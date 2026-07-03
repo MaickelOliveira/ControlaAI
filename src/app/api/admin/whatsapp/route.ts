@@ -66,11 +66,12 @@ export async function POST(req: NextRequest) {
   const { action } = body;
 
   if (action === "generate_token") {
-    // Usa credenciais passadas direto no body (sem depender do config.json salvo)
+    // Usa credenciais passadas direto no body — ignora campos mascarados (••••)
+    const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
     const override = {
-      wppServer:    body.wppServer    || undefined,
-      wppSecretKey: body.wppSecretKey || undefined,
-      wppSession:   body.wppSession   || undefined,
+      wppServer:    (!isMasked(body.wppServer)    && body.wppServer)    || undefined,
+      wppSecretKey: (!isMasked(body.wppSecretKey) && body.wppSecretKey) || undefined,
+      wppSession:   (!isMasked(body.wppSession)   && body.wppSession)   || undefined,
     };
     // Salva também para uso futuro do bot
     const adm = loadAdmin();
