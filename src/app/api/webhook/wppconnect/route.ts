@@ -17,7 +17,18 @@ function getUserByWppPhone(phone: string) {
   const cleaned = phone.replace(/\D/g, "");
   return getUsers().find(u => {
     const wp = ((u as Record<string, unknown>).wppPhone as string | undefined)?.replace(/\D/g, "");
-    return wp && (wp === cleaned || cleaned.endsWith(wp.slice(-9)) || wp.endsWith(cleaned.slice(-9)));
+    if (!wp) return false;
+    // Correspondência exata
+    if (wp === cleaned) return true;
+    // Sufixo de 9 dígitos (nono dígito BR)
+    if (cleaned.length >= 9 && wp.length >= 9 && (
+      cleaned.endsWith(wp.slice(-9)) || wp.endsWith(cleaned.slice(-9))
+    )) return true;
+    // Sufixo de 11 dígitos (DD+número sem país)
+    if (cleaned.length >= 11 && wp.length >= 11 && (
+      cleaned.endsWith(wp.slice(-11)) || wp.endsWith(cleaned.slice(-11))
+    )) return true;
+    return false;
   }) ?? null;
 }
 
