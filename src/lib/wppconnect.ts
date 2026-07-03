@@ -116,15 +116,18 @@ export async function generateAndSaveToken(): Promise<{ token: string; error?: s
   const s = cfg.wppSession || "controlaai";
   if (!b || !secret) return { token: "", error: "Configure o servidor e a secret key primeiro" };
   try {
-    const res = await fetch(`${b}/api/${secret}/generate-token/${s}`, {
-      signal: AbortSignal.timeout(10_000),
+    const res = await fetch(`${b}/api/${s}/${secret}/generate-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => `HTTP ${res.status}`);
       return { token: "", error: `Servidor retornou erro: ${text.slice(0, 200)}` };
     }
     const data = await res.json();
-    const tok: string = data?.token ?? data?.session?.token ?? "";
+    const tok: string = data?.token ?? (data?.full as string)?.replace("Bearer ", "") ?? "";
     if (!tok) return { token: "", error: "Servidor não retornou token. Verifique a secret key." };
     saveConfig({ ...cfg, wppToken: tok });
     return { token: tok };
