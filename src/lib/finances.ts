@@ -102,6 +102,35 @@ export function getDailyTotals(userId: string, mode: FinanceMode, days = 30): Ar
     .map(([date, vals]) => ({ date, ...vals }));
 }
 
+export function deleteFinance(id: string, userId: string): boolean {
+  const items = load();
+  const idx = items.findIndex(f => f.id === id && f.userId === userId);
+  if (idx < 0) return false;
+  items.splice(idx, 1);
+  save(items);
+  return true;
+}
+
+export function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date">>): Finance | null {
+  const items = load();
+  const idx = items.findIndex(f => f.id === id && f.userId === userId);
+  if (idx < 0) return null;
+  items[idx] = { ...items[idx], ...patch };
+  save(items);
+  return items[idx];
+}
+
+export function findFinanceByDescription(userId: string, mode: FinanceMode, keyword: string, limit = 5): Finance[] {
+  const lower = keyword.toLowerCase();
+  return load()
+    .filter(f => f.userId === userId && f.mode === mode && (
+      f.description.toLowerCase().includes(lower) ||
+      f.category.toLowerCase().includes(lower)
+    ))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
+}
+
 export function getRecentTransactions(userId: string, mode: FinanceMode, limit = 10): Finance[] {
   return getFinancesByUser(userId, mode)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))

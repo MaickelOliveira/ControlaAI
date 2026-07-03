@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode } from "@/lib/users";
 import { processMessage, transcribeAudio } from "@/lib/ai-processor";
-import { addFinance, getBalance, formatCurrency } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
@@ -115,6 +115,48 @@ export async function POST(req: NextRequest) {
         });
         const bal = getBalance(user.id, mode, year, month);
         await wppSend(from, replyFinanceRegistered(f, bal.balance));
+        break;
+      }
+
+      case "finance_edit": {
+        if (!ai.finance) break;
+        const keyword = ai.finance.description || ai.finance.category || "";
+        const candidates = keyword
+          ? findFinanceByDescription(user.id, mode, keyword)
+          : getRecentTransactions(user.id, mode, 1);
+        if (!candidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum lançamento com "${keyword}".\n\nDigite *extrato* para ver os últimos lançamentos.`);
+          break;
+        }
+        const target = candidates[0];
+        const patch: Record<string, unknown> = {};
+        if (ai.finance.amount > 0) patch.amount = ai.finance.amount;
+        if (ai.finance.category) patch.category = ai.finance.category;
+        if (ai.finance.description) patch.description = ai.finance.description;
+        if (ai.finance.date) patch.date = ai.finance.date;
+        const updated = updateFinance(target.id, user.id, patch as Parameters<typeof updateFinance>[2]);
+        if (updated) {
+          const bal = getBalance(user.id, mode, year, month);
+          await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+        }
+        break;
+      }
+
+      case "finance_delete": {
+        const keyword = ai.finance?.description || ai.finance?.category || "";
+        const candidates = keyword
+          ? findFinanceByDescription(user.id, mode, keyword)
+          : getRecentTransactions(user.id, mode, 1);
+        if (!candidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum lançamento com "${keyword}".\n\nDigite *extrato* para ver os últimos lançamentos.`);
+          break;
+        }
+        const target = candidates[0];
+        const ok = deleteFinance(target.id, user.id);
+        if (ok) {
+          const bal = getBalance(user.id, mode, year, month);
+          await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${target.description} — ${formatCurrency(target.amount)}\n\n📊 Saldo atualizado: ${formatCurrency(bal.balance)}`);
+        }
         break;
       }
 
@@ -267,11 +309,24 @@ export async function POST(req: NextRequest) {
 
       default: {
         const lower = messageText.toLowerCase();
-        if (lower.includes("ajuda") || lower === "?") await wppSend(from, replyHelp());
-        else if (lower.includes("saldo") || lower.includes("resumo")) {
+        if (lower.includes("ajuda") || lower === "?") {
+          await wppSend(from, replyHelp());
+        } else if (lower.includes("saldo") || lower.includes("resumo")) {
           const personal = getBalance(user.id, "personal", year, month);
           const business = getBalance(user.id, "business", year, month);
           await wppSend(from, replyBalance(personal, business));
+        } else if (lower.includes("extrato") || lower.includes("últimos") || lower.includes("ultimos")) {
+          const recents = getRecentTransactions(user.id, mode, 10);
+          if (!recents.length) {
+            await wppSend(from, "📋 Nenhum lançamento encontrado ainda.");
+          } else {
+            let msg = `📋 *Últimos lançamentos (${mode === "business" ? "Empresa" : "Pessoal"}):*\n\n`;
+            recents.forEach((f, i) => {
+              const emoji = f.type === "income" ? "💰" : "💸";
+              msg += `${i + 1}. ${emoji} ${f.description} — ${formatCurrency(f.amount)}\n   📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${f.category}\n\n`;
+            });
+            await wppSend(from, msg.trim());
+          }
         } else {
           await wppSend(from, replyUnknown());
         }
