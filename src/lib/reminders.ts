@@ -29,7 +29,24 @@ function save(items: Reminder[]) {
 
 export function createReminder(data: Omit<Reminder, "id" | "sent" | "createdAt">): Reminder {
   const items = load();
-  const r: Reminder = { ...data, id: randomUUID(), sent: false, createdAt: new Date().toISOString() };
+  let scheduledAt = data.scheduledAt;
+
+  // Se o horário já passou, avança para o próximo futuro
+  if (new Date(scheduledAt) <= new Date()) {
+    const d = new Date(scheduledAt);
+    if (data.repeat === "daily" || data.repeat === "none") {
+      d.setDate(d.getDate() + 1);
+    } else if (data.repeat === "weekly") {
+      d.setDate(d.getDate() + 7);
+    } else if (data.repeat === "monthly") {
+      d.setMonth(d.getMonth() + 1);
+    } else {
+      d.setDate(d.getDate() + 1);
+    }
+    scheduledAt = d.toISOString();
+  }
+
+  const r: Reminder = { ...data, scheduledAt, id: randomUUID(), sent: false, createdAt: new Date().toISOString() };
   items.push(r);
   save(items);
   return r;
