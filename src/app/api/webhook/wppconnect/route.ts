@@ -136,35 +136,35 @@ export async function POST(req: NextRequest) {
 
       case "finance_edit": {
         if (!ai.finance) break;
-        const editMode = ai.finance.mode || mode;
-        const keyword = ai.finance.description || ai.finance.category || "";
+        // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
+        const keyword = ai.keyword || ai.finance.description || ai.finance.category || "";
+        console.log(`[bot] finance_edit keyword="${keyword}"`);
         const candidates = keyword
-          ? findFinanceByDescription(user.id, editMode, keyword)
-          : getRecentTransactions(user.id, editMode, 1);
+          ? findFinanceByDescription(user.id, null, keyword)
+          : getRecentTransactions(user.id, mode, 1);
         if (!candidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento com "${keyword}".\n\nDigite *extrato* para ver os últimos lançamentos.`);
+          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${keyword}"*.\n\nDigite *extrato* para ver os últimos lançamentos e use o nome exato da descrição.`);
           break;
         }
         const target = candidates[0];
         const patch: Record<string, unknown> = {};
-        if (ai.finance.amount > 0) patch.amount = ai.finance.amount;
+        if (ai.finance.amount && ai.finance.amount > 0) patch.amount = ai.finance.amount;
         if (ai.finance.category) patch.category = ai.finance.category;
-        if (ai.finance.description) patch.description = ai.finance.description;
         if (ai.finance.date) patch.date = ai.finance.date;
         const updated = updateFinance(target.id, user.id, patch as Parameters<typeof updateFinance>[2]);
         if (updated) {
-          const bal = getBalance(user.id, mode, year, month);
-          await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+          const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
+          const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+          await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
         }
         break;
       }
 
       case "finance_delete": {
-        const deleteMode = ai.finance?.mode || mode;
-        const keyword = ai.finance?.description || ai.finance?.category || "";
+        const keyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
         const candidates = keyword
-          ? findFinanceByDescription(user.id, deleteMode, keyword)
-          : getRecentTransactions(user.id, deleteMode, 1);
+          ? findFinanceByDescription(user.id, null, keyword)
+          : getRecentTransactions(user.id, mode, 1);
         if (!candidates.length) {
           await wppSend(from, `❓ Não encontrei nenhum lançamento com "${keyword}".\n\nDigite *extrato* para ver os últimos lançamentos.`);
           break;

@@ -70,6 +70,7 @@ export type AIResult = {
   goal?: GoalData;
   vehicle?: VehicleData;
   mode?: UserMode;
+  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete
   confidence: number;
 };
 
@@ -171,10 +172,11 @@ OU para lembrete:
   }
 }
 
-OU para editar lançamento (finance_edit):
+OU para editar lançamento (finance_edit) — "keyword" é o TERMO DE BUSCA do lançamento original, "finance" contém os NOVOS VALORES:
 {
   "intent": "finance_edit",
   "confidence": 0.9,
+  "keyword": "ifood",
   "finance": {
     "type": "expense",
     "amount": 60.00,
@@ -184,10 +186,11 @@ OU para editar lançamento (finance_edit):
   }
 }
 
-OU para excluir lançamento (finance_delete):
+OU para excluir lançamento (finance_delete) — "keyword" é o TERMO DE BUSCA:
 {
   "intent": "finance_delete",
   "confidence": 0.9,
+  "keyword": "ifood",
   "finance": {
     "type": "expense",
     "amount": 0,

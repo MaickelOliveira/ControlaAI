@@ -120,10 +120,10 @@ export function updateFinance(id: string, userId: string, patch: Partial<Pick<Fi
   return items[idx];
 }
 
-export function findFinanceByDescription(userId: string, mode: FinanceMode, keyword: string, limit = 5): Finance[] {
+export function findFinanceByDescription(userId: string, mode: FinanceMode | null, keyword: string, limit = 5): Finance[] {
   const lower = keyword.toLowerCase();
   return load()
-    .filter(f => f.userId === userId && f.mode === mode && (
+    .filter(f => f.userId === userId && (mode === null || f.mode === mode) && (
       f.description.toLowerCase().includes(lower) ||
       f.category.toLowerCase().includes(lower)
     ))
