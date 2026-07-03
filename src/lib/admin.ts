@@ -6,7 +6,8 @@ export type AdminConfig = {
   adminEmail?: string;
   adminPasswordHash?: string;
   wppServer?: string;
-  wppToken?: string;
+  wppSecretKey?: string;   // secret key para gerar tokens no servidor WPPConnect
+  wppToken?: string;       // JWT gerado automaticamente (não digitar manualmente)
   wppSession?: string;
   geminiApiKey?: string;
   appBaseUrl?: string;

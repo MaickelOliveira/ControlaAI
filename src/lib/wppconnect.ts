@@ -5,7 +5,8 @@ const CONFIG_FILE = path.join(process.cwd(), "data", "config.json");
 
 export type WppConfig = {
   wppServer?: string;
-  wppToken?: string;
+  wppSecretKey?: string;  // chave secreta do servidor WPPConnect (para gerar o token)
+  wppToken?: string;      // JWT gerado pelo servidor (preenchido automaticamente)
   wppSession?: string;
   geminiApiKey?: string;
   appBaseUrl?: string;
@@ -104,4 +105,30 @@ export async function startSession(webhookUrl: string): Promise<boolean> {
     });
     return res.ok;
   } catch { return false; }
+}
+
+/** Gera o JWT de sessão usando a secret key do servidor WPPConnect.
+ *  Salva automaticamente o token no config para uso posterior. */
+export async function generateAndSaveToken(): Promise<{ token: string; error?: string } | null> {
+  const cfg = getConfig();
+  const b = (cfg.wppServer || "").replace(/\/$/, "");
+  const secret = cfg.wppSecretKey || "";
+  const s = cfg.wppSession || "controlaai";
+  if (!b || !secret) return { token: "", error: "Configure o servidor e a secret key primeiro" };
+  try {
+    const res = await fetch(`${b}/api/${secret}/generate-token/${s}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => `HTTP ${res.status}`);
+      return { token: "", error: `Servidor retornou erro: ${text.slice(0, 200)}` };
+    }
+    const data = await res.json();
+    const tok: string = data?.token ?? data?.session?.token ?? "";
+    if (!tok) return { token: "", error: "Servidor não retornou token. Verifique a secret key." };
+    saveConfig({ ...cfg, wppToken: tok });
+    return { token: tok };
+  } catch (e) {
+    return { token: "", error: String(e) };
+  }
 }
