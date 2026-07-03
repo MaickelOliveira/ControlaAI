@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
     const from = (rawFrom as string).replace("@c.us", "").replace(/\D/g, "");
     const fromMe = body.fromMe ?? body.data?.fromMe ?? false;
     const bodyText = body.body ?? body.data?.body ?? body.content ?? body.data?.content ?? "";
-    console.log(`[webhook] event=${event} from=${from} fromMe=${fromMe} body=${JSON.stringify(body).slice(0, 300)}`);
+    console.log(`[webhook] event=${event} from=${from} fromMe=${fromMe}`);
+    console.log(`[webhook] keys=${Object.keys(body).join(",")}`);
+    console.log(`[webhook] full=${JSON.stringify(body)}`);
     if (!from || fromMe) return NextResponse.json({ ok: true });
 
     let messageText = (bodyText as string ?? "").trim();
