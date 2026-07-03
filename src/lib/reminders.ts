@@ -62,6 +62,21 @@ export function getRemindersByUser(userId: string): Reminder[] {
   return load().filter(r => r.userId === userId && !r.sent);
 }
 
+export function getAllRemindersByUser(userId: string): Reminder[] {
+  return load()
+    .filter(r => r.userId === userId)
+    .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+}
+
+export function updateReminder(id: string, userId: string, patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat">>): Reminder | null {
+  const items = load();
+  const idx = items.findIndex(r => r.id === id && r.userId === userId);
+  if (idx < 0) return null;
+  items[idx] = { ...items[idx], ...patch, sent: false };
+  save(items);
+  return items[idx];
+}
+
 export function deleteReminder(id: string, userId: string): boolean {
   const items = load();
   const filtered = items.filter(r => !(r.id === id && r.userId === userId));
