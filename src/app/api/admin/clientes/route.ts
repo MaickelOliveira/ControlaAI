@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAdminSession as getSession } from "@/lib/auth";
 import { getUsers, isTrialExpired } from "@/lib/users";
 import { getFinancesByUser } from "@/lib/finances";
 import { getTasksByUser } from "@/lib/tasks";

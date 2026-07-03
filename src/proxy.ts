@@ -5,6 +5,9 @@ const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "controlaai-secret-2026-change-in-prod"
 );
 
+const CLIENT_COOKIE = "ca_session";
+const ADMIN_COOKIE  = "ca_admin";
+
 async function getRole(token?: string): Promise<string | null> {
   if (!token) return null;
   try {
@@ -15,34 +18,37 @@ async function getRole(token?: string): Promise<string | null> {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const token = req.cookies.get("ca_session")?.value;
-  const role = await getRole(token);
 
-  // Proteção /admin/*
+  // Lê os dois cookies independentemente
+  const clientToken = req.cookies.get(CLIENT_COOKIE)?.value;
+  const adminToken  = req.cookies.get(ADMIN_COOKIE)?.value;
+  const clientRole  = await getRole(clientToken);
+  const adminRole   = await getRole(adminToken);
+
+  // ── Proteção /admin/* (exige cookie de admin)
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    if (role !== "admin") return NextResponse.redirect(new URL("/admin/login", req.url));
+    if (adminRole !== "admin") return NextResponse.redirect(new URL("/admin/login", req.url));
   }
 
-  // Proteção /dashboard/*
+  // ── Proteção /dashboard/* (exige cookie de cliente)
   if (pathname.startsWith("/dashboard")) {
-    if (!role) return NextResponse.redirect(new URL("/login", req.url));
-    if (role === "admin") return NextResponse.redirect(new URL("/admin", req.url));
+    if (clientRole !== "client") return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // Raiz: redireciona conforme role
+  // ── Raiz: redireciona para o dashboard relevante (cliente tem prioridade)
   if (pathname === "/") {
-    if (role === "admin") return NextResponse.redirect(new URL("/admin", req.url));
-    if (role === "client") return NextResponse.redirect(new URL("/dashboard", req.url));
+    if (clientRole === "client") return NextResponse.redirect(new URL("/dashboard", req.url));
+    if (adminRole === "admin") return NextResponse.redirect(new URL("/admin", req.url));
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // Bloqueia /admin/login se já logado como admin
-  if (pathname === "/admin/login" && role === "admin") {
+  // ── Não deixa admin já logado ver /admin/login
+  if (pathname === "/admin/login" && adminRole === "admin") {
     return NextResponse.redirect(new URL("/admin", req.url));
   }
 
-  // Bloqueia /login e /cadastro se já logado como client
-  if ((pathname === "/login" || pathname === "/cadastro") && role === "client") {
+  // ── Não deixa cliente já logado ver /login ou /cadastro
+  if ((pathname === "/login" || pathname === "/cadastro") && clientRole === "client") {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 

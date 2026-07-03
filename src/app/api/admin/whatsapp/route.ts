@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAdminSession as getSession } from "@/lib/auth";
 import { loadAdmin, saveAdmin } from "@/lib/admin";
 import { checkConnection, startSession, getQrCode } from "@/lib/wppconnect";
 

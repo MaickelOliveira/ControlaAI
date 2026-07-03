@@ -4,10 +4,21 @@ import { cookies } from "next/headers";
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "controlaai-secret-2026-change-in-prod"
 );
-const COOKIE = "ca_session";
+
+// Cookies separados para cliente e admin — evita conflito no mesmo navegador
+const CLIENT_COOKIE = "ca_session";
+const ADMIN_COOKIE  = "ca_admin";
+
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  maxAge: 60 * 60 * 24 * 7,
+  path: "/",
+};
 
 export type SessionPayload = {
-  sub: string;    // userId or "admin"
+  sub: string;
   name: string;
   email: string;
   plan: string;
@@ -29,27 +40,41 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
   } catch { return null; }
 }
 
+// ── Cliente ──────────────────────────────────
 export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE)?.value;
+  const jar = await cookies();
+  const token = jar.get(CLIENT_COOKIE)?.value;
   if (!token) return null;
   return verifyToken(token);
 }
 
 export async function setSessionCookie(token: string) {
-  const cookieStore = await cookies();
-  cookieStore.set(COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-  });
+  const jar = await cookies();
+  jar.set(CLIENT_COOKIE, token, COOKIE_OPTS);
 }
 
 export async function clearSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete(COOKIE);
+  const jar = await cookies();
+  jar.delete(CLIENT_COOKIE);
 }
 
-export function getCookieName() { return COOKIE; }
+// ── Admin ─────────────────────────────────────
+export async function getAdminSession(): Promise<SessionPayload | null> {
+  const jar = await cookies();
+  const token = jar.get(ADMIN_COOKIE)?.value;
+  if (!token) return null;
+  return verifyToken(token);
+}
+
+export async function setAdminSessionCookie(token: string) {
+  const jar = await cookies();
+  jar.set(ADMIN_COOKIE, token, COOKIE_OPTS);
+}
+
+export async function clearAdminSession() {
+  const jar = await cookies();
+  jar.delete(ADMIN_COOKIE);
+}
+
+export function getClientCookieName() { return CLIENT_COOKIE; }
+export function getAdminCookieName()  { return ADMIN_COOKIE; }
