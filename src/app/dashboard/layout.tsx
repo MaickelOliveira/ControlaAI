@@ -8,6 +8,7 @@ const navItems = [
   { href: "/dashboard", label: "Visão Geral", icon: "📊" },
   { href: "/dashboard/financas", label: "Finanças", icon: "💰" },
   { href: "/dashboard/tarefas", label: "Tarefas", icon: "📋" },
+  { href: "/dashboard/configuracoes", label: "Configurações", icon: "⚙️" },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

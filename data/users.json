@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": "831e844a-97cb-4c17-811f-f935a3d55855",
+    "phone": "44998168355",
+    "name": "Maickel Espurio de Oliveira",
+    "email": "nexoprotp@gmail.com",
+    "passwordHash": "$2b$10$7BbYVsl9CQZ/zqREp6S5b.VrrrEEId7PKGAtTJeFZMyTbHt4.I2DS",
+    "plan": "personal",
+    "status": "trial",
+    "activeMode": "personal",
+    "company": "",
+    "trialEndsAt": "2026-07-17T18:08:49.341Z",
+    "createdAt": "2026-07-03T18:08:49.426Z"
+  }
+]
