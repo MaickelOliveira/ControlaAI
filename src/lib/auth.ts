@@ -7,10 +7,11 @@ const SECRET = new TextEncoder().encode(
 const COOKIE = "ca_session";
 
 export type SessionPayload = {
-  sub: string;    // userId
+  sub: string;    // userId or "admin"
   name: string;
   email: string;
   plan: string;
+  role: "client" | "admin";
 };
 
 export async function signToken(payload: SessionPayload): Promise<string> {

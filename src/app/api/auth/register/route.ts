@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   if (getUserByEmail(email)) return NextResponse.json({ error: "Email já cadastrado" }, { status: 409 });
 
   const user = await createUser({ name, email, password, phone, plan: plan || "personal", company });
-  const token = await signToken({ sub: user.id, name: user.name, email: user.email, plan: user.plan });
+  const token = await signToken({ sub: user.id, name: user.name, email: user.email, plan: user.plan, role: "client" });
   await setSessionCookie(token);
 
   return NextResponse.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, plan: user.plan, status: user.status } }, { status: 201 });

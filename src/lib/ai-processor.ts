@@ -13,10 +13,29 @@ export type Intent =
   | "reminder_list"
   | "mode_switch"
   | "balance_query"
+  | "goal_create"
+  | "goal_add"
+  | "goal_query"
+  | "goal_complete"
+  | "vehicle_expense"
+  | "vehicle_query"
   | "help"
-  | "onboarding_name"
-  | "onboarding_plan"
   | "unknown";
+
+export type GoalData = {
+  title: string;
+  targetAmount: number;
+  deadline?: string;
+  category?: string;
+};
+
+export type VehicleData = {
+  name?: string;
+  expenseType?: "fuel" | "maintenance" | "insurance" | "tax" | "other";
+  amount?: number;
+  km?: number;
+  description?: string;
+};
 
 export type FinanceData = {
   type: "income" | "expense";
@@ -45,6 +64,8 @@ export type AIResult = {
   finance?: FinanceData;
   task?: TaskData;
   reminder?: ReminderData;
+  goal?: GoalData;
+  vehicle?: VehicleData;
   mode?: UserMode;
   confidence: number;
 };
@@ -58,12 +79,16 @@ INTENÇÕES POSSÍVEIS:
 - finance_register: registrar gasto ou receita
 - finance_query: perguntar sobre saldo, extrato, gastos do mês
 - balance_query: pergunta sobre saldo atual
-- task_create: criar uma tarefa/lembrete de tarefa
-- task_update: atualizar/concluir uma tarefa (menciona número ou nome + concluir/feito/marcar)
-- task_query: listar/ver tarefas
-- task_delete: deletar tarefa
-- reminder_set: criar um lembrete recorrente ou agendado
-- reminder_list: ver lembretes agendados
+- task_create: criar uma tarefa
+- task_update: atualizar/concluir uma tarefa
+- task_query: listar tarefas
+- reminder_set: criar lembrete agendado
+- goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para")
+- goal_add: adicionar valor em uma meta ("adicionei X na meta", "coloquei X para X")
+- goal_query: ver metas ("minhas metas", "metas")
+- goal_complete: concluir uma meta ("concluí meta", "meta atingida")
+- vehicle_expense: registrar gasto com veículo ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro")
+- vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - help: pedir ajuda
 - unknown: não identificado

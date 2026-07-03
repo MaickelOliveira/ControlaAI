@@ -17,6 +17,7 @@ export type User = {
   status: UserStatus;
   activeMode: UserMode;
   company?: string;
+  wppPhone?: string;         // número WhatsApp que o cliente usa para mandar mensagens ao bot
   trialEndsAt: string;
   createdAt: string;
 };
