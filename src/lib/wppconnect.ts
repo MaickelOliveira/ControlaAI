@@ -106,11 +106,19 @@ export async function startSession(webhookUrl: string): Promise<boolean> {
   const t = token();
   const s = session();
   if (!b || !t) return false;
+  // Fecha sessão anterior para evitar QR "zumbi" (sessão que ficou presa)
+  await fetch(`${b}/api/${s}/close-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+    body: JSON.stringify({}),
+    signal: AbortSignal.timeout(8_000),
+  }).catch(() => {});
+  await new Promise(r => setTimeout(r, 1500));
   try {
     const res = await fetch(`${b}/api/${s}/start-session`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
-      body: JSON.stringify({ webhook: webhookUrl, waitQrCode: false }),
+      body: JSON.stringify({ webhook: webhookUrl, waitQrCode: false, autoReadMessages: false, whatsappVersion: "" }),
       signal: AbortSignal.timeout(30_000),
     });
     return res.ok;
