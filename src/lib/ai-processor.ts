@@ -163,9 +163,11 @@ export async function processMessage(message: string): Promise<AIResult> {
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
 
   if (!apiKey) {
-    console.error("[ai-processor] GEMINI_API_KEY não configurada");
+    console.error("[ai-processor] chave Gemini não configurada — salve em WhatsApp Bot no admin");
     return { intent: "unknown", confidence: 0 };
   }
+
+  console.log(`[ai-processor] processando: "${message}" | key=${apiKey.slice(0,8)}...`);
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -176,6 +178,8 @@ export async function processMessage(message: string): Promise<AIResult> {
     );
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+    console.log(`[ai-processor] resposta Gemini: ${text.slice(0, 200)}`);
 
     const parsed = JSON.parse(text) as AIResult;
     return parsed;
