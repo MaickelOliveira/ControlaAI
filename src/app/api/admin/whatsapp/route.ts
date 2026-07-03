@@ -62,18 +62,31 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const { action } = await req.json();
+  const body = await req.json();
+  const { action } = body;
 
   if (action === "generate_token") {
-    // Sincroniza antes de gerar para ter server+secretKey no config.json
-    syncToConfig();
-    const result = await generateAndSaveToken();
-    if (!result || result.error) {
-      return NextResponse.json({ error: result?.error || "Falha ao gerar token" }, { status: 500 });
-    }
-    // Salva o token gerado também no admin.json
+    // Usa credenciais passadas direto no body (sem depender do config.json salvo)
+    const override = {
+      wppServer:    body.wppServer    || undefined,
+      wppSecretKey: body.wppSecretKey || undefined,
+      wppSession:   body.wppSession   || undefined,
+    };
+    // Salva também para uso futuro do bot
     const adm = loadAdmin();
-    saveAdmin({ ...adm, wppToken: result.token });
+    const toSave = {
+      ...adm,
+      ...(override.wppServer    ? { wppServer:    override.wppServer }    : {}),
+      ...(override.wppSecretKey ? { wppSecretKey: override.wppSecretKey } : {}),
+      ...(override.wppSession   ? { wppSession:   override.wppSession }   : {}),
+    };
+    saveAdmin(toSave);
+    syncToConfig();
+    const result = await generateAndSaveToken(override);
+    if (!result || result.error) {
+      return NextResponse.json({ error: result?.error || "Falha ao gerar token", url: result?.url }, { status: 500 });
+    }
+    saveAdmin({ ...toSave, wppToken: result.token });
     return NextResponse.json({ ok: true, token: result.token.slice(0, 20) + "..." });
   }
 
