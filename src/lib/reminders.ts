@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import { nowBR } from "./date-br";
+// nowBR não é mais necessário — comparações usam UTC real (new Date())
 
 export type ReminderRepeat = "none" | "daily" | "weekly" | "monthly";
 
@@ -32,8 +32,8 @@ export function createReminder(data: Omit<Reminder, "id" | "sent" | "createdAt">
   const items = load();
   let scheduledAt = data.scheduledAt;
 
-  // Se o horário já passou (horário de SP), avança para o próximo futuro
-  if (new Date(scheduledAt) <= nowBR()) {
+  // Se o horário já passou, avança para o próximo futuro
+  if (new Date(scheduledAt) <= new Date()) {
     const d = new Date(scheduledAt);
     if (data.repeat === "daily" || data.repeat === "none") {
       d.setDate(d.getDate() + 1);
@@ -54,7 +54,7 @@ export function createReminder(data: Omit<Reminder, "id" | "sent" | "createdAt">
 }
 
 export function getDueReminders(): Reminder[] {
-  const now = nowBR();
+  const now = new Date(); // UTC — os scheduledAt já estão em UTC
   return load().filter(r => !r.sent && new Date(r.scheduledAt) <= now);
 }
 
