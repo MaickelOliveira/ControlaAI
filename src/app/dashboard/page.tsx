@@ -4,113 +4,104 @@ import { clsx } from "clsx";
 
 type DashData = {
   user: { name: string; plan: string; status: string; activeMode: string; trialEndsAt: string };
-  personal: { balance: { income: number; expense: number; balance: number }; dailyTotals: Array<{ date: string; income: number; expense: number }>; expenseCategories: Record<string, number> };
-  business: { balance: { income: number; expense: number; balance: number }; dailyTotals: Array<{ date: string; income: number; expense: number }>; expenseCategories: Record<string, number> };
+  personal: { balance: { income: number; expense: number; balance: number } };
+  business: { balance: { income: number; expense: number; balance: number } };
   tasks: { pendingCount: number; overdueCount: number; recent: Array<{ id: string; title: string; priority: string; dueDate?: string }> };
   recentTransactions: Array<{ id: string; type: string; amount: number; category: string; description: string; date: string; mode: string }>;
 };
 
-function fmt(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function KpiCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
-  return (
-    <div className={clsx("rounded-2xl p-5 text-white", color)}>
-      <p className="text-sm opacity-80">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-      {sub && <p className="text-xs opacity-70 mt-1">{sub}</p>}
-    </div>
-  );
-}
+function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    fetch("/api/dashboard").then(r => r.json()).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
   if (loading) return (
-    <div className="flex items-center justify-center h-64 text-gray-400">
+    <div className="flex items-center justify-center h-64">
       <div className="text-center">
-        <div className="text-4xl mb-4 animate-spin">🤖</div>
-        <p>Carregando...</p>
+        <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-slate-400 text-sm">Carregando...</p>
       </div>
     </div>
   );
 
-  if (!data) return <div className="text-red-500">Erro ao carregar dados</div>;
+  if (!data) return null;
 
   const { user, personal, business, tasks, recentTransactions } = data;
+  const isPersonal = user.activeMode !== "business";
+  const activeBalance = isPersonal ? personal.balance : business.balance;
   const month = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const trialDays = Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / 86400000));
 
+  const kpis = [
+    { label: "Receitas", value: fmt(activeBalance.income), icon: "↑", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
+    { label: "Despesas", value: fmt(activeBalance.expense), icon: "↓", color: "text-red-500", bg: "bg-red-50 border-red-100" },
+    { label: "Saldo", value: fmt(activeBalance.balance), icon: "◈", color: activeBalance.balance >= 0 ? "text-blue-600" : "text-orange-500", bg: activeBalance.balance >= 0 ? "bg-blue-50 border-blue-100" : "bg-orange-50 border-orange-100" },
+    { label: "Tarefas Pendentes", value: String(tasks.pendingCount), icon: tasks.overdueCount > 0 ? "⚠" : "☑", color: tasks.overdueCount > 0 ? "text-amber-600" : "text-purple-600", bg: tasks.overdueCount > 0 ? "bg-amber-50 border-amber-100" : "bg-purple-50 border-purple-100", sub: tasks.overdueCount > 0 ? `${tasks.overdueCount} atrasadas` : undefined },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Olá, {user.name.split(" ")[0]}! 👋</h1>
-          <p className="text-gray-500 text-sm mt-1">Resumo de {month}</p>
+          <p className="text-slate-500 text-sm">{month}</p>
+          <h1 className="text-2xl font-bold text-slate-900 mt-0.5">
+            Olá, {user.name.split(" ")[0]}
+            <span className="ml-1">{isPersonal ? "👤" : "🏢"}</span>
+          </h1>
+          <p className="text-sm text-slate-400 mt-0.5">{isPersonal ? "Modo Pessoal" : "Modo Empresa"}</p>
         </div>
         {user.status === "trial" && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-sm text-amber-700">
-            ⏳ {trialDays} dias de trial
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-right">
+            <p className="text-xs text-amber-700 font-semibold">⏳ Trial</p>
+            <p className="text-xs text-amber-600">{trialDays} dias restantes</p>
           </div>
         )}
       </div>
 
-      {/* KPIs Pessoal */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">👤 Pessoal</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label="Receitas" value={fmt(personal.balance.income)} color="bg-emerald-600" />
-          <KpiCard label="Despesas" value={fmt(personal.balance.expense)} color="bg-red-500" />
-          <KpiCard label="Saldo" value={fmt(personal.balance.balance)} color={personal.balance.balance >= 0 ? "bg-blue-600" : "bg-orange-500"} />
-          <div className="rounded-2xl p-5 bg-purple-600 text-white">
-            <p className="text-sm opacity-80">Tarefas</p>
-            <p className="text-2xl font-bold mt-1">{tasks.pendingCount}</p>
-            {tasks.overdueCount > 0 && <p className="text-xs opacity-70 mt-1">⚠️ {tasks.overdueCount} atrasadas</p>}
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map(k => (
+          <div key={k.label} className={clsx("bg-white border rounded-2xl p-5 shadow-sm", k.bg)}>
+            <div className="flex items-center justify-between mb-3">
+              <span className={clsx("text-lg font-bold", k.color)}>{k.icon}</span>
+            </div>
+            <p className="text-xl font-bold text-slate-900">{k.value}</p>
+            <p className="text-xs text-slate-500 mt-1">{k.label}</p>
+            {k.sub && <p className="text-xs text-amber-600 mt-0.5">{k.sub}</p>}
           </div>
-        </div>
+        ))}
       </div>
 
-      {/* KPIs Empresa (se tiver dados) */}
-      {(business.balance.income > 0 || business.balance.expense > 0) && (
-        <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">🏢 Empresa</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <KpiCard label="Receitas" value={fmt(business.balance.income)} color="bg-emerald-700" />
-            <KpiCard label="Despesas" value={fmt(business.balance.expense)} color="bg-red-600" />
-            <KpiCard label="Saldo" value={fmt(business.balance.balance)} color={business.balance.balance >= 0 ? "bg-blue-700" : "bg-orange-600"} />
-          </div>
-        </div>
-      )}
-
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-5">
         {/* Transações recentes */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h3 className="font-semibold text-gray-800 mb-4">💳 Transações Recentes</h3>
-          {recentTransactions.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <div className="text-3xl mb-2">💬</div>
-              <p className="text-sm">Nenhum registro ainda</p>
-              <p className="text-xs mt-1">Envie uma mensagem para o bot começar!</p>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-xs">◈</span>
+            Transações Recentes
+          </h3>
+          {recentTransactions.filter(t => t.mode === user.activeMode).length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-3xl mb-2">💬</p>
+              <p className="text-sm text-slate-400 font-medium">Nenhum registro ainda</p>
+              <p className="text-xs text-slate-300 mt-1">Envie uma mensagem para o bot!</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {recentTransactions.map(t => (
-                <div key={t.id} className="flex items-center justify-between">
+            <div className="space-y-2.5">
+              {recentTransactions.filter(t => t.mode === user.activeMode).slice(0, 5).map(t => (
+                <div key={t.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
                   <div className="flex items-center gap-3">
-                    <span className="text-xl">{t.type === "income" ? "💰" : "💸"}</span>
+                    <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-sm", t.type === "income" ? "bg-emerald-100" : "bg-red-100")}>
+                      {t.type === "income" ? "↑" : "↓"}
+                    </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{t.description}</p>
-                      <p className="text-xs text-gray-400">{t.category} • {new Date(t.date + "T12:00:00").toLocaleDateString("pt-BR")}</p>
+                      <p className="text-sm font-medium text-slate-800">{t.description}</p>
+                      <p className="text-xs text-slate-400">{t.category}</p>
                     </div>
                   </div>
                   <span className={clsx("text-sm font-semibold", t.type === "income" ? "text-emerald-600" : "text-red-500")}>
@@ -122,24 +113,29 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Tarefas pendentes */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h3 className="font-semibold text-gray-800 mb-4">📋 Tarefas Pendentes</h3>
+        {/* Tarefas */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-xs">☑</span>
+            Tarefas Pendentes
+          </h3>
           {tasks.recent.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <div className="text-3xl mb-2">✨</div>
-              <p className="text-sm">Nenhuma tarefa pendente</p>
+            <div className="text-center py-8">
+              <p className="text-3xl mb-2">✨</p>
+              <p className="text-sm text-slate-400 font-medium">Tudo em dia!</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {tasks.recent.map(t => {
-                const prIcon = t.priority === "high" ? "⚡" : t.priority === "medium" ? "🟡" : "⚪";
+                const prColor = t.priority === "high" ? "bg-red-100 text-red-600" : t.priority === "medium" ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-500";
                 return (
-                  <div key={t.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                    <span>{prIcon}</span>
+                  <div key={t.id} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-xl">
+                    <div className={clsx("w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0", prColor)}>
+                      {t.priority === "high" ? "!" : t.priority === "medium" ? "•" : "·"}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{t.title}</p>
-                      {t.dueDate && <p className="text-xs text-gray-400">📅 {new Date(t.dueDate + "T12:00:00").toLocaleDateString("pt-BR")}</p>}
+                      <p className="text-sm font-medium text-slate-800 truncate">{t.title}</p>
+                      {t.dueDate && <p className="text-xs text-slate-400">📅 {new Date(t.dueDate + "T12:00:00").toLocaleDateString("pt-BR")}</p>}
                     </div>
                   </div>
                 );
@@ -151,24 +147,23 @@ export default function DashboardPage() {
 
       {/* Como usar */}
       {recentTransactions.length === 0 && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6">
-          <h3 className="font-bold text-emerald-800 mb-4">🚀 Como começar a usar</h3>
-          <div className="grid md:grid-cols-3 gap-4 text-sm">
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-6">
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <span>🚀</span> Como usar pelo WhatsApp
+          </h3>
+          <div className="grid md:grid-cols-3 gap-3">
             {[
-              { icon: "💸", title: "Registrar gasto", ex: '"Gastei 50 no mercado"' },
-              { icon: "📋", title: "Criar tarefa", ex: '"Criar tarefa: ligar pro cliente"' },
-              { icon: "🔔", title: "Criar lembrete", ex: '"Me lembra de pagar conta sexta"' },
-            ].map(item => (
-              <div key={item.title} className="bg-white rounded-xl p-4">
-                <div className="text-2xl mb-2">{item.icon}</div>
-                <p className="font-semibold text-gray-800">{item.title}</p>
-                <p className="text-gray-500 text-xs mt-1">{item.ex}</p>
+              { icon: "💸", ex: "\"Gastei 50 no mercado\"" },
+              { icon: "📋", ex: "\"Criar tarefa: ligar pro cliente\"" },
+              { icon: "🎯", ex: "\"Meta: guardar 5000 para viagem\"" },
+            ].map(i => (
+              <div key={i.ex} className="bg-white rounded-xl p-3 border border-emerald-100">
+                <span className="text-xl">{i.icon}</span>
+                <p className="text-xs text-slate-500 mt-2 font-mono">{i.ex}</p>
               </div>
             ))}
           </div>
-          <p className="text-emerald-700 text-sm mt-4">
-            📱 Envie qualquer uma dessas mensagens para o WhatsApp do bot e a IA processa automaticamente!
-          </p>
+          <p className="text-xs text-slate-500 mt-3">Cadastre seu número em <strong>Configurações</strong> para começar!</p>
         </div>
       )}
     </div>

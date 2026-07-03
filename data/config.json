@@ -1,1 +1,7 @@
-{}
+{
+  "wppServer": "",
+  "wppToken": "",
+  "wppSession": "controlaai",
+  "geminiApiKey": "",
+  "appBaseUrl": ""
+}
