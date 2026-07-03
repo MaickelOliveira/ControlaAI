@@ -108,22 +108,26 @@ export async function POST(req: NextRequest) {
 
       case "finance_register": {
         if (!ai.finance) break;
+        // Usa o modo detectado pelo AI (empresa/pessoal) ou o modo ativo do usuário
+        const financeMode = ai.finance.mode || mode;
         const f = addFinance({
           userId: user.id, type: ai.finance.type, amount: ai.finance.amount,
           category: ai.finance.category, description: ai.finance.description,
-          date: ai.finance.date || now.toISOString().slice(0, 10), mode, source: "whatsapp",
+          date: ai.finance.date || now.toISOString().slice(0, 10), mode: financeMode, source: "whatsapp",
         });
-        const bal = getBalance(user.id, mode, year, month);
-        await wppSend(from, replyFinanceRegistered(f, bal.balance));
+        const bal = getBalance(user.id, financeMode, year, month);
+        const modeLabel = financeMode !== mode ? ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_` : "";
+        await wppSend(from, replyFinanceRegistered(f, bal.balance) + modeLabel);
         break;
       }
 
       case "finance_edit": {
         if (!ai.finance) break;
+        const editMode = ai.finance.mode || mode;
         const keyword = ai.finance.description || ai.finance.category || "";
         const candidates = keyword
-          ? findFinanceByDescription(user.id, mode, keyword)
-          : getRecentTransactions(user.id, mode, 1);
+          ? findFinanceByDescription(user.id, editMode, keyword)
+          : getRecentTransactions(user.id, editMode, 1);
         if (!candidates.length) {
           await wppSend(from, `❓ Não encontrei nenhum lançamento com "${keyword}".\n\nDigite *extrato* para ver os últimos lançamentos.`);
           break;
@@ -143,10 +147,11 @@ export async function POST(req: NextRequest) {
       }
 
       case "finance_delete": {
+        const deleteMode = ai.finance?.mode || mode;
         const keyword = ai.finance?.description || ai.finance?.category || "";
         const candidates = keyword
-          ? findFinanceByDescription(user.id, mode, keyword)
-          : getRecentTransactions(user.id, mode, 1);
+          ? findFinanceByDescription(user.id, deleteMode, keyword)
+          : getRecentTransactions(user.id, deleteMode, 1);
         if (!candidates.length) {
           await wppSend(from, `❓ Não encontrei nenhum lançamento com "${keyword}".\n\nDigite *extrato* para ver os últimos lançamentos.`);
           break;

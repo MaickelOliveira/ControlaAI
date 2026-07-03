@@ -45,6 +45,7 @@ export type FinanceData = {
   category: string;
   description: string;
   date: string;
+  mode?: "personal" | "business"; // detectado automaticamente
 };
 
 export type TaskData = {
@@ -100,6 +101,12 @@ INTENÇÕES POSSÍVEIS:
 CATEGORIAS DE DESPESA: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
 CATEGORIAS DE RECEITA: Salário, Freelance, Vendas, Investimentos, Aluguel, Serviços, Reembolso, Outros
 
+MODO (business ou personal):
+- Detecte "mode" no finance baseado no contexto da mensagem:
+- business: mensagem contém "modo empresa", "empresa", "FGTS", "INSS", "funcionário", "funcionarios", "salário funcionário", "folha", "fornecedor", "marketing", "nota fiscal", "cliente", "receita empresa", "faturamento", ou categoria é Funcionários/Marketing/Fornecedores/Impostos de empresa
+- personal: mensagem contém "modo pessoal", "pessoal", ou é uma despesa/receita pessoal clara (mercado, salário, médico, lazer etc.)
+- Se não identificado claramente, não inclua o campo "mode" no JSON (deixe undefined).
+
 Para datas relativas: "hoje"=hoje, "amanhã"=amanhã, "próxima sexta"=calcule a data exata.
 
 Retorne SOMENTE JSON válido, sem markdown:
@@ -111,7 +118,22 @@ Retorne SOMENTE JSON válido, sem markdown:
     "amount": 45.50,
     "category": "Alimentação",
     "description": "almoço no restaurante",
-    "date": "2026-07-03"
+    "date": "2026-07-03",
+    "mode": "personal"
+  }
+}
+
+Exemplo com modo empresa detectado automaticamente:
+{
+  "intent": "finance_register",
+  "confidence": 0.95,
+  "finance": {
+    "type": "expense",
+    "amount": 500.00,
+    "category": "Funcionários",
+    "description": "FGTS",
+    "date": "2026-07-03",
+    "mode": "business"
   }
 }
 
