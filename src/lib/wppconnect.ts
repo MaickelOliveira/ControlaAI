@@ -118,7 +118,7 @@ export async function generateAndSaveToken(override?: {
   const secret = (override?.wppSecretKey ?? cfg.wppSecretKey) || "";
   const s = (override?.wppSession ?? cfg.wppSession) || "controlaai";
   if (!b || !secret) return { token: "", error: "Configure o servidor e a secret key primeiro" };
-  const url = `${b}/api/${secret}/${s}/generate-token`;
+  const url = `${b}/api/${secret}/generate-token/${s}`;
   try {
     const res = await fetch(url, {
       method: "POST",
