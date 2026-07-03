@@ -145,6 +145,16 @@ OU para lembrete:
   }
 }
 
+OU para adicionar valor em meta (goal_add):
+{
+  "intent": "goal_add",
+  "confidence": 0.9,
+  "goal": {
+    "title": "viagem",
+    "targetAmount": 900.00
+  }
+}
+
 OU para trocar modo:
 {
   "intent": "mode_switch",

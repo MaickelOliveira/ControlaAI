@@ -170,9 +170,9 @@ export async function POST(req: NextRequest) {
       }
 
       case "goal_add": {
-        const amount = ai.finance?.amount || 0;
-        const title = ai.goal?.title || messageText;
-        const goal = findGoalByTitle(user.id, title, mode);
+        const amount = (ai.goal?.targetAmount ?? (ai.goal as unknown as Record<string,number>)?.amount) || ai.finance?.amount || 0;
+        const title = ai.goal?.title || "";
+        const goal = findGoalByTitle(user.id, title, mode) ?? (getActiveGoals(user.id, mode)[0] ?? null);
         if (goal && amount > 0) {
           const updated = updateGoalAmount(goal.id, user.id, amount);
           if (updated) {
