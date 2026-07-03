@@ -31,14 +31,14 @@ export default function AdminPage() {
   return (
     <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-xl font-bold text-white">Visão Geral</h1>
+        <h1 className="text-xl font-bold text-slate-900">Visão Geral</h1>
         <p className="text-slate-400 text-sm mt-0.5">Resumo da plataforma</p>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div key={k.label} className="bg-white border border-slate-200 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xl">{k.icon}</span>
             </div>
@@ -49,26 +49,26 @@ export default function AdminPage() {
       </div>
 
       {/* Clientes recentes */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-semibold text-white">Clientes Recentes</h2>
+          <h2 className="font-semibold text-slate-900">Clientes Recentes</h2>
           <Link href="/admin/clientes" className="text-emerald-400 text-sm hover:underline">Ver todos →</Link>
         </div>
         {loading ? (
-          <p className="text-slate-500 text-sm">Carregando...</p>
+          <p className="text-slate-400 text-sm">Carregando...</p>
         ) : recentClients.length === 0 ? (
-          <p className="text-slate-500 text-sm">Nenhum cliente ainda.</p>
+          <p className="text-slate-400 text-sm">Nenhum cliente ainda.</p>
         ) : (
           <div className="space-y-3">
             {recentClients.map(c => (
               <Link href={`/admin/clientes/${c.id}`} key={c.id}
-                className="flex items-center justify-between p-3 bg-slate-800/50 hover:bg-slate-800 rounded-xl transition group">
+                className="flex items-center justify-between p-3 bg-slate-50/80 hover:bg-slate-100 rounded-xl transition group">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-xl bg-emerald-600/20 flex items-center justify-center text-sm font-bold text-emerald-400">
                     {c.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">{c.name}</p>
+                    <p className="text-sm font-medium text-slate-900">{c.name}</p>
                     <p className="text-xs text-slate-400">{c.plan === "business" ? "🏢 Empresa" : "👤 Pessoal"} · {c.financesCount} transações</p>
                   </div>
                 </div>

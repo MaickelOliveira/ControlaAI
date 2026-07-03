@@ -30,7 +30,7 @@ export default function ClienteDetailPage() {
   return (
     <div className="space-y-5 max-w-3xl">
       <div className="flex items-center gap-3">
-        <Link href="/admin/clientes" className="text-slate-400 hover:text-white transition">← Voltar</Link>
+        <Link href="/admin/clientes" className="text-slate-400 hover:text-slate-900 transition">← Voltar</Link>
       </div>
 
       <div className="flex items-center gap-4">
@@ -38,7 +38,7 @@ export default function ClienteDetailPage() {
           {cliente.name.charAt(0)}
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">{cliente.name}</h1>
+          <h1 className="text-xl font-bold text-slate-900">{cliente.name}</h1>
           <p className="text-slate-400 text-sm">{cliente.email} · {cliente.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</p>
         </div>
         <div className="ml-auto flex gap-2">
@@ -60,15 +60,15 @@ export default function ClienteDetailPage() {
           { label: "WhatsApp", value: cliente.wppPhone || "Não cadastrado", icon: "📱" },
           { label: "Modo Ativo", value: cliente.activeMode === "business" ? "🏢 Empresa" : "👤 Pessoal", icon: "⇄" },
         ].map(k => (
-          <div key={k.label} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-            <p className="text-slate-500 text-xs">{k.label}</p>
-            <p className="text-white font-semibold text-sm mt-1 truncate">{k.value}</p>
+          <div key={k.label} className="bg-white border border-slate-200 rounded-2xl p-4">
+            <p className="text-slate-400 text-xs">{k.label}</p>
+            <p className="text-slate-900 font-semibold text-sm mt-1 truncate">{k.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-        <h2 className="font-semibold text-white mb-4">Detalhes da Conta</h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
+        <h2 className="font-semibold text-slate-900 mb-4">Detalhes da Conta</h2>
         <div className="space-y-2 text-sm">
           {[
             { label: "Telefone de cadastro", value: cliente.phone },
@@ -78,8 +78,8 @@ export default function ClienteDetailPage() {
             { label: "Última atividade", value: new Date(cliente.lastActivity).toLocaleDateString("pt-BR") },
             { label: "Trial expira em", value: new Date(cliente.trialEndsAt).toLocaleDateString("pt-BR") },
           ].map(r => (
-            <div key={r.label} className="flex justify-between py-2 border-b border-slate-800 last:border-0">
-              <span className="text-slate-500">{r.label}</span>
+            <div key={r.label} className="flex justify-between py-2 border-b border-slate-200 last:border-0">
+              <span className="text-slate-400">{r.label}</span>
               <span className="text-slate-200">{r.value}</span>
             </div>
           ))}
