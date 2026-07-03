@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getConfig } from "./wppconnect";
+import { nowISOBR, todayStrBR } from "./date-br";
 import type { UserMode } from "./users";
 
 export type Intent =
@@ -74,10 +75,14 @@ export type AIResult = {
   confidence: number;
 };
 
-const SYSTEM_PROMPT = `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
+function buildSystemPrompt() {
+  const hoje = todayStrBR();
+  const agora = nowISOBR();
+  return `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
 Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
 
-Hoje é: ${new Date().toLocaleDateString("pt-BR")} (${new Date().toISOString().slice(0,10)})
+Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR")} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).
+Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar gasto ou receita
@@ -222,6 +227,7 @@ OU genérico:
   "intent": "finance_query",
   "confidence": 0.85
 }`;
+}
 
 export async function processMessage(message: string): Promise<AIResult> {
   const cfg = getConfig();
@@ -239,7 +245,7 @@ export async function processMessage(message: string): Promise<AIResult> {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const result = await model.generateContent(
-      `${SYSTEM_PROMPT}\n\nMensagem do usuário: "${message}"`
+      `${buildSystemPrompt()}\n\nMensagem do usuário: "${message}"`
     );
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();

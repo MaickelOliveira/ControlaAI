@@ -7,6 +7,7 @@ import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses } from "@/lib/vehicles";
 import { sendText as wppSend } from "@/lib/wppconnect";
+import { nowBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyModeSwitch, replyHelp,
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
     }
 
     const mode = user.activeMode;
-    const now = new Date();
+    const now = nowBR(); // horário de Brasília/São Paulo
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
