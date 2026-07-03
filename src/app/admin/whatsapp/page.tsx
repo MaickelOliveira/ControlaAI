@@ -63,8 +63,10 @@ export default function AdminWhatsappPage() {
     setConnecting(true); setQr(null);
     const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start" }) });
     const d = await r.json();
-    if (d.qr) { setQr(d.qr); setPolling(true); }
-    else if (!r.ok) { alert(d.error || "Erro"); setConnecting(false); }
+    if (!r.ok) { alert(d.error || "Erro ao iniciar sessão"); setConnecting(false); return; }
+    // Sessão iniciada — QR pode demorar alguns segundos para ficar pronto
+    if (d.qr) setQr(d.qr);
+    setPolling(true); // sempre faz polling para aguardar QR e depois CONNECTED
   }
 
   const statusInfo = {
