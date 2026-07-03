@@ -67,11 +67,17 @@ export async function checkConnection(): Promise<"CONNECTED" | "DISCONNECTED" | 
   try {
     const res = await fetch(`${b}/api/${s}/check-connection-session`, {
       headers: { Authorization: `Bearer ${t}` },
+      cache: "no-store",
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return "DISCONNECTED";
-    const data = await res.json();
-    return data?.status === "CONNECTED" ? "CONNECTED" : "DISCONNECTED";
+    if (!res.ok) return "UNKNOWN";
+    const data = await res.json() as Record<string, unknown>;
+    // WPPConnect pode retornar status como boolean ou como string em vários formatos
+    if (typeof data.status === "boolean") return data.status ? "CONNECTED" : "DISCONNECTED";
+    const st = String(data.status ?? data.state ?? "").toUpperCase();
+    if (["CONNECTED", "ISLOGGED", "OPEN", "AUTHENTICATED"].includes(st)) return "CONNECTED";
+    if (["DISCONNECTED", "NOTLOGGED", "CLOSED"].includes(st)) return "DISCONNECTED";
+    return "UNKNOWN";
   } catch { return "UNKNOWN"; }
 }
 
