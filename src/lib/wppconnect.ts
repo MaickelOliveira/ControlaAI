@@ -117,9 +117,7 @@ export async function generateAndSaveToken(): Promise<{ token: string; error?: s
   if (!b || !secret) return { token: "", error: "Configure o servidor e a secret key primeiro" };
   try {
     const res = await fetch(`${b}/api/${s}/${secret}/generate-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      method: "GET",
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
