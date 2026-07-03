@@ -2,27 +2,25 @@
 import { useEffect, useState } from "react";
 
 export default function ClienteConfigPage() {
-  const [wppPhone, setWppPhone] = useState("");
-  const [currentPhone, setCurrentPhone] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string; plan: string; activeMode: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; email: string; plan: string; wppPhone?: string } | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => {
-      if (d.user) {
-        setUser(d.user);
-        if (d.user.wppPhone) { setCurrentPhone(d.user.wppPhone); setWppPhone(d.user.wppPhone); }
-      }
-    });
+    fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser(d.user); });
   }, []);
 
-  async function savePhone(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    await fetch("/api/admin/user-mode", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wppPhone }) });
-    setCurrentPhone(wppPhone || null);
-    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 3000);
+  async function generateCode() {
+    setLinking(true);
+    const r = await fetch("/api/dashboard/wpp-link", { method: "POST" });
+    const d = await r.json();
+    if (r.ok) setCode(d.code);
+    setLinking(false);
+  }
+
+  async function refresh() {
+    const d = await fetch("/api/dashboard").then(r => r.json());
+    if (d.user) setUser(d.user);
   }
 
   return (
@@ -32,69 +30,84 @@ export default function ClienteConfigPage() {
         <p className="text-slate-400 text-sm mt-0.5">Configure seu acesso ao bot WhatsApp</p>
       </div>
 
-      {/* WhatsApp do cliente */}
+      {/* Vincular WhatsApp */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
-          <span className="text-xl">📱</span>
-          Meu WhatsApp no Bot
+          <span className="text-xl">📱</span> Vincular WhatsApp ao Bot
         </h2>
         <p className="text-sm text-slate-400 mb-5">
-          Informe o número de WhatsApp que você vai usar para enviar mensagens ao assistente IA e registrar suas finanças e tarefas.
+          Vincule seu número para usar o assistente IA pelo WhatsApp. O sistema identifica você automaticamente.
         </p>
 
-        {currentPhone ? (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4 flex items-center gap-3">
-            <span className="text-emerald-600 text-lg">✓</span>
-            <div>
-              <p className="text-sm font-semibold text-emerald-700">Número cadastrado</p>
-              <p className="text-xs text-emerald-600">{currentPhone}</p>
+        {user?.wppPhone ? (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-emerald-600 text-lg">✓</span>
+              <div>
+                <p className="text-sm font-semibold text-emerald-700">WhatsApp vinculado</p>
+                <p className="text-xs text-emerald-600 font-mono">{user.wppPhone}</p>
+              </div>
             </div>
+            <button onClick={generateCode} disabled={linking}
+              className="text-xs border border-emerald-300 text-emerald-700 hover:bg-emerald-100 rounded-lg px-3 py-1.5 transition">
+              Revincular com outro número
+            </button>
           </div>
         ) : (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center gap-3">
             <span className="text-amber-600 text-lg">⚠</span>
             <div>
-              <p className="text-sm font-semibold text-amber-700">Número não cadastrado</p>
-              <p className="text-xs text-amber-600">Cadastre seu número para usar o bot!</p>
+              <p className="text-sm font-semibold text-amber-700">WhatsApp não vinculado</p>
+              <p className="text-xs text-amber-600">Vincule para usar o bot!</p>
             </div>
           </div>
         )}
 
-        <form onSubmit={savePhone} className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Número com DDD (somente dígitos)
-            </label>
-            <input
-              value={wppPhone}
-              onChange={e => setWppPhone(e.target.value.replace(/\D/g, ""))}
-              placeholder="Ex: 44999999999 (com DDD)"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400"
-            />
-            <p className="text-xs text-slate-400 mt-1.5">
-              Coloque com DDD, sem espaços ou traços. Ex: 44999991234
-            </p>
-          </div>
-          <button type="submit" disabled={saving}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
-            {saving ? "Salvando..." : saved ? "✓ Salvo com sucesso!" : "💾 Salvar número"}
+        {!code ? (
+          <button onClick={generateCode} disabled={linking}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
+            {linking ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
+            ) : "📲 Vincular meu WhatsApp"}
           </button>
-        </form>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 text-center">
+              <p className="text-xs text-slate-500 mb-2">Envie este código para o bot no WhatsApp:</p>
+              <p className="text-5xl font-bold tracking-widest text-slate-900 font-mono">{code}</p>
+              <p className="text-xs text-slate-400 mt-3">⏱ Válido por 10 minutos</p>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
+              <p className="font-semibold mb-1">Como fazer:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Abra o WhatsApp no celular que vai usar</li>
+                <li>Mande a mensagem com apenas o código: <strong>{code}</strong></li>
+                <li>O bot vai confirmar a vinculação automaticamente</li>
+              </ol>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={refresh}
+                className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl py-2.5 text-sm transition">
+                ✓ Já enviei, verificar
+              </button>
+              <button onClick={() => setCode(null)}
+                className="text-slate-400 hover:text-slate-600 rounded-xl px-4 py-2.5 text-sm transition">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Como usar */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-          <span>💬</span>
-          Como enviar mensagens para o Bot
-        </h2>
-        <div className="space-y-3">
+        <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><span>💬</span> Comandos do Bot</h2>
+        <div className="space-y-2">
           {[
             { icon: "💸", title: "Registrar despesa", ex: "\"Gastei 45 no mercado\"" },
             { icon: "💰", title: "Registrar receita", ex: "\"Recebi 3000 de salário\"" },
-            { icon: "📊", title: "Ver saldo", ex: "\"Meu saldo\" ou \"Resumo do mês\"" },
+            { icon: "📊", title: "Ver saldo", ex: "\"Meu saldo\"" },
             { icon: "📋", title: "Criar tarefa", ex: "\"Criar tarefa: ligar pro João até sexta\"" },
-            { icon: "✅", title: "Concluir tarefa", ex: "\"Concluir 1\" (número da tarefa)\"" },
             { icon: "🎯", title: "Criar meta", ex: "\"Meta: guardar 5000 para viagem\"" },
             { icon: "⛽", title: "Gasto no carro", ex: "\"Abasteci 80 reais no Gol\"" },
             { icon: "🏢", title: "Trocar modo", ex: "\"Modo empresa\" ou \"Modo pessoal\"" },
@@ -110,7 +123,6 @@ export default function ClienteConfigPage() {
         </div>
       </div>
 
-      {/* Dados da conta */}
       {user && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
           <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><span>👤</span> Sua Conta</h2>

@@ -17,7 +17,9 @@ export type User = {
   status: UserStatus;
   activeMode: UserMode;
   company?: string;
-  wppPhone?: string;         // número WhatsApp que o cliente usa para mandar mensagens ao bot
+  wppPhone?: string;         // identificador WhatsApp (número ou LID) salvo automaticamente via código
+  wppVerifyCode?: string;    // código temporário de vinculação
+  wppVerifyExpires?: string; // expiração do código
   trialEndsAt: string;
   createdAt: string;
 };
@@ -117,6 +119,23 @@ export function createUserByPhone(phone: string, name: string, plan: UserPlan = 
   users.push(user);
   save(users);
   return user;
+}
+
+export function generateWppVerifyCode(userId: string): string {
+  const code = String(Math.floor(1000 + Math.random() * 9000)); // 4 dígitos
+  const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+  updateUser(userId, { wppVerifyCode: code, wppVerifyExpires: expires });
+  return code;
+}
+
+export function getUserByWppCode(code: string): User | null {
+  const users = load();
+  const now = new Date();
+  return users.find(u =>
+    u.wppVerifyCode === code &&
+    u.wppVerifyExpires &&
+    new Date(u.wppVerifyExpires) > now
+  ) ?? null;
 }
 
 export function isTrialExpired(user: User): boolean {

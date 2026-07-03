@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUsers, updateUser, isTrialExpired } from "@/lib/users";
+import { getUsers, updateUser, isTrialExpired, getUserByWppCode } from "@/lib/users";
 import { processMessage, transcribeAudio } from "@/lib/ai-processor";
 import { addFinance, getBalance, formatCurrency } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
@@ -68,14 +68,24 @@ export async function POST(req: NextRequest) {
 
     if (!messageText) return NextResponse.json({ ok: true });
 
+    // ── Verifica se é um código de vinculação (4 dígitos) ──
+    const codeMatch = messageText.trim().match(/^(\d{4})$/);
+    if (codeMatch) {
+      const codeUser = getUserByWppCode(codeMatch[1]);
+      if (codeUser) {
+        updateUser(codeUser.id, { wppPhone: from, wppVerifyCode: undefined, wppVerifyExpires: undefined });
+        await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*\n\nOlá, ${codeUser.name}! Agora você pode usar o bot normalmente.\n\nDigite *ajuda* para ver os comandos disponíveis.`);
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     // ── Identifica usuário pelo wppPhone cadastrado ──
     const allUsers = getUsers();
     console.log(`[webhook] buscando from=${from} | users=${allUsers.length} | phones=${allUsers.map(u => (u as Record<string,unknown>).wppPhone).join(",")}`);
     const user = getUserByWppPhone(from);
 
     if (!user) {
-      // Número não cadastrado — rejeita
-      await wppSend(from, "⛔ *Ops!* Seu número não está cadastrado em nossa plataforma.\n\nSe você é cliente, acesse o dashboard e cadastre seu número em *Configurações*.\n\nPara contratar: controlaai.app 🚀");
+      await wppSend(from, "⛔ *Ops!* Seu número não está cadastrado em nossa plataforma.\n\nSe você é cliente, acesse o dashboard em *Configurações* e clique em *Vincular WhatsApp* para gerar seu código.\n\nPara contratar: controlaai.app 🚀");
       return NextResponse.json({ ok: true });
     }
 
