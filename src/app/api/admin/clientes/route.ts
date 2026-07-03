@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession as getSession } from "@/lib/auth";
-import { getUsers, isTrialExpired } from "@/lib/users";
+import { getUsers, isTrialExpired, createUser, getUserByEmail, updateUser } from "@/lib/users";
 import { getFinancesByUser } from "@/lib/finances";
 import { getTasksByUser } from "@/lib/tasks";
 
@@ -47,4 +47,29 @@ export async function GET() {
   };
 
   return NextResponse.json({ clientes, stats });
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  const body = await req.json();
+  const { name, email, password, phone, plan, company, isTrial, trialDays } = body;
+
+  if (!name || !email || !password) return NextResponse.json({ error: "Nome, email e senha são obrigatórios" }, { status: 400 });
+  if (getUserByEmail(email)) return NextResponse.json({ error: "Email já cadastrado" }, { status: 400 });
+
+  const user = await createUser({ name, email, password, phone: phone || "", plan: plan || "personal", company });
+
+  if (!isTrial) {
+    // Ativo imediatamente (sem trial)
+    updateUser(user.id, { status: "active" });
+  } else if (trialDays && trialDays !== 14) {
+    // Trial com prazo customizado
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + Number(trialDays));
+    updateUser(user.id, { trialEndsAt: trialEnd.toISOString() });
+  }
+
+  return NextResponse.json({ ok: true, id: user.id });
 }
