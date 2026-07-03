@@ -7,7 +7,7 @@ import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses } from "@/lib/vehicles";
 import { sendText as wppSend } from "@/lib/wppconnect";
-import { nowBR } from "@/lib/date-br";
+import { nowBR, spToUTC } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyModeSwitch, replyHelp,
@@ -217,8 +217,10 @@ export async function POST(req: NextRequest) {
 
       case "reminder_set": {
         if (!ai.reminder) break;
-        createReminder({ userId: user.id, message: ai.reminder.message, phone: from, scheduledAt: ai.reminder.scheduledAt, repeat: ai.reminder.repeat || "none" });
-        await wppSend(from, replyReminderSet(ai.reminder.message, ai.reminder.scheduledAt, ai.reminder.repeat));
+        // Converte horário SP (gerado pela IA) para UTC antes de salvar
+        const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
+        createReminder({ userId: user.id, message: ai.reminder.message, phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none" });
+        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat));
         break;
       }
 
