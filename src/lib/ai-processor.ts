@@ -163,12 +163,13 @@ export async function processMessage(message: string): Promise<AIResult> {
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
 
   if (!apiKey) {
+    console.error("[ai-processor] GEMINI_API_KEY não configurada");
     return { intent: "unknown", confidence: 0 };
   }
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const result = await model.generateContent(
       `${SYSTEM_PROMPT}\n\nMensagem do usuário: "${message}"`
@@ -179,7 +180,7 @@ export async function processMessage(message: string): Promise<AIResult> {
     const parsed = JSON.parse(text) as AIResult;
     return parsed;
   } catch (e) {
-    console.error("[ai-processor] Erro Gemini:", e);
+    console.error("[ai-processor] Erro Gemini:", String(e));
     return { intent: "unknown", confidence: 0 };
   }
 }
