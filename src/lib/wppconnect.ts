@@ -45,13 +45,24 @@ export async function sendText(to: string, message: string): Promise<boolean> {
     return false;
   }
   try {
-    const phone = to.replace(/\D/g, "");
+    // Preserva sufixo @lid se presente (WhatsApp Business LID), senão usa @c.us
+    const rawTo = to.trim();
+    const phoneId = rawTo.includes("@")
+      ? rawTo
+      : /^\d+$/.test(rawTo) && rawTo.length > 13
+        ? `${rawTo}@lid`   // LID: números longos sem sufixo → @lid
+        : `${rawTo.replace(/\D/g, "")}@c.us`; // número normal → @c.us
+
     const res = await fetch(`${b}/api/${s}/send-message`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
-      body: JSON.stringify({ phone: `${phone}@c.us`, message }),
+      body: JSON.stringify({ phone: phoneId, message }),
       signal: AbortSignal.timeout(15_000),
     });
+    if (!res.ok) {
+      const err = await res.text().catch(() => "");
+      console.error(`[wpp] sendText falhou ${res.status}: ${err.slice(0, 100)}`);
+    }
     return res.ok;
   } catch (e) {
     console.error("[wpp] sendText erro:", e);
