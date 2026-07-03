@@ -4,12 +4,20 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 
-const navItems = [
+const BASE_NAV = [
   { href: "/dashboard", label: "Início", icon: "⊞" },
   { href: "/dashboard/financas", label: "Finanças", icon: "◈" },
   { href: "/dashboard/tarefas", label: "Tarefas", icon: "☑" },
   { href: "/dashboard/metas", label: "Metas", icon: "◎" },
   { href: "/dashboard/veiculos", label: "Veículos", icon: "⬡" },
+];
+const BUSINESS_NAV = [
+  { href: "/dashboard/funcionarios", label: "Funcionários", icon: "👥" },
+];
+const PERSONAL_NAV = [
+  { href: "/dashboard/supermercado", label: "Supermercado", icon: "🛒" },
+];
+const CONFIG_NAV = [
   { href: "/dashboard/configuracoes", label: "Configurações", icon: "⚙" },
 ];
 
@@ -93,7 +101,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(item => {
+          {[
+            ...BASE_NAV,
+            ...(user?.activeMode === "business" ? BUSINESS_NAV : PERSONAL_NAV),
+            ...CONFIG_NAV,
+          ].map(item => {
             const isActive = pathname === item.href;
             return (
               <Link key={item.href} href={item.href}
