@@ -7,12 +7,21 @@ type Cliente = { id: string; name: string; email: string; phone: string; wppPhon
 
 const EMPTY_FORM = { name: "", email: "", password: "", phone: "", plan: "personal", company: "", isTrial: true, trialDays: "14" };
 
+async function clienteAction(id: string, action: string, extra?: object) {
+  return fetch(`/api/admin/clientes/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...extra }),
+  });
+}
+
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
+  const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -130,7 +139,44 @@ export default function ClientesPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <Link href={`/admin/clientes/${c.id}`} className="text-xs text-emerald-400 hover:underline">Ver →</Link>
+                      <div className="flex items-center gap-2 relative">
+                        <Link href={`/admin/clientes/${c.id}`} className="text-xs text-emerald-500 hover:underline font-medium">Ver →</Link>
+                        <button onClick={() => setActionMenu(actionMenu === c.id ? null : c.id)}
+                          className="text-slate-400 hover:text-slate-700 transition px-1 text-base leading-none">⋯</button>
+                        {actionMenu === c.id && (
+                          <div className="absolute right-0 top-7 z-20 bg-white border border-slate-200 rounded-xl shadow-lg min-w-44 py-1 text-sm">
+                            {c.status !== "active" && (
+                              <button onClick={async () => { await clienteAction(c.id, "activate"); setActionMenu(null); load(); }}
+                                className="w-full text-left px-4 py-2 hover:bg-slate-50 text-emerald-600 font-medium transition">
+                                ✅ Ativar (remover trial)
+                              </button>
+                            )}
+                            {c.status === "active" && (
+                              <button onClick={async () => { await clienteAction(c.id, "deactivate"); setActionMenu(null); load(); }}
+                                className="w-full text-left px-4 py-2 hover:bg-slate-50 text-amber-600 transition">
+                                ⏸ Desativar acesso
+                              </button>
+                            )}
+                            {c.status !== "trial" && (
+                              <button onClick={async () => { const d = prompt("Quantos dias de trial?", "14"); if (d) { await clienteAction(c.id, "extend_trial", { trialDays: Number(d) }); setActionMenu(null); load(); } }}
+                                className="w-full text-left px-4 py-2 hover:bg-slate-50 text-blue-600 transition">
+                                ⏱ Colocar em trial
+                              </button>
+                            )}
+                            {c.status === "trial" && (
+                              <button onClick={async () => { const d = prompt("Estender por quantos dias?", "14"); if (d) { await clienteAction(c.id, "extend_trial", { trialDays: Number(d) }); setActionMenu(null); load(); } }}
+                                className="w-full text-left px-4 py-2 hover:bg-slate-50 text-blue-600 transition">
+                                ⏱ Estender trial
+                              </button>
+                            )}
+                            <div className="border-t border-slate-100 my-1" />
+                            <button onClick={async () => { if (!confirm(`Excluir ${c.name}? Esta ação não pode ser desfeita.`)) return; await fetch(`/api/admin/clientes/${c.id}`, { method: "DELETE" }); setActionMenu(null); load(); }}
+                              className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-500 transition">
+                              🗑 Excluir cliente
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
