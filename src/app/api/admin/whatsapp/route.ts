@@ -66,24 +66,33 @@ export async function POST(req: NextRequest) {
   const { action } = body;
 
   if (action === "generate_token") {
-    // Usa credenciais passadas direto no body — ignora campos mascarados (••••)
     const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
-    const override = {
-      wppServer:    (!isMasked(body.wppServer)    && body.wppServer)    || undefined,
-      wppSecretKey: (!isMasked(body.wppSecretKey) && body.wppSecretKey) || undefined,
-      wppSession:   (!isMasked(body.wppSession)   && body.wppSession)   || undefined,
-    };
-    // Salva também para uso futuro do bot
+
+    // Se a secret key no body estiver mascarada, forçar redigitação
+    if (isMasked(body.wppSecretKey)) {
+      return NextResponse.json({ error: "Redigite a Secret Key no campo acima e clique em Gerar Token novamente. O campo está mostrando pontos (••••) mas precisamos do valor real." }, { status: 400 });
+    }
+
+    const wppSecretKey = body.wppSecretKey as string;
+    const wppServer    = !isMasked(body.wppServer) ? (body.wppServer as string) : undefined;
+    const wppSession   = !isMasked(body.wppSession) ? (body.wppSession as string) : undefined;
+
+    if (!wppSecretKey) {
+      return NextResponse.json({ error: "Preencha a Secret Key antes de gerar o token." }, { status: 400 });
+    }
+
+    // Limpa valor corrompido do admin.json e salva o valor real
     const adm = loadAdmin();
     const toSave = {
       ...adm,
-      ...(override.wppServer    ? { wppServer:    override.wppServer }    : {}),
-      ...(override.wppSecretKey ? { wppSecretKey: override.wppSecretKey } : {}),
-      ...(override.wppSession   ? { wppSession:   override.wppSession }   : {}),
+      wppSecretKey,
+      ...(wppServer  ? { wppServer }  : {}),
+      ...(wppSession ? { wppSession } : {}),
     };
     saveAdmin(toSave);
     syncToConfig();
-    const result = await generateAndSaveToken(override);
+
+    const result = await generateAndSaveToken({ wppServer, wppSecretKey, wppSession });
     if (!result || result.error) {
       return NextResponse.json({ error: result?.error || "Falha ao gerar token", url: result?.url }, { status: 500 });
     }
