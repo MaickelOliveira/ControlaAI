@@ -26,11 +26,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar admin */}
       <div className="w-60 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
         <div className="p-5 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 mb-4">
             <span className="text-xl">🤖</span>
             <div>
               <p className="text-white font-bold text-sm leading-none">ControlaAI</p>
-              <p className="text-emerald-400 text-xs mt-0.5">Admin Panel</p>
+              <p className="text-emerald-400 text-xs mt-0.5">Painel do Dono</p>
+            </div>
+          </div>
+          {/* Badge de modo */}
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4 h-4 text-amber-400">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-amber-300">Modo Administrador</p>
+              <p className="text-[10px] text-amber-500/70">Acesso total à plataforma</p>
             </div>
           </div>
         </div>
