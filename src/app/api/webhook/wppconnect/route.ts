@@ -31,11 +31,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const from = (body.from as string ?? "").replace("@c.us", "").replace(/\D/g, "");
-    const fromMe = body.fromMe as boolean;
+    const rawFrom = body.from ?? body.data?.from ?? "";
+    const from = (rawFrom as string).replace("@c.us", "").replace(/\D/g, "");
+    const fromMe = body.fromMe ?? body.data?.fromMe ?? false;
+    const bodyText = body.body ?? body.data?.body ?? body.content ?? body.data?.content ?? "";
+    console.log(`[webhook] event=${event} from=${from} fromMe=${fromMe} body=${JSON.stringify(body).slice(0, 300)}`);
     if (!from || fromMe) return NextResponse.json({ ok: true });
 
-    let messageText = (body.body as string ?? body.content as string ?? "").trim();
+    let messageText = (bodyText as string ?? "").trim();
 
     // Transcreve áudio
     if (!messageText && body.type === "audio") {
@@ -53,6 +56,8 @@ export async function POST(req: NextRequest) {
     if (!messageText) return NextResponse.json({ ok: true });
 
     // ── Identifica usuário pelo wppPhone cadastrado ──
+    const allUsers = getUsers();
+    console.log(`[webhook] buscando from=${from} | users=${allUsers.length} | phones=${allUsers.map(u => (u as Record<string,unknown>).wppPhone).join(",")}`);
     const user = getUserByWppPhone(from);
 
     if (!user) {
