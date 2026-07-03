@@ -131,6 +131,32 @@ export function replyTrialExpired(): string {
   return `⚠️ Seu período de teste encerrou.\n\nPara continuar usando o ControlaAI, acesse o dashboard e assine um plano:\n🌐 controlaai.app/planos`;
 }
 
-export function replyUnknown(): string {
-  return `Não entendi 😅 Digite *ajuda* para ver o que posso fazer por você!`;
+export function replyUnknown(originalMsg?: string): string {
+  const quote = originalMsg ? `\n\n> _"${originalMsg}"_\n` : "\n";
+  return `🤔 Não entendi bem o que você quer fazer.${quote}
+Pode reformular? Por exemplo:
+
+💸 *Despesa:* _"gastei 50 no mercado"_
+💰 *Receita:* _"recebi 3000 de salário"_
+📋 *Tarefa:* _"criar tarefa: ligar pro João"_
+🔔 *Lembrete:* _"me lembra amanhã às 9h de pagar conta"_
+🎯 *Meta:* _"meta: guardar 5000 para viagem"_
+📊 *Saldo:* _"meu saldo"_ ou _"extrato"_
+
+Ou digite *ajuda* para ver todos os comandos.`;
+}
+
+export function replyLowConfidence(intent: string, details: string, originalMsg: string): string {
+  const intentLabel: Record<string, string> = {
+    finance_register: "registrar um lançamento financeiro",
+    finance_edit: "editar um lançamento",
+    finance_delete: "excluir um lançamento",
+    task_create: "criar uma tarefa",
+    task_update: "atualizar uma tarefa",
+    reminder_set: "criar um lembrete",
+    goal_create: "criar uma meta",
+    goal_add: "adicionar valor a uma meta",
+  };
+  const label = intentLabel[intent] || intent;
+  return `🤔 Entendi que você quer *${label}*, mas não tenho certeza dos detalhes.\n\n> _"${originalMsg}"_\n\n${details}\n\nEstá correto? Se sim, confirme. Se não, reformule a mensagem.`;
 }
