@@ -108,28 +108,34 @@ export async function startSession(webhookUrl: string): Promise<boolean> {
 }
 
 /** Gera o JWT de sessão usando a secret key do servidor WPPConnect.
- *  Salva automaticamente o token no config para uso posterior. */
-export async function generateAndSaveToken(): Promise<{ token: string; error?: string } | null> {
+ *  Salva automaticamente o token no config para uso posterior.
+ *  Aceita override de credenciais para não depender do config salvo. */
+export async function generateAndSaveToken(override?: {
+  wppServer?: string; wppSecretKey?: string; wppSession?: string;
+}): Promise<{ token: string; url?: string; error?: string } | null> {
   const cfg = getConfig();
-  const b = (cfg.wppServer || "").replace(/\/$/, "");
-  const secret = cfg.wppSecretKey || "";
-  const s = cfg.wppSession || "controlaai";
+  const b = ((override?.wppServer ?? cfg.wppServer) || "").replace(/\/$/, "");
+  const secret = (override?.wppSecretKey ?? cfg.wppSecretKey) || "";
+  const s = (override?.wppSession ?? cfg.wppSession) || "controlaai";
   if (!b || !secret) return { token: "", error: "Configure o servidor e a secret key primeiro" };
+  const url = `${b}/api/${s}/${secret}/generate-token`;
   try {
-    const res = await fetch(`${b}/api/${s}/${secret}/generate-token`, {
-      method: "GET",
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => `HTTP ${res.status}`);
-      return { token: "", error: `Servidor retornou erro: ${text.slice(0, 200)}` };
+      return { token: "", url, error: `Servidor retornou erro: ${text.slice(0, 300)}` };
     }
     const data = await res.json();
     const tok: string = data?.token ?? (data?.full as string)?.replace("Bearer ", "") ?? "";
-    if (!tok) return { token: "", error: "Servidor não retornou token. Verifique a secret key." };
+    if (!tok) return { token: "", url, error: `Servidor não retornou token. Resposta: ${JSON.stringify(data)}` };
     saveConfig({ ...cfg, wppToken: tok });
-    return { token: tok };
+    return { token: tok, url };
   } catch (e) {
-    return { token: "", error: String(e) };
+    return { token: "", url, error: String(e) };
   }
 }

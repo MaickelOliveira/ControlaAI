@@ -48,9 +48,7 @@ export default function AdminWhatsappPage() {
 
   async function generateToken() {
     setGenerating(true); setGenMsg(null);
-    // Salva automaticamente antes de gerar para garantir que o config está atualizado
-    await fetch("/api/admin/whatsapp", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg) });
-    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "generate_token" }) });
+    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "generate_token", wppServer: cfg.wppServer, wppSecretKey: cfg.wppSecretKey, wppSession: cfg.wppSession }) });
     const d = await r.json();
     if (r.ok) {
       setGenMsg({ type: "ok", text: `✓ Token gerado! (${d.token})` });
