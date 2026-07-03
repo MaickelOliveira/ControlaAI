@@ -66,8 +66,9 @@ export function updateGoalStatus(id: string, userId: string, status: GoalStatus)
 }
 
 export function findGoalByTitle(userId: string, title: string, mode?: GoalMode): Goal | null {
+  if (!title) return null;
   const lower = title.toLowerCase();
-  return getGoalsByUser(userId, mode).find(g => g.title.toLowerCase().includes(lower)) ?? null;
+  return getGoalsByUser(userId, mode).find(g => g.title?.toLowerCase().includes(lower)) ?? null;
 }
 
 export function getGoalProgress(goal: Goal): number {
