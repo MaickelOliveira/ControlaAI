@@ -5,6 +5,8 @@ import type { UserMode } from "./users";
 export type Intent =
   | "finance_register"
   | "finance_query"
+  | "finance_edit"
+  | "finance_delete"
   | "task_create"
   | "task_update"
   | "task_query"
@@ -77,6 +79,8 @@ Hoje é: ${new Date().toLocaleDateString("pt-BR")} (${new Date().toISOString().s
 
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar gasto ou receita
+- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
+- finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos do mês
 - balance_query: pergunta sobre saldo atual
 - task_create: criar uma tarefa
@@ -142,6 +146,32 @@ OU para lembrete:
     "message": "Pagar conta de água",
     "scheduledAt": "2026-07-05T09:00:00",
     "repeat": "monthly"
+  }
+}
+
+OU para editar lançamento (finance_edit):
+{
+  "intent": "finance_edit",
+  "confidence": 0.9,
+  "finance": {
+    "type": "expense",
+    "amount": 60.00,
+    "category": "Alimentação",
+    "description": "ifood",
+    "date": "2026-07-03"
+  }
+}
+
+OU para excluir lançamento (finance_delete):
+{
+  "intent": "finance_delete",
+  "confidence": 0.9,
+  "finance": {
+    "type": "expense",
+    "amount": 0,
+    "category": "",
+    "description": "ifood",
+    "date": ""
   }
 }
 
