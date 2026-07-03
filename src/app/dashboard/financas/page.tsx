@@ -55,71 +55,80 @@ export default function FinancasPage() {
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">💰 Finanças</h1>
           <p className="text-slate-400 text-sm mt-0.5">{modeLabel}</p>
         </div>
         <button onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition">
+          className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition shadow-sm">
           + Adicionar
         </button>
       </div>
 
       {/* Saldo */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white border border-emerald-100 rounded-2xl p-5 shadow-sm">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Receitas</p>
-          <p className="text-xl font-bold text-emerald-600 mt-1">{fmt(balance.income)}</p>
+        <div className="bg-emerald-600 rounded-2xl p-6 shadow-sm">
+          <p className="text-xs text-emerald-100 font-medium uppercase tracking-wide">Receitas</p>
+          <p className="text-2xl font-bold text-white mt-2">{fmt(balance.income)}</p>
         </div>
-        <div className="bg-white border border-red-100 rounded-2xl p-5 shadow-sm">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Despesas</p>
-          <p className="text-xl font-bold text-red-500 mt-1">{fmt(balance.expense)}</p>
+        <div className="bg-red-500 rounded-2xl p-6 shadow-sm">
+          <p className="text-xs text-red-100 font-medium uppercase tracking-wide">Despesas</p>
+          <p className="text-2xl font-bold text-white mt-2">{fmt(balance.expense)}</p>
         </div>
-        <div className={clsx("bg-white rounded-2xl p-5 shadow-sm border", balance.balance >= 0 ? "border-blue-100" : "border-orange-100")}>
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Saldo</p>
-          <p className={clsx("text-xl font-bold mt-1", balance.balance >= 0 ? "text-blue-600" : "text-orange-500")}>{fmt(balance.balance)}</p>
+        <div className={clsx("rounded-2xl p-6 shadow-sm", balance.balance >= 0 ? "bg-blue-600" : "bg-orange-500")}>
+          <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Saldo do Mês</p>
+          <p className="text-2xl font-bold text-white mt-2">{fmt(balance.balance)}</p>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-5">
-        {topCats.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <h3 className="font-semibold text-slate-800 mb-4 text-sm">📊 Top Despesas por Categoria</h3>
-            <div className="space-y-3">
+      {/* Categorias + Extrato lado a lado em tela grande, empilhados em mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        {/* Top categorias — ocupa 2/5 */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <h3 className="font-semibold text-slate-800 mb-4 text-sm">📊 Despesas por Categoria</h3>
+          {topCats.length === 0 ? (
+            <div className="text-center py-10 text-slate-300">
+              <p className="text-3xl mb-2">📊</p>
+              <p className="text-sm">Sem despesas registradas</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
               {topCats.map(([cat, val]) => {
                 const pct = balance.expense > 0 ? (val / balance.expense * 100).toFixed(0) : 0;
                 return (
                   <div key={cat}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-slate-600">{cat}</span>
+                    <div className="flex justify-between text-sm mb-1.5">
+                      <span className="text-slate-600 font-medium">{cat}</span>
                       <span className="font-semibold text-slate-800">{fmt(val)}</span>
                     </div>
-                    <div className="h-1.5 bg-slate-100 rounded-full">
-                      <div className="h-1.5 bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                    <div className="h-2 bg-slate-100 rounded-full">
+                      <div className="h-2 bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
+                    <p className="text-xs text-slate-400 mt-0.5 text-right">{pct}% do total</p>
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        <div className={clsx("bg-white rounded-2xl border border-slate-100 shadow-sm p-5", topCats.length === 0 ? "lg:col-span-2" : "")}>
+        {/* Extrato — ocupa 3/5 */}
+        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-4 text-sm">📋 Extrato</h3>
           {loading ? <p className="text-slate-400 text-sm">Carregando...</p> : finances.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
-              <p className="text-3xl mb-2">💬</p>
-              <p className="text-sm">Nenhum registro ainda.</p>
+            <div className="text-center py-16 text-slate-400">
+              <p className="text-4xl mb-3">💬</p>
+              <p className="font-medium text-slate-500">Nenhum registro ainda</p>
               <p className="text-xs mt-1">Envie uma mensagem para o bot!</p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {finances.slice(0, 30).map(f => (
-                <div key={f.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+            <div className="space-y-1 max-h-96 overflow-y-auto">
+              {finances.slice(0, 50).map(f => (
+                <div key={f.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition">
                   <div className="flex items-center gap-3">
-                    <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
+                    <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
                       {f.type === "income" ? "↑" : "↓"}
                     </div>
                     <div>
@@ -127,7 +136,7 @@ export default function FinancasPage() {
                       <p className="text-xs text-slate-400">{f.category} · {new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}</p>
                     </div>
                   </div>
-                  <span className={clsx("text-sm font-bold", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
+                  <span className={clsx("text-sm font-bold shrink-0 ml-4", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
                     {f.type === "income" ? "+" : "-"}{fmt(f.amount)}
                   </span>
                 </div>
