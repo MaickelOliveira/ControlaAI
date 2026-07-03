@@ -10,7 +10,7 @@ import { sendText as wppSend } from "@/lib/wppconnect";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyModeSwitch, replyHelp,
-  replyTrialExpired, replyUnknown,
+  replyTrialExpired, replyUnknown, replyLowConfidence,
 } from "@/lib/bot-replies";
 
 function getUserByWppPhone(phone: string) {
@@ -102,7 +102,20 @@ export async function POST(req: NextRequest) {
 
     // ── Processa com IA ──
     const ai = await processMessage(messageText);
-    console.log(`[bot] ${user.name} | intent=${ai.intent} | mode=${mode}`);
+    console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
+
+    // Confiança baixa — pede esclarecimento antes de agir
+    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help") {
+      const details = ai.finance
+        ? `💰 Valor: ${formatCurrency(ai.finance.amount)}\n🏷️ Categoria: ${ai.finance.category}\n📝 Descrição: ${ai.finance.description}`
+        : ai.task
+        ? `📌 Título: ${ai.task.title}`
+        : ai.reminder
+        ? `🔔 Mensagem: ${ai.reminder.message}`
+        : "";
+      await wppSend(from, replyLowConfidence(ai.intent, details, messageText));
+      return NextResponse.json({ ok: true });
+    }
 
     switch (ai.intent) {
 
@@ -333,7 +346,7 @@ export async function POST(req: NextRequest) {
             await wppSend(from, msg.trim());
           }
         } else {
-          await wppSend(from, replyUnknown());
+          await wppSend(from, replyUnknown(messageText));
         }
       }
     }
