@@ -83,11 +83,21 @@ export async function getQrCode(): Promise<string | null> {
   try {
     const res = await fetch(`${b}/api/${s}/qrcode-session`, {
       headers: { Authorization: `Bearer ${t}` },
+      cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("image/")) {
+      const buf = await res.arrayBuffer();
+      const b64 = Buffer.from(buf).toString("base64");
+      const mime = contentType.split(";")[0].trim();
+      return `data:${mime};base64,${b64}`;
+    }
     const data = await res.json();
-    return data?.qrcode ?? null;
+    const qr: string = data?.qrcode || data?.base64 || "";
+    if (!qr) return null;
+    return qr.startsWith("data:") ? qr : `data:image/png;base64,${qr}`;
   } catch { return null; }
 }
 
