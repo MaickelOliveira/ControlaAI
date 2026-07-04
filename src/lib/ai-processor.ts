@@ -22,6 +22,7 @@ export type Intent =
   | "goal_complete"
   | "vehicle_expense"
   | "vehicle_query"
+  | "how_to"
   | "help"
   | "unknown";
 
@@ -72,6 +73,7 @@ export type AIResult = {
   vehicle?: VehicleData;
   mode?: UserMode;
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete
+  response?: string; // resposta direta para how_to
   confidence: number;
 };
 
@@ -101,8 +103,17 @@ INTENÇÕES POSSÍVEIS:
 - vehicle_expense: registrar gasto com veículo ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro")
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
-- help: pedir ajuda
+- how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos"). Nesse caso, escreva uma explicação clara e amigável no campo "response".
+- help: pedir lista de comandos ("ajuda", "help", "o que você faz")
 - unknown: não identificado
+
+⚠️ REGRA CRÍTICA — tipo income vs expense:
+Palavras que indicam RECEITA (type: "income"): recebi, ganhei, entrou, faturei, vendi, lucrei, recebo, entrada de, receita de, faturamento, pagamento recebido
+Palavras que indicam DESPESA (type: "expense"): gastei, paguei, comprei, saiu, despesa, gasto, conta, fatura, parcela, custo
+Se a mensagem contém "recebi", "ganhei" ou "entrou" → type DEVE ser "income", independentemente da categoria.
+Exemplo: "recebi 500 de vendas" → type: "income", category: "Vendas"
+Exemplo: "vendas do mês foram 2000" → type: "income", category: "Vendas"
+Exemplo: "gastei 500 com vendedor" → type: "expense", category: "Outros"
 
 CATEGORIAS DE DESPESA: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
 CATEGORIAS DE RECEITA: Salário, Freelance, Vendas, Investimentos, Aluguel, Serviços, Reembolso, Outros
@@ -116,6 +127,8 @@ MODO (business ou personal):
 Para datas relativas: "hoje"=hoje, "amanhã"=amanhã, "próxima sexta"=calcule a data exata.
 
 Retorne SOMENTE JSON válido, sem markdown:
+
+Exemplo despesa:
 {
   "intent": "finance_register",
   "confidence": 0.95,
@@ -129,7 +142,20 @@ Retorne SOMENTE JSON válido, sem markdown:
   }
 }
 
-Exemplo com modo empresa detectado automaticamente:
+Exemplo receita ("recebi 500 vendas" → DEVE ser income):
+{
+  "intent": "finance_register",
+  "confidence": 0.95,
+  "finance": {
+    "type": "income",
+    "amount": 500.00,
+    "category": "Vendas",
+    "description": "vendas",
+    "date": "2026-07-03"
+  }
+}
+
+Exemplo modo empresa:
 {
   "intent": "finance_register",
   "confidence": 0.95,
@@ -141,6 +167,13 @@ Exemplo com modo empresa detectado automaticamente:
     "date": "2026-07-03",
     "mode": "business"
   }
+}
+
+Exemplo how_to ("como faço para registrar uma despesa?"):
+{
+  "intent": "how_to",
+  "confidence": 0.95,
+  "response": "Para registrar uma despesa, é simples! Me mande uma mensagem assim:\n\n• _\"Gastei 50 no mercado\"_\n• _\"Paguei 120 de conta de luz\"_\n• _\"Comprei R$200 de roupa\"_\n\nIdentificou automaticamente o valor, categoria e data de hoje! 😊"
 }
 
 OU para tarefa:

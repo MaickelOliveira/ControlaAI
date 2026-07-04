@@ -106,7 +106,9 @@ export async function POST(req: NextRequest) {
     console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
 
     // Confiança baixa — pede esclarecimento antes de agir
-    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help") {
+    // Edit/delete são isentos: têm segurança embutida (só age se encontrar o lançamento)
+    const isEditIntent = ai.intent === "finance_edit" || ai.intent === "finance_delete";
+    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent) {
       const details = ai.finance
         ? `💰 Valor: ${formatCurrency(ai.finance.amount)}\n🏷️ Categoria: ${ai.finance.category}\n📝 Descrição: ${ai.finance.description}`
         : ai.task
@@ -136,23 +138,30 @@ export async function POST(req: NextRequest) {
       }
 
       case "finance_edit": {
-        if (!ai.finance) break;
-        // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
-        const keyword = ai.keyword || ai.finance.description || ai.finance.category || "";
-        console.log(`[bot] finance_edit keyword="${keyword}"`);
-        const candidates = keyword
-          ? findFinanceByDescription(user.id, null, keyword)
-          : getRecentTransactions(user.id, mode, 1);
-        if (!candidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${keyword}"*.\n\nDigite *extrato* para ver os últimos lançamentos e use o nome exato da descrição.`);
+        const keyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
+        console.log(`[bot] finance_edit keyword="${keyword}" finance=${JSON.stringify(ai.finance)}`);
+        if (!keyword) {
+          await wppSend(from, `✏️ Para editar, diga qual lançamento e o novo valor.\n\nEx: _"corrija o gasto do ifood para 80 reais"_\nOu: _"muda a categoria do mercado para Alimentação"_\n\nDigite *extrato* para ver os lançamentos recentes.`);
           break;
         }
-        const target = candidates[0];
+        // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
+        const editCandidates = findFinanceByDescription(user.id, null, keyword);
+        console.log(`[bot] finance_edit encontrados=${editCandidates.length}`);
+        if (!editCandidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${keyword}"*.\n\nDigite *extrato* para ver os lançamentos e use o nome exato.`);
+          break;
+        }
+        const editTarget = editCandidates[0];
         const patch: Record<string, unknown> = {};
-        if (ai.finance.amount && ai.finance.amount > 0) patch.amount = ai.finance.amount;
-        if (ai.finance.category) patch.category = ai.finance.category;
-        if (ai.finance.date) patch.date = ai.finance.date;
-        const updated = updateFinance(target.id, user.id, patch as Parameters<typeof updateFinance>[2]);
+        if (ai.finance?.amount && ai.finance.amount > 0) patch.amount = ai.finance.amount;
+        if (ai.finance?.category) patch.category = ai.finance.category;
+        if (ai.finance?.date) patch.date = ai.finance.date;
+        if (Object.keys(patch).length === 0) {
+          // Encontrou o lançamento mas não há novos valores para aplicar
+          await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} (${editTarget.category})\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          break;
+        }
+        const updated = updateFinance(editTarget.id, user.id, patch as Parameters<typeof updateFinance>[2]);
         if (updated) {
           const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
           const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
@@ -162,19 +171,23 @@ export async function POST(req: NextRequest) {
       }
 
       case "finance_delete": {
-        const keyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
-        const candidates = keyword
-          ? findFinanceByDescription(user.id, null, keyword)
-          : getRecentTransactions(user.id, mode, 1);
-        if (!candidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento com "${keyword}".\n\nDigite *extrato* para ver os últimos lançamentos.`);
+        const delKeyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
+        console.log(`[bot] finance_delete keyword="${delKeyword}" finance=${JSON.stringify(ai.finance)}`);
+        if (!delKeyword) {
+          await wppSend(from, `🗑️ Para excluir, diga qual lançamento apagar.\n\nEx: _"apaga o gasto do ifood"_\nEx: _"remove o lançamento do mercado"_\n\nDigite *extrato* para ver os lançamentos recentes.`);
           break;
         }
-        const target = candidates[0];
-        const ok = deleteFinance(target.id, user.id);
-        if (ok) {
-          const bal = getBalance(user.id, mode, year, month);
-          await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${target.description} — ${formatCurrency(target.amount)}\n\n📊 Saldo atualizado: ${formatCurrency(bal.balance)}`);
+        const delCandidates = findFinanceByDescription(user.id, null, delKeyword);
+        console.log(`[bot] finance_delete encontrados=${delCandidates.length}`);
+        if (!delCandidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${delKeyword}"*.\n\nDigite *extrato* para ver os lançamentos.`);
+          break;
+        }
+        const delTarget = delCandidates[0];
+        const delOk = deleteFinance(delTarget.id, user.id);
+        if (delOk) {
+          const delBal = getBalance(user.id, delTarget.mode as "personal" | "business", year, month);
+          await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${delTarget.description} — ${formatCurrency(delTarget.amount)}\n📅 ${new Date(delTarget.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
         }
         break;
       }
@@ -320,6 +333,15 @@ export async function POST(req: NextRequest) {
         const newMode = ai.mode || (mode === "personal" ? "business" : "personal");
         updateUser(user.id, { activeMode: newMode });
         await wppSend(from, replyModeSwitch(newMode));
+        break;
+      }
+
+      case "how_to": {
+        if (ai.response) {
+          await wppSend(from, ai.response);
+        } else {
+          await wppSend(from, replyHelp());
+        }
         break;
       }
 
