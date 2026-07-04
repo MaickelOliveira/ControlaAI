@@ -75,7 +75,7 @@ export default function ClientesPage() {
       {/* Filtros */}
       <div className="flex gap-3 flex-wrap">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar nome ou email..."
-          className="bg-white border border-slate-200 text-slate-900 rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 flex-1 min-w-48" />
+          className="bg-white border border-slate-200 text-slate-900 rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 flex-1 min-w-0" />
         {["all", "trial", "active", "expired"].map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={clsx("px-4 py-2 rounded-xl text-sm font-medium transition border",
