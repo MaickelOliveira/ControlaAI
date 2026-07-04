@@ -85,7 +85,14 @@ export function replyHelp(): string {
 💰 *Finanças:*
 • _"Gastei 50 no mercado"_ — registra despesa
 • _"Recebi 2000 de salário"_ — registra receita
+• _"extrato"_ — ver últimos lançamentos
 • _"Meu saldo"_ — ver saldo do mês
+
+✏️ *Editar/Excluir lançamento:*
+• _"Corrija o gasto do ifood para 80 reais"_
+• _"Muda a categoria do mercado para Lazer"_
+• _"Apaga o gasto do ifood"_
+• _"Remove o lançamento do mercado"_
 
 📋 *Tarefas:*
 • _"Criar tarefa: ligar pro cliente"_ — nova tarefa
@@ -95,6 +102,10 @@ export function replyHelp(): string {
 🔔 *Lembretes:*
 • _"Me lembra de pagar conta sexta às 9h"_
 • _"Todo mês dia 5 pagar aluguel"_
+
+🎯 *Metas:*
+• _"Meta: guardar 5000 para viagem até dezembro"_
+• _"Minhas metas"_
 
 🔄 *Modos:*
 • _"Modo empresa"_ — finanças empresariais
