@@ -14,8 +14,23 @@ export default function FinancasPage() {
   const [finances, setFinances] = useState<Finance[]>([]);
   const [balance, setBalance] = useState({ income: 0, expense: 0, balance: 0 });
   const [loading, setLoading] = useState(true);
+
+  // modal adicionar
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ type: "expense", amount: "", category: "", description: "" });
+
+  // modal editar
+  const [editTarget, setEditTarget] = useState<Finance | null>(null);
+  const [editForm, setEditForm] = useState({ amount: "", category: "", description: "", date: "" });
+
+  // confirmação de exclusão
+  const [deleteTarget, setDeleteTarget] = useState<Finance | null>(null);
+
+  async function reload(m: string) {
+    const d = await (await fetch(`/api/finances?mode=${m}`)).json();
+    setFinances(d.finances || []);
+    setBalance(d.balance || {});
+  }
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -40,13 +55,40 @@ export default function FinancasPage() {
     if (res.ok) {
       setShowForm(false);
       setForm({ type: "expense", amount: "", category: "", description: "" });
-      const d = await (await fetch(`/api/finances?mode=${mode}`)).json();
-      setFinances(d.finances || []);
-      setBalance(d.balance || {});
+      await reload(mode);
+    }
+  }
+
+  function openEdit(f: Finance) {
+    setEditTarget(f);
+    setEditForm({ amount: String(f.amount), category: f.category, description: f.description, date: f.date });
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editTarget) return;
+    const res = await fetch(`/api/finances/${editTarget.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: parseFloat(editForm.amount), category: editForm.category, description: editForm.description, date: editForm.date }),
+    });
+    if (res.ok) {
+      setEditTarget(null);
+      await reload(mode);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/finances/${deleteTarget.id}`, { method: "DELETE" });
+    if (res.ok) {
+      setDeleteTarget(null);
+      await reload(mode);
     }
   }
 
   const cats = form.type === "income" ? INCOME_CATS : EXPENSE_CATS;
+  const editCats = editTarget?.type === "income" ? INCOME_CATS : EXPENSE_CATS;
   const catTotals: Record<string, number> = {};
   finances.filter(f => f.type === "expense").forEach(f => {
     catTotals[f.category] = (catTotals[f.category] || 0) + f.amount;
@@ -83,9 +125,8 @@ export default function FinancasPage() {
         </div>
       </div>
 
-      {/* Categorias + Extrato lado a lado em tela grande, empilhados em mobile */}
+      {/* Categorias + Extrato */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-        {/* Top categorias — ocupa 2/5 */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-4 text-sm">📊 Despesas por Categoria</h3>
           {topCats.length === 0 ? (
@@ -114,7 +155,7 @@ export default function FinancasPage() {
           )}
         </div>
 
-        {/* Extrato — ocupa 3/5 */}
+        {/* Extrato com ações */}
         <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-4 text-sm">📋 Extrato</h3>
           {loading ? <p className="text-slate-400 text-sm">Carregando...</p> : finances.length === 0 ? (
@@ -126,19 +167,34 @@ export default function FinancasPage() {
           ) : (
             <div className="space-y-1 max-h-96 overflow-y-auto">
               {finances.slice(0, 50).map(f => (
-                <div key={f.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition">
-                  <div className="flex items-center gap-3">
+                <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
                       {f.type === "income" ? "↑" : "↓"}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{f.description}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{f.description}</p>
                       <p className="text-xs text-slate-400">{f.category} · {new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}</p>
                     </div>
                   </div>
-                  <span className={clsx("text-sm font-bold shrink-0 ml-4", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
-                    {f.type === "income" ? "+" : "-"}{fmt(f.amount)}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <span className={clsx("text-sm font-bold", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
+                      {f.type === "income" ? "+" : "-"}{fmt(f.amount)}
+                    </span>
+                    {/* Ações: aparecem no hover */}
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(f)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                        title="Editar">
+                        ✏️
+                      </button>
+                      <button onClick={() => setDeleteTarget(f)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                        title="Excluir">
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -146,6 +202,7 @@ export default function FinancasPage() {
         </div>
       </div>
 
+      {/* Modal — Adicionar */}
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -174,6 +231,51 @@ export default function FinancasPage() {
                 <button type="submit" className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition">Salvar</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Editar */}
+      {editTarget && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold text-slate-900 mb-1">✏️ Editar lançamento</h3>
+            <p className="text-xs text-slate-400 mb-4">{editTarget.type === "income" ? "💰 Receita" : "💸 Despesa"}</p>
+            <form onSubmit={handleEdit} className="space-y-3">
+              <input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} required
+                placeholder="Valor (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
+              <select value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} required
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                <option value="">Categoria</option>
+                {editCats.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Descrição" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setEditTarget(null)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                <button type="submit" className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 transition">Salvar alterações</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Confirmar exclusão */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+            <p className="text-3xl mb-3">🗑️</p>
+            <h3 className="font-bold text-slate-900 mb-1">Excluir lançamento?</h3>
+            <p className="text-sm text-slate-500 mb-1">{deleteTarget.description}</p>
+            <p className={clsx("text-lg font-bold mb-5", deleteTarget.type === "income" ? "text-emerald-600" : "text-red-500")}>
+              {deleteTarget.type === "income" ? "+" : "-"}{fmt(deleteTarget.amount)}
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+              <button onClick={handleDelete} className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 transition">Excluir</button>
+            </div>
           </div>
         </div>
       )}
