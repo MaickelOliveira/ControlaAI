@@ -171,6 +171,14 @@ export default function ClientesPage() {
                             Trial
                           </button>
                         )}
+                        <button onClick={async () => {
+                          const atual = c.maxWppPhones ?? 1;
+                          const d = prompt(`Quantos números WhatsApp este cliente pode vincular?\n(Atual: ${atual})`, String(atual));
+                          if (d && Number(d) > 0) { await clienteAction(c.id, "set_wpp_limit", { maxWppPhones: Number(d) }); load(); }
+                        }}
+                          className="text-xs border border-purple-200 text-purple-600 hover:bg-purple-50 rounded-lg px-2.5 py-1 transition">
+                          📱 {c.maxWppPhones ?? 1}
+                        </button>
                         <button onClick={async () => { if (!confirm(`Excluir ${c.name}?`)) return; await fetch(`/api/admin/clientes/${c.id}`, { method: "DELETE" }); load(); }}
                           className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-2.5 py-1 transition">
                           Excluir
