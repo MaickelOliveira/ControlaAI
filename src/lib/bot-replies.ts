@@ -3,6 +3,9 @@ import type { Task } from "./tasks";
 import { formatCurrency } from "./finances";
 import { PRIORITY_LABEL, formatDueDate } from "./tasks";
 import type { UserMode } from "./users";
+import { formatDateBR } from "./date-br";
+
+const TZ = "America/Sao_Paulo";
 
 export function replyFinanceRegistered(f: Finance, balance: number): string {
   const emoji = f.type === "income" ? "💰" : "💸";
@@ -63,8 +66,8 @@ export function replyTaskUpdated(task: Task): string {
 
 export function replyReminderSet(message: string, scheduledAt: string, repeat: string): string {
   const date = new Date(scheduledAt);
-  const dateStr = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const timeStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = formatDateBR(scheduledAt);
+  const timeStr = date.toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
   const repeatLabel: Record<string, string> = {
     none: "Uma vez",
     daily: "Todo dia",
