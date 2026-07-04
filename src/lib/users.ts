@@ -22,6 +22,8 @@ export type User = {
   maxWppPhones?: number;     // limite de números permitidos (default 1)
   wppVerifyCode?: string;    // código temporário de vinculação
   wppVerifyExpires?: string; // expiração do código
+  customCategoriesExpense?: string[];
+  customCategoriesIncome?: string[];
   trialEndsAt: string;
   createdAt: string;
 };
