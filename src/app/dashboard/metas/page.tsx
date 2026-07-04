@@ -4,10 +4,14 @@ import { clsx } from "clsx";
 
 type Goal = { id: string; title: string; targetAmount: number; currentAmount: number; deadline?: string; category: string; mode: string; status: string };
 
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number | null | undefined) {
+  return (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 function pct(g: Goal) {
-  if (!g.targetAmount) return 0;
-  return Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100));
+  const target = Number(g.targetAmount) || 0;
+  const current = Number(g.currentAmount) || 0;
+  if (!target) return 0;
+  return Math.min(100, Math.round((current / target) * 100));
 }
 
 const CATEGORIES = ["Geral", "Viagem", "Emergência", "Investimento", "Educação", "Casa", "Carro", "Saúde", "Outros"];
@@ -32,7 +36,10 @@ export default function MetasPage() {
       const res = await fetch(`/api/goals?mode=${m}`);
       if (!res.ok) throw new Error(`Erro ${res.status}`);
       const data = await res.json();
-      setGoals(Array.isArray(data) ? data : []);
+      const valid = Array.isArray(data)
+        ? data.filter((g): g is Goal => g && typeof g === "object" && !!g.id)
+        : [];
+      setGoals(valid);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -164,7 +171,7 @@ export default function MetasPage() {
                   <div>
                     <span className="font-bold text-slate-800">{fmt(goal.currentAmount)}</span>
                     <span className="text-slate-400 text-sm"> / {fmt(goal.targetAmount)}</span>
-                    <span className="text-xs text-slate-400 ml-2">faltam {fmt(Math.max(0, goal.targetAmount - goal.currentAmount))}</span>
+                    <span className="text-xs text-slate-400 ml-2">faltam {fmt(Math.max(0, (Number(goal.targetAmount) || 0) - (Number(goal.currentAmount) || 0)))}</span>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { setShowAdd(goal); setAddAmount(""); }}
@@ -190,7 +197,7 @@ export default function MetasPage() {
                     <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-base shrink-0">🏆</div>
                     <div className="min-w-0">
                       <p className="font-medium text-slate-700 text-sm truncate">{goal.title}</p>
-                      <p className="text-xs text-emerald-600 mt-0.5">{fmt(goal.targetAmount)} atingido!</p>
+                      <p className="text-xs text-emerald-600 mt-0.5">{fmt(goal.targetAmount || 0)} atingido!</p>
                     </div>
                   </div>
                 ))}
