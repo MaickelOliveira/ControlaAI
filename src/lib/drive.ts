@@ -174,6 +174,12 @@ export function getFolderByName(userId: string, name: string): DriveFolder | nul
   return loadFolders().find(f => f.userId === userId && f.name.toLowerCase() === name.toLowerCase()) ?? null;
 }
 
+export function getRecentFile(userId: string): DriveFile | null {
+  const files = loadMeta().filter(f => f.userId === userId);
+  if (!files.length) return null;
+  return files.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+}
+
 export function getTotalSize(userId: string): number {
   return loadMeta().filter(f => f.userId === userId).reduce((sum, f) => sum + f.size, 0);
 }

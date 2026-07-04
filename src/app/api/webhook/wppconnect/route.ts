@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones } from "@/lib/users";
 import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI } from "@/lib/ai-processor";
-import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById } from "@/lib/drive";
+import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
@@ -60,18 +60,27 @@ export async function POST(req: NextRequest) {
     console.log(`[webhook] full=${JSON.stringify(body)}`);
     if (!from || fromMe) return NextResponse.json({ ok: true });
 
-    // Se for um tipo de arquivo, não usa body como texto (evita base64 sendo processado como mensagem)
-    const _fileBodyTypes = ["document", "image", "video"];
-    const isFileType = _fileBodyTypes.includes(body.type);
-    let messageText = isFileType ? "" : (bodyText as string ?? "").trim();
+    // Classificação do tipo de mensagem
+    const isFileType = ["document", "image", "video"].includes(body.type);
+    const isAudio = body.type === "audio";
+    const mediaUrl = body.mediaUrl || body.url;
+    const bodyStr = typeof body.body === "string" ? body.body : "";
+    // WPPConnect às vezes envia mídia como base64 em body.body em vez de mediaUrl
+    const bodyIsBase64 = (isFileType || isAudio) && !mediaUrl && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
 
-    // Transcreve áudio
-    if (!messageText && body.type === "audio") {
+    // Não usa body como texto para tipos de arquivo nem áudio base64
+    let messageText = (isFileType || (isAudio && bodyIsBase64)) ? "" : (bodyText as string ?? "").trim();
+
+    // ── Transcreve áudio (URL ou base64) ──
+    if (isAudio) {
       try {
-        const audioUrl = body.mediaUrl || body.url;
-        if (audioUrl) {
-          const audioRes = await fetch(audioUrl);
+        if (mediaUrl) {
+          const audioRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(20_000) });
           const buf = Buffer.from(await audioRes.arrayBuffer());
+          const transcript = await transcribeAudio(buf, body.mimetype || "audio/ogg");
+          if (transcript) messageText = transcript;
+        } else if (bodyIsBase64) {
+          const buf = Buffer.from(bodyStr, "base64");
           const transcript = await transcribeAudio(buf, body.mimetype || "audio/ogg");
           if (transcript) messageText = transcript;
         }
@@ -79,10 +88,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Detecta arquivo/documento enviado via WhatsApp ──
-    const mediaUrl = body.mediaUrl || body.url;
-    // WPPConnect às vezes envia o arquivo como base64 em body.body em vez de mediaUrl
-    const bodyStr = typeof body.body === "string" ? body.body : "";
-    const bodyIsBase64 = isFileType && !mediaUrl && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
     const isFileMessage = isFileType && (mediaUrl || bodyIsBase64) && !fromMe;
 
     if (isFileMessage) {
@@ -91,8 +96,9 @@ export async function POST(req: NextRequest) {
       if (fileUser && !isTrialExpired(fileUser)) {
         const originalName = body.filename || `arquivo_${Date.now()}${body.mimetype?.includes("pdf") ? ".pdf" : body.mimetype?.includes("image") ? ".jpg" : ""}`;
         const mimeType = body.mimetype || "application/octet-stream";
-        // caption só faz sentido se não for o próprio base64
-        const caption = (!bodyIsBase64 && bodyStr && bodyStr !== originalName) ? bodyStr : undefined;
+        // caption: prioriza body.caption (legenda enviada junto ao arquivo), depois bodyStr se não for base64
+        const captionField = typeof body.caption === "string" && body.caption ? body.caption : undefined;
+        const caption = captionField || (!bodyIsBase64 && bodyStr && bodyStr !== originalName ? bodyStr : undefined);
         try {
           let buffer: Buffer;
           if (mediaUrl) {
@@ -615,6 +621,19 @@ export async function POST(req: NextRequest) {
         await wppSend(from, replyFileFound(foundFile.originalName));
         const fileBuffer = readFileSync(filePath);
         await wppSendFile(from, fileBuffer, foundFile.originalName, foundFile.mimeType);
+        break;
+      }
+
+      case "drive_rename": {
+        const newName = ai.keyword || "";
+        if (!newName) { await wppSend(from, "❓ Qual o novo nome para o arquivo?"); break; }
+        const recentFile = getRecentFile(user.id);
+        if (!recentFile) { await wppSend(from, "❓ Não encontrei nenhum arquivo recente no Drive."); break; }
+        // Gera um nome de arquivo "limpo" a partir da descrição (sem caracteres especiais)
+        const ext = recentFile.originalName.includes(".") ? recentFile.originalName.slice(recentFile.originalName.lastIndexOf(".")) : "";
+        const cleanName = newName.toLowerCase().replace(/[^a-z0-9\s\-_]/g, "").replace(/\s+/g, "_").slice(0, 60) + ext;
+        updateFile(recentFile.id, user.id, { originalName: cleanName, description: newName });
+        await wppSend(from, `✅ *Arquivo renomeado!*\n\n📄 ${cleanName}\n💬 Descrição: ${newName}\n\nJá está atualizado no *📁 Drive*. Para encontrar depois: _"ache ${newName}"_`);
         break;
       }
 
