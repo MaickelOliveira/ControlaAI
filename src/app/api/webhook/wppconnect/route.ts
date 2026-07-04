@@ -60,7 +60,10 @@ export async function POST(req: NextRequest) {
     console.log(`[webhook] full=${JSON.stringify(body)}`);
     if (!from || fromMe) return NextResponse.json({ ok: true });
 
-    let messageText = (bodyText as string ?? "").trim();
+    // Se for um tipo de arquivo, não usa body como texto (evita base64 sendo processado como mensagem)
+    const _fileBodyTypes = ["document", "image", "video"];
+    const isFileType = _fileBodyTypes.includes(body.type);
+    let messageText = isFileType ? "" : (bodyText as string ?? "").trim();
 
     // Transcreve áudio
     if (!messageText && body.type === "audio") {
@@ -76,38 +79,46 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Detecta arquivo/documento enviado via WhatsApp ──
-    const fileTypes = ["document", "image", "video", "audio"];
-    const isFileMessage = fileTypes.includes(body.type) && (body.mediaUrl || body.url);
-    if (isFileMessage && !fromMe) {
+    const mediaUrl = body.mediaUrl || body.url;
+    // WPPConnect às vezes envia o arquivo como base64 em body.body em vez de mediaUrl
+    const bodyStr = typeof body.body === "string" ? body.body : "";
+    const bodyIsBase64 = isFileType && !mediaUrl && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
+    const isFileMessage = isFileType && (mediaUrl || bodyIsBase64) && !fromMe;
+
+    if (isFileMessage) {
       // Identifica usuário antes de processar o arquivo
       const fileUser = getUserByWppPhone(from);
       if (fileUser && !isTrialExpired(fileUser)) {
-        const mediaUrl = body.mediaUrl || body.url;
-        const originalName = body.filename || body.caption || `arquivo_${Date.now()}${body.mimetype?.includes("pdf") ? ".pdf" : body.mimetype?.includes("image") ? ".jpg" : ""}`;
+        const originalName = body.filename || `arquivo_${Date.now()}${body.mimetype?.includes("pdf") ? ".pdf" : body.mimetype?.includes("image") ? ".jpg" : ""}`;
         const mimeType = body.mimetype || "application/octet-stream";
-        const caption = (body.type !== "document" && bodyText) ? bodyText : undefined;
+        // caption só faz sentido se não for o próprio base64
+        const caption = (!bodyIsBase64 && bodyStr && bodyStr !== originalName) ? bodyStr : undefined;
         try {
-          const mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30_000) });
-          if (mediaRes.ok) {
-            const buffer = Buffer.from(await mediaRes.arrayBuffer());
-            const folders = getFolders(fileUser.id);
-            const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
-            const { folder: suggestedFolder, keywords } = await categorizeDriveFile(originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
-            const targetFolder = getFolderByName(fileUser.id, suggestedFolder);
-            const savedFile = saveFile({
-              userId: fileUser.id,
-              folderId: targetFolder?.id ?? null,
-              originalName,
-              mimeType,
-              size: buffer.length,
-              description: caption,
-              aiKeywords: keywords,
-              source: "whatsapp",
-              buffer,
-            });
-            console.log(`[drive] arquivo salvo: ${savedFile.id} | ${originalName} | pasta=${suggestedFolder}`);
-            await wppSend(from, replyFileSaved(originalName, suggestedFolder));
+          let buffer: Buffer;
+          if (mediaUrl) {
+            const mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30_000) });
+            if (!mediaRes.ok) throw new Error(`HTTP ${mediaRes.status}`);
+            buffer = Buffer.from(await mediaRes.arrayBuffer());
+          } else {
+            buffer = Buffer.from(bodyStr, "base64");
           }
+          const folders = getFolders(fileUser.id);
+          const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
+          const { folder: suggestedFolder, keywords } = await categorizeDriveFile(originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
+          const targetFolder = getFolderByName(fileUser.id, suggestedFolder);
+          const savedFile = saveFile({
+            userId: fileUser.id,
+            folderId: targetFolder?.id ?? null,
+            originalName,
+            mimeType,
+            size: buffer.length,
+            description: caption,
+            aiKeywords: keywords,
+            source: "whatsapp",
+            buffer,
+          });
+          console.log(`[drive] arquivo salvo: ${savedFile.id} | ${originalName} | pasta=${suggestedFolder}`);
+          await wppSend(from, replyFileSaved(originalName, suggestedFolder));
         } catch (e) {
           console.error("[drive] erro ao salvar arquivo:", e);
           await wppSend(from, "❌ Não consegui salvar o arquivo. Tente novamente.");
