@@ -96,10 +96,10 @@ INTENÇÕES POSSÍVEIS:
 - task_update: atualizar/concluir uma tarefa
 - task_query: listar tarefas
 - reminder_set: criar lembrete agendado
-- goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para")
-- goal_add: adicionar valor em uma meta ("adicionei X na meta", "coloquei X para X")
-- goal_query: ver metas ("minhas metas", "metas")
-- goal_complete: concluir uma meta ("concluí meta", "meta atingida")
+- goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para", "quero juntar X para Y", "quero guardar X para Z"). SEMPRE inclua "title" com o nome da meta e "targetAmount" com o valor alvo.
+- goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
+- goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
+- goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo")
 - vehicle_expense: registrar gasto com veículo ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro")
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
@@ -238,7 +238,30 @@ OU para excluir lançamento (finance_delete) — "keyword" é o TERMO DE BUSCA:
   }
 }
 
-OU para adicionar valor em meta (goal_add):
+OU para criar meta (goal_create) — "title" é o NOME da meta, "targetAmount" é o valor alvo:
+{
+  "intent": "goal_create",
+  "confidence": 0.9,
+  "goal": {
+    "title": "Viagem para a praia",
+    "targetAmount": 3000.00,
+    "deadline": "2026-12-31",
+    "category": "Viagem"
+  }
+}
+
+Exemplo goal_create sem prazo ("quero guardar 500 para emergência"):
+{
+  "intent": "goal_create",
+  "confidence": 0.9,
+  "goal": {
+    "title": "Reserva de emergência",
+    "targetAmount": 500.00,
+    "category": "Emergência"
+  }
+}
+
+OU para adicionar valor em meta existente (goal_add) — "title" é o nome da meta para busca:
 {
   "intent": "goal_add",
   "confidence": 0.9,

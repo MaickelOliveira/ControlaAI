@@ -238,10 +238,14 @@ export async function POST(req: NextRequest) {
       }
 
       case "goal_create": {
-        if (!ai.goal) break;
-        const goal = createGoal({ userId: user.id, title: ai.goal.title, targetAmount: ai.goal.targetAmount, currentAmount: 0, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode, status: "active" });
+        if (!ai.goal?.targetAmount) {
+          await wppSend(from, `🎯 Para criar uma meta, me diga o nome e o valor!\n\nExemplo:\n_"Quero guardar R$3.000 para viagem até dezembro"_\n_"Meta: juntar 500 reais de emergência"_`);
+          break;
+        }
+        const goalTitle = (ai.goal.title || "").trim() || messageText.slice(0, 60);
+        const goal = createGoal({ userId: user.id, title: goalTitle, targetAmount: ai.goal.targetAmount, currentAmount: 0, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode, status: "active" });
         const pct = getGoalProgress(goal);
-        await wppSend(from, `✅ *Meta criada!*\n\n🎯 ${goal.title}\n💰 Alvo: ${formatCurrency(goal.targetAmount)}\n📊 Progresso: ${pct}%${goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : ""}`);
+        await wppSend(from, `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}\n📁 Categoria: ${goal.category}${goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : ""}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`);
         break;
       }
 
