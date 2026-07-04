@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 
-type VehicleExpense = { id: string; date: string; km?: number; type: string; amount: number; description: string };
+type VehicleExpense = { id: string; date: string; km?: number; type: string; amount: number; description: string; financeId?: string };
 type Vehicle = { id: string; plate: string; brand: string; model: string; year: number; fuelType: string; currentKm: number; mode: string; expenses: VehicleExpense[] };
 
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -16,8 +16,9 @@ export default function VeiculosPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showExpense, setShowExpense] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<VehicleExpense | null>(null);
   const [vForm, setVForm] = useState({ brand: "", model: "", plate: "", year: new Date().getFullYear(), fuelType: "flex", currentKm: 0 });
-  const [eForm, setEForm] = useState({ type: "fuel", amount: "", description: "", km: "" });
+  const [eForm, setEForm] = useState({ type: "fuel", amount: "", description: "", km: "", date: "" });
 
   function load(m: string) {
     setLoading(true);
@@ -54,8 +55,25 @@ export default function VeiculosPage() {
   async function addExpense(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
-    await fetch("/api/admin/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "expense", vehicleId: selected.id, ...eForm, amount: parseFloat(eForm.amount), km: eForm.km ? parseInt(eForm.km) : undefined }) });
-    setShowExpense(false); setEForm({ type: "fuel", amount: "", description: "", km: "" }); load(mode);
+    const isEditing = !!editingExpense;
+    const action = isEditing ? "update_expense" : "expense";
+    const body = isEditing
+      ? { action, vehicleId: selected.id, expenseId: editingExpense!.id, type: eForm.type, amount: parseFloat(eForm.amount), description: eForm.description, km: eForm.km ? parseInt(eForm.km) : undefined, date: eForm.date || undefined }
+      : { action, vehicleId: selected.id, type: eForm.type, amount: parseFloat(eForm.amount), description: eForm.description, km: eForm.km ? parseInt(eForm.km) : undefined, date: eForm.date || undefined };
+    await fetch("/api/admin/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    setShowExpense(false); setEditingExpense(null); setEForm({ type: "fuel", amount: "", description: "", km: "", date: "" }); load(mode);
+  }
+
+  function openEdit(exp: VehicleExpense) {
+    setEditingExpense(exp);
+    setEForm({ type: exp.type, amount: String(exp.amount), description: exp.description, km: exp.km ? String(exp.km) : "", date: exp.date });
+    setShowExpense(true);
+  }
+
+  async function deleteExpense(exp: VehicleExpense) {
+    if (!selected || !confirm(`Excluir "${exp.description}" (${fmt(exp.amount)})?`)) return;
+    await fetch("/api/admin/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_expense", vehicleId: selected.id, expenseId: exp.id }) });
+    load(mode);
   }
 
   const totalExpenses = selected ? selected.expenses.reduce((s, e) => s + e.amount, 0) : 0;
@@ -133,9 +151,9 @@ export default function VeiculosPage() {
                   {recentExpenses.length === 0 ? (
                     <p className="text-slate-400 text-sm text-center py-4">Nenhum gasto registrado</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {recentExpenses.map(e => (
-                        <div key={e.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                        <div key={e.id} className="flex items-center justify-between py-2.5 px-2 rounded-xl hover:bg-slate-50 group transition">
                           <div className="flex items-center gap-2.5">
                             <span>{TYPE_EMOJI[e.type] || "📌"}</span>
                             <div>
@@ -143,7 +161,13 @@ export default function VeiculosPage() {
                               <p className="text-xs text-slate-400">{new Date(e.date + "T12:00:00").toLocaleDateString("pt-BR")}{e.km ? ` · ${e.km.toLocaleString()} km` : ""}</p>
                             </div>
                           </div>
-                          <span className="text-sm font-semibold text-red-500">{fmt(e.amount)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-red-500">{fmt(e.amount)}</span>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                              <button onClick={() => openEdit(e)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-xs transition" title="Editar">✏️</button>
+                              <button onClick={() => deleteExpense(e)} className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 text-xs transition" title="Excluir">🗑️</button>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -184,22 +208,28 @@ export default function VeiculosPage() {
         </div>
       )}
 
-      {/* Modal gasto */}
+      {/* Modal gasto / edição */}
       {showExpense && selected && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="font-bold text-slate-900 mb-1">+ Gasto no veículo</h3>
+            <h3 className="font-bold text-slate-900 mb-1">{editingExpense ? "✏️ Editar gasto" : "+ Gasto no veículo"}</h3>
             <p className="text-sm text-slate-400 mb-4">{selected.brand} {selected.model}</p>
             <form onSubmit={addExpense} className="space-y-3">
               <select value={eForm.type} onChange={e => setEForm(f => ({ ...f, type: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none bg-white">
                 {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{TYPE_EMOJI[k]} {v}</option>)}
               </select>
               <input type="number" step="0.01" value={eForm.amount} onChange={e => setEForm(f => ({ ...f, amount: e.target.value }))} required placeholder="Valor (R$)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
-              <input value={eForm.description} onChange={e => setEForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrição (opcional)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
-              <input type="number" value={eForm.km} onChange={e => setEForm(f => ({ ...f, km: e.target.value }))} placeholder="KM atual (opcional)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+              <input value={eForm.description} onChange={e => setEForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrição" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="date" value={eForm.date} onChange={e => setEForm(f => ({ ...f, date: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input type="number" value={eForm.km} onChange={e => setEForm(f => ({ ...f, km: e.target.value }))} placeholder="KM (opcional)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+              </div>
               <div className="flex gap-3">
-                <button type="button" onClick={() => setShowExpense(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" className="flex-1 bg-slate-800 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-700 transition">Registrar</button>
+                <button type="button" onClick={() => { setShowExpense(false); setEditingExpense(null); setEForm({ type: "fuel", amount: "", description: "", km: "", date: "" }); }}
+                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                <button type="submit" className="flex-1 bg-slate-800 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-700 transition">
+                  {editingExpense ? "Salvar" : "Registrar"}
+                </button>
               </div>
             </form>
           </div>
