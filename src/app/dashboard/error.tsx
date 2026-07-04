@@ -9,15 +9,18 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[dashboard] erro de página:", error);
+    console.error("[dashboard] erro de página:", error.message, error.stack);
   }, [error]);
 
   return (
     <div className="flex flex-col items-center justify-center h-64 text-center">
       <p className="text-4xl mb-4">⚠️</p>
       <h2 className="text-lg font-semibold text-slate-800 mb-2">Algo deu errado</h2>
-      <p className="text-sm text-slate-500 mb-5 max-w-sm">
+      <p className="text-sm text-slate-500 mb-2 max-w-sm">
         Ocorreu um erro nesta página. Tente novamente ou recarregue a plataforma.
+      </p>
+      <p className="text-xs text-slate-400 mb-5 max-w-lg font-mono bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+        {error.message || String(error)}
       </p>
       <button
         onClick={reset}
