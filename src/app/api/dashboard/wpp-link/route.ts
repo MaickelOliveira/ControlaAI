@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { generateWppVerifyCode } from "@/lib/users";
+import { generateWppVerifyCode, updateUser } from "@/lib/users";
 import { getAdminWppConfig } from "@/lib/admin";
 
 export async function POST() {
@@ -9,6 +9,13 @@ export async function POST() {
 
   const code = generateWppVerifyCode(session.sub);
   const { wppSession } = getAdminWppConfig();
-  // Retorna o código e o número do bot (sessão WPPConnect)
   return NextResponse.json({ code, session: wppSession });
+}
+
+export async function DELETE() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  updateUser(session.sub, { wppPhone: undefined });
+  return NextResponse.json({ ok: true });
 }

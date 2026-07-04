@@ -5,6 +5,7 @@ export default function ClienteConfigPage() {
   const [user, setUser] = useState<{ name: string; email: string; plan: string; wppPhone?: string } | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
   const [botNumber, setBotNumber] = useState<string>("");
 
   useEffect(() => {
@@ -23,6 +24,14 @@ export default function ClienteConfigPage() {
   async function refresh() {
     const d = await fetch("/api/dashboard").then(r => r.json());
     if (d.user) setUser(d.user);
+  }
+
+  async function unlink() {
+    setUnlinking(true);
+    await fetch("/api/dashboard/wpp-link", { method: "DELETE" });
+    setUser(u => u ? { ...u, wppPhone: undefined } : u);
+    setCode(null);
+    setUnlinking(false);
   }
 
   const commands = [
@@ -69,10 +78,16 @@ export default function ClienteConfigPage() {
                   <p className="text-xs text-emerald-600 font-mono mt-0.5">{user.wppPhone}</p>
                 </div>
               </div>
-              <button onClick={generateCode} disabled={linking}
-                className="text-xs border border-emerald-300 text-emerald-700 hover:bg-emerald-100 rounded-lg px-3 py-1.5 transition">
-                Revincular com outro número
-              </button>
+              <div className="flex gap-2">
+                <button onClick={generateCode} disabled={linking || unlinking}
+                  className="flex-1 text-xs border border-emerald-300 text-emerald-700 hover:bg-emerald-100 rounded-lg px-3 py-1.5 transition">
+                  🔄 Vincular outro número
+                </button>
+                <button onClick={unlink} disabled={unlinking || linking}
+                  className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-3 py-1.5 transition disabled:opacity-50">
+                  {unlinking ? "..." : "🔗 Desvincular"}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-center gap-3">
