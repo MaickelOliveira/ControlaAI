@@ -23,116 +23,153 @@ export default function ClienteConfigPage() {
     if (d.user) setUser(d.user);
   }
 
+  const commands = [
+    { icon: "💸", title: "Registrar despesa", ex: "\"Gastei 45 no mercado\"" },
+    { icon: "💰", title: "Registrar receita", ex: "\"Recebi 3000 de salário\"" },
+    { icon: "📊", title: "Ver saldo", ex: "\"Meu saldo\"" },
+    { icon: "📋", title: "Criar tarefa", ex: "\"Criar tarefa: ligar pro João até sexta\"" },
+    { icon: "🎯", title: "Criar meta", ex: "\"Meta: guardar 5000 para viagem\"" },
+    { icon: "✏️", title: "Editar lançamento", ex: "\"Corrija o gasto do ifood para 80\"" },
+    { icon: "🗑️", title: "Excluir lançamento", ex: "\"Apaga o gasto do mercado\"" },
+    { icon: "⛽", title: "Gasto no carro", ex: "\"Abasteci 80 reais no Gol\"" },
+    { icon: "🔔", title: "Criar lembrete", ex: "\"Me lembra sexta às 9h de pagar conta\"" },
+    { icon: "🏢", title: "Trocar modo", ex: "\"Modo empresa\" ou \"Modo pessoal\"" },
+    { icon: "❓", title: "Pedir ajuda", ex: "\"Como faço para criar uma tarefa?\"" },
+    { icon: "📋", title: "Ver extrato", ex: "\"Extrato\" ou \"Meus últimos gastos\"" },
+  ];
+
   return (
-    <div className="space-y-5 max-w-xl">
+    <div className="space-y-6">
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">⚙️ Configurações</h1>
-        <p className="text-slate-400 text-sm mt-0.5">Configure seu acesso ao bot WhatsApp</p>
+        <p className="text-slate-400 text-sm mt-0.5">Configure seu acesso ao bot WhatsApp e gerencie sua conta</p>
       </div>
 
-      {/* Vincular WhatsApp */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
-          <span className="text-xl">📱</span> Vincular WhatsApp ao Bot
-        </h2>
-        <p className="text-sm text-slate-400 mb-5">
-          Vincule seu número para usar o assistente IA pelo WhatsApp. O sistema identifica você automaticamente.
-        </p>
+      {/* Linha 1: WhatsApp + Conta */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {user?.wppPhone ? (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-emerald-600 text-lg">✓</span>
+        {/* WhatsApp — 2/3 */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
+            <span className="text-xl">📱</span> Vincular WhatsApp ao Bot
+          </h2>
+          <p className="text-sm text-slate-400 mb-5">
+            Vincule seu número para usar o assistente IA pelo WhatsApp. O sistema identifica você automaticamente.
+          </p>
+
+          {user?.wppPhone ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-lg shrink-0">✓</div>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700">WhatsApp vinculado</p>
+                  <p className="text-xs text-emerald-600 font-mono mt-0.5">{user.wppPhone}</p>
+                </div>
+              </div>
+              <button onClick={generateCode} disabled={linking}
+                className="text-xs border border-emerald-300 text-emerald-700 hover:bg-emerald-100 rounded-lg px-3 py-1.5 transition">
+                Revincular com outro número
+              </button>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 text-lg shrink-0">⚠</div>
               <div>
-                <p className="text-sm font-semibold text-emerald-700">WhatsApp vinculado</p>
-                <p className="text-xs text-emerald-600 font-mono">{user.wppPhone}</p>
+                <p className="text-sm font-semibold text-amber-700">WhatsApp não vinculado</p>
+                <p className="text-xs text-amber-600 mt-0.5">Vincule seu número para começar a usar o bot.</p>
               </div>
             </div>
-            <button onClick={generateCode} disabled={linking}
-              className="text-xs border border-emerald-300 text-emerald-700 hover:bg-emerald-100 rounded-lg px-3 py-1.5 transition">
-              Revincular com outro número
-            </button>
-          </div>
-        ) : (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center gap-3">
-            <span className="text-amber-600 text-lg">⚠</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-700">WhatsApp não vinculado</p>
-              <p className="text-xs text-amber-600">Vincule para usar o bot!</p>
-            </div>
-          </div>
-        )}
+          )}
 
-        {!code ? (
-          <button onClick={generateCode} disabled={linking}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
-            {linking ? (
-              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
-            ) : "📲 Vincular meu WhatsApp"}
-          </button>
-        ) : (
-          <div className="space-y-4">
-            <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 text-center">
-              <p className="text-xs text-slate-500 mb-2">Envie este código para o bot no WhatsApp:</p>
-              <p className="text-5xl font-bold tracking-widest text-slate-900 font-mono">{code}</p>
-              <p className="text-xs text-slate-400 mt-3">⏱ Válido por 10 minutos</p>
+          {!code ? (
+            <button onClick={generateCode} disabled={linking}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
+              {linking ? (
+                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
+              ) : "📲 Vincular meu WhatsApp"}
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 text-center">
+                <p className="text-xs text-slate-500 mb-2">Envie este código para o bot no WhatsApp:</p>
+                <p className="text-5xl font-bold tracking-widest text-slate-900 font-mono">{code}</p>
+                <p className="text-xs text-slate-400 mt-3">⏱ Válido por 10 minutos</p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
+                <p className="font-semibold mb-2">Como fazer:</p>
+                <ol className="list-decimal list-inside space-y-1.5 text-xs">
+                  <li>Abra o WhatsApp no celular que vai usar</li>
+                  <li>Mande uma mensagem com apenas o código: <strong className="font-mono">{code}</strong></li>
+                  <li>O bot vai confirmar a vinculação automaticamente</li>
+                </ol>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={refresh}
+                  className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl py-2.5 text-sm transition">
+                  ✓ Já enviei, verificar
+                </button>
+                <button onClick={() => setCode(null)}
+                  className="text-slate-400 hover:text-slate-600 rounded-xl px-4 py-2.5 text-sm transition">
+                  Cancelar
+                </button>
+              </div>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
-              <p className="font-semibold mb-1">Como fazer:</p>
-              <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>Abra o WhatsApp no celular que vai usar</li>
-                <li>Mande a mensagem com apenas o código: <strong>{code}</strong></li>
-                <li>O bot vai confirmar a vinculação automaticamente</li>
-              </ol>
+          )}
+        </div>
+
+        {/* Sua Conta — 1/3 */}
+        {user && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col">
+            <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2 text-base">
+              <span>👤</span> Sua Conta
+            </h2>
+
+            {/* Avatar */}
+            <div className="flex flex-col items-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-2xl font-bold shadow-sm mb-3">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <p className="font-semibold text-slate-800">{user.name}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{user.email}</p>
             </div>
-            <div className="flex gap-2">
-              <button onClick={refresh}
-                className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl py-2.5 text-sm transition">
-                ✓ Já enviei, verificar
-              </button>
-              <button onClick={() => setCode(null)}
-                className="text-slate-400 hover:text-slate-600 rounded-xl px-4 py-2.5 text-sm transition">
-                Cancelar
-              </button>
+
+            <div className="space-y-0 border border-slate-100 rounded-xl overflow-hidden flex-1">
+              <div className="flex justify-between items-center px-4 py-3 bg-slate-50 border-b border-slate-100">
+                <span className="text-xs text-slate-500">Plano</span>
+                <span className="text-xs font-semibold text-slate-800">{user.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</span>
+              </div>
+              <div className="flex justify-between items-center px-4 py-3">
+                <span className="text-xs text-slate-500">WhatsApp</span>
+                <span className="text-xs font-semibold text-slate-800">
+                  {user.wppPhone
+                    ? <span className="text-emerald-600">✓ Vinculado</span>
+                    : <span className="text-amber-600">⚠ Não vinculado</span>}
+                </span>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Como usar */}
+      {/* Linha 2: Comandos do Bot */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><span>💬</span> Comandos do Bot</h2>
-        <div className="space-y-2">
-          {[
-            { icon: "💸", title: "Registrar despesa", ex: "\"Gastei 45 no mercado\"" },
-            { icon: "💰", title: "Registrar receita", ex: "\"Recebi 3000 de salário\"" },
-            { icon: "📊", title: "Ver saldo", ex: "\"Meu saldo\"" },
-            { icon: "📋", title: "Criar tarefa", ex: "\"Criar tarefa: ligar pro João até sexta\"" },
-            { icon: "🎯", title: "Criar meta", ex: "\"Meta: guardar 5000 para viagem\"" },
-            { icon: "⛽", title: "Gasto no carro", ex: "\"Abasteci 80 reais no Gol\"" },
-            { icon: "🏢", title: "Trocar modo", ex: "\"Modo empresa\" ou \"Modo pessoal\"" },
-          ].map(item => (
-            <div key={item.title} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-              <span className="text-base shrink-0">{item.icon}</span>
-              <div>
+        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
+          <span>💬</span> Comandos do Bot
+        </h2>
+        <p className="text-xs text-slate-400 mb-5">Envie estas mensagens para o WhatsApp do bot para usar cada função</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {commands.map(item => (
+            <div key={item.title} className="flex items-start gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+              <span className="text-xl shrink-0 mt-0.5">{item.icon}</span>
+              <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-700">{item.title}</p>
-                <p className="text-xs text-slate-400 font-mono">{item.ex}</p>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5 break-words">{item.ex}</p>
               </div>
             </div>
           ))}
         </div>
       </div>
-
-      {user && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><span>👤</span> Sua Conta</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between py-2 border-b border-slate-50"><span className="text-slate-400">Nome</span><span className="font-medium text-slate-800">{user.name}</span></div>
-            <div className="flex justify-between py-2 border-b border-slate-50"><span className="text-slate-400">Email</span><span className="font-medium text-slate-800">{user.email}</span></div>
-            <div className="flex justify-between py-2"><span className="text-slate-400">Plano</span><span className="font-medium text-slate-800">{user.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</span></div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
