@@ -5,7 +5,7 @@ import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDes
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
-import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses } from "@/lib/vehicles";
+import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice } from "@/lib/pending-actions";
 import { sendText as wppSend } from "@/lib/wppconnect";
 import { nowBR, spToUTC } from "@/lib/date-br";
@@ -116,7 +116,9 @@ export async function POST(req: NextRequest) {
         const exp = addVehicleExpense(chosen.id, user.id, { date: pending.expenseData.date, km: pending.expenseData.km, type: pending.expenseData.expenseType, amount: pending.expenseData.amount, description: pending.expenseData.description });
         if (exp) {
           const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
-          addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: vCatMap[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp" });
+          const newExp = exp.expenses[exp.expenses.length - 1];
+          const f = addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: vCatMap[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp" });
+          setExpenseFinanceId(chosen.id, newExp.id, f.id);
           const total = getVehicleTotalExpenses(exp);
           await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
         }
@@ -422,7 +424,9 @@ export async function POST(req: NextRequest) {
           const exp = addVehicleExpense(targetVehicle.id, user.id, { date: vDate, km: vKm, type: vType, amount: vAmount, description: vDesc });
           if (exp) {
             const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
-            addFinance({ userId: user.id, type: "expense", amount: vAmount, category: vCatMap[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode, source: "whatsapp" });
+            const newExp = exp.expenses[exp.expenses.length - 1];
+            const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: vCatMap[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode, source: "whatsapp" });
+            setExpenseFinanceId(targetVehicle.id, newExp.id, f.id);
             const total = getVehicleTotalExpenses(exp);
             await wppSend(from, `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
           }

@@ -13,6 +13,7 @@ export type VehicleExpense = {
   type: VehicleExpenseType;
   amount: number;
   description: string;
+  financeId?: string; // ID do lançamento espelhado em finances.json
 };
 
 export type Vehicle = {
@@ -61,6 +62,49 @@ export function addVehicleExpense(vehicleId: string, userId: string, expense: Om
   if (expense.km && expense.km > items[idx].currentKm) items[idx].currentKm = expense.km;
   save(items);
   return items[idx];
+}
+
+export function updateVehicleExpense(vehicleId: string, userId: string, expenseId: string, patch: Partial<Omit<VehicleExpense, "id">>): Vehicle | null {
+  const items = load();
+  const idx = items.findIndex(v => v.id === vehicleId && v.userId === userId);
+  if (idx < 0) return null;
+  const eIdx = items[idx].expenses.findIndex(e => e.id === expenseId);
+  if (eIdx < 0) return null;
+  items[idx].expenses[eIdx] = { ...items[idx].expenses[eIdx], ...patch };
+  save(items);
+  return items[idx];
+}
+
+/** Retorna { vehicle, financeId } para que o caller possa apagar o lançamento financeiro vinculado */
+export function deleteVehicleExpense(vehicleId: string, userId: string, expenseId: string): { vehicle: Vehicle; financeId?: string } | null {
+  const items = load();
+  const idx = items.findIndex(v => v.id === vehicleId && v.userId === userId);
+  if (idx < 0) return null;
+  const expense = items[idx].expenses.find(e => e.id === expenseId);
+  if (!expense) return null;
+  const financeId = expense.financeId;
+  items[idx].expenses = items[idx].expenses.filter(e => e.id !== expenseId);
+  save(items);
+  return { vehicle: items[idx], financeId };
+}
+
+/** Busca o vehicle expense pelo financeId — usado ao excluir em Finanças */
+export function findExpenseByFinanceId(userId: string, financeId: string): { vehicleId: string; expenseId: string } | null {
+  for (const v of load()) {
+    if (v.userId !== userId) continue;
+    const e = v.expenses.find(ex => ex.financeId === financeId);
+    if (e) return { vehicleId: v.id, expenseId: e.id };
+  }
+  return null;
+}
+
+/** Atualiza o financeId de um gasto de veículo após criar o lançamento financeiro */
+export function setExpenseFinanceId(vehicleId: string, expenseId: string, financeId: string): void {
+  const items = load();
+  const v = items.find(v => v.id === vehicleId);
+  if (!v) return;
+  const e = v.expenses.find(e => e.id === expenseId);
+  if (e) { e.financeId = financeId; save(items); }
 }
 
 export function updateVehicleKm(vehicleId: string, userId: string, km: number): Vehicle | null {
