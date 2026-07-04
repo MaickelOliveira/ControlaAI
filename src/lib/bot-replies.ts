@@ -209,6 +209,23 @@ export function replyRecurringList(items: RecurringTransaction[]): string {
   return msg.trim();
 }
 
+export function replyFileSaved(originalName: string, folder: string): string {
+  return `📁 *Arquivo salvo no Drive!*\n\n📄 ${originalName}\n🗂️ Pasta: ${folder}\n\nPara buscar depois: _"ache meu arquivo ${originalName.split(".")[0]}"_ 🔍`;
+}
+
+export function replyFileFound(originalName: string): string {
+  return `🔍 *Arquivo encontrado!*\n\n📄 ${originalName}\n\nEnviando agora... ⬆️`;
+}
+
+export function replyFileNotFound(query: string): string {
+  return `❓ Não encontrei nenhum arquivo com *"${query}"* no Drive.\n\nTente outros termos ou veja sua biblioteca em *📁 Drive* no dashboard.`;
+}
+
+export function replyDriveFileList(count: number): string {
+  if (count === 0) return `📁 *Drive vazio!*\n\nEnvie um arquivo (PDF, imagem, documento) por aqui e eu organizo automaticamente.`;
+  return `📁 *Drive Inteligente*\n\nVocê tem *${count} arquivo${count > 1 ? "s" : ""}* salvos.\n\nPara buscar: _"ache o comprovante do mecânico"_\nPara ver tudo: acesse *📁 Drive* no dashboard. 🌐`;
+}
+
 export function replyUnknown(originalMsg?: string): string {
   const quote = originalMsg ? `\n\n> _"${originalMsg}"_\n` : "\n";
   return `🤔 Não entendi bem o que você quer fazer.${quote}

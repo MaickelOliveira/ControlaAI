@@ -27,6 +27,7 @@ export type Intent =
   | "recurring_query"
   | "recurring_cancel"
   | "recurring_edit"
+  | "drive_search"
   | "how_to"
   | "help"
   | "unknown";
@@ -93,7 +94,7 @@ export type AIResult = {
   vehicle?: VehicleData;
   recurring?: RecurringData;
   mode?: UserMode;
-  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit
+  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search
   response?: string; // resposta direta para how_to
   confidence: number;
 };
@@ -126,6 +127,7 @@ INTENÇÕES POSSÍVEIS:
 - recurring_query: ver lançamentos recorrentes/parcelados ("minhas parcelas", "contas recorrentes", "o que tenho parcelado", "meus recorrentes")
 - recurring_cancel: cancelar um recorrente/parcelado ("cancela a parcela da geladeira", "para o netflix", "remove o recorrente do aluguel")
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
+- drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
@@ -429,6 +431,13 @@ OU para editar recorrente ("muda o netflix para 65"):
   }
 }
 
+OU para buscar arquivo no Drive ("ache o comprovante do mecânico"):
+{
+  "intent": "drive_search",
+  "confidence": 0.9,
+  "keyword": "comprovante mecânico"
+}
+
 OU para trocar modo:
 {
   "intent": "mode_switch",
@@ -534,6 +543,56 @@ Instruções:
   } catch (e) {
     console.error("[ai-processor] Erro generateAnalysisResponse:", e);
     return "❌ Não consegui gerar a análise agora. Tente novamente.";
+  }
+}
+
+export async function categorizeDriveFile(filename: string, defaultFolders: string[]): Promise<{ folder: string; keywords: string[] }> {
+  const cfg = getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return { folder: "Outros", keywords: [] };
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(
+      `Analise o nome do arquivo: "${filename}".
+Pastas disponíveis: ${defaultFolders.join(", ")}.
+Retorne APENAS JSON válido no formato: {"folder": "NomeDaPasta", "keywords": ["palavra1","palavra2","palavra3"]}
+- folder: a pasta mais adequada para este arquivo
+- keywords: 3-5 palavras-chave em português que descrevem o conteúdo do arquivo (úteis para busca futura)
+Não use markdown.`
+    );
+    const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(text);
+    return {
+      folder: defaultFolders.includes(parsed.folder) ? parsed.folder : "Outros",
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+    };
+  } catch {
+    return { folder: "Outros", keywords: [] };
+  }
+}
+
+export async function findDriveFileByAI(
+  query: string,
+  files: Array<{ id: string; originalName: string; description?: string; aiKeywords?: string[] }>
+): Promise<string | null> {
+  if (!files.length) return null;
+  const cfg = getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const fileList = files.map((f, i) => `${i + 1}. id="${f.id}" nome="${f.originalName}"${f.description ? ` desc="${f.description}"` : ""}${f.aiKeywords?.length ? ` keywords="${f.aiKeywords.join(",")}"` : ""}`).join("\n");
+    const result = await model.generateContent(
+      `Busca: "${query}"\n\nArquivos disponíveis:\n${fileList}\n\nRetorne APENAS o id do arquivo mais compatível com a busca. Se nenhum arquivo for compatível, retorne "null". Retorne APENAS o id ou "null", sem mais nada.`
+    );
+    const text = result.response.text().trim().replace(/"/g, "");
+    return text === "null" || !text ? null : text;
+  } catch {
+    return null;
   }
 }
 
