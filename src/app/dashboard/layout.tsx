@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 
-// ── Ícones SVG inline (Heroicons style, stroke, sem cor própria) ──
 const Icons = {
   home: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4.5 h-4.5">
@@ -74,6 +73,16 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
     </svg>
   ),
+  menu: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  ),
+  x: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  ),
 };
 
 const BASE_NAV = [
@@ -96,15 +105,121 @@ const CONFIG_NAV = [
 
 type User = { name: string; plan: string; status: string; activeMode: string; trialEndsAt: string };
 
+function SidebarContent({
+  user,
+  pathname,
+  modeChanging,
+  isPersonal,
+  toggleMode,
+  logout,
+  onNavClick,
+}: {
+  user: User | null;
+  pathname: string;
+  modeChanging: boolean;
+  isPersonal: boolean;
+  toggleMode: () => void;
+  logout: () => void;
+  onNavClick: () => void;
+}) {
+  const navItems = [
+    ...BASE_NAV,
+    ...(user?.activeMode === "business" ? BUSINESS_NAV : PERSONAL_NAV),
+    ...CONFIG_NAV,
+  ];
+
+  return (
+    <>
+      {/* Logo */}
+      <div className="p-5 border-b border-slate-100">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
+            <span className="text-white text-base font-bold">C</span>
+          </div>
+          <div>
+            <p className="text-slate-900 font-bold text-sm leading-none">ControlaAI</p>
+            <p className="text-slate-400 text-xs mt-0.5">Gestão inteligente</p>
+          </div>
+        </div>
+      </div>
+
+      {/* User info + Mode toggle */}
+      {user && (
+        <div className="p-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-600">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-slate-800 text-xs font-semibold truncate">{user.name}</p>
+              <p className="text-slate-400 text-[10px]">
+                {user.status === "trial"
+                  ? `Trial · ${Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / 86400000))} dias`
+                  : "Plano Ativo"}
+              </p>
+            </div>
+          </div>
+          <button onClick={toggleMode} disabled={modeChanging}
+            className="w-full rounded-xl p-2.5 flex items-center gap-2.5 transition border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left">
+            <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm shrink-0">
+              {isPersonal ? Icons.person : Icons.building}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-700">
+                {isPersonal ? "Modo Pessoal" : "Modo Empresa"}
+              </p>
+              <p className="text-[10px] text-slate-400">{modeChanging ? "Alterando..." : "Clique para trocar"}</p>
+            </div>
+            <div className="text-slate-400 shrink-0">{Icons.switch}</div>
+          </button>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        {navItems.map(item => {
+          const isActive = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href} onClick={onNavClick}
+              className={clsx(
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition",
+                isActive
+                  ? "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+              )}>
+              <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
+              {item.label}
+              {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Logout */}
+      <div className="p-3 border-t border-slate-100">
+        <button onClick={logout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition">
+          <span className="w-5 flex items-center justify-center">{Icons.logout}</span>
+          Sair
+        </button>
+      </div>
+    </>
+  );
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [modeChanging, setModeChanging] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/dashboard").then(r => r.json()).then(d => d.user && setUser(d.user)).catch(() => {});
   }, []);
+
+  // fechar sidebar ao trocar de rota no mobile
+  useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
   async function toggleMode() {
     if (!user || modeChanging) return;
@@ -122,92 +237,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const isPersonal = user?.activeMode !== "business";
+  const sidebarProps = { user, pathname, modeChanging, isPersonal, toggleMode, logout, onNavClick: () => setSidebarOpen(false) };
 
   return (
     <div className="flex h-screen bg-[#F1F5F9]">
-      {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm">
-        {/* Logo */}
-        <div className="p-5 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
-              <span className="text-white text-base font-bold">C</span>
-            </div>
-            <div>
-              <p className="text-slate-900 font-bold text-sm leading-none">ControlaAI</p>
-              <p className="text-slate-400 text-xs mt-0.5">Gestão inteligente</p>
-            </div>
-          </div>
-        </div>
-
-        {/* User info + Mode toggle */}
-        {user && (
-          <div className="p-4 border-b border-slate-100">
-            <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-600">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-slate-800 text-xs font-semibold truncate">{user.name}</p>
-                <p className="text-slate-400 text-[10px]">{user.status === "trial" ? `Trial · ${Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / 86400000))} dias` : "Plano Ativo"}</p>
-              </div>
-            </div>
-            {/* Mode toggle */}
-            <button onClick={toggleMode} disabled={modeChanging}
-              className="w-full rounded-xl p-2.5 flex items-center gap-2.5 transition border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left">
-              <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm shrink-0">
-                {isPersonal ? Icons.person : Icons.building}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-700">
-                  {isPersonal ? "Modo Pessoal" : "Modo Empresa"}
-                </p>
-                <p className="text-[10px] text-slate-400">{modeChanging ? "Alterando..." : "Clique para trocar"}</p>
-              </div>
-              <div className="text-slate-400 shrink-0">{Icons.switch}</div>
-            </button>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {[
-            ...BASE_NAV,
-            ...(user?.activeMode === "business" ? BUSINESS_NAV : PERSONAL_NAV),
-            ...CONFIG_NAV,
-          ].map(item => {
-            const isActive = pathname === item.href;
-            return (
-              <Link key={item.href} href={item.href}
-                className={clsx(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition",
-                  isActive
-                    ? "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200"
-                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-                )}>
-                <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
-                {item.label}
-                {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Logout */}
-        <div className="p-3 border-t border-slate-100">
-          <button onClick={logout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition">
-            <span className="w-5 flex items-center justify-center">{Icons.logout}</span>
-            Sair
-          </button>
-        </div>
+      {/* Sidebar — desktop (lg+) */}
+      <div className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col shrink-0 shadow-sm">
+        <SidebarContent {...sidebarProps} />
       </div>
 
+      {/* Sidebar — mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
+          {/* Drawer */}
+          <div className="relative w-72 max-w-[85vw] h-full bg-white flex flex-col shadow-xl">
+            <SidebarContent {...sidebarProps} />
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
-      <div className="flex-1 overflow-auto">
-        <main className="p-6 max-w-6xl mx-auto">
-          {children}
-        </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar — mobile only */}
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 shrink-0">
+          <button onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition">
+            {Icons.menu}
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+              <span className="text-white text-xs font-bold">C</span>
+            </div>
+            <span className="font-bold text-slate-900 text-sm">ControlaAI</span>
+          </div>
+          {user && (
+            <span className="ml-auto text-xs text-slate-500 truncate max-w-[120px]">
+              {isPersonal ? "👤 Pessoal" : "🏢 Empresa"}
+            </span>
+          )}
+        </div>
+
+        {/* Page content */}
+        <div className="flex-1 overflow-auto">
+          <main className="p-4 sm:p-6 max-w-6xl mx-auto">
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

@@ -44,7 +44,6 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
-  const { updateGoalStatus: markCancelled } = await import("@/lib/goals");
-  const goal = markCancelled(id, session.sub, "cancelled");
+  const goal = updateGoalStatus(id, session.sub, "cancelled");
   return goal ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 }

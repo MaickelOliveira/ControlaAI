@@ -150,7 +150,7 @@ export default function MetasPage() {
                     <span className={clsx("text-xs rounded-full px-2.5 py-0.5 font-semibold border", p >= 100 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-indigo-100 text-indigo-600 border-indigo-200")}>
                       {p}%
                     </span>
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <div className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex gap-1">
                       <button onClick={() => setDeleteTarget(goal)} className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition" title="Excluir">🗑️</button>
                     </div>
                   </div>

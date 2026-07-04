@@ -110,16 +110,16 @@ export default function FinancasPage() {
       </div>
 
       {/* Saldo */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-emerald-600 rounded-2xl p-6 shadow-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-emerald-600 rounded-2xl p-5 shadow-sm">
           <p className="text-xs text-emerald-100 font-medium uppercase tracking-wide">Receitas</p>
           <p className="text-2xl font-bold text-white mt-2">{fmt(balance.income)}</p>
         </div>
-        <div className="bg-red-500 rounded-2xl p-6 shadow-sm">
+        <div className="bg-red-500 rounded-2xl p-5 shadow-sm">
           <p className="text-xs text-red-100 font-medium uppercase tracking-wide">Despesas</p>
           <p className="text-2xl font-bold text-white mt-2">{fmt(balance.expense)}</p>
         </div>
-        <div className={clsx("rounded-2xl p-6 shadow-sm", balance.balance >= 0 ? "bg-blue-600" : "bg-orange-500")}>
+        <div className={clsx("rounded-2xl p-5 shadow-sm", balance.balance >= 0 ? "bg-blue-600" : "bg-orange-500")}>
           <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Saldo do Mês</p>
           <p className="text-2xl font-bold text-white mt-2">{fmt(balance.balance)}</p>
         </div>
@@ -181,8 +181,7 @@ export default function FinancasPage() {
                     <span className={clsx("text-sm font-bold", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
                       {f.type === "income" ? "+" : "-"}{fmt(f.amount)}
                     </span>
-                    {/* Ações: aparecem no hover */}
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={() => openEdit(f)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
                         title="Editar">
