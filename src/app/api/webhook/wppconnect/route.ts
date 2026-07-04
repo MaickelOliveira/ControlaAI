@@ -6,6 +6,7 @@ import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTa
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses } from "@/lib/vehicles";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice } from "@/lib/pending-actions";
 import { sendText as wppSend } from "@/lib/wppconnect";
 import { nowBR, spToUTC } from "@/lib/date-br";
 import {
@@ -100,6 +101,26 @@ export async function POST(req: NextRequest) {
     const now = nowBR(); // horário de Brasília/São Paulo
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
+
+    // ── Verifica ação pendente (ex: seleção de veículo) ──
+    const pending = getPendingAction(from);
+    if (pending?.type === "vehicle_selection" && pending.userId === user.id) {
+      const choiceIdx = parseVehicleChoice(messageText, pending.vehicles);
+      if (choiceIdx >= 0) {
+        clearPendingAction(from);
+        const chosen = pending.vehicles[choiceIdx];
+        const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
+        const exp = addVehicleExpense(chosen.id, user.id, { date: pending.expenseData.date, km: pending.expenseData.km, type: pending.expenseData.expenseType, amount: pending.expenseData.amount, description: pending.expenseData.description });
+        if (exp) {
+          const total = getVehicleTotalExpenses(exp);
+          await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
+        }
+        return NextResponse.json({ ok: true });
+      } else {
+        // não é uma resposta de veículo — limpa pendência e processa normalmente
+        clearPendingAction(from);
+      }
+    }
 
     // ── Processa com IA ──
     const ai = await processMessage(messageText);
@@ -295,26 +316,51 @@ export async function POST(req: NextRequest) {
       }
 
       case "vehicle_expense": {
-        if (!ai.vehicle) break;
-        const vehicles = getVehiclesByUser(user.id, mode);
-        let vehicle = ai.vehicle.name ? findVehicleByName(user.id, ai.vehicle.name, mode) : vehicles[0];
-        if (!vehicle && vehicles.length === 0) {
-          await wppSend(from, `🚗 Você não tem veículos cadastrados.\n\nAcesse o dashboard em *Veículos* para adicionar um.`);
+        const vAmount = ai.vehicle?.amount || 0;
+        const vType = ai.vehicle?.expenseType || "other";
+        const vDesc = ai.vehicle?.description || vType;
+        const vKm = ai.vehicle?.km;
+        const vDate = now.toISOString().slice(0, 10);
+        const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
+
+        const allVehicles = getVehiclesByUser(user.id, mode);
+
+        // Sem veículos → registra como despesa financeira
+        if (allVehicles.length === 0) {
+          const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode, source: "whatsapp" });
+          const bal = getBalance(user.id, mode, year, month).balance;
+          await wppSend(from, `${replyFinanceRegistered(f, bal)}\n\n💡 _Dica: Cadastre seu veículo no dashboard → Veículos para controlar gastos separadamente!_`);
           break;
         }
-        if (!vehicle) vehicle = vehicles[0];
-        const exp = addVehicleExpense(vehicle.id, user.id, {
-          date: now.toISOString().slice(0, 10),
-          km: ai.vehicle.km,
-          type: ai.vehicle.expenseType || "other",
-          amount: ai.vehicle.amount || 0,
-          description: ai.vehicle.description || ai.vehicle.expenseType || "despesa",
-        });
-        if (exp) {
-          const total = getVehicleTotalExpenses(exp);
-          const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
-          await wppSend(from, `${typeEmoji[ai.vehicle.expenseType || "other"] || "📌"} *Despesa registrada no ${vehicle.brand} ${vehicle.model}!*\n\n💰 ${formatCurrency(ai.vehicle.amount || 0)} — ${ai.vehicle.description || ai.vehicle.expenseType}\n📊 Total do veículo: ${formatCurrency(total)}`);
+
+        // Identifica veículo pelo nome mencionado na mensagem
+        let targetVehicle = ai.vehicle?.name
+          ? findVehicleByName(user.id, ai.vehicle.name, mode)
+          : null;
+
+        // Um único veículo → registra direto
+        if (!targetVehicle && allVehicles.length === 1) {
+          targetVehicle = allVehicles[0];
         }
+
+        if (targetVehicle) {
+          const exp = addVehicleExpense(targetVehicle.id, user.id, { date: vDate, km: vKm, type: vType, amount: vAmount, description: vDesc });
+          if (exp) {
+            const total = getVehicleTotalExpenses(exp);
+            await wppSend(from, `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
+          }
+          break;
+        }
+
+        // Múltiplos veículos → pergunta qual
+        const expenseData = { amount: vAmount, expenseType: vType, description: vDesc, km: vKm, date: vDate };
+        const vehicleList = allVehicles.map(v => ({ id: v.id, brand: v.brand, model: v.model, year: v.year }));
+        setPendingAction(from, { type: "vehicle_selection", userId: user.id, mode, expenseData, vehicles: vehicleList });
+
+        let msg = `🚗 Você tem ${allVehicles.length} veículos cadastrados. Em qual registrar *${formatCurrency(vAmount)}* de ${vDesc}?\n\n`;
+        allVehicles.forEach((v, i) => { msg += `*${i + 1}.* ${v.brand} ${v.model} (${v.year})${v.plate ? ` — ${v.plate}` : ""}\n`; });
+        msg += `\nResponda com o número ou nome do veículo. ⏱ _Válido por 5 min._`;
+        await wppSend(from, msg);
         break;
       }
 
