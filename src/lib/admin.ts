@@ -11,6 +11,7 @@ export type AdminConfig = {
   wppSession?: string;
   geminiApiKey?: string;
   appBaseUrl?: string;
+  wppBotNumber?: string;
 };
 
 const FILE = path.join(process.cwd(), "data", "admin.json");

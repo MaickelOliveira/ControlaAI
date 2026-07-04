@@ -15,6 +15,7 @@ function syncToConfig() {
     wppSession:   adm.wppSession   ?? cur.wppSession,
     geminiApiKey: adm.geminiApiKey ?? cur.geminiApiKey,
     appBaseUrl:   adm.appBaseUrl   ?? cur.appBaseUrl,
+    wppBotNumber: adm.wppBotNumber ?? cur.wppBotNumber,
   });
 }
 
@@ -34,6 +35,7 @@ export async function GET() {
     geminiApiKey: cfg.geminiApiKey ? "••••••••" : "",
     hasGemini: !!cfg.geminiApiKey,
     appBaseUrl: cfg.appBaseUrl ?? "",
+    wppBotNumber: cfg.wppBotNumber ?? "",
     connectionStatus: status,
   });
 }
@@ -51,6 +53,7 @@ export async function PUT(req: NextRequest) {
     wppSession:   body.wppSession   ?? current.wppSession,
     geminiApiKey: body.geminiApiKey && !body.geminiApiKey.startsWith("•") ? body.geminiApiKey : current.geminiApiKey,
     appBaseUrl:   body.appBaseUrl   ?? current.appBaseUrl,
+    wppBotNumber: body.wppBotNumber ?? current.wppBotNumber,
     // wppToken não é aceito do body — só via generate_token
   };
   saveAdmin(updated);
