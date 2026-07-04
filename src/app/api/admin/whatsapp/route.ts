@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession as getSession } from "@/lib/auth";
 import { loadAdmin, saveAdmin } from "@/lib/admin";
 import { checkConnection, startSession, getQrCode, saveConfig, getConfig, generateAndSaveToken } from "@/lib/wppconnect";
+import { detectBotNumber } from "@/app/api/bot-info/route";
 
 /** Sincroniza admin.json → config.json para que o bot use os mesmos dados */
 function syncToConfig() {
@@ -122,6 +123,11 @@ export async function POST(req: NextRequest) {
   if (action === "status") {
     const status = await checkConnection();
     return NextResponse.json({ status });
+  }
+
+  if (action === "detect_number") {
+    const number = await detectBotNumber();
+    return NextResponse.json({ ok: true, wppBotNumber: number || null });
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
