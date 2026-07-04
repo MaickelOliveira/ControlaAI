@@ -35,6 +35,7 @@ function getUserByWppPhone(phone: string) {
 }
 
 export async function POST(req: NextRequest) {
+  let _from = ""; // acessível no catch para enviar mensagem de erro
   try {
     const body = await req.json().catch(() => null);
     if (!body) return NextResponse.json({ ok: true });
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
 
     const rawFrom = body.from ?? body.data?.from ?? "";
     const from = (rawFrom as string).replace("@c.us", "").replace(/\D/g, "");
+    _from = from;
     const fromMe = body.fromMe ?? body.data?.fromMe ?? false;
     const bodyText = body.body ?? body.data?.body ?? body.content ?? body.data?.content ?? "";
     console.log(`[webhook] event=${event} from=${from} fromMe=${fromMe}`);
@@ -144,7 +146,7 @@ export async function POST(req: NextRequest) {
     switch (ai.intent) {
 
       case "finance_register": {
-        if (!ai.finance) break;
+        if (!ai.finance) { await wppSend(from, replyUnknown(messageText)); break; }
         // Usa o modo detectado pelo AI (empresa/pessoal) ou o modo ativo do usuário
         const financeMode = ai.finance.mode || mode;
         const f = addFinance({
@@ -222,7 +224,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "task_create": {
-        if (!ai.task) break;
+        if (!ai.task) { await wppSend(from, replyUnknown(messageText)); break; }
         const task = createTask({ userId: user.id, title: ai.task.title, priority: ai.task.priority || "medium", dueDate: ai.task.dueDate, status: "pending", mode });
         await wppSend(from, replyTaskCreated(task));
         break;
@@ -250,7 +252,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "reminder_set": {
-        if (!ai.reminder) break;
+        if (!ai.reminder) { await wppSend(from, replyUnknown(messageText)); break; }
         // Converte horário SP (gerado pela IA) para UTC antes de salvar
         const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
         createReminder({ userId: user.id, message: ai.reminder.message, phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none" });
@@ -431,6 +433,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("[webhook]", e);
+    if (_from) {
+      try { await wppSend(_from, "❌ Ocorreu um erro interno. Tente novamente em instantes."); } catch { /* ignora */ }
+    }
     return NextResponse.json({ ok: true });
   }
 }
