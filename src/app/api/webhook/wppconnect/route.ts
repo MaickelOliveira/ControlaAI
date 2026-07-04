@@ -379,9 +379,14 @@ export async function POST(req: NextRequest) {
       }
 
       case "vehicle_expense": {
-        const vAmount = ai.vehicle?.amount || 0;
+        const vAmount = ai.vehicle?.amount || ai.finance?.amount || 0;
         const vType = ai.vehicle?.expenseType || "other";
-        const vDesc = ai.vehicle?.description || vType;
+        const vDesc = ai.vehicle?.description || ai.finance?.description || vType;
+
+        if (!vAmount || vAmount <= 0) {
+          await wppSend(from, `❓ Não consegui identificar o valor do gasto.\n\nTente assim:\n_"Gastei 50 reais de combustível"_\n_"Paguei 300 de manutenção no carro"_`);
+          break;
+        }
         const vKm = ai.vehicle?.km;
         const vDate = now.toISOString().slice(0, 10);
         const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };

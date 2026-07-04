@@ -296,6 +296,42 @@ OU para adicionar valor em meta existente (goal_add) — "title" é o nome da me
   }
 }
 
+OU para gasto de veículo (vehicle_expense) — SEMPRE inclua "amount" com o valor e "expenseType" correto:
+{
+  "intent": "vehicle_expense",
+  "confidence": 0.95,
+  "vehicle": {
+    "amount": 50.00,
+    "expenseType": "fuel",
+    "description": "combustível",
+    "name": ""
+  }
+}
+
+Exemplo manutenção ("gastei 300 de revisão no Gol"):
+{
+  "intent": "vehicle_expense",
+  "confidence": 0.95,
+  "vehicle": {
+    "amount": 300.00,
+    "expenseType": "maintenance",
+    "description": "revisão",
+    "name": "Gol"
+  }
+}
+
+Exemplo IPVA ("paguei 800 de IPVA"):
+{
+  "intent": "vehicle_expense",
+  "confidence": 0.95,
+  "vehicle": {
+    "amount": 800.00,
+    "expenseType": "tax",
+    "description": "IPVA",
+    "name": ""
+  }
+}
+
 OU para trocar modo:
 {
   "intent": "mode_switch",
