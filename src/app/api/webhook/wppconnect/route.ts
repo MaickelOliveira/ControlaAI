@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones } from "@/lib/users";
-import { processMessage, transcribeAudio, generateAnalysisResponse } from "@/lib/ai-processor";
+import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI } from "@/lib/ai-processor";
+import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById } from "@/lib/drive";
+import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
@@ -8,13 +10,14 @@ import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoa
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice } from "@/lib/pending-actions";
 import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
-import { sendText as wppSend } from "@/lib/wppconnect";
+import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/wppconnect";
 import { nowBR, spToUTC, todayStrBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyModeSwitch, replyHelp,
   replyTrialExpired, replyUnknown, replyLowConfidence,
   replyRecurringConfirmed, replyRecurringCreated, replyRecurringList,
+  replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
 } from "@/lib/bot-replies";
 
 function phoneMatches(stored: string, incoming: string): boolean {
@@ -70,6 +73,47 @@ export async function POST(req: NextRequest) {
           if (transcript) messageText = transcript;
         }
       } catch { /* ignora */ }
+    }
+
+    // ── Detecta arquivo/documento enviado via WhatsApp ──
+    const fileTypes = ["document", "image", "video", "audio"];
+    const isFileMessage = fileTypes.includes(body.type) && (body.mediaUrl || body.url);
+    if (isFileMessage && !fromMe) {
+      // Identifica usuário antes de processar o arquivo
+      const fileUser = getUserByWppPhone(from);
+      if (fileUser && !isTrialExpired(fileUser)) {
+        const mediaUrl = body.mediaUrl || body.url;
+        const originalName = body.filename || body.caption || `arquivo_${Date.now()}${body.mimetype?.includes("pdf") ? ".pdf" : body.mimetype?.includes("image") ? ".jpg" : ""}`;
+        const mimeType = body.mimetype || "application/octet-stream";
+        const caption = (body.type !== "document" && bodyText) ? bodyText : undefined;
+        try {
+          const mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30_000) });
+          if (mediaRes.ok) {
+            const buffer = Buffer.from(await mediaRes.arrayBuffer());
+            const folders = getFolders(fileUser.id);
+            const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
+            const { folder: suggestedFolder, keywords } = await categorizeDriveFile(originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
+            const targetFolder = getFolderByName(fileUser.id, suggestedFolder);
+            const savedFile = saveFile({
+              userId: fileUser.id,
+              folderId: targetFolder?.id ?? null,
+              originalName,
+              mimeType,
+              size: buffer.length,
+              description: caption,
+              aiKeywords: keywords,
+              source: "whatsapp",
+              buffer,
+            });
+            console.log(`[drive] arquivo salvo: ${savedFile.id} | ${originalName} | pasta=${suggestedFolder}`);
+            await wppSend(from, replyFileSaved(originalName, suggestedFolder));
+          }
+        } catch (e) {
+          console.error("[drive] erro ao salvar arquivo:", e);
+          await wppSend(from, "❌ Não consegui salvar o arquivo. Tente novamente.");
+        }
+      }
+      return NextResponse.json({ ok: true });
     }
 
     if (!messageText) return NextResponse.json({ ok: true });
@@ -536,6 +580,30 @@ export async function POST(req: NextRequest) {
         if (editUpdated) {
           await wppSend(from, `✏️ *${editUpdated.description}* atualizado!\n\n💰 Novo valor: ${formatCurrency(editUpdated.amount)}`);
         }
+        break;
+      }
+
+      case "drive_search": {
+        const driveQuery = ai.keyword || messageText;
+        const allFiles = getFiles(user.id);
+        if (!allFiles.length) {
+          await wppSend(from, replyDriveFileList(0));
+          break;
+        }
+        const fileId = await findDriveFileByAI(driveQuery, allFiles.map(f => ({
+          id: f.id, originalName: f.originalName, description: f.description, aiKeywords: f.aiKeywords,
+        })));
+        if (!fileId) {
+          await wppSend(from, replyFileNotFound(driveQuery));
+          break;
+        }
+        const foundFile = getFileById(fileId, user.id);
+        if (!foundFile) { await wppSend(from, replyFileNotFound(driveQuery)); break; }
+        const filePath = getFilePath(foundFile);
+        if (!existsSync(filePath)) { await wppSend(from, replyFileNotFound(driveQuery)); break; }
+        await wppSend(from, replyFileFound(foundFile.originalName));
+        const fileBuffer = readFileSync(filePath);
+        await wppSendFile(from, fileBuffer, foundFile.originalName, foundFile.mimeType);
         break;
       }
 

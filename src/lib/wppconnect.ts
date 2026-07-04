@@ -71,6 +71,40 @@ export async function sendText(to: string, message: string): Promise<boolean> {
   }
 }
 
+export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
+  const b = base();
+  const t = token();
+  const s = session();
+  if (!b || !t) {
+    console.warn("[wpp] WPPConnect não configurado");
+    return false;
+  }
+  try {
+    const rawTo = to.trim();
+    const phoneId = rawTo.includes("@")
+      ? rawTo
+      : /^\d+$/.test(rawTo) && rawTo.length > 13
+        ? `${rawTo}@lid`
+        : `${rawTo.replace(/\D/g, "")}@c.us`;
+
+    const dataUri = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+    const res = await fetch(`${b}/api/${s}/send-file-base64`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+      body: JSON.stringify({ phone: phoneId, base64: dataUri, filename, caption: caption || "" }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => "");
+      console.error(`[wpp] sendFile falhou ${res.status}: ${err.slice(0, 200)}`);
+    }
+    return res.ok;
+  } catch (e) {
+    console.error("[wpp] sendFile erro:", e);
+    return false;
+  }
+}
+
 export async function checkConnection(): Promise<"CONNECTED" | "DISCONNECTED" | "UNKNOWN"> {
   const b = base();
   const t = token();
