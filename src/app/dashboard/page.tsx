@@ -159,7 +159,7 @@ export default function DashboardPage() {
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
                 <Tooltip
-                  formatter={(value: number, name: string) => [fmt(value), name === "receitas" ? "Receitas" : "Despesas"]}
+                  formatter={(value, name) => [fmt(Number(value ?? 0)), name === "receitas" ? "Receitas" : "Despesas"]}
                   contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
                   cursor={{ fill: "#f8fafc" }}
                 />
@@ -200,7 +200,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => [fmt(value), "Total"]}
+                    formatter={(value) => [fmt(Number(value ?? 0)), "Total"]}
                     contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
                   />
                 </PieChart>
