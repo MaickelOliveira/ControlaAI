@@ -6,7 +6,7 @@ export default function AdminWhatsappPage() {
   const [cfg, setCfg] = useState({
     wppServer: "", wppSecretKey: "", wppToken: "", hasToken: false,
     wppSession: "controlaai", geminiApiKey: "", hasGemini: false,
-    appBaseUrl: "", connectionStatus: "UNKNOWN",
+    appBaseUrl: "", wppBotNumber: "", connectionStatus: "UNKNOWN",
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -221,6 +221,13 @@ export default function AdminWhatsappPage() {
               <input value={cfg.appBaseUrl} onChange={e => setCfg(c => ({ ...c, appBaseUrl: e.target.value }))}
                 placeholder="https://lp-controlaai.ztcjzs.easypanel.host"
                 className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Número do bot WhatsApp (com DDI, sem + ou espaços)</label>
+              <input value={cfg.wppBotNumber} onChange={e => setCfg(c => ({ ...c, wppBotNumber: e.target.value.replace(/\D/g, "") }))}
+                placeholder="5544999999999"
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition font-mono" />
+              <p className="text-[11px] text-slate-400 mt-1">Número conectado ao WPPConnect — exibido para os clientes vincularem o WhatsApp</p>
             </div>
             {webhookUrl && (
               <div className="bg-slate-100 border border-slate-200 rounded-xl p-3">

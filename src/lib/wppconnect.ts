@@ -10,6 +10,7 @@ export type WppConfig = {
   wppSession?: string;
   geminiApiKey?: string;
   appBaseUrl?: string;
+  wppBotNumber?: string;  // número WhatsApp do bot (ex: 5544999999999)
 };
 
 export function getConfig(): WppConfig {
