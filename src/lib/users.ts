@@ -17,7 +17,9 @@ export type User = {
   status: UserStatus;
   activeMode: UserMode;
   company?: string;
-  wppPhone?: string;         // identificador WhatsApp (número ou LID) salvo automaticamente via código
+  wppPhone?: string;         // legado — migrado para wppPhones automaticamente
+  wppPhones?: string[];      // lista de números vinculados
+  maxWppPhones?: number;     // limite de números permitidos (default 1)
   wppVerifyCode?: string;    // código temporário de vinculação
   wppVerifyExpires?: string; // expiração do código
   trialEndsAt: string;
@@ -119,6 +121,38 @@ export function createUserByPhone(phone: string, name: string, plan: UserPlan = 
   users.push(user);
   save(users);
   return user;
+}
+
+/** Retorna os números vinculados, migrando do campo legado wppPhone se necessário */
+export function getWppPhones(user: User): string[] {
+  if (user.wppPhones && user.wppPhones.length > 0) return user.wppPhones;
+  if (user.wppPhone) return [user.wppPhone];
+  return [];
+}
+
+export function getMaxWppPhones(user: User): number {
+  return user.maxWppPhones ?? 1;
+}
+
+export function addWppPhone(userId: string, phone: string): User | null {
+  const users = load();
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx < 0) return null;
+  const current = getWppPhones(users[idx]);
+  if (!current.includes(phone)) current.push(phone);
+  users[idx] = { ...users[idx], wppPhones: current, wppPhone: undefined };
+  save(users);
+  return users[idx];
+}
+
+export function removeWppPhone(userId: string, phone: string): User | null {
+  const users = load();
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx < 0) return null;
+  const current = getWppPhones(users[idx]).filter(p => p !== phone);
+  users[idx] = { ...users[idx], wppPhones: current, wppPhone: undefined };
+  save(users);
+  return users[idx];
 }
 
 export function generateWppVerifyCode(userId: string): string {

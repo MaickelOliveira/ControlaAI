@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUsers, updateUser, isTrialExpired, getUserByWppCode } from "@/lib/users";
+import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones } from "@/lib/users";
 import { processMessage, transcribeAudio, generateAnalysisResponse } from "@/lib/ai-processor";
 import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
@@ -15,23 +15,18 @@ import {
   replyTrialExpired, replyUnknown, replyLowConfidence,
 } from "@/lib/bot-replies";
 
+function phoneMatches(stored: string, incoming: string): boolean {
+  const s = stored.replace(/\D/g, "");
+  const i = incoming.replace(/\D/g, "");
+  if (!s || !i) return false;
+  if (s === i) return true;
+  if (i.length >= 9 && s.length >= 9 && (i.endsWith(s.slice(-9)) || s.endsWith(i.slice(-9)))) return true;
+  if (i.length >= 11 && s.length >= 11 && (i.endsWith(s.slice(-11)) || s.endsWith(i.slice(-11)))) return true;
+  return false;
+}
+
 function getUserByWppPhone(phone: string) {
-  const cleaned = phone.replace(/\D/g, "");
-  return getUsers().find(u => {
-    const wp = ((u as Record<string, unknown>).wppPhone as string | undefined)?.replace(/\D/g, "");
-    if (!wp) return false;
-    // Correspondência exata
-    if (wp === cleaned) return true;
-    // Sufixo de 9 dígitos (nono dígito BR)
-    if (cleaned.length >= 9 && wp.length >= 9 && (
-      cleaned.endsWith(wp.slice(-9)) || wp.endsWith(cleaned.slice(-9))
-    )) return true;
-    // Sufixo de 11 dígitos (DD+número sem país)
-    if (cleaned.length >= 11 && wp.length >= 11 && (
-      cleaned.endsWith(wp.slice(-11)) || wp.endsWith(cleaned.slice(-11))
-    )) return true;
-    return false;
-  }) ?? null;
+  return getUsers().find(u => getWppPhones(u).some(p => phoneMatches(p, phone))) ?? null;
 }
 
 export async function POST(req: NextRequest) {
@@ -77,7 +72,8 @@ export async function POST(req: NextRequest) {
     if (codeMatch) {
       const codeUser = getUserByWppCode(codeMatch[1]);
       if (codeUser) {
-        updateUser(codeUser.id, { wppPhone: from, wppVerifyCode: undefined, wppVerifyExpires: undefined });
+        addWppPhone(codeUser.id, from);
+        updateUser(codeUser.id, { wppVerifyCode: undefined, wppVerifyExpires: undefined });
         await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*\n\nOlá, ${codeUser.name}! Agora você pode usar o bot normalmente.\n\nDigite *ajuda* para ver os comandos disponíveis.`);
         return NextResponse.json({ ok: true });
       }

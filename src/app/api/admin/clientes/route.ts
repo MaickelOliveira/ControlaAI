@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession as getSession } from "@/lib/auth";
-import { getUsers, isTrialExpired, createUser, getUserByEmail, updateUser } from "@/lib/users";
+import { getUsers, isTrialExpired, createUser, getUserByEmail, updateUser, getWppPhones, getMaxWppPhones } from "@/lib/users";
 import { getFinancesByUser } from "@/lib/finances";
 import { getTasksByUser } from "@/lib/tasks";
 
@@ -25,6 +25,8 @@ export async function GET() {
       email: u.email,
       phone: u.phone,
       wppPhone: (u as Record<string,unknown>).wppPhone ?? null,
+      wppPhones: getWppPhones(u),
+      maxWppPhones: getMaxWppPhones(u),
       plan: u.plan,
       status: trialExpired ? "expired" : u.status,
       activeMode: u.activeMode,
@@ -54,21 +56,24 @@ export async function POST(req: NextRequest) {
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const { name, email, password, phone, plan, company, isTrial, trialDays } = body;
+  const { name, email, password, phone, plan, company, isTrial, trialDays, maxWppPhones } = body;
 
   if (!name || !email || !password) return NextResponse.json({ error: "Nome, email e senha são obrigatórios" }, { status: 400 });
   if (getUserByEmail(email)) return NextResponse.json({ error: "Email já cadastrado" }, { status: 400 });
 
   const user = await createUser({ name, email, password, phone: phone || "", plan: plan || "personal", company });
 
+  const extraPatch: Record<string, unknown> = {};
+  if (maxWppPhones && Number(maxWppPhones) > 1) extraPatch.maxWppPhones = Number(maxWppPhones);
+
   if (!isTrial) {
-    // Ativo imediatamente (sem trial)
-    updateUser(user.id, { status: "active" });
+    updateUser(user.id, { status: "active", ...extraPatch });
   } else if (trialDays && trialDays !== 14) {
-    // Trial com prazo customizado
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + Number(trialDays));
-    updateUser(user.id, { trialEndsAt: trialEnd.toISOString() });
+    updateUser(user.id, { trialEndsAt: trialEnd.toISOString(), ...extraPatch });
+  } else if (Object.keys(extraPatch).length > 0) {
+    updateUser(user.id, extraPatch as Partial<import("@/lib/users").User>);
   }
 
   return NextResponse.json({ ok: true, id: user.id });
