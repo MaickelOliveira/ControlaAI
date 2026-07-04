@@ -8,6 +8,7 @@ export type Intent =
   | "finance_query"
   | "finance_edit"
   | "finance_delete"
+  | "finance_analysis"
   | "task_create"
   | "task_update"
   | "task_query"
@@ -91,8 +92,9 @@ INTENÇÕES POSSÍVEIS:
 - finance_register: registrar gasto ou receita
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
-- finance_query: perguntar sobre saldo, extrato, gastos do mês
-- balance_query: pergunta sobre saldo atual
+- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato")
+- balance_query: saldo atual ("qual meu saldo", "quanto tenho")
+- finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais")
 - task_create: criar uma tarefa
 - task_update: atualizar/concluir uma tarefa
 - task_query: listar tarefas
@@ -301,6 +303,12 @@ OU para trocar modo:
   "mode": "business"
 }
 
+OU para análise de gastos ("no que eu gastei mais", "me ajude a economizar"):
+{
+  "intent": "finance_analysis",
+  "confidence": 0.9
+}
+
 OU genérico:
 {
   "intent": "finance_query",
@@ -336,6 +344,63 @@ export async function processMessage(message: string): Promise<AIResult> {
   } catch (e) {
     console.error("[ai-processor] Erro Gemini:", String(e));
     return { intent: "unknown", confidence: 0 };
+  }
+}
+
+export async function generateAnalysisResponse(
+  question: string,
+  data: {
+    mode: string;
+    balance: { income: number; expense: number; balance: number };
+    topExpenses: Array<{ category: string; amount: number }>;
+    topIncomes: Array<{ category: string; amount: number }>;
+    month: string;
+  }
+): Promise<string> {
+  const cfg = getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return "❌ IA não configurada.";
+
+  const modeLabel = data.mode === "business" ? "Empresa" : "Pessoal";
+  const expText = data.topExpenses.length
+    ? data.topExpenses.map((e, i) => `${i + 1}. ${e.category}: R$ ${e.amount.toFixed(2)}`).join("\n")
+    : "Nenhuma despesa registrada";
+  const incText = data.topIncomes.length
+    ? data.topIncomes.map((e, i) => `${i + 1}. ${e.category}: R$ ${e.amount.toFixed(2)}`).join("\n")
+    : "Nenhuma receita registrada";
+
+  const prompt = `Você é um assistente financeiro pessoal amigável via WhatsApp para usuários brasileiros.
+Responda à pergunta do usuário de forma PERSONALIZADA com base nos dados REAIS dele.
+Use emojis, negrito com *asterisco* (formato WhatsApp), listas com • e seja direto e útil.
+Máximo 250 palavras.
+
+DADOS DO USUÁRIO (${modeLabel}) — ${data.month}:
+Receitas: R$ ${data.balance.income.toFixed(2)}
+Despesas: R$ ${data.balance.expense.toFixed(2)}
+Saldo: R$ ${data.balance.balance.toFixed(2)}
+
+Maiores despesas por categoria:
+${expText}
+
+Maiores receitas por categoria:
+${incText}
+
+Pergunta: "${question}"
+
+Instruções:
+- Se perguntou "no que gastou mais" → mostre o ranking das categorias com valores reais, destaque a maior
+- Se pediu dicas para economizar → analise as categorias com mais gastos e dê 3-4 dicas práticas e específicas para esse perfil
+- Se pediu análise geral → dê uma visão personalizada do perfil financeiro com base nos dados
+- Sempre baseie a resposta nos dados reais, não em exemplos genéricos`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim();
+  } catch (e) {
+    console.error("[ai-processor] Erro generateAnalysisResponse:", e);
+    return "❌ Não consegui gerar a análise agora. Tente novamente.";
   }
 }
 

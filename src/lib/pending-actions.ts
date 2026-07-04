@@ -21,7 +21,17 @@ export type PendingVehicleSelection = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection;
+export type PendingGoalSelection = {
+  type: "goal_selection";
+  phone: string;
+  userId: string;
+  mode: string;
+  amount: number;
+  goals: Array<{ id: string; title: string; currentAmount: number; targetAmount: number }>;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection;
 
 type Store = Record<string, PendingAction>;
 
@@ -36,7 +46,9 @@ function save(store: Store) {
   try { writeFileSync(FILE, JSON.stringify(store, null, 2)); } catch { /* ignore */ }
 }
 
-export function setPendingAction(phone: string, action: Omit<PendingAction, "phone" | "expiresAt">): void {
+type PendingActionInput = Omit<PendingVehicleSelection, "phone" | "expiresAt"> | Omit<PendingGoalSelection, "phone" | "expiresAt">;
+
+export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();
   // remove expirados
   const now = Date.now();
@@ -65,6 +77,21 @@ export function clearPendingAction(phone: string): void {
     delete store[phone];
     save(store);
   }
+}
+
+/** Interpreta a resposta do usuário como escolha de meta.
+ *  Aceita: "1", "2", parte do título. Retorna índice (0-based) ou -1. */
+export function parseGoalChoice(
+  text: string,
+  goals: Array<{ id: string; title: string; currentAmount: number; targetAmount: number }>
+): number {
+  const t = text.trim().toLowerCase();
+  const num = parseInt(t);
+  if (!isNaN(num) && num >= 1 && num <= goals.length) return num - 1;
+  for (let i = 0; i < goals.length; i++) {
+    if (goals[i].title.toLowerCase().includes(t) || t.includes(goals[i].title.toLowerCase())) return i;
+  }
+  return -1;
 }
 
 /** Interpreta a resposta do usuário como escolha de veículo.
