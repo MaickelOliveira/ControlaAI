@@ -28,6 +28,7 @@ export type Intent =
   | "recurring_cancel"
   | "recurring_edit"
   | "drive_search"
+  | "drive_rename"
   | "how_to"
   | "help"
   | "unknown";
@@ -128,6 +129,7 @@ INTENÇÕES POSSÍVEIS:
 - recurring_cancel: cancelar um recorrente/parcelado ("cancela a parcela da geladeira", "para o netflix", "remove o recorrente do aluguel")
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
+- drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
 - vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
@@ -436,6 +438,13 @@ OU para buscar arquivo no Drive ("ache o comprovante do mecânico"):
   "intent": "drive_search",
   "confidence": 0.9,
   "keyword": "comprovante mecânico"
+}
+
+OU para renomear/descrever último arquivo salvo ("altere e salve como comprovante de pagamento thalita"):
+{
+  "intent": "drive_rename",
+  "confidence": 0.9,
+  "keyword": "comprovante de pagamento thalita"
 }
 
 OU para trocar modo:
