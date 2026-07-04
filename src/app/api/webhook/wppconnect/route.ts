@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode } from "@/lib/users";
-import { processMessage, transcribeAudio } from "@/lib/ai-processor";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions } from "@/lib/finances";
+import { processMessage, transcribeAudio, generateAnalysisResponse } from "@/lib/ai-processor";
+import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses } from "@/lib/vehicles";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice } from "@/lib/pending-actions";
 import { sendText as wppSend } from "@/lib/wppconnect";
 import { nowBR, spToUTC } from "@/lib/date-br";
 import {
@@ -124,6 +124,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Verifica seleção de meta pendente ──
+    if (pending?.type === "goal_selection" && pending.userId === user.id) {
+      const choiceIdx = parseGoalChoice(messageText, pending.goals);
+      if (choiceIdx >= 0) {
+        clearPendingAction(from);
+        const chosen = pending.goals[choiceIdx];
+        const updated = updateGoalAmount(chosen.id, user.id, pending.amount);
+        if (updated) {
+          const p = getGoalProgress(updated);
+          const emoji = p >= 100 ? "🎉" : p >= 75 ? "🚀" : "📈";
+          await wppSend(from, `${emoji} *${formatCurrency(pending.amount)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${p}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
+        }
+        return NextResponse.json({ ok: true });
+      } else {
+        clearPendingAction(from);
+      }
+    }
+
     // ── Processa com IA ──
     const ai = await processMessage(messageText);
     console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
@@ -215,6 +233,26 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "finance_analysis": {
+        const expCats = getByCategory(user.id, mode, "expense", year, month);
+        const incCats = getByCategory(user.id, mode, "income", year, month);
+        const analysisBal = getBalance(user.id, mode, year, month);
+        const topExpenses = Object.entries(expCats)
+          .map(([category, amount]) => ({ category, amount }))
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 6);
+        const topIncomes = Object.entries(incCats)
+          .map(([category, amount]) => ({ category, amount }))
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 4);
+        const monthLabel = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        const analysisReply = await generateAnalysisResponse(messageText, {
+          mode, balance: analysisBal, topExpenses, topIncomes, month: monthLabel,
+        });
+        await wppSend(from, analysisReply);
+        break;
+      }
+
       case "finance_query":
       case "balance_query": {
         const personal = getBalance(user.id, "personal", year, month);
@@ -275,18 +313,43 @@ export async function POST(req: NextRequest) {
       }
 
       case "goal_add": {
-        const amount = (ai.goal?.targetAmount ?? (ai.goal as unknown as Record<string,number>)?.amount) || ai.finance?.amount || 0;
-        const title = ai.goal?.title || "";
-        const goal = findGoalByTitle(user.id, title, mode) ?? (getActiveGoals(user.id, mode)[0] ?? null);
-        if (goal && amount > 0) {
-          const updated = updateGoalAmount(goal.id, user.id, amount);
+        const addAmt = (ai.goal?.targetAmount ?? (ai.goal as unknown as Record<string,number>)?.amount) || ai.finance?.amount || 0;
+        const addTitle = (ai.goal?.title || "").trim();
+        const activeGoals = getActiveGoals(user.id, mode);
+
+        if (!addAmt || addAmt <= 0) {
+          await wppSend(from, `💰 Qual valor quer adicionar à meta?\n\nExemplo: _"adicionar 200 na meta viagem"_`);
+          break;
+        }
+
+        // Tenta encontrar pelo título
+        let addGoal = addTitle ? findGoalByTitle(user.id, addTitle, mode) : null;
+
+        // Título não bateu — só pega direto se tiver 1 meta
+        if (!addGoal && activeGoals.length === 1) {
+          addGoal = activeGoals[0];
+        }
+
+        if (addGoal) {
+          const updated = updateGoalAmount(addGoal.id, user.id, addAmt);
           if (updated) {
-            const pct = getGoalProgress(updated);
-            const emoji = pct >= 100 ? "🎉" : pct >= 75 ? "🚀" : "📈";
-            await wppSend(from, `${emoji} *${formatCurrency(amount)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${pct}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
+            const p = getGoalProgress(updated);
+            const emoji = p >= 100 ? "🎉" : p >= 75 ? "🚀" : "📈";
+            await wppSend(from, `${emoji} *${formatCurrency(addAmt)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${p}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
           }
+        } else if (activeGoals.length === 0) {
+          await wppSend(from, "❓ Você não tem metas ativas. Crie uma primeiro!\n\nEx: _\"Meta: guardar 3000 para viagem\"_");
         } else {
-          await wppSend(from, "❓ Meta não encontrada. Digite *minhas metas* para ver a lista.");
+          // Múltiplas metas — pergunta qual
+          const goalList = activeGoals.map(g => ({ id: g.id, title: g.title, currentAmount: g.currentAmount, targetAmount: g.targetAmount }));
+          setPendingAction(from, { type: "goal_selection", userId: user.id, mode, amount: addAmt, goals: goalList });
+          let msg = `🎯 Você tem ${activeGoals.length} metas ativas. Em qual deseja adicionar *${formatCurrency(addAmt)}*?\n\n`;
+          activeGoals.forEach((g, i) => {
+            const p = getGoalProgress(g);
+            msg += `*${i + 1}.* ${g.title} (${p}%)\n`;
+          });
+          msg += `\nResponda com o número ou nome da meta. ⏱ _Válido por 5 min._`;
+          await wppSend(from, msg);
         }
         break;
       }
