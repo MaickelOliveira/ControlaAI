@@ -75,8 +75,8 @@ export function updateVehicleExpense(vehicleId: string, userId: string, expenseI
   return items[idx];
 }
 
-/** Retorna { vehicle, financeId } para que o caller possa apagar o lançamento financeiro vinculado */
-export function deleteVehicleExpense(vehicleId: string, userId: string, expenseId: string): { vehicle: Vehicle; financeId?: string } | null {
+/** Retorna { vehicle, financeId, expense } para que o caller possa apagar o lançamento financeiro vinculado */
+export function deleteVehicleExpense(vehicleId: string, userId: string, expenseId: string): { vehicle: Vehicle; financeId?: string; expense: VehicleExpense } | null {
   const items = load();
   const idx = items.findIndex(v => v.id === vehicleId && v.userId === userId);
   if (idx < 0) return null;
@@ -85,7 +85,7 @@ export function deleteVehicleExpense(vehicleId: string, userId: string, expenseI
   const financeId = expense.financeId;
   items[idx].expenses = items[idx].expenses.filter(e => e.id !== expenseId);
   save(items);
-  return { vehicle: items[idx], financeId };
+  return { vehicle: items[idx], financeId, expense };
 }
 
 /** Busca o vehicle expense pelo financeId — usado ao excluir em Finanças */

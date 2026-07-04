@@ -4,6 +4,7 @@ import { VehicleExpenseType } from "./vehicles";
 
 const FILE = path.join(process.cwd(), "data", "pending.json");
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
+const TTL_RECURRING_MS = 12 * 60 * 60 * 1000; // 12 horas
 
 export type PendingVehicleSelection = {
   type: "vehicle_selection";
@@ -31,7 +32,19 @@ export type PendingGoalSelection = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection;
+export type PendingRecurringConfirmation = {
+  type: "recurring_confirmation";
+  phone: string;
+  userId: string;
+  recurringId: string;
+  description: string;
+  amount: number;
+  installmentNumber?: number;
+  totalInstallments?: number;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation;
 
 type Store = Record<string, PendingAction>;
 
@@ -46,7 +59,10 @@ function save(store: Store) {
   try { writeFileSync(FILE, JSON.stringify(store, null, 2)); } catch { /* ignore */ }
 }
 
-type PendingActionInput = Omit<PendingVehicleSelection, "phone" | "expiresAt"> | Omit<PendingGoalSelection, "phone" | "expiresAt">;
+type PendingActionInput =
+  | Omit<PendingVehicleSelection, "phone" | "expiresAt">
+  | Omit<PendingGoalSelection, "phone" | "expiresAt">
+  | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">;
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();
@@ -55,7 +71,8 @@ export function setPendingAction(phone: string, action: PendingActionInput): voi
   for (const key of Object.keys(store)) {
     if (new Date(store[key].expiresAt).getTime() < now) delete store[key];
   }
-  store[phone] = { ...action, phone, expiresAt: new Date(now + TTL_MS).toISOString() } as PendingAction;
+  const ttl = action.type === "recurring_confirmation" ? TTL_RECURRING_MS : TTL_MS;
+  store[phone] = { ...action, phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
   save(store);
 }
 

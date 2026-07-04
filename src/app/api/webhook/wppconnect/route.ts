@@ -7,12 +7,14 @@ import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice } from "@/lib/pending-actions";
+import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { sendText as wppSend } from "@/lib/wppconnect";
-import { nowBR, spToUTC } from "@/lib/date-br";
+import { nowBR, spToUTC, todayStrBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyModeSwitch, replyHelp,
   replyTrialExpired, replyUnknown, replyLowConfidence,
+  replyRecurringConfirmed, replyRecurringCreated, replyRecurringList,
 } from "@/lib/bot-replies";
 
 function phoneMatches(stored: string, incoming: string): boolean {
@@ -145,6 +147,26 @@ export async function POST(req: NextRequest) {
       } else {
         clearPendingAction(from);
       }
+    }
+
+    // ── Confirmação de recorrente/parcela (resposta ao lembrete das 20h) ──
+    if (pending?.type === "recurring_confirmation" && pending.userId === user.id) {
+      const lower = messageText.toLowerCase().trim();
+      const isYes = /^(sim|s|foi|paguei|recebi|yes|pago|recebido|ok)\b/.test(lower);
+      const isNo  = /^(n(ão|ao)?|ainda não|ainda nao|não paguei|nao paguei|nao|não)\b/.test(lower);
+      if (isYes) {
+        clearPendingAction(from);
+        const result = confirmRecurring(pending.recurringId, user.id);
+        if (result) {
+          await wppSend(from, replyRecurringConfirmed(result.updated, result.finance));
+        }
+      } else if (isNo) {
+        clearPendingAction(from);
+        await wppSend(from, "Ok! Quando quiser marcar como pago, acesse *Recorrentes* no dashboard. 👍");
+      } else {
+        await wppSend(from, `Não entendi. Responda *sim* se ${pending.installmentNumber ? "a parcela foi paga" : "foi pago/recebido"} ou *não* para deixar pendente.`);
+      }
+      return NextResponse.json({ ok: true });
     }
 
     // ── Processa com IA ──
@@ -456,6 +478,63 @@ export async function POST(req: NextRequest) {
             msg += `• *${v.brand} ${v.model}* (${v.year})\n  Placa: ${v.plate || "—"} | Km: ${v.currentKm.toLocaleString()}\n  Total gastos: ${formatCurrency(total)}\n\n`;
           });
           await wppSend(from, msg.trim());
+        }
+        break;
+      }
+
+      case "recurring_create": {
+        if (!ai.recurring) { await wppSend(from, replyUnknown(messageText)); break; }
+        const r = ai.recurring;
+        const rec = createRecurring({
+          userId: user.id,
+          type: r.type,
+          amount: r.amount,
+          totalAmount: r.totalAmount,
+          category: cap(r.category || (r.type === "income" ? "Outros" : "Outros")),
+          description: cap(r.description),
+          mode: (r.mode as "personal" | "business") || mode,
+          recurrenceType: r.recurrenceType,
+          totalInstallments: r.totalInstallments,
+          repeatUnit: r.repeatUnit || "monthly",
+          dayOfMonth: r.dayOfMonth,
+          startDate: r.startDate || todayStrBR(),
+          source: "whatsapp",
+        });
+        await wppSend(from, replyRecurringCreated(rec));
+        break;
+      }
+
+      case "recurring_query": {
+        const recs = getRecurringByUser(user.id, mode, "active");
+        await wppSend(from, replyRecurringList(recs));
+        break;
+      }
+
+      case "recurring_cancel": {
+        const keyword = ai.keyword || "";
+        if (!keyword) { await wppSend(from, "❓ Qual recorrente ou parcela deseja cancelar?"); break; }
+        const found = findRecurringByDescription(user.id, keyword);
+        if (!found) { await wppSend(from, `❓ Não encontrei recorrente com *"${keyword}"*.\n\nDigite *minhas parcelas* para ver a lista.`); break; }
+        cancelRecurring(found.id, user.id);
+        await wppSend(from, `✅ *${found.description}* cancelado(a)!\n\nSe quiser reativar, acesse *Recorrentes* no dashboard.`);
+        break;
+      }
+
+      case "recurring_edit": {
+        const editKw = ai.keyword || ai.recurring?.description || "";
+        if (!editKw) { await wppSend(from, "❓ Qual recorrente ou parcela deseja editar?"); break; }
+        const editFound = findRecurringByDescription(user.id, editKw);
+        if (!editFound) { await wppSend(from, `❓ Não encontrei recorrente com *"${editKw}"*.\n\nDigite *minhas parcelas* para ver a lista.`); break; }
+        const patch: Parameters<typeof updateRecurring>[2] = {};
+        if (ai.recurring?.amount) patch.amount = ai.recurring.amount;
+        if (ai.recurring?.description) patch.description = cap(ai.recurring.description);
+        if (ai.recurring?.category) patch.category = cap(ai.recurring.category);
+        if (ai.recurring?.dayOfMonth) patch.dayOfMonth = ai.recurring.dayOfMonth;
+        if (ai.recurring?.repeatUnit) patch.repeatUnit = ai.recurring.repeatUnit;
+        if (Object.keys(patch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o netflix para 65 reais\"_"); break; }
+        const editUpdated = updateRecurring(editFound.id, user.id, patch);
+        if (editUpdated) {
+          await wppSend(from, `✏️ *${editUpdated.description}* atualizado!\n\n💰 Novo valor: ${formatCurrency(editUpdated.amount)}`);
         }
         break;
       }

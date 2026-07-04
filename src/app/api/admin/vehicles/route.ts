@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createVehicle, getVehiclesByUser, addVehicleExpense, updateVehicleKm, updateVehicleExpense, deleteVehicleExpense, setExpenseFinanceId } from "@/lib/vehicles";
-import { addFinance, deleteFinance, updateFinance } from "@/lib/finances";
+import { addFinance, deleteFinance, updateFinance, findFinanceByDescription } from "@/lib/finances";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -73,7 +73,16 @@ export async function POST(req: NextRequest) {
     if (!vehicleId || !expenseId) return NextResponse.json({ error: "vehicleId e expenseId obrigatórios" }, { status: 400 });
     const result = deleteVehicleExpense(vehicleId, session.sub, expenseId);
     if (!result) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
-    if (result.financeId) deleteFinance(result.financeId, session.sub);
+    if (result.financeId) {
+      deleteFinance(result.financeId, session.sub);
+    } else {
+      // Fallback para gastos antigos sem financeId: busca por descrição
+      const v = result.vehicle;
+      const desc = `${result.expense.description} — ${v.brand} ${v.model}`;
+      const candidates = findFinanceByDescription(session.sub, null, desc);
+      const match = candidates.find(f => f.amount === result.expense.amount && f.date === result.expense.date);
+      if (match) deleteFinance(match.id, session.sub);
+    }
     return NextResponse.json(result.vehicle);
   }
 
