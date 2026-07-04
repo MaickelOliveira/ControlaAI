@@ -29,6 +29,11 @@ function getUserByWppPhone(phone: string) {
   return getUsers().find(u => getWppPhones(u).some(p => phoneMatches(p, phone))) ?? null;
 }
 
+function cap(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export async function POST(req: NextRequest) {
   let _from = ""; // acessível no catch para enviar mensagem de erro
   try {
@@ -167,7 +172,7 @@ export async function POST(req: NextRequest) {
         const financeMode = ai.finance.mode || mode;
         const f = addFinance({
           userId: user.id, type: ai.finance.type, amount: ai.finance.amount,
-          category: ai.finance.category, description: ai.finance.description,
+          category: cap(ai.finance.category), description: cap(ai.finance.description),
           date: ai.finance.date || now.toISOString().slice(0, 10), mode: financeMode, source: "whatsapp",
         });
         const bal = getBalance(user.id, financeMode, year, month);
@@ -261,7 +266,7 @@ export async function POST(req: NextRequest) {
 
       case "task_create": {
         if (!ai.task) { await wppSend(from, replyUnknown(messageText)); break; }
-        const task = createTask({ userId: user.id, title: ai.task.title, priority: ai.task.priority || "medium", dueDate: ai.task.dueDate, status: "pending", mode });
+        const task = createTask({ userId: user.id, title: cap(ai.task.title), priority: ai.task.priority || "medium", dueDate: ai.task.dueDate, status: "pending", mode });
         await wppSend(from, replyTaskCreated(task));
         break;
       }
@@ -291,7 +296,7 @@ export async function POST(req: NextRequest) {
         if (!ai.reminder) { await wppSend(from, replyUnknown(messageText)); break; }
         // Converte horário SP (gerado pela IA) para UTC antes de salvar
         const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
-        createReminder({ userId: user.id, message: ai.reminder.message, phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none" });
+        createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none" });
         await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat));
         break;
       }
@@ -301,7 +306,7 @@ export async function POST(req: NextRequest) {
           await wppSend(from, `🎯 Para criar uma meta, me diga o nome e o valor!\n\nExemplo:\n_"Quero guardar R$3.000 para viagem até dezembro"_\n_"Meta: juntar 500 reais de emergência"_`);
           break;
         }
-        const goalTitle = (ai.goal.title || "").trim() || messageText.slice(0, 60);
+        const goalTitle = cap((ai.goal.title || "").trim() || messageText.slice(0, 60));
         const goalCurrentAmount = Number(ai.goal.currentAmount) || 0;
         const goal = createGoal({ userId: user.id, title: goalTitle, targetAmount: ai.goal.targetAmount, currentAmount: goalCurrentAmount, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode, status: "active" });
         const pct = getGoalProgress(goal);
@@ -383,7 +388,7 @@ export async function POST(req: NextRequest) {
       case "vehicle_expense": {
         const vAmount = ai.vehicle?.amount || ai.finance?.amount || 0;
         const vType = ai.vehicle?.expenseType || "other";
-        const vDesc = ai.vehicle?.description || ai.finance?.description || vType;
+        const vDesc = cap(ai.vehicle?.description || ai.finance?.description || vType);
 
         if (!vAmount || vAmount <= 0) {
           await wppSend(from, `❓ Não consegui identificar o valor do gasto.\n\nTente assim:\n_"Gastei 50 reais de combustível"_\n_"Paguei 300 de manutenção no carro"_`);
