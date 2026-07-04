@@ -25,8 +25,6 @@ type Recurring = {
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtDate(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-BR"); }
 
-const EXPENSE_CATS = ["Alimentação", "Transporte", "Moradia", "Saúde", "Educação", "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Funcionários", "Marketing", "Fornecedores", "Outros"];
-const INCOME_CATS = ["Salário", "Freelance", "Vendas", "Investimentos", "Aluguel", "Serviços", "Reembolso", "Outros"];
 const UNIT_LABEL: Record<string, string> = { monthly: "Mensal", weekly: "Semanal", daily: "Diário", yearly: "Anual" };
 
 type FormState = {
@@ -55,6 +53,18 @@ export default function FinancasPage() {
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [catsExpense, setCatsExpense] = useState<string[]>([]);
+  const [catsIncome, setCatsIncome] = useState<string[]>([]);
+
+  // modal nova categoria
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [catType, setCatType] = useState<"expense" | "income">("expense");
+  const [catName, setCatName] = useState("");
+  const [catSaving, setCatSaving] = useState(false);
+  const [catError, setCatError] = useState("");
+  const [customExpense, setCustomExpense] = useState<string[]>([]);
+  const [customIncome, setCustomIncome] = useState<string[]>([]);
+
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -68,6 +78,16 @@ export default function FinancasPage() {
   const [deleteTarget, setDeleteTarget] = useState<Finance | null>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [cancellingRec, setCancellingRec] = useState<string | null>(null);
+
+  function loadCategories() {
+    fetch("/api/categories").then(r => r.json()).then(d => {
+      setCatsExpense(d.expense || []);
+      setCatsIncome(d.income || []);
+      const defaults = { expense: ["Alimentação","Transporte","Moradia","Saúde","Educação","Lazer","Vestuário","Tecnologia","Serviços","Impostos","Funcionários","Marketing","Fornecedores","Outros"], income: ["Salário","Freelance","Vendas","Investimentos","Aluguel","Serviços","Reembolso","Outros"] };
+      setCustomExpense((d.expense || []).filter((c: string) => !defaults.expense.includes(c)));
+      setCustomIncome((d.income || []).filter((c: string) => !defaults.income.includes(c)));
+    }).catch(() => {});
+  }
 
   function loadAll(m: string) {
     setLoading(true);
@@ -87,8 +107,34 @@ export default function FinancasPage() {
       const m = d.user?.activeMode || "personal";
       setMode(m);
       loadAll(m);
+      loadCategories();
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSaveCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!catName.trim()) return;
+    setCatSaving(true);
+    setCatError("");
+    const res = await fetch("/api/categories", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: catType, name: catName.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setCatError(data.error || "Erro ao salvar"); setCatSaving(false); return; }
+    setCatSaving(false);
+    setCatName("");
+    setShowCatModal(false);
+    loadCategories();
+  }
+
+  async function handleDeleteCategory(type: "expense" | "income", name: string) {
+    await fetch("/api/categories", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, name }),
+    });
+    loadCategories();
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -175,9 +221,9 @@ export default function FinancasPage() {
     loadAll(mode);
   }
 
-  const cats = form.type === "income" ? INCOME_CATS : EXPENSE_CATS;
-  const editCats = editTarget?.type === "income" ? INCOME_CATS : EXPENSE_CATS;
-  const editRecCats = editRec?.type === "income" ? INCOME_CATS : EXPENSE_CATS;
+  const cats = form.type === "income" ? catsIncome : catsExpense;
+  const editCats = editTarget?.type === "income" ? catsIncome : catsExpense;
+  const editRecCats = editRec?.type === "income" ? catsIncome : catsExpense;
   const catTotals: Record<string, number> = {};
   finances.filter(f => f.type === "expense").forEach(f => { catTotals[f.category] = (catTotals[f.category] || 0) + f.amount; });
   const topCats = Object.entries(catTotals).sort(([, a], [, b]) => b - a).slice(0, 5);
@@ -225,7 +271,13 @@ export default function FinancasPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         {/* Categorias */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <h3 className="font-semibold text-slate-800 mb-4 text-sm">📊 Despesas por Categoria</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-800 text-sm">📊 Despesas por Categoria</h3>
+            <button onClick={() => { setCatType("expense"); setCatName(""); setCatError(""); setShowCatModal(true); }}
+              className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1 transition">
+              <span className="text-base leading-none">+</span> Categoria
+            </button>
+          </div>
           {topCats.length === 0 ? (
             <div className="text-center py-10 text-slate-300">
               <p className="text-3xl mb-2">📊</p>
@@ -376,19 +428,18 @@ export default function FinancasPage() {
                 placeholder={form.frequency === "installment" ? "Valor por parcela (R$)" : "Valor (R$)"}
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200" />
 
-              {form.frequency === "once" ? (
-                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} required
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
-                  <option value="">Categoria</option>
-                  {cats.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              ) : (
+              <div className="flex gap-2 items-center">
                 <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
-                  <option value="">Categoria (opcional)</option>
+                  required={form.frequency === "once"}
+                  className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                  <option value="">{form.frequency === "once" ? "Categoria *" : "Categoria (opcional)"}</option>
                   {cats.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-              )}
+                <button type="button" onClick={() => { setCatType(form.type); setCatName(""); setCatError(""); setShowCatModal(true); }}
+                  className="shrink-0 px-3 py-2.5 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition">
+                  + Nova
+                </button>
+              </div>
 
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 required={form.frequency !== "once"}
@@ -489,6 +540,55 @@ export default function FinancasPage() {
                   className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
                 <button type="submit"
                   className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 transition">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Nova Categoria */}
+      {showCatModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-slate-900 mb-1">+ Nova categoria</h3>
+            <div className="flex gap-2 mb-4 mt-2">
+              {(["expense", "income"] as const).map(t => (
+                <button key={t} type="button" onClick={() => setCatType(t)}
+                  className={clsx("flex-1 py-2 rounded-xl text-xs font-semibold border transition",
+                    catType === t ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 text-slate-500 hover:bg-slate-50")}>
+                  {t === "expense" ? "💸 Despesa" : "💰 Receita"}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={handleSaveCategory} className="space-y-3">
+              <input value={catName} onChange={e => { setCatName(e.target.value); setCatError(""); }} required autoFocus
+                placeholder="Nome da categoria (ex: Pet, Assinaturas)"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200" />
+              {catError && <p className="text-xs text-red-500">{catError}</p>}
+
+              {/* Categorias personalizadas existentes */}
+              {(catType === "expense" ? customExpense : customIncome).length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1.5">Suas categorias:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(catType === "expense" ? customExpense : customIncome).map(c => (
+                      <span key={c} className="flex items-center gap-1 text-xs bg-slate-100 text-slate-600 rounded-lg px-2 py-1">
+                        {c}
+                        <button type="button" onClick={() => handleDeleteCategory(catType, c)}
+                          className="text-slate-400 hover:text-red-500 transition leading-none">×</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowCatModal(false)}
+                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                <button type="submit" disabled={catSaving}
+                  className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+                  {catSaving ? "Salvando..." : "Salvar"}
+                </button>
               </div>
             </form>
           </div>
