@@ -23,6 +23,10 @@ export type Intent =
   | "goal_complete"
   | "vehicle_expense"
   | "vehicle_query"
+  | "recurring_create"
+  | "recurring_query"
+  | "recurring_cancel"
+  | "recurring_edit"
   | "how_to"
   | "help"
   | "unknown";
@@ -66,6 +70,20 @@ export type ReminderData = {
   repeat: "none" | "daily" | "weekly" | "monthly";
 };
 
+export type RecurringData = {
+  type: "income" | "expense";
+  description: string;
+  amount: number;
+  totalAmount?: number;
+  totalInstallments?: number;
+  recurrenceType: "installment" | "recurring";
+  repeatUnit: "monthly" | "weekly" | "daily" | "yearly";
+  dayOfMonth?: number;
+  startDate?: string;
+  category?: string;
+  mode?: string;
+};
+
 export type AIResult = {
   intent: Intent;
   finance?: FinanceData;
@@ -73,8 +91,9 @@ export type AIResult = {
   reminder?: ReminderData;
   goal?: GoalData;
   vehicle?: VehicleData;
+  recurring?: RecurringData;
   mode?: UserMode;
-  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete
+  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit
   response?: string; // resposta direta para how_to
   confidence: number;
 };
@@ -103,6 +122,10 @@ INTENÇÕES POSSÍVEIS:
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
 - goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
 - goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo")
+- recurring_create: cadastrar despesa ou receita parcelada ou recorrente ("comprei geladeira em 10x", "pago netflix todo mês", "recebo salário todo dia 10", "parcela do carro", "assinatura mensal"). Use recurrenceType: "installment" para parcelamentos (tem totalInstallments) e "recurring" para recorrentes contínuos.
+- recurring_query: ver lançamentos recorrentes/parcelados ("minhas parcelas", "contas recorrentes", "o que tenho parcelado", "meus recorrentes")
+- recurring_cancel: cancelar um recorrente/parcelado ("cancela a parcela da geladeira", "para o netflix", "remove o recorrente do aluguel")
+- recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
@@ -329,6 +352,80 @@ Exemplo IPVA ("paguei 800 de IPVA"):
     "expenseType": "tax",
     "description": "IPVA",
     "name": ""
+  }
+}
+
+OU para parcelamento ("comprei geladeira 5000 em 10x de 500 todo dia 10"):
+{
+  "intent": "recurring_create",
+  "confidence": 0.95,
+  "recurring": {
+    "type": "expense",
+    "description": "Geladeira",
+    "totalAmount": 5000,
+    "amount": 500,
+    "totalInstallments": 10,
+    "recurrenceType": "installment",
+    "repeatUnit": "monthly",
+    "dayOfMonth": 10,
+    "category": "Outros"
+  }
+}
+
+OU para recorrente mensal despesa ("pago netflix 55 todo mês"):
+{
+  "intent": "recurring_create",
+  "confidence": 0.95,
+  "recurring": {
+    "type": "expense",
+    "description": "Netflix",
+    "amount": 55,
+    "recurrenceType": "recurring",
+    "repeatUnit": "monthly",
+    "category": "Lazer"
+  }
+}
+
+OU para recorrente mensal receita ("recebo salário todo dia 10, 3000"):
+{
+  "intent": "recurring_create",
+  "confidence": 0.95,
+  "recurring": {
+    "type": "income",
+    "description": "Salário",
+    "amount": 3000,
+    "recurrenceType": "recurring",
+    "repeatUnit": "monthly",
+    "dayOfMonth": 10,
+    "category": "Salário"
+  }
+}
+
+OU para listar recorrentes ("minhas parcelas"):
+{
+  "intent": "recurring_query",
+  "confidence": 0.9
+}
+
+OU para cancelar recorrente ("cancela a parcela da geladeira"):
+{
+  "intent": "recurring_cancel",
+  "confidence": 0.9,
+  "keyword": "geladeira"
+}
+
+OU para editar recorrente ("muda o netflix para 65"):
+{
+  "intent": "recurring_edit",
+  "confidence": 0.9,
+  "keyword": "netflix",
+  "recurring": {
+    "type": "expense",
+    "description": "Netflix",
+    "amount": 65,
+    "recurrenceType": "recurring",
+    "repeatUnit": "monthly",
+    "category": "Lazer"
   }
 }
 

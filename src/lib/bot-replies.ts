@@ -1,5 +1,6 @@
 import type { Finance } from "./finances";
 import type { Task } from "./tasks";
+import type { RecurringTransaction } from "./recurring";
 import { formatCurrency } from "./finances";
 import { PRIORITY_LABEL, formatDueDate } from "./tasks";
 import type { UserMode } from "./users";
@@ -91,6 +92,14 @@ export function replyHelp(): string {
 • _"extrato"_ — ver últimos lançamentos
 • _"Meu saldo"_ — ver saldo do mês
 
+💳 *Recorrentes e Parcelas:*
+• _"Comprei geladeira 5000 em 10x de 500 todo dia 10"_
+• _"Pago netflix 55 todo mês"_
+• _"Recebo salário todo dia 10, 3000"_
+• _"Minhas parcelas"_ — ver recorrentes ativos
+• _"Cancela a parcela da geladeira"_
+• _"Muda o netflix para 65"_
+
 ✏️ *Editar/Excluir lançamento:*
 • _"Corrija o gasto do ifood para 80 reais"_
 • _"Muda a categoria do mercado para Lazer"_
@@ -143,6 +152,61 @@ export function replyOnboardingDone(name: string, plan: string): string {
 
 export function replyTrialExpired(): string {
   return `⚠️ Seu período de teste encerrou.\n\nPara continuar usando o ControlaAI, acesse o dashboard e assine um plano:\n🌐 controlaai.app/planos`;
+}
+
+export function buildRecurringNotification(r: RecurringTransaction): string {
+  const fmt = (v: number) => formatCurrency(v);
+  const dueDateStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
+  const typeEmoji = r.type === "income" ? "💰" : "💸";
+  if (r.recurrenceType === "installment") {
+    return `🔔 *Parcela ${r.paidInstallments + 1}/${r.totalInstallments} vence hoje!*\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n📅 Vencimento: ${dueDateStr}\n\nFoi ${r.type === "income" ? "recebida" : "paga"}? Responda *sim* ou *não*`;
+  }
+  return `🔔 *Conta recorrente para hoje:*\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n📅 ${dueDateStr}\n\nFoi ${r.type === "income" ? "recebida" : "paga"}? Responda *sim* ou *não*`;
+}
+
+export function replyRecurringConfirmed(r: RecurringTransaction, _finance: Finance): string {
+  const fmt = (v: number) => formatCurrency(v);
+  if (r.status === "completed") {
+    return `✅ *Parabéns! Todas as parcelas quitadas!*\n\n💳 ${r.description}\nTotal pago: ${fmt((r.totalAmount ?? r.amount * (r.totalInstallments ?? 1)))}\n\nLançamento registrado em Finanças. 🎉`;
+  }
+  const nextStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
+  const typeLabel = r.type === "income" ? "Recebimento" : "Pagamento";
+  return `✅ *${typeLabel} confirmado!*\n\n💳 ${r.description} — ${fmt(r.amount)}\n\nLançamento registrado em Finanças.\n📅 Próximo vencimento: ${nextStr}`;
+}
+
+export function replyRecurringCreated(r: RecurringTransaction): string {
+  const fmt = (v: number) => formatCurrency(v);
+  const nextStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
+  const typeEmoji = r.type === "income" ? "💰" : "💸";
+  const unitLabel: Record<string, string> = { monthly: "mensal", weekly: "semanal", daily: "diário", yearly: "anual" };
+  if (r.recurrenceType === "installment") {
+    return `✅ *Parcelamento cadastrado!*\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/parcela × ${r.totalInstallments} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nVou te lembrar às 20h em cada vencimento. 👍`;
+  }
+  return `✅ *Recorrente cadastrado!*\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}\n📅 Próximo vencimento: ${nextStr}\n\nVou te lembrar às 20h em cada vencimento. 👍`;
+}
+
+export function replyRecurringList(items: RecurringTransaction[]): string {
+  const fmt = (v: number) => formatCurrency(v);
+  if (!items.length) return "📋 Nenhum lançamento recorrente ou parcelado ativo.";
+  let msg = `📋 *Seus lançamentos recorrentes:*\n\n`;
+  const installments = items.filter(r => r.recurrenceType === "installment");
+  const recurring = items.filter(r => r.recurrenceType === "recurring");
+  if (installments.length) {
+    msg += `*💳 Parcelas:*\n`;
+    installments.forEach(r => {
+      const next = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
+      msg += `• ${r.description} — ${fmt(r.amount)} (${r.paidInstallments}/${r.totalInstallments}) · próx. ${next}\n`;
+    });
+    msg += "\n";
+  }
+  if (recurring.length) {
+    msg += `*🔁 Recorrentes:*\n`;
+    recurring.forEach(r => {
+      const next = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
+      msg += `• ${r.description} — ${fmt(r.amount)} · próx. ${next}\n`;
+    });
+  }
+  return msg.trim();
 }
 
 export function replyUnknown(originalMsg?: string): string {

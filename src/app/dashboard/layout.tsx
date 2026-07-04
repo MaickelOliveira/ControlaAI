@@ -73,6 +73,12 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
     </svg>
   ),
+  card: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4.5 h-4.5">
+      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="1" y1="10" x2="23" y2="10" strokeLinecap="round" />
+    </svg>
+  ),
   menu: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -88,6 +94,7 @@ const Icons = {
 const BASE_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: Icons.home },
   { href: "/dashboard/financas", label: "Finanças", icon: Icons.chart },
+  { href: "/dashboard/recorrentes", label: "Recorrentes", icon: Icons.card },
   { href: "/dashboard/tarefas", label: "Tarefas", icon: Icons.tasks },
   { href: "/dashboard/metas", label: "Metas", icon: Icons.target },
   { href: "/dashboard/veiculos", label: "Veículos", icon: Icons.car },
