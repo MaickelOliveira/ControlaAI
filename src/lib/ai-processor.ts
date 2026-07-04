@@ -100,7 +100,7 @@ INTENÇÕES POSSÍVEIS:
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
 - goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
 - goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo")
-- vehicle_expense: registrar gasto com veículo ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro")
+- vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos"). Nesse caso, escreva uma explicação clara e amigável no campo "response".
