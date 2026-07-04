@@ -29,6 +29,7 @@ export type Intent =
 export type GoalData = {
   title: string;
   targetAmount: number;
+  currentAmount?: number;
   deadline?: string;
   category?: string;
 };
@@ -96,7 +97,7 @@ INTENÇÕES POSSÍVEIS:
 - task_update: atualizar/concluir uma tarefa
 - task_query: listar tarefas
 - reminder_set: criar lembrete agendado
-- goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para", "quero juntar X para Y", "quero guardar X para Z"). SEMPRE inclua "title" com o nome da meta e "targetAmount" com o valor alvo.
+- goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para", "quero juntar X para Y", "quero guardar X para Z"). SEMPRE inclua "title" com o nome da meta e "targetAmount" com o valor alvo. Se o usuário mencionar "já tenho X", "ja tenho X", "tenho X guardado", inclua "currentAmount" com esse valor. Se o valor alvo não for especificado, use targetAmount: 0 (o sistema pedirá ao usuário).
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
 - goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
 - goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo")
@@ -238,7 +239,7 @@ OU para excluir lançamento (finance_delete) — "keyword" é o TERMO DE BUSCA:
   }
 }
 
-OU para criar meta (goal_create) — "title" é o NOME da meta, "targetAmount" é o valor alvo:
+OU para criar meta (goal_create) — "title" é o NOME da meta, "targetAmount" é o valor alvo, "currentAmount" é o que já tem (opcional):
 {
   "intent": "goal_create",
   "confidence": 0.9,
@@ -258,6 +259,28 @@ Exemplo goal_create sem prazo ("quero guardar 500 para emergência"):
     "title": "Reserva de emergência",
     "targetAmount": 500.00,
     "category": "Emergência"
+  }
+}
+
+Exemplo goal_create com valor já guardado ("crie a meta carro 50000 ja tenho 15000"):
+{
+  "intent": "goal_create",
+  "confidence": 0.9,
+  "goal": {
+    "title": "carro",
+    "targetAmount": 50000.00,
+    "currentAmount": 15000.00,
+    "category": "Carro"
+  }
+}
+
+Exemplo goal_create sem valor informado ("crie uma meta pra mim") — SEM valor alvo, use targetAmount: 0:
+{
+  "intent": "goal_create",
+  "confidence": 0.7,
+  "goal": {
+    "title": "",
+    "targetAmount": 0
   }
 }
 

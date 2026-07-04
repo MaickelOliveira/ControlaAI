@@ -264,9 +264,11 @@ export async function POST(req: NextRequest) {
           break;
         }
         const goalTitle = (ai.goal.title || "").trim() || messageText.slice(0, 60);
-        const goal = createGoal({ userId: user.id, title: goalTitle, targetAmount: ai.goal.targetAmount, currentAmount: 0, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode, status: "active" });
+        const goalCurrentAmount = Number(ai.goal.currentAmount) || 0;
+        const goal = createGoal({ userId: user.id, title: goalTitle, targetAmount: ai.goal.targetAmount, currentAmount: goalCurrentAmount, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode, status: "active" });
         const pct = getGoalProgress(goal);
-        await wppSend(from, `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}\n📁 Categoria: ${goal.category}${goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : ""}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`);
+        const currentLine = goalCurrentAmount > 0 ? `\n💵 Já guardado: ${formatCurrency(goalCurrentAmount)}` : "";
+        await wppSend(from, `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoria: ${goal.category}${goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : ""}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`);
         break;
       }
 
