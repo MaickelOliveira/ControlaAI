@@ -1,37 +1,42 @@
 "use client";
 import { useEffect, useState } from "react";
 
+type UserData = { name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[]; maxWppPhones: number };
+
 export default function ClienteConfigPage() {
-  const [user, setUser] = useState<{ name: string; email: string; plan: string; wppPhone?: string } | null>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [code, setCode] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
-  const [unlinking, setUnlinking] = useState(false);
+  const [unlinkingPhone, setUnlinkingPhone] = useState<string | null>(null);
   const [botNumber, setBotNumber] = useState<string>("");
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser(d.user); });
+    fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], maxWppPhones: d.user.maxWppPhones ?? 1 }); });
     fetch("/api/bot-info").then(r => r.json()).then(d => { if (d.wppBotNumber) setBotNumber(d.wppBotNumber); });
   }, []);
 
   async function generateCode() {
     setLinking(true);
+    setLinkError(null);
     const r = await fetch("/api/dashboard/wpp-link", { method: "POST" });
     const d = await r.json();
     if (r.ok) setCode(d.code);
+    else setLinkError(d.error || "Erro ao gerar código");
     setLinking(false);
   }
 
   async function refresh() {
     const d = await fetch("/api/dashboard").then(r => r.json());
-    if (d.user) setUser(d.user);
+    if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], maxWppPhones: d.user.maxWppPhones ?? 1 });
+    setCode(null);
   }
 
-  async function unlink() {
-    setUnlinking(true);
-    await fetch("/api/dashboard/wpp-link", { method: "DELETE" });
-    setUser(u => u ? { ...u, wppPhone: undefined } : u);
-    setCode(null);
-    setUnlinking(false);
+  async function unlink(phone: string) {
+    setUnlinkingPhone(phone);
+    await fetch("/api/dashboard/wpp-link", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
+    setUser(u => u ? { ...u, wppPhones: u.wppPhones.filter(p => p !== phone) } : u);
+    setUnlinkingPhone(null);
   }
 
   const commands = [
@@ -69,25 +74,27 @@ export default function ClienteConfigPage() {
             Vincule seu número para usar o assistente IA pelo WhatsApp. O sistema identifica você automaticamente.
           </p>
 
-          {user?.wppPhone ? (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-lg shrink-0">✓</div>
-                <div>
-                  <p className="text-sm font-semibold text-emerald-700">WhatsApp vinculado</p>
-                  <p className="text-xs text-emerald-600 font-mono mt-0.5">{user.wppPhone}</p>
+          {/* Números vinculados */}
+          {user && user.wppPhones.length > 0 ? (
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-slate-600">Números vinculados</p>
+                <span className="text-xs text-slate-400">{user.wppPhones.length}/{user.maxWppPhones}</span>
+              </div>
+              {user.wppPhones.map(phone => (
+                <div key={phone} className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-sm shrink-0">✓</div>
+                    <p className="text-sm font-mono text-emerald-700">+{phone}</p>
+                  </div>
+                  <button
+                    onClick={() => unlink(phone)}
+                    disabled={unlinkingPhone === phone}
+                    className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-2.5 py-1 transition disabled:opacity-50">
+                    {unlinkingPhone === phone ? "..." : "Desvincular"}
+                  </button>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={generateCode} disabled={linking || unlinking}
-                  className="flex-1 text-xs border border-emerald-300 text-emerald-700 hover:bg-emerald-100 rounded-lg px-3 py-1.5 transition">
-                  🔄 Vincular outro número
-                </button>
-                <button onClick={unlink} disabled={unlinking || linking}
-                  className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-3 py-1.5 transition disabled:opacity-50">
-                  {unlinking ? "..." : "🔗 Desvincular"}
-                </button>
-              </div>
+              ))}
             </div>
           ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-center gap-3">
@@ -99,12 +106,23 @@ export default function ClienteConfigPage() {
             </div>
           )}
 
+          {/* Erro de limite */}
+          {linkError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 text-xs text-red-600">{linkError}</div>
+          )}
+
           {!code ? (
-            <button onClick={generateCode} disabled={linking}
+            <button
+              onClick={generateCode}
+              disabled={linking || (user ? user.wppPhones.length >= user.maxWppPhones : false)}
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
               {linking ? (
                 <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
-              ) : "📲 Vincular meu WhatsApp"}
+              ) : user && user.wppPhones.length >= user.maxWppPhones ? (
+                `🔒 Limite atingido (${user.maxWppPhones} número${user.maxWppPhones > 1 ? "s" : ""})`
+              ) : (
+                `📲 ${user && user.wppPhones.length > 0 ? "Vincular mais um número" : "Vincular meu WhatsApp"}`
+              )}
             </button>
           ) : (
             <div className="space-y-4">
@@ -180,8 +198,8 @@ export default function ClienteConfigPage() {
               <div className="flex justify-between items-center px-4 py-3">
                 <span className="text-xs text-slate-500">WhatsApp</span>
                 <span className="text-xs font-semibold text-slate-800">
-                  {user.wppPhone
-                    ? <span className="text-emerald-600">✓ Vinculado</span>
+                  {user.wppPhones.length > 0
+                    ? <span className="text-emerald-600">✓ {user.wppPhones.length}/{user.maxWppPhones} número{user.maxWppPhones > 1 ? "s" : ""}</span>
                     : <span className="text-amber-600">⚠ Não vinculado</span>}
                 </span>
               </div>

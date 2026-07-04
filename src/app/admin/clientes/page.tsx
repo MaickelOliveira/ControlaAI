@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 
-type Cliente = { id: string; name: string; email: string; phone: string; wppPhone?: string; plan: string; status: string; financesCount: number; tasksCount: number; lastActivity: string; activeToday: boolean; trialEndsAt: string };
+type Cliente = { id: string; name: string; email: string; phone: string; wppPhone?: string; wppPhones?: string[]; maxWppPhones?: number; plan: string; status: string; financesCount: number; tasksCount: number; lastActivity: string; activeToday: boolean; trialEndsAt: string };
 
-const EMPTY_FORM = { name: "", email: "", password: "", phone: "", plan: "personal", company: "", isTrial: true, trialDays: "14" };
+const EMPTY_FORM = { name: "", email: "", password: "", phone: "", plan: "personal", company: "", isTrial: true, trialDays: "14", maxWppPhones: "1" };
 
 async function clienteAction(id: string, action: string, extra?: object) {
   return fetch(`/api/admin/clientes/${id}`, {
@@ -46,7 +46,7 @@ export default function ClientesPage() {
     const r = await fetch("/api/admin/clientes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, trialDays: Number(form.trialDays) }),
+      body: JSON.stringify({ ...form, trialDays: Number(form.trialDays), maxWppPhones: Number(form.maxWppPhones) }),
     });
     const d = await r.json();
     if (!r.ok) { setError(d.error || "Erro ao criar cliente"); setSaving(false); return; }
@@ -119,11 +119,15 @@ export default function ClientesPage() {
                       <span className="text-xs text-slate-600">{c.plan === "business" ? "🏢 Empresa" : "👤 Pessoal"}</span>
                     </td>
                     <td className="px-5 py-3.5">
-                      {c.wppPhone ? (
-                        <span className="text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-900/40 rounded-lg px-2 py-0.5">✓ {c.wppPhone}</span>
-                      ) : (
-                        <span className="text-xs text-slate-600">Não cadastrado</span>
-                      )}
+                      {(() => {
+                        const phones = c.wppPhones?.length ? c.wppPhones : c.wppPhone ? [c.wppPhone] : [];
+                        const max = c.maxWppPhones ?? 1;
+                        return phones.length > 0 ? (
+                          <span className="text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-900/40 rounded-lg px-2 py-0.5">✓ {phones.length}/{max} número{max > 1 ? "s" : ""}</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">Não vinculado ({max} slot{max > 1 ? "s" : ""})</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className="text-xs text-slate-400">{c.financesCount} transações · {c.tasksCount} tarefas</span>
@@ -233,6 +237,17 @@ export default function ClientesPage() {
                       className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500" />
                   </div>
                 )}
+              </div>
+
+              {/* Limite de números WhatsApp */}
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Números de WhatsApp permitidos</label>
+                <select value={form.maxWppPhones} onChange={e => setForm(f => ({ ...f, maxWppPhones: e.target.value }))}
+                  className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500">
+                  {[1, 2, 3, 5, 10].map(n => (
+                    <option key={n} value={n}>{n} número{n > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Tipo de acesso */}
