@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 
 type UserData = { name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[]; maxWppPhones: number };
+type PwForm = { current: string; next: string; confirm: string };
 
 export default function ClienteConfigPage() {
   const [user, setUser] = useState<UserData | null>(null);
@@ -10,6 +11,9 @@ export default function ClienteConfigPage() {
   const [linking, setLinking] = useState(false);
   const [unlinkingPhone, setUnlinkingPhone] = useState<string | null>(null);
   const [botNumber, setBotNumber] = useState<string>("");
+  const [pwForm, setPwForm] = useState<PwForm>({ current: "", next: "", confirm: "" });
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pwLoading, setPwLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], maxWppPhones: d.user.maxWppPhones ?? 1 }); });
@@ -37,6 +41,18 @@ export default function ClienteConfigPage() {
     await fetch("/api/dashboard/wpp-link", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
     setUser(u => u ? { ...u, wppPhones: u.wppPhones.filter(p => p !== phone) } : u);
     setUnlinkingPhone(null);
+  }
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwMsg(null);
+    if (pwForm.next !== pwForm.confirm) { setPwMsg({ ok: false, text: "As senhas não coincidem" }); return; }
+    setPwLoading(true);
+    const r = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }) });
+    const d = await r.json();
+    if (r.ok) { setPwMsg({ ok: true, text: "Senha alterada com sucesso!" }); setPwForm({ current: "", next: "", confirm: "" }); }
+    else setPwMsg({ ok: false, text: d.error || "Erro ao alterar senha" });
+    setPwLoading(false);
   }
 
   const commands = [
@@ -233,6 +249,24 @@ export default function ClienteConfigPage() {
             </div>
           ))}
         </div>
+      </div>
+      {/* Alterar senha */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
+          <span>🔑</span> Alterar Senha
+        </h2>
+        <p className="text-xs text-slate-400 mb-5">Mantenha sua conta segura com uma senha forte</p>
+        <form onSubmit={changePassword} className="max-w-sm space-y-3">
+          <input type="password" value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} required placeholder="Senha atual" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <input type="password" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required placeholder="Nova senha (mín. 6 caracteres)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <input type="password" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required placeholder="Confirmar nova senha" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          {pwMsg && (
+            <p className={`text-xs px-3 py-2 rounded-lg ${pwMsg.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>{pwMsg.text}</p>
+          )}
+          <button type="submit" disabled={pwLoading} className="bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl px-5 py-2.5 text-sm transition disabled:opacity-50">
+            {pwLoading ? "Salvando..." : "Alterar senha"}
+          </button>
+        </form>
       </div>
     </div>
   );
