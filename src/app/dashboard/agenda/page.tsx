@@ -101,8 +101,12 @@ function aptToForm(a: Appointment): FormState {
     const spEnd = new Date(a.endAt).toLocaleString("sv-SE", { timeZone: TZ });
     [ed, et] = spEnd.split(" ");
   }
+  // Se meetLink está salvo, limpa o link da descrição (pode ter sido colocado como texto)
+  const cleanDesc = a.meetLink
+    ? (a.description || "").replace(/^Meet:\s*https?:\/\/meet\.google\.com\/\S*/im, "").trim()
+    : (a.description || "");
   return {
-    title: a.title, description: a.description || "", location: a.location || "",
+    title: a.title, description: cleanDesc, location: a.location || "",
     startDate: sd, startTime: st ? st.slice(0, 5) : "",
     endDate: ed, endTime: et ? et.slice(0, 5) : "",
     allDay: a.allDay, repeat: a.repeat, withMeet: false,
@@ -500,6 +504,13 @@ export default function AgendaPage() {
                   placeholder="Ex: Sala de reunião, Zoom..."
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
+              {/* Botão Entrar no Meet — visível ao editar compromisso com meet link */}
+              {editing?.meetLink && (
+                <a href={editing.meetLink} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition">
+                  🎥 Entrar no Google Meet
+                </a>
+              )}
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Descrição</label>
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
