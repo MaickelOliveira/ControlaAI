@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
 
     // Classificação do tipo de mensagem
     const isFileType = ["document", "image", "video"].includes(body.type);
-    const isAudio = body.type === "audio";
+    // "ptt" = push-to-talk (nota de voz WhatsApp), "audio" = arquivo de áudio
+    const isAudio = ["audio", "ptt"].includes(body.type);
     const mediaUrl = body.mediaUrl || body.url;
     const bodyStr = typeof body.body === "string" ? body.body : "";
     // WPPConnect às vezes envia mídia como base64 em body.body em vez de mediaUrl
@@ -78,20 +79,25 @@ export async function POST(req: NextRequest) {
     // Não usa body como texto para tipos de arquivo nem áudio base64
     let messageText = (isFileType || (isAudio && bodyIsBase64)) ? "" : (bodyText as string ?? "").trim();
 
-    // ── Transcreve áudio (URL ou base64) ──
+    // ── Transcreve áudio/voz (URL ou base64) ──
     if (isAudio) {
+      let transcribed = false;
       try {
         if (mediaUrl) {
           const audioRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(20_000) });
           const buf = Buffer.from(await audioRes.arrayBuffer());
           const transcript = await transcribeAudio(buf, body.mimetype || "audio/ogg");
-          if (transcript) messageText = transcript;
+          if (transcript) { messageText = transcript; transcribed = true; }
         } else if (bodyIsBase64) {
           const buf = Buffer.from(bodyStr, "base64");
           const transcript = await transcribeAudio(buf, body.mimetype || "audio/ogg");
-          if (transcript) messageText = transcript;
+          if (transcript) { messageText = transcript; transcribed = true; }
         }
       } catch { /* ignora */ }
+      if (!transcribed && !messageText) {
+        await wppSend(from, "🎤 Não consegui entender o áudio. Pode digitar sua mensagem?");
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // ── Detecta arquivo/documento enviado via WhatsApp ──
@@ -132,12 +138,15 @@ export async function POST(req: NextRequest) {
           });
           console.log(`[drive] arquivo salvo: ${savedFile.id} | ${originalName} | pasta=${suggestedFolder}`);
           await wppSend(from, replyFileSaved(originalName, suggestedFolder));
+          // Se veio com legenda, processa pelo fluxo normal da IA também
+          if (caption) messageText = caption;
         } catch (e) {
           console.error("[drive] erro ao salvar arquivo:", e);
           await wppSend(from, "❌ Não consegui salvar o arquivo. Tente novamente.");
         }
       }
-      return NextResponse.json({ ok: true });
+      // Se não há legenda/caption para processar, encerra aqui
+      if (!messageText) return NextResponse.json({ ok: true });
     }
 
     if (!messageText) return NextResponse.json({ ok: true });
