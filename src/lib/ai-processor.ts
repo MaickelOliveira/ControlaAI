@@ -133,11 +133,27 @@ export type AIResult = {
 function buildSystemPrompt() {
   const hoje = todayStrBR();
   const agora = nowISOBR();
+
+  // Gera mini-calendário dos próximos 8 dias para evitar erros de cálculo de dia da semana
+  const DIAS = ["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"];
+  const nextDays: string[] = [];
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(hoje + "T12:00:00-03:00");
+    d.setDate(d.getDate() + i);
+    const ymd = d.toISOString().slice(0, 10);
+    const dow = DIAS[d.getDay()];
+    const label = i === 0 ? " ← hoje" : i === 1 ? " ← amanhã" : "";
+    nextDays.push(`  ${dow}: ${ymd}${label}`);
+  }
+
   return `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
 Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
 
-Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR")} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).
+Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
+
+Calendário dos próximos dias (use para resolver dias da semana sem errar):
+${nextDays.join("\n")}
 
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar gasto ou receita
@@ -189,7 +205,7 @@ MODO (business ou personal):
 - personal: mensagem contém "modo pessoal", "pessoal", ou é uma despesa/receita pessoal clara (mercado, salário, médico, lazer etc.)
 - Se não identificado claramente, não inclua o campo "mode" no JSON (deixe undefined).
 
-Para datas relativas: "hoje"=hoje, "amanhã"=amanhã, "próxima sexta"=calcule a data exata.
+Para datas relativas: use SEMPRE o calendário acima para resolver dias da semana — não calcule por conta própria. Ex: se hoje é domingo e o usuário diz "terça-feira", pegue a data de terça-feira listada acima.
 
 Retorne SOMENTE JSON válido, sem markdown:
 
