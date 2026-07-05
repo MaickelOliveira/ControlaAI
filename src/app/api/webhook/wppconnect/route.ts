@@ -73,35 +73,46 @@ export async function POST(req: NextRequest) {
     const isAudio = ["audio", "ptt"].includes(body.type);
     const mediaUrl = body.mediaUrl || body.url;
     const bodyStr = typeof body.body === "string" ? body.body : "";
-    // WPPConnect às vezes envia mídia como base64 em body.body em vez de mediaUrl
-    const bodyIsBase64 = (isFileType || isAudio) && !mediaUrl && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
+    // Para áudio/ptt o WPPConnect sempre coloca o base64 em body.body (independente de mediaUrl)
+    const bodyIsBase64Audio = isAudio && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
+    // Para arquivos, base64 só quando não tem URL
+    const bodyIsBase64File = isFileType && !mediaUrl && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
+    const bodyIsBase64 = bodyIsBase64Audio || bodyIsBase64File;
 
-    // Não usa body como texto para tipos de arquivo nem áudio base64
-    let messageText = (isFileType || (isAudio && bodyIsBase64)) ? "" : (bodyText as string ?? "").trim();
+    // Áudio/arquivo nunca usa body.body como texto
+    let messageText = (isFileType || isAudio) ? "" : (bodyText as string ?? "").trim();
 
-    // ── Transcreve áudio/voz (URL ou base64) ──
+    // ── Transcreve áudio/voz ──
     if (isAudio) {
       let transcribed = false;
+      // Gemini exige mime limpo — strip "; codecs=opus" etc.
+      const rawMime = (body.mimetype as string | undefined) || "audio/ogg";
+      const mime = rawMime.split(";")[0].trim() || "audio/ogg";
       try {
-        if (mediaUrl) {
-          const audioRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(20_000) });
-          const buf = Buffer.from(await audioRes.arrayBuffer());
-          const transcript = await transcribeAudio(buf, body.mimetype || "audio/ogg");
-          if (transcript) { messageText = transcript; transcribed = true; }
-        } else if (bodyIsBase64) {
+        // Tenta base64 primeiro (body.body é sempre preenchido pelo WPPConnect)
+        if (bodyIsBase64Audio) {
           const buf = Buffer.from(bodyStr, "base64");
-          const transcript = await transcribeAudio(buf, body.mimetype || "audio/ogg");
+          const transcript = await transcribeAudio(buf, mime);
           if (transcript) { messageText = transcript; transcribed = true; }
         }
+        // Fallback: tenta URL (pode precisar de auth, mas vale tentar)
+        if (!transcribed && mediaUrl) {
+          const audioRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(20_000) });
+          if (audioRes.ok) {
+            const buf = Buffer.from(await audioRes.arrayBuffer());
+            const transcript = await transcribeAudio(buf, mime);
+            if (transcript) { messageText = transcript; transcribed = true; }
+          }
+        }
       } catch { /* ignora */ }
-      if (!transcribed && !messageText) {
+      if (!transcribed) {
         await wppSend(from, "🎤 Não consegui entender o áudio. Pode digitar sua mensagem?");
         return NextResponse.json({ ok: true });
       }
     }
 
     // ── Detecta arquivo/documento enviado via WhatsApp ──
-    const isFileMessage = isFileType && (mediaUrl || bodyIsBase64) && !fromMe;
+    const isFileMessage = isFileType && (mediaUrl || bodyIsBase64File) && !fromMe;
 
     if (isFileMessage) {
       // Identifica usuário antes de processar o arquivo
@@ -111,7 +122,7 @@ export async function POST(req: NextRequest) {
         const mimeType = body.mimetype || "application/octet-stream";
         // caption: prioriza body.caption (legenda enviada junto ao arquivo), depois bodyStr se não for base64
         const captionField = typeof body.caption === "string" && body.caption ? body.caption : undefined;
-        const caption = captionField || (!bodyIsBase64 && bodyStr && bodyStr !== originalName ? bodyStr : undefined);
+        const caption = captionField || (!bodyIsBase64File && bodyStr && bodyStr !== originalName ? bodyStr : undefined);
         try {
           let buffer: Buffer;
           if (mediaUrl) {
