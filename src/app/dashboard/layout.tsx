@@ -78,6 +78,19 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
     </svg>
   ),
+  calendar: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4.5 h-4.5">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  video: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4.5 h-4.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+    </svg>
+  ),
   card: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4.5 h-4.5">
       <rect x="1" y="4" width="22" height="16" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -104,6 +117,8 @@ const BASE_NAV = [
   { href: "/dashboard/veiculos", label: "Veículos", icon: Icons.car },
   { href: "/dashboard/lembretes", label: "Lembretes", icon: Icons.bell },
   { href: "/dashboard/drive", label: "Drive", icon: Icons.folder },
+  { href: "/dashboard/agenda", label: "Agenda", icon: Icons.calendar },
+  { href: "/dashboard/reunioes", label: "Reuniões", icon: Icons.video },
 ];
 const BUSINESS_NAV = [
   { href: "/dashboard/funcionarios", label: "Funcionários", icon: Icons.users },

@@ -78,6 +78,43 @@ export async function register() {
           console.error("[cron] Erro no bloco de recorrentes:", e);
         }
       }
+      // ── Verificar reuniões encerradas que precisam de ata ──
+      try {
+        const meetsModule = await import("./lib/meets").catch(() => null);
+        const usersModule = await import("./lib/users").catch(() => null);
+        const pendingModule = await import("./lib/pending-actions").catch(() => null);
+        const repliesModule = await import("./lib/bot-replies").catch(() => null);
+        if (meetsModule && usersModule && pendingModule && repliesModule) {
+          const { getMeetsEndedWithoutAta, updateMeet } = meetsModule;
+          const { getUserById, getWppPhones } = usersModule;
+          const { setPendingAction } = pendingModule;
+          const { replyMeetAtaRequest } = repliesModule;
+          const endedMeets = getMeetsEndedWithoutAta();
+          for (const meet of endedMeets) {
+            try {
+              const meetUser = getUserById(meet.userId);
+              if (!meetUser) continue;
+              const phones = getWppPhones(meetUser);
+              for (const phone of phones) {
+                const ok = await sendText(phone, replyMeetAtaRequest(meet.title));
+                if (ok) {
+                  updateMeet(meet.id, meet.userId, { ataNotifiedAt: new Date().toISOString() });
+                  setPendingAction(phone, {
+                    type: "meet_ata",
+                    userId: meet.userId,
+                    meetId: meet.id,
+                    meetTitle: meet.title,
+                  });
+                }
+              }
+            } catch (e) {
+              console.error("[cron] Erro ao notificar ata:", e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[cron] Erro no bloco de meets:", e);
+      }
     } catch (e) {
       console.error("[cron] Erro no tick:", e);
     }

@@ -29,6 +29,11 @@ export type Intent =
   | "recurring_edit"
   | "drive_search"
   | "drive_rename"
+  | "agenda_create"
+  | "agenda_list"
+  | "agenda_update"
+  | "agenda_delete"
+  | "meet_create"
   | "how_to"
   | "help"
   | "unknown";
@@ -72,6 +77,29 @@ export type ReminderData = {
   repeat: "none" | "daily" | "weekly" | "monthly";
 };
 
+export type MeetData = {
+  title?: string;
+  description?: string;
+  startDate?: string;   // "YYYY-MM-DD" horário SP
+  startTime?: string;   // "HH:MM" horário SP
+  endDate?: string;
+  endTime?: string;
+  duration?: number;    // minutos (default 60)
+  attendees?: Array<{ name: string; phone?: string; email?: string }>;
+};
+
+export type AgendaData = {
+  title?: string;
+  description?: string;
+  location?: string;
+  startDate?: string;   // "YYYY-MM-DD" horário SP
+  startTime?: string;   // "HH:MM" horário SP
+  endDate?: string;
+  endTime?: string;
+  allDay?: boolean;
+  repeat?: "none" | "daily" | "weekly" | "monthly" | "yearly";
+};
+
 export type RecurringData = {
   type: "income" | "expense";
   description: string;
@@ -94,8 +122,10 @@ export type AIResult = {
   goal?: GoalData;
   vehicle?: VehicleData;
   recurring?: RecurringData;
+  agendaData?: AgendaData;
+  meetData?: MeetData;
   mode?: UserMode;
-  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search
+  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
   response?: string; // resposta direta para how_to
   confidence: number;
 };
@@ -130,6 +160,11 @@ INTENÇÕES POSSÍVEIS:
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
+- agenda_create: agendar um compromisso, reunião, consulta ou evento com data e hora ("agendar reunião amanhã às 14h", "consulta médica sexta às 10h", "evento no sábado às 9h"). Use "agendaData" com título, startDate, startTime e opcionalmente location, endDate, endTime, repeat.
+- agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
+- agenda_update: reagendar ou editar um compromisso existente ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com o termo de busca e "agendaData" com os novos valores.
+- agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com o termo de busca.
+- meet_create: criar uma reunião do Google Meet ("criar meet amanhã às 14h", "meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). Diferente de agenda_create — esse cria um link real do Google Meet.
 - vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
@@ -447,6 +482,79 @@ OU para renomear/descrever último arquivo salvo ("altere e salve como comprovan
   "keyword": "comprovante de pagamento thalita"
 }
 
+OU para agendar compromisso ("agendar reunião com cliente amanhã às 14h"):
+{
+  "intent": "agenda_create",
+  "confidence": 0.95,
+  "agendaData": {
+    "title": "Reunião com cliente",
+    "startDate": "2026-07-05",
+    "startTime": "14:00"
+  }
+}
+
+OU para agendar com local ("agendar almoço sexta às 12h no Restaurante Central"):
+{
+  "intent": "agenda_create",
+  "confidence": 0.95,
+  "agendaData": {
+    "title": "Almoço",
+    "startDate": "2026-07-10",
+    "startTime": "12:00",
+    "location": "Restaurante Central"
+  }
+}
+
+OU para listar compromissos ("meus compromissos de hoje"):
+{
+  "intent": "agenda_list",
+  "confidence": 0.9
+}
+
+OU para reagendar ("reagendar reunião com cliente para segunda às 10h") — "keyword" é o TERMO DE BUSCA do compromisso:
+{
+  "intent": "agenda_update",
+  "confidence": 0.9,
+  "keyword": "reunião com cliente",
+  "agendaData": {
+    "startDate": "2026-07-06",
+    "startTime": "10:00"
+  }
+}
+
+OU para cancelar compromisso ("cancelar o almoço de sexta") — "keyword" é o TERMO DE BUSCA:
+{
+  "intent": "agenda_delete",
+  "confidence": 0.9,
+  "keyword": "almoço"
+}
+
+OU para criar meet ("criar meet amanhã às 14h com João 11999999999"):
+{
+  "intent": "meet_create",
+  "confidence": 0.95,
+  "meetData": {
+    "title": "Reunião",
+    "startDate": "2026-07-05",
+    "startTime": "14:00",
+    "duration": 60,
+    "attendees": [{"name": "João", "phone": "11999999999"}]
+  }
+}
+
+OU para criar meet com e-mail ("meet hoje às 16h com cliente maria@empresa.com por 2 horas"):
+{
+  "intent": "meet_create",
+  "confidence": 0.95,
+  "meetData": {
+    "title": "Reunião com cliente",
+    "startDate": "2026-07-04",
+    "startTime": "16:00",
+    "duration": 120,
+    "attendees": [{"name": "Maria", "email": "maria@empresa.com"}]
+  }
+}
+
 OU para trocar modo:
 {
   "intent": "mode_switch",
@@ -602,6 +710,53 @@ export async function findDriveFileByAI(
     return text === "null" || !text ? null : text;
   } catch {
     return null;
+  }
+}
+
+export async function generateMeetAta(
+  notes: string,
+  meetTitle: string,
+  attendeeNames: string[]
+): Promise<{ summary: string; decisions: string[]; tasks: string[] }> {
+  const cfg = getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return { summary: notes, decisions: [], tasks: [] };
+
+  const attendeesLine = attendeeNames.length
+    ? `Participantes: ${attendeeNames.join(", ")}.`
+    : "";
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(
+      `Você é um assistente de ata de reunião. Com base nas notas abaixo, gere uma ata estruturada.
+${attendeesLine}
+Reunião: "${meetTitle}"
+
+Notas: "${notes}"
+
+Retorne APENAS JSON válido no formato:
+{
+  "summary": "resumo objetivo da reunião em 2-4 frases",
+  "decisions": ["decisão 1", "decisão 2"],
+  "tasks": ["tarefa 1", "tarefa 2"]
+}
+
+- summary: o que foi discutido e decidido, de forma objetiva
+- decisions: lista de decisões tomadas (máx 5)
+- tasks: lista de tarefas/próximas ações (máx 8, frases curtas imperativas)
+Não use markdown.`
+    );
+    const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(text);
+    return {
+      summary: parsed.summary || notes,
+      decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+    };
+  } catch {
+    return { summary: notes, decisions: [], tasks: [] };
   }
 }
 

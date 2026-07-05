@@ -44,7 +44,16 @@ export type PendingRecurringConfirmation = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation;
+export type PendingMeetAta = {
+  type: "meet_ata";
+  phone: string;
+  userId: string;
+  meetId: string;
+  meetTitle: string;
+  expiresAt: string; // 4 horas
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta;
 
 type Store = Record<string, PendingAction>;
 
@@ -59,10 +68,13 @@ function save(store: Store) {
   try { writeFileSync(FILE, JSON.stringify(store, null, 2)); } catch { /* ignore */ }
 }
 
+const TTL_MEET_ATA_MS = 4 * 60 * 60 * 1000; // 4 horas
+
 type PendingActionInput =
   | Omit<PendingVehicleSelection, "phone" | "expiresAt">
   | Omit<PendingGoalSelection, "phone" | "expiresAt">
-  | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">;
+  | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">
+  | Omit<PendingMeetAta, "phone" | "expiresAt">;
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();
@@ -71,7 +83,10 @@ export function setPendingAction(phone: string, action: PendingActionInput): voi
   for (const key of Object.keys(store)) {
     if (new Date(store[key].expiresAt).getTime() < now) delete store[key];
   }
-  const ttl = action.type === "recurring_confirmation" ? TTL_RECURRING_MS : TTL_MS;
+  const ttl =
+    action.type === "recurring_confirmation" ? TTL_RECURRING_MS :
+    action.type === "meet_ata" ? TTL_MEET_ATA_MS :
+    TTL_MS;
   store[phone] = { ...action, phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
   save(store);
 }

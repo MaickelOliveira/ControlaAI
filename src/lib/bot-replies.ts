@@ -1,10 +1,12 @@
 import type { Finance } from "./finances";
 import type { Task } from "./tasks";
 import type { RecurringTransaction } from "./recurring";
+import type { Appointment } from "./agenda";
+import type { Meet } from "./meets";
 import { formatCurrency } from "./finances";
 import { PRIORITY_LABEL, formatDueDate } from "./tasks";
 import type { UserMode } from "./users";
-import { formatDateBR } from "./date-br";
+import { formatDateBR, formatDateTimeBR } from "./date-br";
 
 const TZ = "America/Sao_Paulo";
 
@@ -224,6 +226,67 @@ export function replyFileNotFound(query: string): string {
 export function replyDriveFileList(count: number): string {
   if (count === 0) return `📁 *Drive vazio!*\n\nEnvie um arquivo (PDF, imagem, documento) por aqui e eu organizo automaticamente.`;
   return `📁 *Drive Inteligente*\n\nVocê tem *${count} arquivo${count > 1 ? "s" : ""}* salvos.\n\nPara buscar: _"ache o comprovante do mecânico"_\nPara ver tudo: acesse *📁 Drive* no dashboard. 🌐`;
+}
+
+export function replyAgendaCreated(a: Appointment): string {
+  const dateTime = formatDateTimeBR(a.startAt);
+  const locationLine = a.location ? `\n📍 ${a.location}` : "";
+  const endLine = a.endAt ? ` até ${formatDateTimeBR(a.endAt).slice(11)}` : "";
+  return `✅ *Compromisso agendado!*\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}`;
+}
+
+export function replyAgendaList(appointments: Appointment[]): string {
+  if (!appointments.length) return `🗓️ Nenhum compromisso agendado nos próximos dias.\n\nPara agendar: _"Agendar reunião amanhã às 14h"_`;
+  let msg = `🗓️ *Seus próximos compromissos (${appointments.length}):*\n\n`;
+  appointments.slice(0, 10).forEach((a, i) => {
+    const dateTime = formatDateTimeBR(a.startAt);
+    const loc = a.location ? ` · ${a.location}` : "";
+    msg += `${i + 1}. *${a.title}*\n   🕒 ${dateTime}${loc}\n\n`;
+  });
+  return msg.trim();
+}
+
+export function replyAgendaUpdated(a: Appointment): string {
+  const dateTime = formatDateTimeBR(a.startAt);
+  const locationLine = a.location ? `\n📍 ${a.location}` : "";
+  return `✅ *Compromisso atualizado!*\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}`;
+}
+
+export function replyAgendaDeleted(title: string): string {
+  return `🗑️ Compromisso *${title}* cancelado!`;
+}
+
+export function replyMeetCreated(meet: Meet): string {
+  const start = formatDateTimeBR(meet.startAt);
+  const end = new Date(meet.endAt).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+  const withPhones = meet.attendees.filter(a => a.phone).length;
+  const inviteNote = withPhones > 0 ? `\n👥 Convite enviado para ${withPhones} participante${withPhones > 1 ? "s" : ""} via WhatsApp` : "";
+  const withEmails = meet.attendees.filter(a => a.email).length;
+  const emailNote = withEmails > 0 ? `\n📧 Convite por e-mail enviado para ${withEmails} participante${withEmails > 1 ? "s" : ""}` : "";
+  return `✅ *Reunião criada!*\n\n📅 *${meet.title}*\n🕒 ${start} → ${end}\n🔗 ${meet.meetLink}${inviteNote}${emailNote}`;
+}
+
+export function replyMeetInvite(meet: Meet, name: string): string {
+  return `📩 *${name}, você foi convidado para uma reunião!*\n\n📅 *${meet.title}*\n🕒 ${formatDateTimeBR(meet.startAt)}\n\n🔗 *Link:* ${meet.meetLink}\n\nTe vejo lá! 👋`;
+}
+
+export function replyMeetAtaRequest(title: string): string {
+  return `📋 *Sua reunião "${title}" encerrou!*\n\nPara gerar a ata automática, me envie um *áudio* ou *texto* resumindo o que foi discutido:\n\n• Principais pontos debatidos\n• Decisões tomadas\n• Próximas ações\n\nVou estruturar tudo e criar as tarefas automaticamente. 🤖`;
+}
+
+export function replyMeetAtaGenerated(title: string, ata: { summary: string; decisions: string[]; tasks: string[] }): string {
+  let msg = `📋 *Ata da Reunião: ${title}*\n\n`;
+  msg += `📝 *Resumo:*\n${ata.summary}\n`;
+  if (ata.decisions.length) {
+    msg += `\n✅ *Decisões tomadas:*\n`;
+    ata.decisions.forEach(d => { msg += `• ${d}\n`; });
+  }
+  if (ata.tasks.length) {
+    msg += `\n📌 *Tarefas criadas (${ata.tasks.length}):*\n`;
+    ata.tasks.forEach(t => { msg += `• ${t}\n`; });
+    msg += `\nJá adicionadas em *📋 Tarefas* no dashboard!`;
+  }
+  return msg.trim();
 }
 
 export function replyUnknown(originalMsg?: string): string {
