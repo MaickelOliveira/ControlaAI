@@ -237,13 +237,52 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Confirmação de Meet (sim/não) ──
+    if (pending?.type === "meet_confirm" && pending.userId === user.id) {
+      const lower = messageText.toLowerCase().trim();
+      const yes = ["sim", "s", "yes", "y", "1", "quero", "pode", "ok", "confirmar"].some(w => lower.includes(w));
+      const no = ["não", "nao", "n", "no", "0", "sem", "cancela"].some(w => lower.includes(w));
+      if (yes || no) {
+        clearPendingAction(from);
+        let meetLink: string | undefined;
+        let calendarEventId: string | undefined;
+        if (yes && isConnected(user.id)) {
+          try {
+            const r = await createMeetEvent({
+              userId: user.id, title: pending.title, description: pending.description,
+              startAt: pending.startAt, endAt: pending.endAt, attendees: pending.attendees,
+            });
+            meetLink = r.meetLink;
+            calendarEventId = r.calendarEventId;
+          } catch (e) {
+            console.error("[meet_confirm]", e);
+            await wppSend(from, "⚠️ Não consegui gerar o link do Meet. Criando o compromisso sem link...");
+          }
+        } else if (yes && !isConnected(user.id)) {
+          await wppSend(from, "⚠️ Sua conta Google não está conectada. Criando o compromisso sem link Meet.");
+        }
+        const apt = createAppointment({
+          userId: user.id, title: pending.title, description: pending.description,
+          startAt: pending.startAt, endAt: pending.endAt,
+          allDay: false, repeat: "none", status: "scheduled", source: "whatsapp",
+          meetLink, calendarEventId,
+        });
+        await wppSend(from, replyMeetCreated(apt));
+        for (const a of pending.attendees.filter(a => a.phone)) {
+          await wppSend(a.phone!, replyMeetInvite(apt, a.name));
+        }
+      } else {
+        await wppSend(from, `Responda *Sim* para incluir o link do Google Meet ou *Não* para criar só o compromisso.`);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Resposta de ata de reunião ──
     if (pending?.type === "meet_ata" && pending.userId === user.id) {
       if (messageText) {
         clearPendingAction(from);
         const ata = await generateMeetAta(messageText, pending.meetTitle, []);
-        const { updateMeet } = await import("@/lib/meets");
-        updateMeet(pending.meetId, user.id, { ataGenerated: true, ataContent: ata.summary, status: "ended" });
+        updateAppointment(pending.meetId, user.id, { ataGenerated: true, ataContent: ata.summary });
         for (const taskTitle of ata.tasks) {
           createTask({ userId: user.id, title: cap(taskTitle), priority: "medium", status: "pending", mode });
         }
@@ -748,11 +787,7 @@ export async function POST(req: NextRequest) {
       case "meet_create": {
         const d = ai.meetData;
         if (!d?.startDate || !d?.startTime) {
-          await wppSend(from, `🗓️ Para criar uma reunião no Google Meet, me diga a data e horário!\n\nEx: _"criar meet amanhã às 14h"_\nEx: _"meet hoje às 16h com João (11 99999-9999)"_`);
-          break;
-        }
-        if (!isConnected(user.id)) {
-          await wppSend(from, `🔗 Para criar reuniões no Google Meet, primeiro conecte sua conta Google!\n\nAcesse *Configurações* no dashboard → *Integrações* → *Conectar Google*. 🌐`);
+          await wppSend(from, `🗓️ Me diga a data e horário da reunião!\n\nEx: _"reunião amanhã às 14h"_\nEx: _"meet hoje às 16h com João (11 99999-9999)"_`);
           break;
         }
         const meetStartAt = spToUTC(`${d.startDate}T${d.startTime}:00`);
@@ -762,39 +797,20 @@ export async function POST(req: NextRequest) {
           : new Date(new Date(meetStartAt).getTime() + durationMs).toISOString();
         const meetTitle = cap(d.title || "Reunião");
         const meetAttendees = d.attendees || [];
-        // Avisa imediatamente — Google Calendar API pode demorar alguns segundos
-        await wppSend(from, `⏳ Criando reunião no Google Meet, aguarde um instante...`);
-        try {
-          const { meetLink, calendarEventId } = await createMeetEvent({
-            userId: user.id, title: meetTitle, description: d.description,
-            startAt: meetStartAt, endAt: meetEndAt, attendees: meetAttendees,
-          });
-          const meet = createMeet({
-            userId: user.id, title: meetTitle, description: d.description,
-            startAt: meetStartAt, endAt: meetEndAt,
-            meetLink, calendarEventId, attendees: meetAttendees,
-            ataGenerated: false, status: "scheduled", source: "whatsapp",
-          });
-          // Espelha na Agenda para aparecer no calendário
-          createAppointment({
-            userId: user.id,
-            title: `🎥 ${meetTitle}`,
-            description: `${d.description ? d.description + "\n" : ""}Meet: ${meetLink}`,
-            startAt: meetStartAt,
-            endAt: meetEndAt,
-            allDay: false,
-            repeat: "none",
-            status: "scheduled",
-            source: "whatsapp",
-          });
-          await wppSend(from, replyMeetCreated(meet));
-          for (const a of meetAttendees.filter(a => a.phone)) {
-            await wppSend(a.phone!, replyMeetInvite(meet, a.name));
-          }
-        } catch (e) {
-          console.error("[meet_create]", e);
-          await wppSend(from, "❌ Não consegui criar a reunião. Verifique se sua conta Google ainda está conectada em *Configurações*.");
-        }
+        // Pergunta se quer link do Google Meet
+        const { formatDateTimeBR } = await import("@/lib/date-br");
+        const timeStr = formatDateTimeBR(meetStartAt);
+        setPendingAction(from, {
+          type: "meet_confirm",
+          userId: user.id,
+          title: meetTitle,
+          description: d.description,
+          startAt: meetStartAt,
+          endAt: meetEndAt,
+          attendees: meetAttendees,
+          mode,
+        });
+        await wppSend(from, `📅 *${meetTitle}*\n🕒 ${timeStr}\n${meetAttendees.length > 0 ? `👥 ${meetAttendees.map(a => a.name).join(", ")}\n` : ""}\nDeseja incluir link do *Google Meet*?\n\nResponda *Sim* ou *Não*`);
         break;
       }
 

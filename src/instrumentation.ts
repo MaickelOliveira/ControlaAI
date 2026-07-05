@@ -78,32 +78,32 @@ export async function register() {
           console.error("[cron] Erro no bloco de recorrentes:", e);
         }
       }
-      // ── Verificar reuniões encerradas que precisam de ata ──
+      // ── Verificar reuniões (na Agenda) encerradas que precisam de ata ──
       try {
-        const meetsModule = await import("./lib/meets").catch(() => null);
+        const agendaModule = await import("./lib/agenda").catch(() => null);
         const usersModule = await import("./lib/users").catch(() => null);
         const pendingModule = await import("./lib/pending-actions").catch(() => null);
         const repliesModule = await import("./lib/bot-replies").catch(() => null);
-        if (meetsModule && usersModule && pendingModule && repliesModule) {
-          const { getMeetsEndedWithoutAta, updateMeet } = meetsModule;
+        if (agendaModule && usersModule && pendingModule && repliesModule) {
+          const { getAppointmentsWithEndedMeet, updateAppointment } = agendaModule;
           const { getUserById, getWppPhones } = usersModule;
           const { setPendingAction } = pendingModule;
           const { replyMeetAtaRequest } = repliesModule;
-          const endedMeets = getMeetsEndedWithoutAta();
-          for (const meet of endedMeets) {
+          const ended = getAppointmentsWithEndedMeet();
+          for (const apt of ended) {
             try {
-              const meetUser = getUserById(meet.userId);
-              if (!meetUser) continue;
-              const phones = getWppPhones(meetUser);
+              const aptUser = getUserById(apt.userId);
+              if (!aptUser) continue;
+              const phones = getWppPhones(aptUser);
               for (const phone of phones) {
-                const ok = await sendText(phone, replyMeetAtaRequest(meet.title));
+                const ok = await sendText(phone, replyMeetAtaRequest(apt.title));
                 if (ok) {
-                  updateMeet(meet.id, meet.userId, { ataNotifiedAt: new Date().toISOString() });
+                  updateAppointment(apt.id, apt.userId, { ataNotifiedAt: new Date().toISOString() });
                   setPendingAction(phone, {
                     type: "meet_ata",
-                    userId: meet.userId,
-                    meetId: meet.id,
-                    meetTitle: meet.title,
+                    userId: apt.userId,
+                    meetId: apt.id,
+                    meetTitle: apt.title,
                   });
                 }
               }

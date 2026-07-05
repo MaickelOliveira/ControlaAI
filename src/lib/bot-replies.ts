@@ -256,18 +256,26 @@ export function replyAgendaDeleted(title: string): string {
   return `🗑️ Compromisso *${title}* cancelado!`;
 }
 
-export function replyMeetCreated(meet: Meet): string {
+type MeetLike = {
+  title: string; startAt: string; endAt?: string; meetLink?: string;
+};
+
+export function replyMeetCreated(meet: MeetLike, attendees?: Array<{ phone?: string; email?: string }>): string {
   const start = formatDateTimeBR(meet.startAt);
-  const end = new Date(meet.endAt).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
-  const withPhones = meet.attendees.filter(a => a.phone).length;
+  const end = meet.endAt
+    ? new Date(meet.endAt).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
+    : "";
+  const endStr = end ? ` → ${end}` : "";
+  const meetStr = meet.meetLink ? `\n🔗 ${meet.meetLink}` : "";
+  const withPhones = (attendees || []).filter(a => a.phone).length;
   const inviteNote = withPhones > 0 ? `\n👥 Convite enviado para ${withPhones} participante${withPhones > 1 ? "s" : ""} via WhatsApp` : "";
-  const withEmails = meet.attendees.filter(a => a.email).length;
-  const emailNote = withEmails > 0 ? `\n📧 Convite por e-mail enviado para ${withEmails} participante${withEmails > 1 ? "s" : ""}` : "";
-  return `✅ *Reunião criada!*\n\n📅 *${meet.title}*\n🕒 ${start} → ${end}\n🔗 ${meet.meetLink}${inviteNote}${emailNote}`;
+  const withEmails = (attendees || []).filter(a => a.email).length;
+  const emailNote = withEmails > 0 ? `\n📧 Convite por e-mail para ${withEmails} participante${withEmails > 1 ? "s" : ""}` : "";
+  return `✅ *${meet.meetLink ? "Reunião criada com Google Meet!" : "Compromisso criado!"}*\n\n📅 *${meet.title}*\n🕒 ${start}${endStr}${meetStr}${inviteNote}${emailNote}`;
 }
 
-export function replyMeetInvite(meet: Meet, name: string): string {
-  return `📩 *${name}, você foi convidado para uma reunião!*\n\n📅 *${meet.title}*\n🕒 ${formatDateTimeBR(meet.startAt)}\n\n🔗 *Link:* ${meet.meetLink}\n\nTe vejo lá! 👋`;
+export function replyMeetInvite(meet: MeetLike, name: string): string {
+  return `📩 *${name}, você foi convidado para uma reunião!*\n\n📅 *${meet.title}*\n🕒 ${formatDateTimeBR(meet.startAt)}\n\n🔗 *Link:* ${meet.meetLink ?? "(sem link)"}\n\nTe vejo lá! 👋`;
 }
 
 export function replyMeetAtaRequest(title: string): string {

@@ -118,7 +118,6 @@ const BASE_NAV = [
   { href: "/dashboard/lembretes", label: "Lembretes", icon: Icons.bell },
   { href: "/dashboard/drive", label: "Drive", icon: Icons.folder },
   { href: "/dashboard/agenda", label: "Agenda", icon: Icons.calendar },
-  { href: "/dashboard/reunioes", label: "Reuniões", icon: Icons.video },
 ];
 const BUSINESS_NAV = [
   { href: "/dashboard/funcionarios", label: "Funcionários", icon: Icons.users },
