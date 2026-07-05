@@ -751,6 +751,8 @@ export async function POST(req: NextRequest) {
           : new Date(new Date(meetStartAt).getTime() + durationMs).toISOString();
         const meetTitle = cap(d.title || "Reunião");
         const meetAttendees = d.attendees || [];
+        // Avisa imediatamente — Google Calendar API pode demorar alguns segundos
+        await wppSend(from, `⏳ Criando reunião no Google Meet, aguarde um instante...`);
         try {
           const { meetLink, calendarEventId } = await createMeetEvent({
             userId: user.id, title: meetTitle, description: d.description,
