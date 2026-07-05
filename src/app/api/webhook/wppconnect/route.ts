@@ -849,6 +849,44 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "agenda_add_meet": {
+        // Adiciona Google Meet a compromisso existente sem alterar data/hora
+        const addMeetKeyword = ai.keyword || "";
+        const addMeetFound = addMeetKeyword
+          ? findAppointmentByKeyword(user.id, addMeetKeyword)
+          : getUpcomingAppointments(user.id, 1)[0] || null;
+        if (!addMeetFound) {
+          await wppSend(from, `❓ Não encontrei o compromisso${addMeetKeyword ? ` com *"${addMeetKeyword}"*` : ""}.\n\nDigite *meus compromissos* para ver a lista.`);
+          break;
+        }
+        if (addMeetFound.meetLink) {
+          await wppSend(from, `ℹ️ *${addMeetFound.title}* já tem um link do Meet:\n🔗 ${addMeetFound.meetLink}`);
+          break;
+        }
+        if (!addMeetFound.endAt) {
+          await wppSend(from, `⚠️ O compromisso *${addMeetFound.title}* não tem horário de fim definido. Edite-o pela agenda para adicionar a hora de término e tente novamente.`);
+          break;
+        }
+        if (!isConnected(user.id)) {
+          await wppSend(from, `🔗 Sua conta Google não está conectada.\n\nAcesse *Configurações → Integrações* para conectar e criar links do Meet.`);
+          break;
+        }
+        await wppSend(from, `⏳ Criando link do Google Meet para *${addMeetFound.title}*...`);
+        try {
+          const meetResult = await createMeetEvent({
+            userId: user.id, title: addMeetFound.title, description: addMeetFound.description,
+            startAt: addMeetFound.startAt, endAt: addMeetFound.endAt, attendees: [],
+          });
+          updateAppointment(addMeetFound.id, user.id, { meetLink: meetResult.meetLink, calendarEventId: meetResult.calendarEventId });
+          const { formatDateTimeBR } = await import("@/lib/date-br");
+          await wppSend(from, `✅ *Meet adicionado!*\n\n📅 *${addMeetFound.title}*\n🕒 ${formatDateTimeBR(addMeetFound.startAt)}\n🔗 ${meetResult.meetLink}`);
+        } catch (e) {
+          console.error("[agenda_add_meet]", e);
+          await wppSend(from, `❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.`);
+        }
+        break;
+      }
+
       case "meet_create": {
         const d = ai.meetData;
         if (!d?.startDate || !d?.startTime) {
