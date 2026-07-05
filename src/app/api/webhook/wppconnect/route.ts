@@ -357,10 +357,19 @@ export async function POST(req: NextRequest) {
           break;
         }
         // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
-        const editCandidates = findFinanceByDescription(user.id, null, keyword);
+        let editCandidates = findFinanceByDescription(user.id, null, keyword);
+        // Fallback: tenta buscar sem acentos e sem espaços extras
+        if (!editCandidates.length) {
+          const normalizedKeyword = keyword.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+          editCandidates = findFinanceByDescription(user.id, null, normalizedKeyword);
+        }
         console.log(`[bot] finance_edit encontrados=${editCandidates.length}`);
         if (!editCandidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${keyword}"*.\n\nDigite *extrato* para ver os lançamentos e use o nome exato.`);
+          const recent = getRecentTransactions(user.id, mode, 5);
+          const recentList = recent.length
+            ? `\n\n📋 *Lançamentos recentes:*\n${recent.map(r => `• ${r.description} — ${formatCurrency(r.amount)}`).join("\n")}`
+            : "";
+          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${keyword}"*.${recentList}\n\nUse o nome exato ou diga _"extrato"_ para ver todos.`);
           break;
         }
         const editTarget = editCandidates[0];
