@@ -12,13 +12,19 @@ export type Appointment = {
   title: string;
   description?: string;
   location?: string;
-  startAt: string;   // ISO UTC
-  endAt?: string;    // ISO UTC, optional
+  startAt: string;        // ISO UTC
+  endAt?: string;         // ISO UTC, optional
   allDay: boolean;
   repeat: AppointmentRepeat;
   status: AppointmentStatus;
   source: "whatsapp" | "web";
-  createdAt: string; // ISO UTC
+  createdAt: string;      // ISO UTC
+  // Google Meet
+  meetLink?: string;
+  calendarEventId?: string;
+  ataGenerated?: boolean;
+  ataContent?: string;
+  ataNotifiedAt?: string;
 };
 
 const DATA_FILE = path.join(process.cwd(), "data", "agenda.json");
@@ -86,6 +92,20 @@ export function findAppointmentByKeyword(userId: string, keyword: string): Appoi
       a.location?.toLowerCase().includes(lower)
     ) ?? null
   );
+}
+
+/** Compromissos com Google Meet encerrados há 5-60 min sem ata ainda gerada */
+export function getAppointmentsWithEndedMeet(): Appointment[] {
+  const now = Date.now();
+  const min5 = 5 * 60_000;
+  const min60 = 60 * 60_000;
+  return load().filter(a => {
+    if (!a.meetLink || !a.endAt) return false;
+    if (a.ataGenerated || a.ataNotifiedAt) return false;
+    if (a.status !== "scheduled") return false;
+    const endMs = new Date(a.endAt).getTime();
+    return endMs < now - min5 && endMs > now - min60;
+  });
 }
 
 export function getUpcomingAppointments(userId: string, days: number = 7): Appointment[] {

@@ -48,12 +48,25 @@ export type PendingMeetAta = {
   type: "meet_ata";
   phone: string;
   userId: string;
-  meetId: string;
+  meetId: string;    // agendaAppointmentId
   meetTitle: string;
-  expiresAt: string; // 4 horas
+  expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta;
+export type PendingMeetConfirm = {
+  type: "meet_confirm";
+  phone: string;
+  userId: string;
+  title: string;
+  description?: string;
+  startAt: string;
+  endAt: string;
+  attendees: Array<{ name: string; phone?: string; email?: string }>;
+  mode: string;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm;
 
 type Store = Record<string, PendingAction>;
 
@@ -74,7 +87,8 @@ type PendingActionInput =
   | Omit<PendingVehicleSelection, "phone" | "expiresAt">
   | Omit<PendingGoalSelection, "phone" | "expiresAt">
   | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">
-  | Omit<PendingMeetAta, "phone" | "expiresAt">;
+  | Omit<PendingMeetAta, "phone" | "expiresAt">
+  | Omit<PendingMeetConfirm, "phone" | "expiresAt">;
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();

@@ -16,6 +16,9 @@ type Appointment = {
   status: AppointmentStatus;
   source: string;
   createdAt: string;
+  meetLink?: string;
+  ataGenerated?: boolean;
+  ataContent?: string;
 };
 
 const TZ = "America/Sao_Paulo";
@@ -72,6 +75,7 @@ type FormState = {
   endTime: string;
   allDay: boolean;
   repeat: AppointmentRepeat;
+  withMeet: boolean;
 };
 
 const emptyForm = (defaultDate?: string): FormState => {
@@ -85,7 +89,7 @@ const emptyForm = (defaultDate?: string): FormState => {
     startDate: defaultDate || date,
     startTime: time.slice(0, 5),
     endDate: "", endTime: "",
-    allDay: false, repeat: "none",
+    allDay: false, repeat: "none", withMeet: false,
   };
 };
 
@@ -101,7 +105,7 @@ function aptToForm(a: Appointment): FormState {
     title: a.title, description: a.description || "", location: a.location || "",
     startDate: sd, startTime: st ? st.slice(0, 5) : "",
     endDate: ed, endTime: et ? et.slice(0, 5) : "",
-    allDay: a.allDay, repeat: a.repeat,
+    allDay: a.allDay, repeat: a.repeat, withMeet: false,
   };
 }
 
@@ -128,6 +132,7 @@ export default function AgendaPage() {
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -140,7 +145,10 @@ export default function AgendaPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch("/api/google/status").then(r => r.json()).then(d => setGoogleConnected(d.connected)).catch(() => {});
+  }, []);
 
   function openNew(date?: string) {
     setEditing(null);
@@ -167,6 +175,7 @@ export default function AgendaPage() {
         description: form.description.trim() || undefined,
         location: form.location.trim() || undefined,
         startAt, endAt, allDay: form.allDay, repeat: form.repeat,
+        withMeet: !editing && form.withMeet && !!endAt,
       };
       if (editing) {
         const res = await fetch(`/api/agenda/${editing.id}`, {
@@ -462,6 +471,29 @@ export default function AgendaPage() {
                   className="w-4 h-4 rounded accent-blue-600" />
                 <span className="text-sm text-slate-700">Dia inteiro</span>
               </label>
+
+              {/* Toggle Google Meet — só para novos compromissos com horário fim */}
+              {!editing && googleConnected && (
+                <label className={`flex items-center gap-2.5 cursor-pointer select-none rounded-xl p-3 border transition
+                  ${form.withMeet ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}>
+                  <input type="checkbox" checked={form.withMeet}
+                    onChange={e => setForm(f => ({ ...f, withMeet: e.target.checked }))}
+                    className="w-4 h-4 rounded accent-blue-600" />
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">🎥 Incluir link do Google Meet</p>
+                    <p className="text-xs text-slate-400">Cria um link de reunião automático no Google Calendar</p>
+                    {form.withMeet && !form.endDate && (
+                      <p className="text-xs text-amber-600 mt-0.5">⚠ Preencha a hora de fim para gerar o Meet</p>
+                    )}
+                  </div>
+                </label>
+              )}
+              {!editing && !googleConnected && (
+                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <span>🎥</span>
+                  <span>Para incluir Google Meet, <a href="/dashboard/configuracoes" className="text-blue-500 underline">conecte sua conta Google</a></span>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Local</label>
                 <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
@@ -520,19 +552,27 @@ function DayEventRow({ evt, onEdit, onDone, onDelete }: {
           {evt.location && ` · 📍${evt.location}`}
         </p>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition" onClick={e => e.stopPropagation()}>
-        <button onClick={() => onDone(evt.id)} title="Concluído"
-          className="p-1 rounded text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </button>
-        <button onClick={() => onDelete(evt.id)} title="Excluir"
-          className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+      <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+        {evt.meetLink && (
+          <a href={evt.meetLink} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition text-xs font-medium">
+            🎥 Entrar
+          </a>
+        )}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+          <button onClick={() => onDone(evt.id)} title="Concluído"
+            className="p-1 rounded text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </button>
+          <button onClick={() => onDelete(evt.id)} title="Excluir"
+            className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -601,19 +641,27 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, onNew, loadin
                       {evt.repeat !== "none" && ` · 🔁${REPEAT_LABEL[evt.repeat]}`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition shrink-0" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => onDone(evt.id)} title="Concluído"
-                      className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <button onClick={() => onDelete(evt.id)} title="Excluir"
-                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                    {evt.meetLink && (
+                      <a href={evt.meetLink} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition text-xs font-medium">
+                        🎥 Entrar
+                      </a>
+                    )}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                      <button onClick={() => onDone(evt.id)} title="Concluído"
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </button>
+                      <button onClick={() => onDelete(evt.id)} title="Excluir"
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
