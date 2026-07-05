@@ -33,6 +33,7 @@ export type Intent =
   | "agenda_list"
   | "agenda_update"
   | "agenda_delete"
+  | "agenda_add_meet"
   | "meet_create"
   | "how_to"
   | "help"
@@ -178,8 +179,9 @@ INTENÇÕES POSSÍVEIS:
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
 - agenda_create: agendar um compromisso, reunião, consulta ou evento com data e hora ("agendar reunião amanhã às 14h", "consulta médica sexta às 10h", "evento no sábado às 9h"). Use "agendaData" com título, startDate, startTime e opcionalmente location, endDate, endTime, repeat.
 - agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
-- agenda_update: reagendar ou editar um compromisso existente ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com o termo de busca e "agendaData" com os novos valores.
+- agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com o termo de busca e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
 - agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com o termo de busca.
+- agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com o nome/descrição do compromisso. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
 - meet_create: criar uma reunião do Google Meet ("criar meet amanhã às 14h", "meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). Diferente de agenda_create — esse cria um link real do Google Meet.
 - vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
@@ -559,6 +561,13 @@ OU para cancelar compromisso ("cancelar o almoço de sexta") — "keyword" é o 
   "intent": "agenda_delete",
   "confidence": 0.9,
   "keyword": "almoço"
+}
+
+OU para adicionar Meet a compromisso existente ("coloca via meet essa reunião", "adiciona meet no compromisso de sexta"):
+{
+  "intent": "agenda_add_meet",
+  "confidence": 0.95,
+  "keyword": "reunião"
 }
 
 OU para criar meet ("criar meet amanhã às 14h com João 11999999999"):
