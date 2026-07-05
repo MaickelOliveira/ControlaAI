@@ -14,10 +14,13 @@ export default function ClienteConfigPage() {
   const [pwForm, setPwForm] = useState<PwForm>({ current: "", next: "", confirm: "" });
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pwLoading, setPwLoading] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email?: string } | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], maxWppPhones: d.user.maxWppPhones ?? 1 }); });
     fetch("/api/bot-info").then(r => r.json()).then(d => { if (d.wppBotNumber) setBotNumber(d.wppBotNumber); });
+    fetch("/api/google/status").then(r => r.json()).then(d => setGoogleStatus(d)).catch(() => {});
   }, []);
 
   async function generateCode() {
@@ -41,6 +44,13 @@ export default function ClienteConfigPage() {
     await fetch("/api/dashboard/wpp-link", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
     setUser(u => u ? { ...u, wppPhones: u.wppPhones.filter(p => p !== phone) } : u);
     setUnlinkingPhone(null);
+  }
+
+  async function disconnectGoogle() {
+    setGoogleLoading(true);
+    await fetch("/api/google/disconnect", { method: "POST" });
+    setGoogleStatus({ connected: false });
+    setGoogleLoading(false);
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -250,6 +260,47 @@ export default function ClienteConfigPage() {
           ))}
         </div>
       </div>
+      {/* Integrações */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
+          <span>🤝</span> Integrações
+        </h2>
+        <p className="text-xs text-slate-400 mb-5">Conecte serviços externos para ampliar as funcionalidades do bot</p>
+
+        <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm text-xl shrink-0">
+              🗓️
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Google Calendar / Meet</p>
+              <p className="text-xs text-slate-400 mt-0.5">Crie reuniões no Google Meet diretamente pelo WhatsApp</p>
+              {googleStatus?.connected && googleStatus.email && (
+                <p className="text-xs text-emerald-600 mt-1 font-medium">✓ {googleStatus.email}</p>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0">
+            {googleStatus === null ? (
+              <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+            ) : googleStatus.connected ? (
+              <button
+                onClick={disconnectGoogle}
+                disabled={googleLoading}
+                className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-3 py-1.5 transition disabled:opacity-50">
+                {googleLoading ? "..." : "Desconectar"}
+              </button>
+            ) : (
+              <a
+                href="/api/google/connect"
+                className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-1.5 transition">
+                Conectar Google
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Alterar senha */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">

@@ -10,6 +10,11 @@ import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoa
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice } from "@/lib/pending-actions";
 import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
+import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
+import { createMeet } from "@/lib/meets";
+import { createMeetEvent } from "@/lib/google-meet";
+import { isConnected } from "@/lib/google-oauth";
+import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/wppconnect";
 import { nowBR, spToUTC, todayStrBR } from "@/lib/date-br";
 import {
@@ -18,6 +23,8 @@ import {
   replyTrialExpired, replyUnknown, replyLowConfidence,
   replyRecurringConfirmed, replyRecurringCreated, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
+  replyAgendaCreated, replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
+  replyMeetCreated, replyMeetInvite, replyMeetAtaRequest, replyMeetAtaGenerated,
 } from "@/lib/bot-replies";
 
 function phoneMatches(stored: string, incoming: string): boolean {
@@ -208,6 +215,23 @@ export async function POST(req: NextRequest) {
       } else {
         clearPendingAction(from);
       }
+    }
+
+    // ── Resposta de ata de reunião ──
+    if (pending?.type === "meet_ata" && pending.userId === user.id) {
+      if (messageText) {
+        clearPendingAction(from);
+        const ata = await generateMeetAta(messageText, pending.meetTitle, []);
+        const { updateMeet } = await import("@/lib/meets");
+        updateMeet(pending.meetId, user.id, { ataGenerated: true, ataContent: ata.summary, status: "ended" });
+        for (const taskTitle of ata.tasks) {
+          createTask({ userId: user.id, title: cap(taskTitle), priority: "medium", status: "pending", mode });
+        }
+        await wppSend(from, replyMeetAtaGenerated(pending.meetTitle, ata));
+      } else {
+        await wppSend(from, `Para gerar a ata, me envie um *áudio* ou *texto* com o resumo da reunião. ⏱ ${replyMeetAtaRequest(pending.meetTitle)}`);
+      }
+      return NextResponse.json({ ok: true });
     }
 
     // ── Confirmação de recorrente/parcela (resposta ao lembrete das 20h) ──
@@ -634,6 +658,121 @@ export async function POST(req: NextRequest) {
         const cleanName = newName.toLowerCase().replace(/[^a-z0-9\s\-_]/g, "").replace(/\s+/g, "_").slice(0, 60) + ext;
         updateFile(recentFile.id, user.id, { originalName: cleanName, description: newName });
         await wppSend(from, `✅ *Arquivo renomeado!*\n\n📄 ${cleanName}\n💬 Descrição: ${newName}\n\nJá está atualizado no *📁 Drive*. Para encontrar depois: _"ache ${newName}"_`);
+        break;
+      }
+
+      case "agenda_create": {
+        const d = ai.agendaData;
+        if (!d?.title || !d?.startDate) {
+          await wppSend(from, `🗓️ Para agendar, me diga o título e a data/hora!\n\nEx: _"Agendar reunião amanhã às 14h"_\nEx: _"Consulta médica sexta às 10h no Pronto Socorro"_`);
+          break;
+        }
+        const startSP = `${d.startDate}T${d.startTime || "00:00"}:00`;
+        const startAt = spToUTC(startSP);
+        const endAt = d.endDate ? spToUTC(`${d.endDate}T${d.endTime || "00:00"}:00`) : undefined;
+        const apt = createAppointment({
+          userId: user.id,
+          title: cap(d.title),
+          description: d.description,
+          location: d.location,
+          startAt,
+          endAt,
+          allDay: d.allDay ?? false,
+          repeat: d.repeat ?? "none",
+          status: "scheduled",
+          source: "whatsapp",
+        });
+        await wppSend(from, replyAgendaCreated(apt));
+        break;
+      }
+
+      case "agenda_list": {
+        const apts = getUpcomingAppointments(user.id, 14);
+        await wppSend(from, replyAgendaList(apts));
+        break;
+      }
+
+      case "agenda_update": {
+        const keyword = ai.keyword || "";
+        if (!keyword) { await wppSend(from, "❓ Qual compromisso deseja alterar?"); break; }
+        const found = findAppointmentByKeyword(user.id, keyword);
+        if (!found) {
+          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
+          break;
+        }
+        const d2 = ai.agendaData ?? {};
+        const patch: Parameters<typeof updateAppointment>[2] = {};
+        if (d2.startDate) patch.startAt = spToUTC(`${d2.startDate}T${d2.startTime || "00:00"}:00`);
+        if (d2.endDate) patch.endAt = spToUTC(`${d2.endDate}T${d2.endTime || "00:00"}:00`);
+        if (d2.title) patch.title = cap(d2.title);
+        if (d2.location) patch.location = d2.location;
+        if (d2.description) patch.description = d2.description;
+        const updated = updateAppointment(found.id, user.id, patch);
+        if (updated) await wppSend(from, replyAgendaUpdated(updated));
+        break;
+      }
+
+      case "agenda_delete": {
+        const keyword = ai.keyword || "";
+        if (!keyword) { await wppSend(from, "❓ Qual compromisso deseja cancelar?"); break; }
+        const found = findAppointmentByKeyword(user.id, keyword);
+        if (!found) {
+          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
+          break;
+        }
+        deleteAppointment(found.id, user.id);
+        await wppSend(from, replyAgendaDeleted(found.title));
+        break;
+      }
+
+      case "meet_create": {
+        const d = ai.meetData;
+        if (!d?.startDate || !d?.startTime) {
+          await wppSend(from, `🗓️ Para criar uma reunião no Google Meet, me diga a data e horário!\n\nEx: _"criar meet amanhã às 14h"_\nEx: _"meet hoje às 16h com João (11 99999-9999)"_`);
+          break;
+        }
+        if (!isConnected(user.id)) {
+          await wppSend(from, `🔗 Para criar reuniões no Google Meet, primeiro conecte sua conta Google!\n\nAcesse *Configurações* no dashboard → *Integrações* → *Conectar Google*. 🌐`);
+          break;
+        }
+        const meetStartAt = spToUTC(`${d.startDate}T${d.startTime}:00`);
+        const durationMs = (d.duration || 60) * 60_000;
+        const meetEndAt = d.endDate
+          ? spToUTC(`${d.endDate}T${d.endTime || "00:00"}:00`)
+          : new Date(new Date(meetStartAt).getTime() + durationMs).toISOString();
+        const meetTitle = cap(d.title || "Reunião");
+        const meetAttendees = d.attendees || [];
+        try {
+          const { meetLink, calendarEventId } = await createMeetEvent({
+            userId: user.id, title: meetTitle, description: d.description,
+            startAt: meetStartAt, endAt: meetEndAt, attendees: meetAttendees,
+          });
+          const meet = createMeet({
+            userId: user.id, title: meetTitle, description: d.description,
+            startAt: meetStartAt, endAt: meetEndAt,
+            meetLink, calendarEventId, attendees: meetAttendees,
+            ataGenerated: false, status: "scheduled", source: "whatsapp",
+          });
+          // Espelha na Agenda para aparecer no calendário
+          createAppointment({
+            userId: user.id,
+            title: `🎥 ${meetTitle}`,
+            description: `${d.description ? d.description + "\n" : ""}Meet: ${meetLink}`,
+            startAt: meetStartAt,
+            endAt: meetEndAt,
+            allDay: false,
+            repeat: "none",
+            status: "scheduled",
+            source: "whatsapp",
+          });
+          await wppSend(from, replyMeetCreated(meet));
+          for (const a of meetAttendees.filter(a => a.phone)) {
+            await wppSend(a.phone!, replyMeetInvite(meet, a.name));
+          }
+        } catch (e) {
+          console.error("[meet_create]", e);
+          await wppSend(from, "❌ Não consegui criar a reunião. Verifique se sua conta Google ainda está conectada em *Configurações*.");
+        }
         break;
       }
 
