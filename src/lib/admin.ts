@@ -12,6 +12,8 @@ export type AdminConfig = {
   geminiApiKey?: string;
   appBaseUrl?: string;
   wppBotNumber?: string;
+  googleClientId?: string;
+  googleClientSecret?: string;
 };
 
 const FILE = path.join(process.cwd(), "data", "admin.json");

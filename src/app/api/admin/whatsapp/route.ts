@@ -4,19 +4,23 @@ import { loadAdmin, saveAdmin } from "@/lib/admin";
 import { checkConnection, startSession, getQrCode, saveConfig, getConfig, generateAndSaveToken } from "@/lib/wppconnect";
 import { detectBotNumber } from "@/app/api/bot-info/route";
 
+const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
+
 /** Sincroniza admin.json → config.json para que o bot use os mesmos dados */
 function syncToConfig() {
   const adm = loadAdmin();
   const cur = getConfig();
   saveConfig({
     ...cur,
-    wppServer:    adm.wppServer    ?? cur.wppServer,
-    wppSecretKey: adm.wppSecretKey ?? cur.wppSecretKey,
-    wppToken:     adm.wppToken     ?? cur.wppToken,
-    wppSession:   adm.wppSession   ?? cur.wppSession,
-    geminiApiKey: adm.geminiApiKey ?? cur.geminiApiKey,
-    appBaseUrl:   adm.appBaseUrl   ?? cur.appBaseUrl,
-    wppBotNumber: adm.wppBotNumber ?? cur.wppBotNumber,
+    wppServer:          adm.wppServer          ?? cur.wppServer,
+    wppSecretKey:       adm.wppSecretKey       ?? cur.wppSecretKey,
+    wppToken:           adm.wppToken           ?? cur.wppToken,
+    wppSession:         adm.wppSession         ?? cur.wppSession,
+    geminiApiKey:       adm.geminiApiKey       ?? cur.geminiApiKey,
+    appBaseUrl:         adm.appBaseUrl         ?? cur.appBaseUrl,
+    wppBotNumber:       adm.wppBotNumber       ?? cur.wppBotNumber,
+    googleClientId:     adm.googleClientId     ?? cur.googleClientId,
+    googleClientSecret: adm.googleClientSecret ?? cur.googleClientSecret,
   });
 }
 
@@ -37,6 +41,9 @@ export async function GET() {
     hasGemini: !!cfg.geminiApiKey,
     appBaseUrl: cfg.appBaseUrl ?? "",
     wppBotNumber: cfg.wppBotNumber ?? "",
+    googleClientId: cfg.googleClientId ?? "",
+    googleClientSecret: cfg.googleClientSecret ? "••••••••" : "",
+    hasGoogleOAuth: !!(cfg.googleClientId && cfg.googleClientSecret),
     connectionStatus: status,
   });
 }
@@ -49,12 +56,14 @@ export async function PUT(req: NextRequest) {
   const current = loadAdmin();
   const updated = {
     ...current,
-    wppServer:    body.wppServer    ?? current.wppServer,
-    wppSecretKey: body.wppSecretKey && !body.wppSecretKey.startsWith("•") ? body.wppSecretKey : current.wppSecretKey,
-    wppSession:   body.wppSession   ?? current.wppSession,
-    geminiApiKey: body.geminiApiKey && !body.geminiApiKey.startsWith("•") ? body.geminiApiKey : current.geminiApiKey,
-    appBaseUrl:   body.appBaseUrl   ?? current.appBaseUrl,
-    wppBotNumber: body.wppBotNumber ?? current.wppBotNumber,
+    wppServer:          body.wppServer    ?? current.wppServer,
+    wppSecretKey:       !isMasked(body.wppSecretKey) && body.wppSecretKey ? body.wppSecretKey : current.wppSecretKey,
+    wppSession:         body.wppSession   ?? current.wppSession,
+    geminiApiKey:       !isMasked(body.geminiApiKey) && body.geminiApiKey ? body.geminiApiKey : current.geminiApiKey,
+    appBaseUrl:         body.appBaseUrl   ?? current.appBaseUrl,
+    wppBotNumber:       body.wppBotNumber ?? current.wppBotNumber,
+    googleClientId:     body.googleClientId !== undefined ? (body.googleClientId || undefined) : current.googleClientId,
+    googleClientSecret: !isMasked(body.googleClientSecret) && body.googleClientSecret ? body.googleClientSecret : current.googleClientSecret,
     // wppToken não é aceito do body — só via generate_token
   };
   saveAdmin(updated);
@@ -70,8 +79,6 @@ export async function POST(req: NextRequest) {
   const { action } = body;
 
   if (action === "generate_token") {
-    const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
-
     // Se a secret key no body estiver mascarada, forçar redigitação
     if (isMasked(body.wppSecretKey)) {
       return NextResponse.json({ error: "Redigite a Secret Key no campo acima e clique em Gerar Token novamente. O campo está mostrando pontos (••••) mas precisamos do valor real." }, { status: 400 });
