@@ -16,6 +16,8 @@ export async function GET() {
     wppSession: cfg.wppSession ?? "controlaai",
     geminiApiKey: cfg.geminiApiKey ?? "",
     appBaseUrl: cfg.appBaseUrl ?? "",
+    googleClientId: cfg.googleClientId ?? "",
+    googleClientSecret: cfg.googleClientSecret ?? "",
     connectionStatus: status,
   });
 }
@@ -33,6 +35,8 @@ export async function PUT(req: NextRequest) {
     wppSession: body.wppSession ?? current.wppSession,
     geminiApiKey: body.geminiApiKey ?? current.geminiApiKey,
     appBaseUrl: body.appBaseUrl ?? current.appBaseUrl,
+    googleClientId: body.googleClientId !== undefined ? (body.googleClientId || undefined) : current.googleClientId,
+    googleClientSecret: body.googleClientSecret !== undefined ? (body.googleClientSecret || undefined) : current.googleClientSecret,
   });
 
   return NextResponse.json({ ok: true });

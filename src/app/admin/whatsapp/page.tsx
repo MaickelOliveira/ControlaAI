@@ -7,6 +7,7 @@ export default function AdminWhatsappPage() {
     wppServer: "", wppSecretKey: "", wppToken: "", hasToken: false,
     wppSession: "controlaai", geminiApiKey: "", hasGemini: false,
     appBaseUrl: "", wppBotNumber: "", connectionStatus: "UNKNOWN",
+    googleClientId: "", googleClientSecret: "", hasGoogleOAuth: false,
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -241,6 +242,39 @@ export default function AdminWhatsappPage() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Google OAuth */}
+          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
+              <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">4</span>
+              Google OAuth — para criação de Google Meet
+              {cfg.hasGoogleOAuth && <span className="ml-auto text-emerald-500 text-[10px] font-semibold">✓ Configurado</span>}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              Crie um app OAuth no <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline text-blue-400">Google Cloud Console</a>.
+              Ative a API Google Calendar. Adicione a URI de redirecionamento:
+            </p>
+            {cfg.appBaseUrl && (
+              <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
+                <code className="text-xs text-emerald-500 flex-1 break-all">{cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback</code>
+                <button type="button" onClick={() => navigator.clipboard.writeText(`${cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback`)}
+                  className="text-xs text-slate-400 hover:text-slate-900 border border-slate-300 rounded-lg px-2 py-1 shrink-0 transition">📋</button>
+              </div>
+            )}
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Client ID</label>
+              <input value={cfg.googleClientId} onChange={e => setCfg(c => ({ ...c, googleClientId: e.target.value }))}
+                placeholder="999999999-abc123.apps.googleusercontent.com"
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition font-mono" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Client Secret</label>
+              <input type="password" value={cfg.googleClientSecret} onChange={e => setCfg(c => ({ ...c, googleClientSecret: e.target.value }))}
+                placeholder="GOCSPX-..."
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+              <p className="text-[11px] text-slate-400 mt-1">Esses dados ficam salvos no servidor — os clientes só clicam em &quot;Conectar Google&quot; no dashboard deles.</p>
+            </div>
           </div>
 
           <button type="submit" disabled={saving}

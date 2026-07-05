@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
+import { getConfig } from "./wppconnect";
 
 const TOKEN_FILE = path.join(process.cwd(), "data", "google-tokens.json");
 
@@ -26,10 +27,14 @@ function saveStore(store: TokenStore) {
 }
 
 export function getAuthClient() {
+  const cfg = getConfig();
+  const clientId = cfg.googleClientId || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = cfg.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET;
+  const appUrl = (cfg.appBaseUrl || process.env.APP_URL || "").replace(/\/$/, "");
   return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.APP_URL}/api/auth/google/callback`
+    clientId,
+    clientSecret,
+    `${appUrl}/api/auth/google/callback`
   );
 }
 
