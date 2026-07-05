@@ -276,6 +276,7 @@ OU para lembrete:
 }
 
 OU para editar lançamento (finance_edit) — "keyword" é o TERMO DE BUSCA do lançamento original, "finance" contém os NOVOS VALORES:
+⚠️ REGRA CRÍTICA para finance_edit e finance_delete: "keyword" é SEMPRE o nome/descrição do lançamento que o usuário quer alterar. Mesmo que essa palavra também indique tipo (ex: "receita", "gasto", "despesa"), use-a como keyword de busca. Exemplo: "corrigir a receita para 2000" → keyword: "receita" (é o nome do lançamento), não registre como novo lançamento.
 {
   "intent": "finance_edit",
   "confidence": 0.9,
@@ -286,6 +287,21 @@ OU para editar lançamento (finance_edit) — "keyword" é o TERMO DE BUSCA do l
     "category": "Alimentação",
     "description": "ifood",
     "date": "2026-07-03"
+  }
+}
+
+Exemplo onde a descrição do lançamento é uma palavra que também indica tipo ("corrija a receita para 2000 no modo pessoal"):
+{
+  "intent": "finance_edit",
+  "confidence": 0.95,
+  "keyword": "receita",
+  "finance": {
+    "type": "income",
+    "amount": 2000.00,
+    "category": "Outros",
+    "description": "receita",
+    "date": "2026-07-04",
+    "mode": "personal"
   }
 }
 
