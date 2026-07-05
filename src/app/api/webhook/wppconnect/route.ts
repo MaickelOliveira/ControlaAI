@@ -8,7 +8,7 @@ import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTa
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice } from "@/lib/pending-actions";
 import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
 import { createMeet } from "@/lib/meets";
@@ -237,6 +237,36 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Seleção de lançamento financeiro (editar/excluir com múltiplos resultados) ──
+    if (pending?.type === "finance_select" && pending.userId === user.id) {
+      const choiceIdx = parseFinanceChoice(messageText, pending.candidates);
+      if (choiceIdx >= 0) {
+        clearPendingAction(from);
+        const chosen = pending.candidates[choiceIdx];
+        if (pending.action === "edit" && pending.patch && Object.keys(pending.patch).length > 0) {
+          const updated = updateFinance(chosen.id, user.id, pending.patch as Parameters<typeof updateFinance>[2]);
+          if (updated) {
+            const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
+            const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+            await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+          }
+        } else if (pending.action === "delete") {
+          const delOk = deleteFinance(chosen.id, user.id);
+          if (delOk) {
+            const delBal = getBalance(user.id, chosen.mode as "personal" | "business", year, month);
+            await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${chosen.description} — ${formatCurrency(chosen.amount)}\n📅 ${new Date(chosen.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+          }
+        }
+        return NextResponse.json({ ok: true });
+      }
+      // Resposta inválida: lista novamente
+      const list = pending.candidates.map((c, i) =>
+        `${i + 1}️⃣ ${formatCurrency(c.amount)} · ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+      ).join("\n");
+      await wppSend(from, `❓ Não entendi. Responda com o número ou a data:\n\n${list}\n\nEx: *1* ou *04/07*`);
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Confirmação de Meet (sim/não) ──
     if (pending?.type === "meet_confirm" && pending.userId === user.id) {
       const lower = messageText.toLowerCase().trim();
@@ -372,17 +402,30 @@ export async function POST(req: NextRequest) {
           await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${keyword}"*.${recentList}\n\nUse o nome exato ou diga _"extrato"_ para ver todos.`);
           break;
         }
+        const editPatch: Record<string, unknown> = {};
+        if (ai.finance?.amount && ai.finance.amount > 0) editPatch.amount = ai.finance.amount;
+        if (ai.finance?.category) editPatch.category = ai.finance.category;
+        if (ai.finance?.date) editPatch.date = ai.finance.date;
+        // Múltiplos resultados → pergunta qual
+        if (editCandidates.length > 1) {
+          const list = editCandidates.map((c, i) =>
+            `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+          ).join("\n");
+          setPendingAction(from, {
+            type: "finance_select", userId: user.id,
+            action: "edit",
+            candidates: editCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
+            patch: editPatch,
+          });
+          await wppSend(from, `✏️ Encontrei *${editCandidates.length} lançamentos* com *"${keyword}"*:\n\n${list}\n\nQual deles deseja alterar? Responda com o número ou a data (ex: *1* ou *04/07*).`);
+          break;
+        }
         const editTarget = editCandidates[0];
-        const patch: Record<string, unknown> = {};
-        if (ai.finance?.amount && ai.finance.amount > 0) patch.amount = ai.finance.amount;
-        if (ai.finance?.category) patch.category = ai.finance.category;
-        if (ai.finance?.date) patch.date = ai.finance.date;
-        if (Object.keys(patch).length === 0) {
-          // Encontrou o lançamento mas não há novos valores para aplicar
+        if (Object.keys(editPatch).length === 0) {
           await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} (${editTarget.category})\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
           break;
         }
-        const updated = updateFinance(editTarget.id, user.id, patch as Parameters<typeof updateFinance>[2]);
+        const updated = updateFinance(editTarget.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
         if (updated) {
           const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
           const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
@@ -402,6 +445,19 @@ export async function POST(req: NextRequest) {
         console.log(`[bot] finance_delete encontrados=${delCandidates.length}`);
         if (!delCandidates.length) {
           await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${delKeyword}"*.\n\nDigite *extrato* para ver os lançamentos.`);
+          break;
+        }
+        // Múltiplos resultados → pergunta qual
+        if (delCandidates.length > 1) {
+          const delList = delCandidates.map((c, i) =>
+            `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+          ).join("\n");
+          setPendingAction(from, {
+            type: "finance_select", userId: user.id,
+            action: "delete",
+            candidates: delCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
+          });
+          await wppSend(from, `🗑️ Encontrei *${delCandidates.length} lançamentos* com *"${delKeyword}"*:\n\n${delList}\n\nQual deles deseja excluir? Responda com o número ou a data (ex: *1* ou *04/07*).`);
           break;
         }
         const delTarget = delCandidates[0];

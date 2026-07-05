@@ -66,7 +66,17 @@ export type PendingMeetConfirm = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm;
+export type PendingFinanceSelect = {
+  type: "finance_select";
+  phone: string;
+  userId: string;
+  action: "edit" | "delete";
+  candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string }>;
+  patch?: Record<string, unknown>; // usado só em "edit"
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect;
 
 type Store = Record<string, PendingAction>;
 
@@ -88,7 +98,8 @@ type PendingActionInput =
   | Omit<PendingGoalSelection, "phone" | "expiresAt">
   | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">
   | Omit<PendingMeetAta, "phone" | "expiresAt">
-  | Omit<PendingMeetConfirm, "phone" | "expiresAt">;
+  | Omit<PendingMeetConfirm, "phone" | "expiresAt">
+  | Omit<PendingFinanceSelect, "phone" | "expiresAt">;
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();
@@ -137,6 +148,61 @@ export function parseGoalChoice(
   for (let i = 0; i < goals.length; i++) {
     if (goals[i].title.toLowerCase().includes(t) || t.includes(goals[i].title.toLowerCase())) return i;
   }
+  return -1;
+}
+
+/** Interpreta a resposta do usuário como escolha de lançamento financeiro.
+ *  Aceita: "1"/"2"/... (número), "último"/"mais recente", "04/07"/"4 de julho" (data). Retorna índice (0-based) ou -1. */
+export function parseFinanceChoice(
+  text: string,
+  candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string }>
+): number {
+  const t = text.trim().toLowerCase();
+
+  // Número direto
+  const num = parseInt(t);
+  if (!isNaN(num) && num >= 1 && num <= candidates.length) return num - 1;
+
+  // "último", "ultimo", "mais recente", "last", "recente"
+  if (/^(último|ultimo|mais recente|recente|last|o último|o ultimo)$/.test(t)) return 0;
+
+  // Tentativa de match por data: "04/07", "4/7", "04-07", "4 de julho", "hoje", "ontem"
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  if (t === "hoje" || t === "today") {
+    const idx = candidates.findIndex(c => c.date === today);
+    if (idx !== -1) return idx;
+  }
+  if (t === "ontem" || t === "yesterday") {
+    const idx = candidates.findIndex(c => c.date === yesterday);
+    if (idx !== -1) return idx;
+  }
+
+  // DD/MM ou D/M
+  const dmMatch = t.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+  if (dmMatch) {
+    const day = dmMatch[1].padStart(2, "0");
+    const mon = dmMatch[2].padStart(2, "0");
+    const idx = candidates.findIndex(c => c.date.slice(5, 7) === mon && c.date.slice(8, 10) === day);
+    if (idx !== -1) return idx;
+  }
+
+  // "4 de julho", "4 julho"
+  const MONTHS: Record<string, string> = {
+    janeiro: "01", fevereiro: "02", março: "03", marco: "03", abril: "04",
+    maio: "05", junho: "06", julho: "07", agosto: "08", setembro: "09",
+    outubro: "10", novembro: "11", dezembro: "12",
+  };
+  const monthMatch = t.match(/^(\d{1,2})\s+(?:de\s+)?(\w+)$/);
+  if (monthMatch) {
+    const day = monthMatch[1].padStart(2, "0");
+    const mon = MONTHS[monthMatch[2]];
+    if (mon) {
+      const idx = candidates.findIndex(c => c.date.slice(5, 7) === mon && c.date.slice(8, 10) === day);
+      if (idx !== -1) return idx;
+    }
+  }
+
   return -1;
 }
 
