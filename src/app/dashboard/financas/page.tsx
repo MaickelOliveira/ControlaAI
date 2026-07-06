@@ -22,7 +22,7 @@ type Recurring = {
   status: "active" | "completed" | "cancelled";
 };
 
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number | undefined | null) { return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtDate(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-BR"); }
 
 const UNIT_LABEL: Record<string, string> = { monthly: "Mensal", weekly: "Semanal", daily: "Diário", yearly: "Anual" };
@@ -96,7 +96,7 @@ export default function FinancasPage() {
       fetch(`/api/recurring?mode=${m}&status=active`).then(r => r.json()),
     ]).then(([fd, rd]) => {
       setFinances(fd.finances || []);
-      setBalance(fd.balance || {});
+      setBalance({ income: 0, expense: 0, balance: 0, ...(fd.balance || {}) });
       setRecs(Array.isArray(rd) ? rd : []);
       setLoading(false);
     }).catch(() => setLoading(false));

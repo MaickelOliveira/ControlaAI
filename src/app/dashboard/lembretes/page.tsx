@@ -45,10 +45,16 @@ export default function LembretesPage() {
 
   function load() {
     setLoading(true);
-    fetch("/api/admin/reminders").then(r => r.json()).then(d => {
-      setReminders(Array.isArray(d) ? d : []);
-      setLoading(false);
-    });
+    fetch("/api/admin/reminders")
+      .then(r => r.json())
+      .then(d => {
+        setReminders(Array.isArray(d) ? d : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setReminders([]);
+        setLoading(false);
+      });
   }
 
   useEffect(() => { load(); }, []);
