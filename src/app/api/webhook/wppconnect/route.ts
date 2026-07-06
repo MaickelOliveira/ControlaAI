@@ -192,8 +192,8 @@ export async function POST(req: NextRequest) {
           });
           console.log(`[drive] arquivo salvo: ${savedFile.id} | ${originalName} | pasta=${suggestedFolder}`);
           await wppSend(from, replyFileSaved(originalName, suggestedFolder));
-          // Se veio com legenda, processa pelo fluxo normal da IA também
-          if (caption) messageText = caption;
+          // Só repassa à IA se a legenda tem conteúdo além do comando de salvar
+          if (caption && !hasSaveIntent) messageText = caption;
         } catch (e) {
           console.error("[drive] erro ao salvar arquivo:", e);
           await wppSend(from, "❌ Não consegui salvar o arquivo. Tente novamente.");
@@ -533,33 +533,42 @@ export async function POST(req: NextRequest) {
       }
 
       case "finance_detail": {
-        const expenseList = getMonthlyTransactions(user.id, mode, year, month).filter(f => f.type === "expense");
-        const monthName = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-        const monthTitle = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-        if (!expenseList.length) {
-          await wppSend(from, `📋 Nenhuma despesa registrada em *${monthTitle}* (${mode === "business" ? "Empresa" : "Pessoal"}).`);
-          break;
-        }
-        // Agrupa por categoria ordenado por maior gasto
-        const byCat: Record<string, { items: typeof expenseList; total: number }> = {};
-        for (const f of expenseList) {
-          if (!byCat[f.category]) byCat[f.category] = { items: [], total: 0 };
-          byCat[f.category].items.push(f);
-          byCat[f.category].total += f.amount;
-        }
-        const sortedCats = Object.entries(byCat).sort((a, b) => b[1].total - a[1].total);
-        const totalExpense = expenseList.reduce((s, f) => s + f.amount, 0);
-        let detailMsg = `📋 *Despesas — ${monthTitle}*\n_(${mode === "business" ? "Empresa" : "Pessoal"})_\n\n`;
-        for (const [cat, { items, total }] of sortedCats) {
-          detailMsg += `🔴 *${cat}* — ${formatCurrency(total)}\n`;
-          for (const f of items) {
-            const d = new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-            detailMsg += `   • ${f.description} — ${formatCurrency(f.amount)} _(${d})_\n`;
+        try {
+          const detailMode = (ai.mode as "personal" | "business" | undefined) || mode;
+          const expenseList = getMonthlyTransactions(user.id, detailMode, year, month).filter(f => f.type === "expense");
+          const monthName = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+          const monthTitle = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+          const modeLabel = detailMode === "business" ? "Empresa" : "Pessoal";
+          if (!expenseList.length) {
+            await wppSend(from, `📋 Nenhuma despesa registrada em *${monthTitle}* (${modeLabel}).`);
+            break;
           }
-          detailMsg += "\n";
+          // Agrupa por categoria ordenado por maior gasto
+          const byCat: Record<string, { items: typeof expenseList; total: number }> = {};
+          for (const f of expenseList) {
+            if (!byCat[f.category]) byCat[f.category] = { items: [], total: 0 };
+            byCat[f.category].items.push(f);
+            byCat[f.category].total += f.amount;
+          }
+          const sortedCats = Object.entries(byCat).sort((a, b) => b[1].total - a[1].total);
+          const totalExpense = expenseList.reduce((s, f) => s + f.amount, 0);
+          let detailMsg = `📋 *Despesas — ${monthTitle}*\n_(${modeLabel})_\n\n`;
+          for (const [cat, { items, total }] of sortedCats) {
+            detailMsg += `🔴 *${cat}* — ${formatCurrency(total)}\n`;
+            for (const f of items) {
+              const d = new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+              detailMsg += `   • ${f.description} — ${formatCurrency(f.amount)} _(${d})_\n`;
+            }
+            detailMsg += "\n";
+          }
+          detailMsg += `━━━━━━━━━━━━\n💸 *Total: ${formatCurrency(totalExpense)}*`;
+          // Trunca se muito longa (limite seguro do WhatsApp ~4000 chars)
+          const finalMsg = detailMsg.trim();
+          await wppSend(from, finalMsg.length > 4000 ? finalMsg.slice(0, 3950) + "\n\n_(lista truncada — veja o restante no dashboard)_" : finalMsg);
+        } catch (detailErr) {
+          console.error("[finance_detail]", detailErr);
+          await wppSend(from, "❌ Não consegui gerar o extrato. Tente novamente.");
         }
-        detailMsg += `━━━━━━━━━━━━\n💸 *Total: ${formatCurrency(totalExpense)}*`;
-        await wppSend(from, detailMsg.trim());
         break;
       }
 
