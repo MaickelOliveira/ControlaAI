@@ -162,7 +162,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato")
-- finance_detail: extrato DETALHADO de despesas do mês atual, listando cada lançamento por categoria ("extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "quero ver cada gasto", "extrato de despesas do mês", "todos os gastos do mês", "detalhes das despesas")
+- finance_detail: extrato DETALHADO de despesas do mês atual, listando cada lançamento por categoria ("extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "quero ver cada gasto", "extrato de despesas do mês", "todos os gastos do mês", "detalhes das despesas", "extrato despesas empresa", "extrato detalhado empresa", "extrato detalhado pessoal"). Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal".
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho")
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais")
 - task_create: criar uma tarefa
@@ -602,6 +602,13 @@ OU para extrato detalhado de despesas ("extrato detalhado", "lista todas as desp
 {
   "intent": "finance_detail",
   "confidence": 0.9
+}
+
+OU para extrato detalhado da empresa ("extrato detalhado da empresa", "extrato despesas empresa"):
+{
+  "intent": "finance_detail",
+  "confidence": 0.9,
+  "mode": "business"
 }
 
 OU para trocar modo:
