@@ -867,14 +867,26 @@ Retorne APENAS JSON válido, sem markdown.`,
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
 
-    if (!parsed.isFinancial || !parsed.amount || Number(parsed.amount) <= 0) return null;
+    if (!parsed.isFinancial) return null;
+
+    // Normaliza formato brasileiro: "1.500,90" → 1500.90, "99,90" → 99.90
+    const rawAmount = String(parsed.amount ?? "0")
+      .replace(/\s/g, "")
+      .replace(/\.(?=\d{3}[,.])/g, "")  // remove separador de milhar (ponto antes de 3 dígitos)
+      .replace(",", ".");                // troca vírgula decimal por ponto
+    const amount = Number(rawAmount);
+    if (isNaN(amount) || amount <= 0) return null;
+
+    // Valida data no formato YYYY-MM-DD
+    const rawDate = String(parsed.date || "");
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
 
     return {
       type: parsed.type === "income" ? "income" : "expense",
-      amount: Number(parsed.amount),
+      amount,
       description: String(parsed.description || "documento"),
       category: String(parsed.category || "Outros"),
-      date: String(parsed.date || hoje),
+      date,
       mode: parsed.mode === "business" || parsed.mode === "personal" ? parsed.mode : undefined,
     };
   } catch (e) {

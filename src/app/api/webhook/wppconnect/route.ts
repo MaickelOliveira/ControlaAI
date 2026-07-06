@@ -535,7 +535,10 @@ export async function POST(req: NextRequest) {
       case "finance_detail": {
         try {
           const detailMode = (ai.mode as "personal" | "business" | undefined) || mode;
-          const expenseList = getMonthlyTransactions(user.id, detailMode, year, month).filter(f => f.type === "expense");
+          // Filtra entradas inválidas (NaN amount ou data inválida) para evitar RangeError
+          const expenseList = getMonthlyTransactions(user.id, detailMode, year, month).filter(f =>
+            f.type === "expense" && !isNaN(f.amount) && f.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? "")
+          );
           const monthName = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
           const monthTitle = monthName.charAt(0).toUpperCase() + monthName.slice(1);
           const modeLabel = detailMode === "business" ? "Empresa" : "Pessoal";
