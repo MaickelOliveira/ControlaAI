@@ -414,39 +414,64 @@ export async function POST(req: NextRequest) {
           : (ai.finance ? [ai.finance] : []);
         if (!financeItems.length) { await wppSend(from, replyUnknown(messageText)); break; }
 
+        const today = todayStrBR();
+
         if (financeItems.length === 1) {
-          // Lançamento único — comportamento original
+          // Lançamento único
           const fd = financeItems[0];
           const financeMode = fd.mode || mode;
+          const financeDate = fd.date || today;
+          const isPending = financeDate > today;
           const f = addFinance({
             userId: user.id, type: fd.type, amount: fd.amount,
             category: cap(fd.category), description: cap(fd.description),
-            date: fd.date || now.toISOString().slice(0, 10), mode: financeMode, source: "whatsapp",
+            date: financeDate, mode: financeMode, source: "whatsapp",
+            status: isPending ? "pending" : "posted",
           });
           const bal = getBalance(user.id, financeMode, year, month);
           const modeLabel = financeMode !== mode ? ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_` : "";
-          await wppSend(from, replyFinanceRegistered(f, bal.balance) + modeLabel);
+          if (isPending) {
+            const dtFormatted = new Date(financeDate + "T12:00:00").toLocaleDateString("pt-BR");
+            const typeLabel = fd.type === "income" ? "Receita" : "Despesa";
+            const typeEmoji = fd.type === "income" ? "💰" : "💸";
+            await wppSend(from, `⏳ *${typeLabel} agendada!*${modeLabel}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 Será contabilizada em *${dtFormatted}*\n\n_Lançamentos futuros não entram no saldo até a data chegar._`);
+          } else {
+            await wppSend(from, replyFinanceRegistered(f, bal.balance) + modeLabel);
+          }
         } else {
           // Múltiplos lançamentos — registra todos e exibe resumo
-          const registered: Array<ReturnType<typeof addFinance>> = [];
+          const registered: Array<ReturnType<typeof addFinance> & { pending: boolean }> = [];
           for (const fd of financeItems) {
             const financeMode = fd.mode || mode;
+            const financeDate = fd.date || today;
+            const isPending = financeDate > today;
             const f = addFinance({
               userId: user.id, type: fd.type, amount: fd.amount,
               category: cap(fd.category), description: cap(fd.description),
-              date: fd.date || now.toISOString().slice(0, 10), mode: financeMode, source: "whatsapp",
+              date: financeDate, mode: financeMode, source: "whatsapp",
+              status: isPending ? "pending" : "posted",
             });
-            registered.push(f);
+            registered.push({ ...f, pending: isPending });
           }
           const primaryMode = (financeItems[0].mode || mode) as "personal" | "business";
           const bal = getBalance(user.id, primaryMode, year, month);
-          const totalIncome = registered.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
-          const totalExpense = registered.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
+          const posted = registered.filter(f => !f.pending);
+          const pending = registered.filter(f => f.pending);
+          const totalIncome = posted.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
+          const totalExpense = posted.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
           const modeLabel = primaryMode === "business" ? "🏢 Empresa" : "👤 Pessoal";
           let msg = `✅ *${registered.length} lançamentos registrados!*\n_(${modeLabel})_\n\n`;
-          for (const f of registered) {
+          for (const f of posted) {
             const emoji = f.type === "income" ? "💰" : "💸";
             msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)}\n`;
+          }
+          if (pending.length > 0) {
+            msg += `\n⏳ *Agendados (data futura):*\n`;
+            for (const f of pending) {
+              const emoji = f.type === "income" ? "💰" : "💸";
+              const dt = new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR");
+              msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)} _(${dt})_\n`;
+            }
           }
           if (totalIncome > 0) msg += `\n💰 *Total receitas: ${formatCurrency(totalIncome)}*`;
           if (totalExpense > 0) msg += `\n💸 *Total despesas: ${formatCurrency(totalExpense)}*`;
@@ -569,37 +594,41 @@ export async function POST(req: NextRequest) {
       case "finance_detail": {
         try {
           const detailMode = (ai.mode as "personal" | "business" | undefined) || mode;
-          // Filtra entradas inválidas (NaN amount ou data inválida) para evitar RangeError
-          const expenseList = getMonthlyTransactions(user.id, detailMode, year, month).filter(f =>
-            f.type === "expense" && !isNaN(f.amount) && f.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? "")
+          const isIncome = ai.financeType === "income";
+          const targetType = isIncome ? "income" : "expense";
+          const typeLabel = isIncome ? "Receitas" : "Despesas";
+          const typeEmoji = isIncome ? "💰" : "💸";
+          const catEmoji = isIncome ? "🟢" : "🔴";
+
+          const txList = getMonthlyTransactions(user.id, detailMode, year, month).filter(f =>
+            f.type === targetType && !isNaN(f.amount) && f.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? "")
           );
           const monthName = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
           const monthTitle = monthName.charAt(0).toUpperCase() + monthName.slice(1);
           const modeLabel = detailMode === "business" ? "Empresa" : "Pessoal";
-          if (!expenseList.length) {
-            await wppSend(from, `📋 Nenhuma despesa registrada em *${monthTitle}* (${modeLabel}).`);
+          if (!txList.length) {
+            await wppSend(from, `📋 Nenhuma ${typeLabel.toLowerCase()} registrada em *${monthTitle}* (${modeLabel}).`);
             break;
           }
-          // Agrupa por categoria ordenado por maior gasto
-          const byCat: Record<string, { items: typeof expenseList; total: number }> = {};
-          for (const f of expenseList) {
+          // Agrupa por categoria ordenado por maior valor
+          const byCat: Record<string, { items: typeof txList; total: number }> = {};
+          for (const f of txList) {
             if (!byCat[f.category]) byCat[f.category] = { items: [], total: 0 };
             byCat[f.category].items.push(f);
             byCat[f.category].total += f.amount;
           }
           const sortedCats = Object.entries(byCat).sort((a, b) => b[1].total - a[1].total);
-          const totalExpense = expenseList.reduce((s, f) => s + f.amount, 0);
-          let detailMsg = `📋 *Despesas — ${monthTitle}*\n_(${modeLabel})_\n\n`;
-          for (const [cat, { items, total }] of sortedCats) {
-            detailMsg += `🔴 *${cat}* — ${formatCurrency(total)}\n`;
+          const total = txList.reduce((s, f) => s + f.amount, 0);
+          let detailMsg = `📋 *${typeLabel} — ${monthTitle}*\n_(${modeLabel})_\n\n`;
+          for (const [cat, { items, total: catTotal }] of sortedCats) {
+            detailMsg += `${catEmoji} *${cat}* — ${formatCurrency(catTotal)}\n`;
             for (const f of items) {
               const d = new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
               detailMsg += `   • ${f.description} — ${formatCurrency(f.amount)} _(${d})_\n`;
             }
             detailMsg += "\n";
           }
-          detailMsg += `━━━━━━━━━━━━\n💸 *Total: ${formatCurrency(totalExpense)}*`;
-          // Trunca se muito longa (limite seguro do WhatsApp ~4000 chars)
+          detailMsg += `━━━━━━━━━━━━\n${typeEmoji} *Total: ${formatCurrency(total)}*`;
           const finalMsg = detailMsg.trim();
           await wppSend(from, finalMsg.length > 4000 ? finalMsg.slice(0, 3950) + "\n\n_(lista truncada — veja o restante no dashboard)_" : finalMsg);
         } catch (detailErr) {

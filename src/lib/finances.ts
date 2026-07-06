@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 export type FinanceType = "income" | "expense";
 export type FinanceMode = "personal" | "business";
 export type FinanceSource = "whatsapp" | "web";
+export type FinanceStatus = "posted" | "pending";
 
 export const CATEGORIES_EXPENSE = [
   "Alimentação", "Transporte", "Moradia", "Saúde", "Educação",
@@ -26,8 +27,14 @@ export type Finance = {
   date: string;
   mode: FinanceMode;
   source: FinanceSource;
+  status?: FinanceStatus; // undefined = posted (retrocompatível)
   createdAt: string;
 };
+
+// Entrada está "postada" (contabilizada) se status for "posted" ou undefined (registros antigos)
+function isPosted(f: Finance): boolean {
+  return !f.status || f.status === "posted";
+}
 
 const FILE = path.join(process.cwd(), "data", "finances.json");
 
@@ -58,10 +65,10 @@ export function getBalance(userId: string, mode: FinanceMode, year?: number, mon
   expense: number;
   balance: number;
 } {
-  let items = getFinancesByUser(userId, mode);
+  let items = getFinancesByUser(userId, mode).filter(isPosted);
   if (year !== undefined && month !== undefined) {
     items = items.filter(f => {
-      const d = new Date(f.date);
+      const d = new Date(f.date + "T12:00:00");
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     });
   }
@@ -71,10 +78,10 @@ export function getBalance(userId: string, mode: FinanceMode, year?: number, mon
 }
 
 export function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number): Record<string, number> {
-  let items = getFinancesByUser(userId, mode).filter(f => f.type === type);
+  let items = getFinancesByUser(userId, mode).filter(f => f.type === type && isPosted(f));
   if (year && month) {
     items = items.filter(f => {
-      const d = new Date(f.date);
+      const d = new Date(f.date + "T12:00:00");
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     });
   }
@@ -85,7 +92,7 @@ export function getByCategory(userId: string, mode: FinanceMode, type: FinanceTy
 }
 
 export function getDailyTotals(userId: string, mode: FinanceMode, days = 30): Array<{ date: string; income: number; expense: number }> {
-  const items = getFinancesByUser(userId, mode);
+  const items = getFinancesByUser(userId, mode).filter(isPosted);
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
 
@@ -111,7 +118,7 @@ export function deleteFinance(id: string, userId: string): boolean {
   return true;
 }
 
-export function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date">>): Finance | null {
+export function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status">>): Finance | null {
   const items = load();
   const idx = items.findIndex(f => f.id === id && f.userId === userId);
   if (idx < 0) return null;
@@ -133,17 +140,43 @@ export function findFinanceByDescription(userId: string, mode: FinanceMode | nul
 
 export function getRecentTransactions(userId: string, mode: FinanceMode, limit = 10): Finance[] {
   return getFinancesByUser(userId, mode)
+    .filter(isPosted)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, limit);
 }
 
 export function getMonthlyTransactions(userId: string, mode: FinanceMode, year: number, month: number): Finance[] {
   return getFinancesByUser(userId, mode)
+    .filter(f => isPosted(f) && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? ""))
     .filter(f => {
       const d = new Date(f.date + "T12:00:00");
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     })
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Retorna lançamentos pendentes de um usuário ordenados por data
+export function getPendingFinances(userId: string, mode?: FinanceMode): Finance[] {
+  return load()
+    .filter(f => f.userId === userId && f.status === "pending" && (!mode || f.mode === mode))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Posta automaticamente os lançamentos pendentes cuja data já chegou
+// Retorna os lançamentos que foram postados
+export function autoPostPendingFinances(todayStr: string): Finance[] {
+  const items = load();
+  const posted: Finance[] = [];
+  let changed = false;
+  for (const f of items) {
+    if (f.status === "pending" && f.date <= todayStr) {
+      f.status = "posted";
+      posted.push(f);
+      changed = true;
+    }
+  }
+  if (changed) save(items);
+  return posted;
 }
 
 export function formatCurrency(v: number): string {
