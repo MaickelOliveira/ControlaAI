@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones } from "@/lib/users";
-import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI } from "@/lib/ai-processor";
+import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions } from "@/lib/finances";
+import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getMonthlyTransactions } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
@@ -123,8 +123,9 @@ export async function POST(req: NextRequest) {
         // caption: prioriza body.caption (legenda enviada junto ao arquivo), depois bodyStr se não for base64
         const captionField = typeof body.caption === "string" && body.caption ? body.caption : undefined;
         const caption = captionField || (!bodyIsBase64File && bodyStr && bodyStr !== originalName ? bodyStr : undefined);
+
+        let buffer: Buffer;
         try {
-          let buffer: Buffer;
           if (mediaUrl) {
             const mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30_000) });
             if (!mediaRes.ok) throw new Error(`HTTP ${mediaRes.status}`);
@@ -132,6 +133,48 @@ export async function POST(req: NextRequest) {
           } else {
             buffer = Buffer.from(bodyStr, "base64");
           }
+        } catch (e) {
+          console.error("[drive] erro ao obter arquivo:", e);
+          await wppSend(from, "❌ Não consegui processar o arquivo. Tente novamente.");
+          return NextResponse.json({ ok: true });
+        }
+
+        // Verifica se o usuário pediu explicitamente para guardar no Drive
+        const SAVE_KEYWORDS = ["guarda", "salva", "arquiva", "armazena", "salvar", "guardar", "arquivar", "arquivo", "pasta", "drive"];
+        const hasSaveIntent = !!caption && SAVE_KEYWORDS.some(k => caption.toLowerCase().includes(k));
+
+        if (!hasSaveIntent) {
+          // Tenta extrair dados financeiros do documento/foto via Gemini Vision
+          try {
+            const financeData = await extractFinanceFromDocument(buffer, mimeType, caption);
+            if (financeData) {
+              const fNow = nowBR();
+              const fYear = fNow.getFullYear();
+              const fMonth = fNow.getMonth() + 1;
+              const fMode = financeData.mode || fileUser.activeMode;
+              const f = addFinance({
+                userId: fileUser.id,
+                type: financeData.type,
+                amount: financeData.amount,
+                category: cap(financeData.category),
+                description: cap(financeData.description),
+                date: financeData.date || fNow.toISOString().slice(0, 10),
+                mode: fMode,
+                source: "whatsapp",
+              });
+              const bal = getBalance(fileUser.id, fMode, fYear, fMonth);
+              const typeLabel = financeData.type === "income" ? "Receita" : "Despesa";
+              const typeEmoji = financeData.type === "income" ? "💰" : "💸";
+              await wppSend(from, `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${f.description}\n💰 ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💡 Para guardar no Drive, envie com legenda "guarda" ou "salva"._`);
+              return NextResponse.json({ ok: true });
+            }
+          } catch (e) {
+            console.error("[webhook] erro ao extrair finanças do documento:", e);
+          }
+        }
+
+        // Sem dados financeiros ou com pedido de salvar → salva no Drive
+        try {
           const folders = getFolders(fileUser.id);
           const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
           const { folder: suggestedFolder, keywords } = await categorizeDriveFile(originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
@@ -486,6 +529,37 @@ export async function POST(req: NextRequest) {
           mode, balance: analysisBal, topExpenses, topIncomes, month: monthLabel,
         });
         await wppSend(from, analysisReply);
+        break;
+      }
+
+      case "finance_detail": {
+        const expenseList = getMonthlyTransactions(user.id, mode, year, month).filter(f => f.type === "expense");
+        const monthName = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        const monthTitle = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+        if (!expenseList.length) {
+          await wppSend(from, `📋 Nenhuma despesa registrada em *${monthTitle}* (${mode === "business" ? "Empresa" : "Pessoal"}).`);
+          break;
+        }
+        // Agrupa por categoria ordenado por maior gasto
+        const byCat: Record<string, { items: typeof expenseList; total: number }> = {};
+        for (const f of expenseList) {
+          if (!byCat[f.category]) byCat[f.category] = { items: [], total: 0 };
+          byCat[f.category].items.push(f);
+          byCat[f.category].total += f.amount;
+        }
+        const sortedCats = Object.entries(byCat).sort((a, b) => b[1].total - a[1].total);
+        const totalExpense = expenseList.reduce((s, f) => s + f.amount, 0);
+        let detailMsg = `📋 *Despesas — ${monthTitle}*\n_(${mode === "business" ? "Empresa" : "Pessoal"})_\n\n`;
+        for (const [cat, { items, total }] of sortedCats) {
+          detailMsg += `🔴 *${cat}* — ${formatCurrency(total)}\n`;
+          for (const f of items) {
+            const d = new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+            detailMsg += `   • ${f.description} — ${formatCurrency(f.amount)} _(${d})_\n`;
+          }
+          detailMsg += "\n";
+        }
+        detailMsg += `━━━━━━━━━━━━\n💸 *Total: ${formatCurrency(totalExpense)}*`;
+        await wppSend(from, detailMsg.trim());
         break;
       }
 

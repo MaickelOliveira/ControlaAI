@@ -137,6 +137,15 @@ export function getRecentTransactions(userId: string, mode: FinanceMode, limit =
     .slice(0, limit);
 }
 
+export function getMonthlyTransactions(userId: string, mode: FinanceMode, year: number, month: number): Finance[] {
+  return getFinancesByUser(userId, mode)
+    .filter(f => {
+      const d = new Date(f.date + "T12:00:00");
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function formatCurrency(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

@@ -35,6 +35,7 @@ export type Intent =
   | "agenda_delete"
   | "agenda_add_meet"
   | "meet_create"
+  | "finance_detail"
   | "how_to"
   | "help"
   | "unknown";
@@ -161,6 +162,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato")
+- finance_detail: extrato DETALHADO de despesas do mês atual, listando cada lançamento por categoria ("extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "quero ver cada gasto", "extrato de despesas do mês", "todos os gastos do mês", "detalhes das despesas")
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho")
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais")
 - task_create: criar uma tarefa
@@ -596,6 +598,12 @@ OU para criar meet com e-mail ("meet hoje às 16h com cliente maria@empresa.com 
   }
 }
 
+OU para extrato detalhado de despesas ("extrato detalhado", "lista todas as despesas", "quero ver cada gasto do mês"):
+{
+  "intent": "finance_detail",
+  "confidence": 0.9
+}
+
 OU para trocar modo:
 {
   "intent": "mode_switch",
@@ -798,6 +806,73 @@ Não use markdown.`
     };
   } catch {
     return { summary: notes, decisions: [], tasks: [] };
+  }
+}
+
+export async function extractFinanceFromDocument(
+  buffer: Buffer,
+  mimeType: string,
+  caption?: string
+): Promise<{ type: "income" | "expense"; amount: number; description: string; category: string; date: string; mode?: "personal" | "business" } | null> {
+  const cfg = getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  const hoje = todayStrBR();
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent([
+      `Analise esta imagem/documento e determine se é um documento financeiro (nota fiscal, recibo, boleto, comprovante de pagamento, cupom fiscal, extrato bancário, fatura, etc.).
+
+Hoje é: ${hoje}
+${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
+
+Se for um documento financeiro, extraia os dados e retorne JSON:
+{
+  "isFinancial": true,
+  "type": "expense" ou "income",
+  "amount": número (valor total a pagar/recebido),
+  "description": "descrição curta do que é (ex: Conta de luz, Nota fiscal Mercado, Boleto aluguel)",
+  "category": "uma das categorias abaixo",
+  "date": "YYYY-MM-DD (data do documento, ou hoje se não encontrar)",
+  "mode": "personal" ou "business" (omitir se não puder identificar)
+}
+
+Se NÃO for um documento financeiro, retorne:
+{"isFinancial": false}
+
+CATEGORIAS DE DESPESA: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
+CATEGORIAS DE RECEITA: Salário, Freelance, Vendas, Investimentos, Aluguel, Serviços, Reembolso, Outros
+
+Retorne APENAS JSON válido, sem markdown.`,
+      {
+        inlineData: {
+          data: buffer.toString("base64"),
+          mimeType: mimeType || "image/jpeg",
+        },
+      },
+    ]);
+
+    const text = result.response.text().trim()
+      .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(text);
+
+    if (!parsed.isFinancial || !parsed.amount || Number(parsed.amount) <= 0) return null;
+
+    return {
+      type: parsed.type === "income" ? "income" : "expense",
+      amount: Number(parsed.amount),
+      description: String(parsed.description || "documento"),
+      category: String(parsed.category || "Outros"),
+      date: String(parsed.date || hoje),
+      mode: parsed.mode === "business" || parsed.mode === "personal" ? parsed.mode : undefined,
+    };
+  } catch (e) {
+    console.error("[ai-processor] Erro extractFinanceFromDocument:", e);
+    return null;
   }
 }
 
