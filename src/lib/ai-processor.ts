@@ -128,6 +128,7 @@ export type AIResult = {
   agendaData?: AgendaData;
   meetData?: MeetData;
   mode?: UserMode;
+  financeType?: "income" | "expense"; // para finance_detail: qual tipo mostrar
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
   response?: string; // resposta direta para how_to
   confidence: number;
@@ -163,7 +164,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato")
-- finance_detail: extrato DETALHADO de despesas do mês atual, listando cada lançamento por categoria ("extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "quero ver cada gasto", "extrato de despesas do mês", "todos os gastos do mês", "detalhes das despesas", "extrato despesas empresa", "extrato detalhado empresa", "extrato detalhado pessoal"). Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal".
+- finance_detail: extrato DETALHADO do mês atual, listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal".
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho")
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais")
 - task_create: criar uma tarefa
@@ -613,13 +614,30 @@ OU para criar meet com e-mail ("meet hoje às 16h com cliente maria@empresa.com 
 OU para extrato detalhado de despesas ("extrato detalhado", "lista todas as despesas", "quero ver cada gasto do mês"):
 {
   "intent": "finance_detail",
-  "confidence": 0.9
+  "confidence": 0.9,
+  "financeType": "expense"
 }
 
 OU para extrato detalhado da empresa ("extrato detalhado da empresa", "extrato despesas empresa"):
 {
   "intent": "finance_detail",
   "confidence": 0.9,
+  "financeType": "expense",
+  "mode": "business"
+}
+
+OU para extrato de receitas ("extrato de receitas", "lista todas as receitas", "quero ver as entradas do mês"):
+{
+  "intent": "finance_detail",
+  "confidence": 0.9,
+  "financeType": "income"
+}
+
+OU para extrato de receitas da empresa ("extrato receitas empresa", "entradas da empresa"):
+{
+  "intent": "finance_detail",
+  "confidence": 0.9,
+  "financeType": "income",
   "mode": "business"
 }
 

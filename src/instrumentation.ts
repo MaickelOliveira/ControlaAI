@@ -13,6 +13,18 @@ export async function register() {
 
   const tick = async () => {
     try {
+      // ── Auto-posta lançamentos pendentes cuja data chegou ──
+      try {
+        const financesModule = await import("./lib/finances").catch(() => null);
+        const dateBrModule = await import("./lib/date-br").catch(() => null);
+        if (financesModule && dateBrModule) {
+          const posted = financesModule.autoPostPendingFinances(dateBrModule.todayStrBR());
+          if (posted.length > 0) console.log(`[cron] ${posted.length} lançamento(s) pendente(s) postados`);
+        }
+      } catch (e) {
+        console.error("[cron] Erro ao postar pendentes:", e);
+      }
+
       const remindersModule = await import("./lib/reminders").catch(() => null);
       const wppModule = await import("./lib/wppconnect").catch(() => null);
       if (!remindersModule || !wppModule) return;
