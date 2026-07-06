@@ -4,9 +4,13 @@ import { getAllRemindersByUser, createReminder, deleteReminder, updateReminder }
 import { getUserById } from "@/lib/users";
 
 export async function GET() {
-  const session = await getSession();
-  if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  return NextResponse.json(getAllRemindersByUser(session.sub));
+  try {
+    const session = await getSession();
+    if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    return NextResponse.json(getAllRemindersByUser(session.sub));
+  } catch {
+    return NextResponse.json([], { status: 200 });
+  }
 }
 
 export async function POST(req: NextRequest) {

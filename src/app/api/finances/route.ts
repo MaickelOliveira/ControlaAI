@@ -3,18 +3,22 @@ import { getSession } from "@/lib/auth";
 import { addFinance, getFinancesByUser, getBalance } from "@/lib/finances";
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  try {
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const mode = searchParams.get("mode") as "personal" | "business" | undefined;
-  const finances = getFinancesByUser(session.sub, mode || undefined)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const { searchParams } = new URL(req.url);
+    const mode = searchParams.get("mode") as "personal" | "business" | undefined;
+    const finances = getFinancesByUser(session.sub, mode || undefined)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  const now = new Date();
-  const balance = getBalance(session.sub, mode || "personal", now.getFullYear(), now.getMonth() + 1);
+    const now = new Date();
+    const balance = getBalance(session.sub, mode || "personal", now.getFullYear(), now.getMonth() + 1);
 
-  return NextResponse.json({ finances, balance });
+    return NextResponse.json({ finances, balance });
+  } catch {
+    return NextResponse.json({ finances: [], balance: { income: 0, expense: 0, balance: 0 } });
+  }
 }
 
 export async function POST(req: NextRequest) {
