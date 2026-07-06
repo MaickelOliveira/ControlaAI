@@ -119,6 +119,7 @@ export type RecurringData = {
 export type AIResult = {
   intent: Intent;
   finance?: FinanceData;
+  finances?: FinanceData[]; // múltiplos lançamentos de uma vez
   task?: TaskData;
   reminder?: ReminderData;
   goal?: GoalData;
@@ -158,7 +159,7 @@ Calendário dos próximos dias (use para resolver dias da semana sem errar):
 ${nextDays.join("\n")}
 
 INTENÇÕES POSSÍVEIS:
-- finance_register: registrar gasto ou receita
+- finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular)
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato")
@@ -239,6 +240,17 @@ Exemplo receita ("recebi 500 vendas" → DEVE ser income):
     "date": "2026-07-03"
   }
 }
+
+Exemplo MÚLTIPLOS lançamentos em uma mensagem ("registrar os seguintes recebimentos na empresa\naluguel 1500 dia 10\niFood 50 dia 10"):
+{
+  "intent": "finance_register",
+  "confidence": 0.95,
+  "finances": [
+    { "type": "income", "amount": 1500.00, "category": "Aluguel", "description": "Aluguel", "date": "2026-07-10", "mode": "business" },
+    { "type": "expense", "amount": 50.00, "category": "Alimentação", "description": "iFood", "date": "2026-07-10" }
+  ]
+}
+⚠️ Use "finances" (array) sempre que houver 2 ou mais lançamentos na mesma mensagem. Cada item segue a mesma estrutura de "finance". O mode da mensagem principal se aplica a todos quando não especificado por item.
 
 Exemplo modo empresa:
 {

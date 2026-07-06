@@ -408,17 +408,51 @@ export async function POST(req: NextRequest) {
     switch (ai.intent) {
 
       case "finance_register": {
-        if (!ai.finance) { await wppSend(from, replyUnknown(messageText)); break; }
-        // Usa o modo detectado pelo AI (empresa/pessoal) ou o modo ativo do usuário
-        const financeMode = ai.finance.mode || mode;
-        const f = addFinance({
-          userId: user.id, type: ai.finance.type, amount: ai.finance.amount,
-          category: cap(ai.finance.category), description: cap(ai.finance.description),
-          date: ai.finance.date || now.toISOString().slice(0, 10), mode: financeMode, source: "whatsapp",
-        });
-        const bal = getBalance(user.id, financeMode, year, month);
-        const modeLabel = financeMode !== mode ? ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_` : "";
-        await wppSend(from, replyFinanceRegistered(f, bal.balance) + modeLabel);
+        // Suporte a múltiplos lançamentos de uma vez (campo "finances") ou único ("finance")
+        const financeItems = (ai.finances && ai.finances.length > 0)
+          ? ai.finances
+          : (ai.finance ? [ai.finance] : []);
+        if (!financeItems.length) { await wppSend(from, replyUnknown(messageText)); break; }
+
+        if (financeItems.length === 1) {
+          // Lançamento único — comportamento original
+          const fd = financeItems[0];
+          const financeMode = fd.mode || mode;
+          const f = addFinance({
+            userId: user.id, type: fd.type, amount: fd.amount,
+            category: cap(fd.category), description: cap(fd.description),
+            date: fd.date || now.toISOString().slice(0, 10), mode: financeMode, source: "whatsapp",
+          });
+          const bal = getBalance(user.id, financeMode, year, month);
+          const modeLabel = financeMode !== mode ? ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_` : "";
+          await wppSend(from, replyFinanceRegistered(f, bal.balance) + modeLabel);
+        } else {
+          // Múltiplos lançamentos — registra todos e exibe resumo
+          const registered: Array<ReturnType<typeof addFinance>> = [];
+          for (const fd of financeItems) {
+            const financeMode = fd.mode || mode;
+            const f = addFinance({
+              userId: user.id, type: fd.type, amount: fd.amount,
+              category: cap(fd.category), description: cap(fd.description),
+              date: fd.date || now.toISOString().slice(0, 10), mode: financeMode, source: "whatsapp",
+            });
+            registered.push(f);
+          }
+          const primaryMode = (financeItems[0].mode || mode) as "personal" | "business";
+          const bal = getBalance(user.id, primaryMode, year, month);
+          const totalIncome = registered.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
+          const totalExpense = registered.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
+          const modeLabel = primaryMode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+          let msg = `✅ *${registered.length} lançamentos registrados!*\n_(${modeLabel})_\n\n`;
+          for (const f of registered) {
+            const emoji = f.type === "income" ? "💰" : "💸";
+            msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)}\n`;
+          }
+          if (totalIncome > 0) msg += `\n💰 *Total receitas: ${formatCurrency(totalIncome)}*`;
+          if (totalExpense > 0) msg += `\n💸 *Total despesas: ${formatCurrency(totalExpense)}*`;
+          msg += `\n${bal.balance >= 0 ? "📈" : "📉"} *Saldo ${modeLabel}: ${formatCurrency(bal.balance)}*`;
+          await wppSend(from, msg.trim());
+        }
         break;
       }
 
