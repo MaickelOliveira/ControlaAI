@@ -65,8 +65,8 @@ export function getBalance(userId: string, mode: FinanceMode, year?: number, mon
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     });
   }
-  const income = items.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
-  const expense = items.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
+  const income = items.filter(f => f.type === "income" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
+  const expense = items.filter(f => f.type === "expense" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
   return { income, expense, balance: income - expense };
 }
 
