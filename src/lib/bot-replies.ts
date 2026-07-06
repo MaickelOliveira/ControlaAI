@@ -86,47 +86,108 @@ export function replyModeSwitch(mode: UserMode): string {
 }
 
 export function replyHelp(): string {
-  return `🤖 *ControlaAI — Como usar:*
+  return `🤖 *ControlaAI — Guia completo*
 
-💰 *Finanças:*
-• _"Gastei 50 no mercado"_ — registra despesa
-• _"Recebi 2000 de salário"_ — registra receita
-• _"extrato"_ — ver últimos lançamentos
-• _"Meu saldo"_ — ver saldo do mês
+Fale de forma natural, como se estivesse conversando! Veja tudo que você pode fazer:
 
-💳 *Recorrentes e Parcelas:*
-• _"Comprei geladeira 5000 em 10x de 500 todo dia 10"_
-• _"Pago netflix 55 todo mês"_
-• _"Recebo salário todo dia 10, 3000"_
-• _"Minhas parcelas"_ — ver recorrentes ativos
-• _"Cancela a parcela da geladeira"_
-• _"Muda o netflix para 65"_
+━━━━━━━━━━━━━━━
+💰 *REGISTRAR DINHEIRO*
+Mande uma mensagem contando o que aconteceu:
+• _"Gastei 50 no mercado"_ → despesa registrada
+• _"Paguei 120 de conta de luz"_ → despesa registrada
+• _"Recebi 2000 de salário"_ → receita registrada
+• _"Entrou 500 de freela"_ → receita registrada
+📸 *Dica extra:* Envie uma foto de nota fiscal ou boleto — registro automático!
 
-✏️ *Editar/Excluir lançamento:*
-• _"Corrija o gasto do ifood para 80 reais"_
-• _"Muda a categoria do mercado para Lazer"_
-• _"Apaga o gasto do ifood"_
-• _"Remove o lançamento do mercado"_
+━━━━━━━━━━━━━━━
+📊 *VER SEUS NÚMEROS*
+• _"Meu saldo"_ → ver quanto entrou e saiu no mês
+• _"Extrato"_ → ver os últimos lançamentos
+• _"Extrato detalhado"_ → cada gasto separado por categoria
+• _"No que gastei mais?"_ → análise inteligente com dicas
+• _"Extrato detalhado da empresa"_ → gastos da conta empresa
 
-📋 *Tarefas:*
-• _"Criar tarefa: ligar pro cliente"_ — nova tarefa
-• _"Minhas tarefas"_ — ver pendentes
-• _"Concluir 1"_ — marcar tarefa 1 como concluída
+━━━━━━━━━━━━━━━
+✏️ *CORRIGIR OU APAGAR*
+Errou um valor? Sem problema:
+• _"Corrige o ifood para 80 reais"_ → altera o valor
+• _"Muda a categoria do mercado para Lazer"_ → altera categoria
+• _"Apaga o gasto do ifood"_ → remove o lançamento
 
-🔔 *Lembretes:*
-• _"Me lembra de pagar conta sexta às 9h"_
-• _"Todo mês dia 5 pagar aluguel"_
+━━━━━━━━━━━━━━━
+💳 *PARCELAS E CONTAS FIXAS*
+Para compras parceladas ou contas que repetem todo mês:
+• _"Comprei geladeira 5000 em 10x de 500"_ → cadastra as parcelas
+• _"Pago netflix 55 todo mês"_ → cadastra conta mensal
+• _"Recebo aluguel todo dia 5, 1200"_ → receita mensal
+• _"Minhas parcelas"_ → ver todas as contas e parcelas ativas
+• _"Cancela o netflix"_ → para de acompanhar
+• _"Muda o netflix para 65"_ → atualiza o valor
+O bot te avisa automaticamente todo mês no dia do vencimento! 🔔
 
-🎯 *Metas:*
-• _"Meta: guardar 5000 para viagem até dezembro"_
-• _"Minhas metas"_
+━━━━━━━━━━━━━━━
+🚗 *GASTOS COM VEÍCULO*
+Se você tem carro ou moto cadastrado no dashboard:
+• _"Abasteci 80 reais"_ → registra combustível
+• _"Paguei 300 de revisão no carro"_ → manutenção
+• _"Seguro do carro 1200"_ → seguro
+• _"Paguei 800 de IPVA"_ → imposto
 
-🔄 *Modos:*
-• _"Modo empresa"_ — finanças empresariais
-• _"Modo pessoal"_ — finanças pessoais
+━━━━━━━━━━━━━━━
+📋 *TAREFAS — Lista de afazeres*
+• _"Criar tarefa: ligar pro João amanhã"_ → cria uma tarefa
+• _"Minhas tarefas"_ → ver o que está pendente
+• _"Concluir 1"_ → marca a tarefa número 1 como feita
+• _"Tarefa 2 em andamento"_ → atualiza o status
 
-📊 *Relatórios:*
-• _"Saldo do mês"_ — resumo financeiro`;
+━━━━━━━━━━━━━━━
+🔔 *LEMBRETES*
+O bot te manda mensagem na hora certa:
+• _"Me lembra de pagar conta sexta às 9h"_ → aviso único
+• _"Todo mês dia 5 me lembra de pagar aluguel"_ → aviso mensal
+• _"Todo dia às 8h me lembra de tomar remédio"_ → aviso diário
+
+━━━━━━━━━━━━━━━
+🎯 *METAS — Guardar dinheiro*
+Quer juntar dinheiro para algo? O bot acompanha pra você:
+• _"Quero guardar 5000 para viagem até dezembro"_ → cria a meta
+• _"Adicionei 300 na meta viagem"_ → atualiza quanto já guardou
+• _"Minhas metas"_ → ver o progresso de cada meta
+• _"Meta viagem concluída"_ → marca como atingida 🎉
+
+━━━━━━━━━━━━━━━
+🗓️ *AGENDA — Compromissos*
+• _"Agendar reunião amanhã às 14h"_ → cria compromisso
+• _"Consulta médica sexta às 10h no Hospital X"_ → com local
+• _"Meus compromissos"_ → ver o que está agendado
+• _"Reagendar reunião para segunda às 10h"_ → muda o horário
+• _"Cancela a consulta de sexta"_ → remove
+
+━━━━━━━━━━━━━━━
+🎥 *REUNIÃO POR VÍDEO (Google Meet)*
+Cria um link de reunião e avisa os participantes:
+• _"Criar meet amanhã às 14h com João 11999999999"_
+• _"Meet sexta às 15h com maria@empresa.com por 2 horas"_
+• _"Adiciona meet na reunião de segunda"_ → coloca link no compromisso existente
+Participantes com WhatsApp recebem o link automaticamente!
+
+━━━━━━━━━━━━━━━
+📁 *ARQUIVOS (Drive inteligente)*
+• Envie qualquer foto, PDF ou documento → salvo e organizado
+• Nota fiscal ou boleto → lançado automaticamente como despesa
+• Para guardar no Drive mesmo: envie com legenda _"salva"_ ou _"guarda"_
+• _"Ache o contrato do João"_ → te manda o arquivo de volta
+• _"Salva como contrato assinado"_ → renomeia o último arquivo
+
+━━━━━━━━━━━━━━━
+🏢 *MODO EMPRESA / PESSOAL*
+Separa as finanças da empresa das finanças pessoais:
+• _"Modo empresa"_ → próximos registros vão para a empresa
+• _"Modo pessoal"_ → volta para os gastos pessoais
+O modo atual aparece em cada resposta (👤 Pessoal ou 🏢 Empresa)
+
+━━━━━━━━━━━━━━━
+💡 *Lembre-se:* fale naturalmente, como no dia a dia. O ControlaAI entende português normal!`;
 }
 
 export function replyOnboardingWelcome(): string {
