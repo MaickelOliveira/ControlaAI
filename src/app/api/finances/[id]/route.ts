@@ -9,13 +9,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await req.json();
-  const { amount, category, description, date } = body;
+  const { amount, category, description, date, status } = body;
 
   const updated = updateFinance(id, session.sub, {
     ...(amount !== undefined ? { amount: parseFloat(amount) } : {}),
     ...(category ? { category } : {}),
     ...(description !== undefined ? { description } : {}),
     ...(date ? { date } : {}),
+    ...(status ? { status } : {}),
   });
 
   if (!updated) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
