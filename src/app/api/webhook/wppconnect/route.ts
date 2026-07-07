@@ -419,7 +419,7 @@ export async function POST(req: NextRequest) {
         if (financeItems.length === 1) {
           // Lançamento único
           const fd = financeItems[0];
-          const financeMode = fd.mode || mode;
+          const financeMode = (fd.mode || "personal") as "personal" | "business";
           const financeDate = fd.date || today;
           const isPending = financeDate > today;
           const f = addFinance({
@@ -429,20 +429,20 @@ export async function POST(req: NextRequest) {
             status: isPending ? "pending" : "posted",
           });
           const bal = getBalance(user.id, financeMode, year, month);
-          const modeLabel = financeMode !== mode ? ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_` : "";
+          const modeSuffix = ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_`;
           if (isPending) {
             const dtFormatted = new Date(financeDate + "T12:00:00").toLocaleDateString("pt-BR");
             const typeLabel = fd.type === "income" ? "Receita" : "Despesa";
             const typeEmoji = fd.type === "income" ? "💰" : "💸";
-            await wppSend(from, `⏳ *${typeLabel} agendada!*${modeLabel}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 Será contabilizada em *${dtFormatted}*\n\n_Lançamentos futuros não entram no saldo até a data chegar._`);
+            await wppSend(from, `⏳ *${typeLabel} agendada!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 Será contabilizada em *${dtFormatted}*\n\n_Lançamentos futuros não entram no saldo até a data chegar._`);
           } else {
-            await wppSend(from, replyFinanceRegistered(f, bal.balance) + modeLabel);
+            await wppSend(from, replyFinanceRegistered(f, bal.balance));
           }
         } else {
           // Múltiplos lançamentos — registra todos e exibe resumo
           const registered: Array<ReturnType<typeof addFinance> & { pending: boolean }> = [];
           for (const fd of financeItems) {
-            const financeMode = fd.mode || mode;
+            const financeMode = (fd.mode || "personal") as "personal" | "business";
             const financeDate = fd.date || today;
             const isPending = financeDate > today;
             const f = addFinance({
@@ -453,7 +453,7 @@ export async function POST(req: NextRequest) {
             });
             registered.push({ ...f, pending: isPending });
           }
-          const primaryMode = (financeItems[0].mode || mode) as "personal" | "business";
+          const primaryMode = (financeItems[0].mode || "personal") as "personal" | "business";
           const bal = getBalance(user.id, primaryMode, year, month);
           const posted = registered.filter(f => !f.pending);
           const pending = registered.filter(f => f.pending);
