@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 
-type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string };
+type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
 
 type Recurring = {
   id: string;
@@ -78,6 +78,7 @@ export default function FinancasPage() {
   const [deleteTarget, setDeleteTarget] = useState<Finance | null>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [cancellingRec, setCancellingRec] = useState<string | null>(null);
+  const [confirmingPending, setConfirmingPending] = useState<string | null>(null);
 
   function loadCategories() {
     fetch("/api/categories").then(r => r.json()).then(d => {
@@ -204,6 +205,16 @@ export default function FinancasPage() {
     loadAll(mode);
   }
 
+  async function handleConfirmPending(f: Finance) {
+    setConfirmingPending(f.id);
+    await fetch(`/api/finances/${f.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "posted" }),
+    });
+    setConfirmingPending(null);
+    loadAll(mode);
+  }
+
   async function handleEditRec(e: React.FormEvent) {
     e.preventDefault();
     if (!editRec) return;
@@ -229,6 +240,10 @@ export default function FinancasPage() {
   const topCats = Object.entries(catTotals).sort(([, a], [, b]) => b - a).slice(0, 5);
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
+
+  // Finanças pendentes (data futura, status pending) separadas das confirmadas
+  const pendingFinances = finances.filter(f => f.status === "pending");
+  const postedFinances = finances.filter(f => f.status !== "pending");
 
   // Recs sorted: overdue first, then by nextDueDate
   const sortedRecs = [...recs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
@@ -308,7 +323,7 @@ export default function FinancasPage() {
         <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-4 text-sm">📋 Extrato</h3>
           {loading ? <p className="text-slate-400 text-sm">Carregando...</p> :
-            (finances.length === 0 && recs.length === 0) ? (
+            (postedFinances.length === 0 && recs.length === 0 && pendingFinances.length === 0) ? (
               <div className="text-center py-16 text-slate-400">
                 <p className="text-4xl mb-3">💬</p>
                 <p className="font-medium text-slate-500">Nenhum registro ainda</p>
@@ -317,7 +332,7 @@ export default function FinancasPage() {
             ) : (
               <div className="space-y-1 max-h-[480px] overflow-y-auto">
 
-                {/* Pendentes (recorrentes/parcelados) */}
+                {/* Pendentes: recorrentes/parcelados */}
                 {sortedRecs.map(r => {
                   const st = recStatus(r);
                   const installLabel = r.recurrenceType === "installment"
@@ -357,8 +372,48 @@ export default function FinancasPage() {
                   );
                 })}
 
-                {/* Separador se tiver pendentes e lançamentos */}
-                {sortedRecs.length > 0 && finances.length > 0 && (
+                {/* Pendentes: lançamentos únicos com data futura */}
+                {pendingFinances.map(f => {
+                  const dueDate = new Date(f.date + "T12:00:00");
+                  const dueFmt = dueDate.toLocaleDateString("pt-BR");
+                  const isOverdue = f.date < today;
+                  const badgeColor = isOverdue ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500";
+                  const badgeLabel = isOverdue ? `Vencido ${dueFmt}` : `A vencer ${dueFmt}`;
+                  return (
+                    <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition border border-dashed border-slate-200">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
+                          {f.type === "income" ? "↑" : "↓"}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium text-slate-800 truncate">{f.description}</p>
+                            <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0", badgeColor)}>{badgeLabel}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{f.category}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <span className={clsx("text-sm font-bold", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
+                          {f.type === "income" ? "+" : "-"}{fmt(f.amount)}
+                        </span>
+                        <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => openEdit(f)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition" title="Editar">✏️</button>
+                          <button onClick={() => setDeleteTarget(f)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Excluir">🗑️</button>
+                        </div>
+                        <button onClick={() => handleConfirmPending(f)} disabled={confirmingPending === f.id}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold transition shrink-0 disabled:opacity-50 bg-emerald-600 text-white hover:bg-emerald-700">
+                          {confirmingPending === f.id ? "..." : f.type === "income" ? "✓ Recebido" : "✓ Pago"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Separador se tiver pendentes e lançamentos confirmados */}
+                {(sortedRecs.length > 0 || pendingFinances.length > 0) && postedFinances.length > 0 && (
                   <div className="flex items-center gap-2 py-1">
                     <div className="flex-1 h-px bg-slate-100" />
                     <span className="text-xs text-slate-300">confirmados</span>
@@ -367,7 +422,7 @@ export default function FinancasPage() {
                 )}
 
                 {/* Lançamentos confirmados */}
-                {finances.slice(0, 50).map(f => (
+                {postedFinances.slice(0, 50).map(f => (
                   <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
