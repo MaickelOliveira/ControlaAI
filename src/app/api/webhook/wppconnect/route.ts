@@ -8,7 +8,7 @@ import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTa
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText } from "@/lib/pending-actions";
 import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
 import { createMeet } from "@/lib/meets";
@@ -282,11 +282,45 @@ export async function POST(req: NextRequest) {
 
     // ── Seleção de lançamento financeiro (editar/excluir com múltiplos resultados) ──
     if (pending?.type === "finance_select" && pending.userId === user.id) {
+      const hasPatch = !!(pending.patch && Object.keys(pending.patch).length > 0);
+
+      // Já sabemos QUAL lançamento (etapa anterior escolheu 1) e só falta o que
+      // mudar — interpreta a mensagem atual como o novo valor/categoria, não
+      // como uma escolha de número.
+      if (pending.action === "edit" && !hasPatch && pending.candidates.length === 1) {
+        const patch = parseFinancePatchFromText(messageText);
+        if (Object.keys(patch).length === 0) {
+          await wppSend(from, `❓ Não entendi o que alterar. Ex: _"80 reais"_ ou _"categoria Lazer"_`);
+          return NextResponse.json({ ok: true });
+        }
+        clearPendingAction(from);
+        const chosen = pending.candidates[0];
+        const updated = updateFinance(chosen.id, user.id, patch as Parameters<typeof updateFinance>[2]);
+        if (updated) {
+          const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
+          const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+          await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       const choiceIdx = parseFinanceChoice(messageText, pending.candidates);
       if (choiceIdx >= 0) {
-        clearPendingAction(from);
         const chosen = pending.candidates[choiceIdx];
-        if (pending.action === "edit" && pending.patch && Object.keys(pending.patch).length > 0) {
+
+        // Editar mas ainda não sabemos o que mudar → guarda só esse alvo e pergunta
+        if (pending.action === "edit" && !hasPatch) {
+          setPendingAction(from, {
+            type: "finance_select", userId: user.id,
+            action: "edit",
+            candidates: [chosen],
+          });
+          await wppSend(from, `🔍 Encontrei: *${chosen.description}* — ${formatCurrency(chosen.amount)} (${chosen.category})\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          return NextResponse.json({ ok: true });
+        }
+
+        clearPendingAction(from);
+        if (pending.action === "edit" && hasPatch) {
           const updated = updateFinance(chosen.id, user.id, pending.patch as Parameters<typeof updateFinance>[2]);
           if (updated) {
             const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
@@ -484,31 +518,46 @@ export async function POST(req: NextRequest) {
       case "finance_edit": {
         const keyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
         console.log(`[bot] finance_edit keyword="${keyword}" finance=${JSON.stringify(ai.finance)}`);
-        if (!keyword) {
-          await wppSend(from, `✏️ Para editar, diga qual lançamento e o novo valor.\n\nEx: _"corrija o gasto do ifood para 80 reais"_\nOu: _"muda a categoria do mercado para Alimentação"_\n\nDigite *extrato* para ver os lançamentos recentes.`);
-          break;
-        }
-        // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
-        let editCandidates = findFinanceByDescription(user.id, null, keyword);
-        // Fallback: tenta buscar sem acentos e sem espaços extras
-        if (!editCandidates.length) {
-          const normalizedKeyword = keyword.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-          editCandidates = findFinanceByDescription(user.id, null, normalizedKeyword);
-        }
-        console.log(`[bot] finance_edit encontrados=${editCandidates.length}`);
-        if (!editCandidates.length) {
-          const recent = getRecentTransactions(user.id, mode, 5);
-          const recentList = recent.length
-            ? `\n\n📋 *Lançamentos recentes:*\n${recent.map(r => `• ${r.description} — ${formatCurrency(r.amount)}`).join("\n")}`
-            : "";
-          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${keyword}"*.${recentList}\n\nUse o nome exato ou diga _"extrato"_ para ver todos.`);
-          break;
-        }
+
         const editPatch: Record<string, unknown> = {};
         if (ai.finance?.amount && ai.finance.amount > 0) editPatch.amount = ai.finance.amount;
         if (ai.finance?.category) editPatch.category = ai.finance.category;
         if (ai.finance?.date) editPatch.date = ai.finance.date;
-        // Múltiplos resultados → pergunta qual
+
+        // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
+        let editCandidates = keyword ? findFinanceByDescription(user.id, null, keyword) : [];
+        // Fallback: tenta buscar sem acentos e sem espaços extras
+        if (keyword && !editCandidates.length) {
+          const normalizedKeyword = keyword.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+          editCandidates = findFinanceByDescription(user.id, null, normalizedKeyword);
+        }
+        console.log(`[bot] finance_edit encontrados por palavra-chave=${editCandidates.length}`);
+
+        // Achou exatamente 1 pela palavra-chave e já sabemos o que mudar → aplica direto
+        if (keyword && editCandidates.length === 1 && Object.keys(editPatch).length > 0) {
+          const editTarget = editCandidates[0];
+          const updated = updateFinance(editTarget.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
+          if (updated) {
+            const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
+            const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+            await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+          }
+          break;
+        }
+
+        // Achou exatamente 1 pela palavra-chave mas ainda não sabemos o que mudar
+        if (keyword && editCandidates.length === 1) {
+          const editTarget = editCandidates[0];
+          setPendingAction(from, {
+            type: "finance_select", userId: user.id,
+            action: "edit",
+            candidates: [{ id: editTarget.id, description: editTarget.description, amount: editTarget.amount, date: editTarget.date, category: editTarget.category, mode: editTarget.mode }],
+          });
+          await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} (${editTarget.category})\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          break;
+        }
+
+        // Palavra-chave achou vários → deixa escolher entre eles
         if (editCandidates.length > 1) {
           const list = editCandidates.map((c, i) =>
             `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
@@ -522,17 +571,24 @@ export async function POST(req: NextRequest) {
           await wppSend(from, `✏️ Encontrei *${editCandidates.length} lançamentos* com *"${keyword}"*:\n\n${list}\n\nQual deles deseja alterar? Responda com o número ou a data (ex: *1* ou *04/07*).`);
           break;
         }
-        const editTarget = editCandidates[0];
-        if (Object.keys(editPatch).length === 0) {
-          await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} (${editTarget.category})\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+
+        // Sem palavra-chave, ou palavra-chave não achou nada → lista os últimos
+        // 5 dias de gastos/receitas pra escolher, em vez de um beco sem saída
+        const recentCandidates = getFinancesLastDays(user.id, null, 5);
+        if (!recentCandidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum lançamento nos últimos 5 dias${keyword ? ` com *"${keyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
           break;
         }
-        const updated = updateFinance(editTarget.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
-        if (updated) {
-          const bal = getBalance(user.id, updated.mode as "personal" | "business", year, month);
-          const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
-          await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
-        }
+        const recentList = recentCandidates.map((c, i) =>
+          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+        ).join("\n");
+        setPendingAction(from, {
+          type: "finance_select", userId: user.id,
+          action: "edit",
+          candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
+          patch: editPatch,
+        });
+        await wppSend(from, `✏️ ${keyword ? `Não encontrei nada com *"${keyword}"*, mas aqui` : "Aqui"} estão os lançamentos dos últimos 5 dias:\n\n${recentList}\n\nQual deles deseja alterar? Responda com o número ou a data (ex: *1* ou *04/07*).`);
         break;
       }
 
