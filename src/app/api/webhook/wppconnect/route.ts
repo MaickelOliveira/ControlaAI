@@ -3,7 +3,7 @@ import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, ge
 import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getMonthlyTransactions } from "@/lib/finances";
+import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getMonthlyTransactions, getFinancesLastDays } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
@@ -539,17 +539,22 @@ export async function POST(req: NextRequest) {
       case "finance_delete": {
         const delKeyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
         console.log(`[bot] finance_delete keyword="${delKeyword}" finance=${JSON.stringify(ai.finance)}`);
-        if (!delKeyword) {
-          await wppSend(from, `🗑️ Para excluir, diga qual lançamento apagar.\n\nEx: _"apaga o gasto do ifood"_\nEx: _"remove o lançamento do mercado"_\n\nDigite *extrato* para ver os lançamentos recentes.`);
+
+        const delCandidates = delKeyword ? findFinanceByDescription(user.id, null, delKeyword) : [];
+        console.log(`[bot] finance_delete encontrados por palavra-chave=${delCandidates.length}`);
+
+        // Achou exatamente 1 pela palavra-chave → exclui direto (fluxo rápido)
+        if (delKeyword && delCandidates.length === 1) {
+          const delTarget = delCandidates[0];
+          const delOk = deleteFinance(delTarget.id, user.id);
+          if (delOk) {
+            const delBal = getBalance(user.id, delTarget.mode as "personal" | "business", year, month);
+            await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${delTarget.description} — ${formatCurrency(delTarget.amount)}\n📅 ${new Date(delTarget.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+          }
           break;
         }
-        const delCandidates = findFinanceByDescription(user.id, null, delKeyword);
-        console.log(`[bot] finance_delete encontrados=${delCandidates.length}`);
-        if (!delCandidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento com *"${delKeyword}"*.\n\nDigite *extrato* para ver os lançamentos.`);
-          break;
-        }
-        // Múltiplos resultados → pergunta qual
+
+        // Palavra-chave achou vários → deixa escolher entre eles
         if (delCandidates.length > 1) {
           const delList = delCandidates.map((c, i) =>
             `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
@@ -562,12 +567,23 @@ export async function POST(req: NextRequest) {
           await wppSend(from, `🗑️ Encontrei *${delCandidates.length} lançamentos* com *"${delKeyword}"*:\n\n${delList}\n\nQual deles deseja excluir? Responda com o número ou a data (ex: *1* ou *04/07*).`);
           break;
         }
-        const delTarget = delCandidates[0];
-        const delOk = deleteFinance(delTarget.id, user.id);
-        if (delOk) {
-          const delBal = getBalance(user.id, delTarget.mode as "personal" | "business", year, month);
-          await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${delTarget.description} — ${formatCurrency(delTarget.amount)}\n📅 ${new Date(delTarget.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+
+        // Sem palavra-chave, ou palavra-chave não achou nada → lista os últimos
+        // 5 dias de gastos/receitas pra escolher, em vez de um beco sem saída
+        const recentCandidates = getFinancesLastDays(user.id, null, 5);
+        if (!recentCandidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum lançamento nos últimos 5 dias${delKeyword ? ` com *"${delKeyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
+          break;
         }
+        const recentList = recentCandidates.map((c, i) =>
+          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+        ).join("\n");
+        setPendingAction(from, {
+          type: "finance_select", userId: user.id,
+          action: "delete",
+          candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
+        });
+        await wppSend(from, `🗑️ ${delKeyword ? `Não encontrei nada com *"${delKeyword}"*, mas aqui` : "Aqui"} estão os lançamentos dos últimos 5 dias:\n\n${recentList}\n\nQual deles deseja excluir? Responda com o número ou a data (ex: *1* ou *04/07*).`);
         break;
       }
 
