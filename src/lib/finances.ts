@@ -127,6 +127,18 @@ export function updateFinance(id: string, userId: string, patch: Partial<Pick<Fi
   return items[idx];
 }
 
+// Lançamentos crus (sem agregação) dos últimos N dias, mais recente primeiro —
+// usado para deixar o usuário escolher qual excluir quando não deu palavra-chave
+// (ou ela não achou nada), em vez de um beco sem saída.
+export function getFinancesLastDays(userId: string, mode: FinanceMode | null, days = 5): Finance[] {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  return load()
+    .filter(f => f.userId === userId && (mode === null || f.mode === mode))
+    .filter(f => new Date(f.date + "T12:00:00") >= cutoff)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+}
+
 export function findFinanceByDescription(userId: string, mode: FinanceMode | null, keyword: string, limit = 5): Finance[] {
   const lower = keyword.toLowerCase();
   return load()
