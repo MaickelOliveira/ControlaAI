@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
 import { VehicleExpenseType } from "./vehicles";
+import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
 
 const FILE = path.join(process.cwd(), "data", "pending.json");
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
@@ -204,6 +205,29 @@ export function parseFinanceChoice(
   }
 
   return -1;
+}
+
+/** Interpreta a resposta do usuário como o NOVO VALOR de um lançamento já
+ *  escolhido (etapa final de finance_edit, quando falta só o "o que mudar").
+ *  Aceita valor em reais (ex: "80 reais", "R$ 80,50") e/ou nome de categoria
+ *  conhecida mencionado no texto. Retorna um patch parcial — pode vir vazio
+ *  se não reconhecer nada. */
+export function parseFinancePatchFromText(text: string): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  const t = text.trim();
+
+  const amountMatch = t.replace(/\./g, "").replace(",", ".").match(/(\d+(?:\.\d{1,2})?)/);
+  if (amountMatch) {
+    const val = parseFloat(amountMatch[1]);
+    if (!isNaN(val) && val > 0) patch.amount = val;
+  }
+
+  const lower = t.toLowerCase();
+  const allCategories = [...CATEGORIES_EXPENSE, ...CATEGORIES_INCOME];
+  const category = allCategories.find((c) => lower.includes(c.toLowerCase()));
+  if (category) patch.category = category;
+
+  return patch;
 }
 
 /** Interpreta a resposta do usuário como escolha de veículo.
