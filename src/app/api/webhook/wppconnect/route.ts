@@ -46,6 +46,15 @@ function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// Ícone do modo (pessoal/empresa) pra deixar claro em listas e confirmações
+// de qual lançamento se trata, já que descrição/categoria podem repetir entre modos.
+function modeIcon(m: string): string {
+  return m === "business" ? "🏢" : "👤";
+}
+function modeLabelFull(m: string): string {
+  return m === "business" ? "🏢 Empresa" : "👤 Pessoal";
+}
+
 export async function POST(req: NextRequest) {
   let _from = ""; // acessível no catch para enviar mensagem de erro
   try {
@@ -315,7 +324,7 @@ export async function POST(req: NextRequest) {
             action: "edit",
             candidates: [chosen],
           });
-          await wppSend(from, `🔍 Encontrei: *${chosen.description}* — ${formatCurrency(chosen.amount)} (${chosen.category})\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          await wppSend(from, `🔍 Encontrei: *${chosen.description}* — ${formatCurrency(chosen.amount)} (${chosen.category}) ${modeIcon(chosen.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
           return NextResponse.json({ ok: true });
         }
 
@@ -331,14 +340,14 @@ export async function POST(req: NextRequest) {
           const delOk = deleteFinance(chosen.id, user.id);
           if (delOk) {
             const delBal = getBalance(user.id, chosen.mode as "personal" | "business", year, month);
-            await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${chosen.description} — ${formatCurrency(chosen.amount)}\n📅 ${new Date(chosen.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+            await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${chosen.description} — ${formatCurrency(chosen.amount)}\n📅 ${new Date(chosen.date + "T12:00:00").toLocaleDateString("pt-BR")}\n${modeLabelFull(chosen.mode)}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
           }
         }
         return NextResponse.json({ ok: true });
       }
       // Resposta inválida: lista novamente
       const list = pending.candidates.map((c, i) =>
-        `${i + 1}️⃣ ${formatCurrency(c.amount)} · ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+        `${i + 1}️⃣ ${modeIcon(c.mode)} ${formatCurrency(c.amount)} · ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
       ).join("\n");
       await wppSend(from, `❓ Não entendi. Responda com o número ou a data:\n\n${list}\n\nEx: *1* ou *04/07*`);
       return NextResponse.json({ ok: true });
@@ -553,14 +562,14 @@ export async function POST(req: NextRequest) {
             action: "edit",
             candidates: [{ id: editTarget.id, description: editTarget.description, amount: editTarget.amount, date: editTarget.date, category: editTarget.category, mode: editTarget.mode }],
           });
-          await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} (${editTarget.category})\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} (${editTarget.category}) ${modeIcon(editTarget.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
           break;
         }
 
         // Palavra-chave achou vários → deixa escolher entre eles
         if (editCandidates.length > 1) {
           const list = editCandidates.map((c, i) =>
-            `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+            `${i + 1}️⃣ ${modeIcon(c.mode)} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
           ).join("\n");
           setPendingAction(from, {
             type: "finance_select", userId: user.id,
@@ -580,7 +589,7 @@ export async function POST(req: NextRequest) {
           break;
         }
         const recentList = recentCandidates.map((c, i) =>
-          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} ${modeIcon(c.mode)} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
         ).join("\n");
         setPendingAction(from, {
           type: "finance_select", userId: user.id,
@@ -605,7 +614,7 @@ export async function POST(req: NextRequest) {
           const delOk = deleteFinance(delTarget.id, user.id);
           if (delOk) {
             const delBal = getBalance(user.id, delTarget.mode as "personal" | "business", year, month);
-            await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${delTarget.description} — ${formatCurrency(delTarget.amount)}\n📅 ${new Date(delTarget.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+            await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${delTarget.description} — ${formatCurrency(delTarget.amount)}\n📅 ${new Date(delTarget.date + "T12:00:00").toLocaleDateString("pt-BR")}\n${modeLabelFull(delTarget.mode)}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
           }
           break;
         }
@@ -613,7 +622,7 @@ export async function POST(req: NextRequest) {
         // Palavra-chave achou vários → deixa escolher entre eles
         if (delCandidates.length > 1) {
           const delList = delCandidates.map((c, i) =>
-            `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+            `${i + 1}️⃣ ${modeIcon(c.mode)} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
           ).join("\n");
           setPendingAction(from, {
             type: "finance_select", userId: user.id,
@@ -632,7 +641,7 @@ export async function POST(req: NextRequest) {
           break;
         }
         const recentList = recentCandidates.map((c, i) =>
-          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
+          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} ${modeIcon(c.mode)} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}`
         ).join("\n");
         setPendingAction(from, {
           type: "finance_select", userId: user.id,
