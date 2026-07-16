@@ -26,7 +26,7 @@ export async function GET() {
   const recentTransactions = getRecentTransactions(user.id, user.activeMode, 5);
 
   return NextResponse.json({
-    user: { id: user.id, name: user.name, email: user.email, plan: user.plan, status: user.status, activeMode: user.activeMode, trialEndsAt: user.trialEndsAt, wppPhone: user.wppPhone ?? null, wppPhones: getWppPhones(user), maxWppPhones: getMaxWppPhones(user) },
+    user: { id: user.id, name: user.name, email: user.email, plan: user.plan, status: user.status, activeMode: user.activeMode, trialEndsAt: user.trialEndsAt, wppPhone: user.wppPhone ?? null, wppPhones: getWppPhones(user), wppPhoneNames: user.wppPhoneNames ?? {}, maxWppPhones: getMaxWppPhones(user) },
     personal: { balance: personalBalance, dailyTotals: personalDailyTotals, expenseCategories: personalExpCategories },
     business: { balance: businessBalance, dailyTotals: businessDailyTotals, expenseCategories: businessExpCategories },
     tasks: { pendingCount: pendingTasks.length, overdueCount: overdueTasks.length, recent: pendingTasks.slice(0, 5) },

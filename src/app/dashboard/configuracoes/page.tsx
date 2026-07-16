@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 
-type UserData = { name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[]; maxWppPhones: number };
+type UserData = { name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[]; wppPhoneNames: Record<string, string>; maxWppPhones: number };
 type PwForm = { current: string; next: string; confirm: string };
 
 export default function ClienteConfigPage() {
@@ -10,6 +10,9 @@ export default function ClienteConfigPage() {
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   const [unlinkingPhone, setUnlinkingPhone] = useState<string | null>(null);
+  const [editingNamePhone, setEditingNamePhone] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const [botNumber, setBotNumber] = useState<string>("");
   const [pwForm, setPwForm] = useState<PwForm>({ current: "", next: "", confirm: "" });
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -18,7 +21,7 @@ export default function ClienteConfigPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], maxWppPhones: d.user.maxWppPhones ?? 1 }); });
+    fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], wppPhoneNames: d.user.wppPhoneNames ?? {}, maxWppPhones: d.user.maxWppPhones ?? 1 }); });
     fetch("/api/bot-info").then(r => r.json()).then(d => { if (d.wppBotNumber) setBotNumber(d.wppBotNumber); });
     fetch("/api/google/status").then(r => r.json()).then(d => setGoogleStatus(d)).catch(() => {});
   }, []);
@@ -35,7 +38,7 @@ export default function ClienteConfigPage() {
 
   async function refresh() {
     const d = await fetch("/api/dashboard").then(r => r.json());
-    if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], maxWppPhones: d.user.maxWppPhones ?? 1 });
+    if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], wppPhoneNames: d.user.wppPhoneNames ?? {}, maxWppPhones: d.user.maxWppPhones ?? 1 });
     setCode(null);
   }
 
@@ -44,6 +47,22 @@ export default function ClienteConfigPage() {
     await fetch("/api/dashboard/wpp-link", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
     setUser(u => u ? { ...u, wppPhones: u.wppPhones.filter(p => p !== phone) } : u);
     setUnlinkingPhone(null);
+  }
+
+  function startEditName(phone: string) {
+    setEditingNamePhone(phone);
+    setNameInput(user?.wppPhoneNames[phone] ?? "");
+  }
+
+  async function saveName(phone: string) {
+    const name = nameInput.trim();
+    if (!name) return;
+    setSavingName(true);
+    const r = await fetch("/api/dashboard/wpp-link", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, name }) });
+    const d = await r.json();
+    if (r.ok) setUser(u => u ? { ...u, wppPhoneNames: d.wppPhoneNames } : u);
+    setSavingName(false);
+    setEditingNamePhone(null);
   }
 
   async function disconnectGoogle() {
@@ -107,18 +126,53 @@ export default function ClienteConfigPage() {
                 <p className="text-xs font-semibold text-slate-600">Números vinculados</p>
                 <span className="text-xs text-slate-400">{user.wppPhones.length}/{user.maxWppPhones}</span>
               </div>
+              <p className="text-[11px] text-slate-400 -mt-1 mb-1">
+                Dê um nome a cada número (ex: Ana, Gabriel) para identificar quem registrou cada gasto quando várias pessoas usarem o bot.
+              </p>
               {user.wppPhones.map(phone => (
-                <div key={phone} className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-sm shrink-0">✓</div>
-                    <p className="text-sm font-mono text-emerald-700">+{phone}</p>
+                <div key={phone} className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-sm shrink-0">✓</div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-mono text-emerald-700">+{phone}</p>
+                        {user.wppPhoneNames[phone] && editingNamePhone !== phone && (
+                          <p className="text-xs text-emerald-600 font-semibold truncate">{user.wppPhoneNames[phone]}</p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => unlink(phone)}
+                      disabled={unlinkingPhone === phone}
+                      className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-2.5 py-1 transition disabled:opacity-50 shrink-0">
+                      {unlinkingPhone === phone ? "..." : "Desvincular"}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => unlink(phone)}
-                    disabled={unlinkingPhone === phone}
-                    className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-2.5 py-1 transition disabled:opacity-50">
-                    {unlinkingPhone === phone ? "..." : "Desvincular"}
-                  </button>
+                  {editingNamePhone === phone ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        autoFocus
+                        value={nameInput}
+                        onChange={e => setNameInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") saveName(phone); if (e.key === "Escape") setEditingNamePhone(null); }}
+                        placeholder="Nome da pessoa"
+                        maxLength={40}
+                        className="flex-1 text-xs border border-emerald-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-emerald-500 transition" />
+                      <button onClick={() => saveName(phone)} disabled={savingName || !nameInput.trim()}
+                        className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 transition disabled:opacity-50">
+                        {savingName ? "..." : "Salvar"}
+                      </button>
+                      <button onClick={() => setEditingNamePhone(null)}
+                        className="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1.5 transition">
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => startEditName(phone)}
+                      className="text-[11px] text-emerald-700 hover:underline mt-1.5">
+                      {user.wppPhoneNames[phone] ? "✏️ Alterar nome" : "+ Adicionar nome"}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

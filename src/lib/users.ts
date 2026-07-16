@@ -19,6 +19,7 @@ export type User = {
   company?: string;
   wppPhone?: string;         // legado — migrado para wppPhones automaticamente
   wppPhones?: string[];      // lista de números vinculados
+  wppPhoneNames?: Record<string, string>; // nome de quem usa cada número vinculado (para identificar quem registrou cada gasto)
   maxWppPhones?: number;     // limite de números permitidos (default 1)
   wppVerifyCode?: string;    // código temporário de vinculação
   wppVerifyExpires?: string; // expiração do código
@@ -152,9 +153,46 @@ export function removeWppPhone(userId: string, phone: string): User | null {
   const idx = users.findIndex(u => u.id === userId);
   if (idx < 0) return null;
   const current = getWppPhones(users[idx]).filter(p => p !== phone);
-  users[idx] = { ...users[idx], wppPhones: current, wppPhone: undefined };
+  const names = { ...(users[idx].wppPhoneNames ?? {}) };
+  delete names[phone];
+  users[idx] = { ...users[idx], wppPhones: current, wppPhone: undefined, wppPhoneNames: names };
   save(users);
   return users[idx];
+}
+
+/** Define o nome de quem usa um número vinculado (ex: "Ana", "Gabriel") */
+export function setWppPhoneName(userId: string, phone: string, name: string): User | null {
+  const users = load();
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx < 0) return null;
+  const names = { ...(users[idx].wppPhoneNames ?? {}), [phone]: name.trim() };
+  users[idx] = { ...users[idx], wppPhoneNames: names };
+  save(users);
+  return users[idx];
+}
+
+/** Retorna o nome cadastrado para o número, se houver */
+export function getWppPhoneName(user: User, phone: string): string | undefined {
+  return user.wppPhoneNames?.[phone];
+}
+
+/** Acha o número vinculado cujo nome cadastrado combina com o nome informado
+ *  (ex: "Ana" -> o número cujo wppPhoneNames[phone] === "Ana") */
+export function getWppPhoneByName(user: User, name: string): string | undefined {
+  const target = normalizeName(name);
+  const entries = Object.entries(user.wppPhoneNames ?? {});
+  const match = entries.find(([, n]) => normalizeName(n) === target);
+  return match?.[0];
+}
+
+const DIACRITICS_REGEX = /[̀-ͯ]/g;
+
+function normalizeName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(DIACRITICS_REGEX, "")
+    .trim()
+    .toLowerCase();
 }
 
 export function generateWppVerifyCode(userId: string): string {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getUserById, generateWppVerifyCode, getWppPhones, getMaxWppPhones, removeWppPhone } from "@/lib/users";
+import { getUserById, generateWppVerifyCode, getWppPhones, getMaxWppPhones, removeWppPhone, setWppPhoneName } from "@/lib/users";
 import { getAdminWppConfig } from "@/lib/admin";
 
 export async function POST() {
@@ -32,4 +32,24 @@ export async function DELETE(req: NextRequest) {
 
   removeWppPhone(session.sub, phone);
   return NextResponse.json({ ok: true });
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const phone = body.phone as string | undefined;
+  const name = (body.name as string | undefined)?.trim().slice(0, 40);
+
+  if (!phone) return NextResponse.json({ error: "Número não informado" }, { status: 400 });
+  if (!name) return NextResponse.json({ error: "Nome não informado" }, { status: 400 });
+
+  const user = getUserById(session.sub);
+  if (!user || !getWppPhones(user).includes(phone)) {
+    return NextResponse.json({ error: "Número não vinculado a essa conta" }, { status: 400 });
+  }
+
+  const updated = setWppPhoneName(session.sub, phone, name);
+  return NextResponse.json({ ok: true, wppPhoneNames: updated?.wppPhoneNames ?? {} });
 }

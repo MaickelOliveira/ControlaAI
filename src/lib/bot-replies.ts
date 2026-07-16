@@ -19,9 +19,9 @@ export function replyFinanceRegistered(f: Finance, balance: number): string {
   return `✅ *${tipo} registrada!*\n\n${emoji} *${formatCurrency(f.amount)}* — ${f.category}\n📝 ${f.description}\n📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n${balEmoji} *Saldo ${modeLabel}:* ${formatCurrency(balance)}`;
 }
 
-export function replyBalance(personal: { income: number; expense: number; balance: number }, business?: { income: number; expense: number; balance: number }): string {
+export function replyBalance(personal: { income: number; expense: number; balance: number }, business?: { income: number; expense: number; balance: number }, personName?: string): string {
   const month = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  let msg = `📊 *Resumo de ${month}*\n\n`;
+  let msg = personName ? `📊 *Resumo de ${month} — ${personName}*\n\n` : `📊 *Resumo de ${month}*\n\n`;
 
   msg += `👤 *Pessoal*\n`;
   msg += `  💰 Receitas: ${formatCurrency(personal.income)}\n`;
@@ -35,6 +35,18 @@ export function replyBalance(personal: { income: number; expense: number; balanc
     msg += `  ${business.balance >= 0 ? "📈" : "📉"} Saldo: ${formatCurrency(business.balance)}\n`;
   }
   return msg;
+}
+
+export function replyPersonNotFound(name: string): string {
+  return `🤔 Não encontrei ninguém chamado *${name}* entre os números vinculados a essa conta.\n\nPara identificar quem registrou cada gasto, cada pessoa precisa vincular o próprio WhatsApp em *Configurações* e informar o nome quando for solicitado.`;
+}
+
+export function replyAskWppName(): string {
+  return `👋 Antes de começar, qual é o seu nome?\n\nAssim consigo identificar quem registrou cada gasto quando várias pessoas da família usarem essa conta. 😊`;
+}
+
+export function replyWppNameSaved(name: string): string {
+  return `✅ Prontinho, *${name}*! Agora você já pode usar o assistente normalmente.\n\nDigite *ajuda* para ver os comandos disponíveis.`;
 }
 
 export function replyTaskCreated(task: Task): string {
@@ -315,6 +327,13 @@ export function replyAgendaUpdated(a: Appointment): string {
 
 export function replyAgendaDeleted(title: string): string {
   return `🗑️ Compromisso *${title}* cancelado!`;
+}
+
+export function replyAppointmentReminder(a: Appointment): string {
+  const dateTime = formatDateTimeBR(a.startAt);
+  const locationLine = a.location ? `\n📍 ${a.location}` : "";
+  const meetLine = a.meetLink ? `\n🔗 ${a.meetLink}` : "";
+  return `⏰ *Lembrete: seu compromisso é daqui a 2 horas!*\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}${meetLine}`;
 }
 
 type MeetLike = {

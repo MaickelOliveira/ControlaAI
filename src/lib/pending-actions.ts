@@ -77,7 +77,14 @@ export type PendingFinanceSelect = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect;
+export type PendingWppName = {
+  type: "awaiting_wpp_name";
+  phone: string;
+  userId: string;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName;
 
 type Store = Record<string, PendingAction>;
 
@@ -100,7 +107,8 @@ type PendingActionInput =
   | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">
   | Omit<PendingMeetAta, "phone" | "expiresAt">
   | Omit<PendingMeetConfirm, "phone" | "expiresAt">
-  | Omit<PendingFinanceSelect, "phone" | "expiresAt">;
+  | Omit<PendingFinanceSelect, "phone" | "expiresAt">
+  | Omit<PendingWppName, "phone" | "expiresAt">;
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();

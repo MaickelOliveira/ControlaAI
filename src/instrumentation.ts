@@ -127,6 +127,38 @@ export async function register() {
       } catch (e) {
         console.error("[cron] Erro no bloco de meets:", e);
       }
+
+      // ── Lembrete de compromissos que começam em até 2h ──
+      try {
+        const agendaModule = await import("./lib/agenda").catch(() => null);
+        const usersModule = await import("./lib/users").catch(() => null);
+        const repliesModule = await import("./lib/bot-replies").catch(() => null);
+        if (agendaModule && usersModule && repliesModule) {
+          const { getAppointmentsNeedingReminder, updateAppointment } = agendaModule;
+          const { getUserById, getWppPhones } = usersModule;
+          const { replyAppointmentReminder } = repliesModule;
+          const dueSoon = getAppointmentsNeedingReminder();
+          if (dueSoon.length > 0) console.log(`[cron] ${dueSoon.length} compromisso(s) a lembrar`);
+          for (const apt of dueSoon) {
+            try {
+              const aptUser = getUserById(apt.userId);
+              if (!aptUser) continue;
+              const phones = getWppPhones(aptUser);
+              const msg = replyAppointmentReminder(apt);
+              let sentToAny = false;
+              for (const phone of phones) {
+                const ok = await sendText(phone, msg);
+                if (ok) sentToAny = true;
+              }
+              if (sentToAny) updateAppointment(apt.id, apt.userId, { reminderSentAt: new Date().toISOString() });
+            } catch (e) {
+              console.error("[cron] Erro ao enviar lembrete de compromisso:", e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[cron] Erro no bloco de lembrete de compromissos:", e);
+      }
     } catch (e) {
       console.error("[cron] Erro no tick:", e);
     }

@@ -25,6 +25,7 @@ export type Appointment = {
   ataGenerated?: boolean;
   ataContent?: string;
   ataNotifiedAt?: string;
+  reminderSentAt?: string;
 };
 
 const DATA_FILE = path.join(process.cwd(), "data", "agenda.json");
@@ -105,6 +106,18 @@ export function getAppointmentsWithEndedMeet(): Appointment[] {
     if (a.status !== "scheduled") return false;
     const endMs = new Date(a.endAt).getTime();
     return endMs < now - min5 && endMs > now - min60;
+  });
+}
+
+/** Compromissos agendados que começam em até 2h e ainda não receberam o lembrete */
+export function getAppointmentsNeedingReminder(): Appointment[] {
+  const now = Date.now();
+  const hours2 = 2 * 60 * 60_000;
+  return load().filter(a => {
+    if (a.status !== "scheduled" || a.reminderSentAt) return false;
+    const startMs = new Date(a.startAt).getTime();
+    const diff = startMs - now;
+    return diff > 0 && diff <= hours2;
   });
 }
 

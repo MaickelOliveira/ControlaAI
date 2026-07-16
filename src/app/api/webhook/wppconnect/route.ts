@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones } from "@/lib/users";
+import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones, setWppPhoneName, getWppPhoneByName } from "@/lib/users";
 import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
@@ -25,6 +25,7 @@ import {
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
   replyAgendaCreated, replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
   replyMeetCreated, replyMeetInvite, replyMeetAtaRequest, replyMeetAtaGenerated,
+  replyPersonNotFound, replyAskWppName, replyWppNameSaved,
 } from "@/lib/bot-replies";
 
 function phoneMatches(stored: string, incoming: string): boolean {
@@ -167,6 +168,7 @@ export async function POST(req: NextRequest) {
                 date: financeData.date || fNow.toISOString().slice(0, 10),
                 mode: fMode,
                 source: "whatsapp",
+                registeredBy: from,
               });
               const bal = getBalance(fileUser.id, fMode, fYear, fMonth);
               const typeLabel = financeData.type === "income" ? "Receita" : "Despesa";
@@ -218,7 +220,9 @@ export async function POST(req: NextRequest) {
       if (codeUser) {
         addWppPhone(codeUser.id, from);
         updateUser(codeUser.id, { wppVerifyCode: undefined, wppVerifyExpires: undefined });
-        await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*\n\nOlá, ${codeUser.name}! Agora você pode usar o bot normalmente.\n\nDigite *ajuda* para ver os comandos disponíveis.`);
+        await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*`);
+        setPendingAction(from, { type: "awaiting_wpp_name", userId: codeUser.id });
+        await wppSend(from, replyAskWppName());
         return NextResponse.json({ ok: true });
       }
     }
@@ -244,8 +248,31 @@ export async function POST(req: NextRequest) {
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
+    // ── Comando para (re)definir o nome de quem usa este número ──
+    const nameCmdMatch = messageText.trim().match(/^(?:meu nome (?:é|e)|me chamo)\s+(.{2,40})$/i);
+    if (nameCmdMatch) {
+      const name = cap(nameCmdMatch[1].trim());
+      setWppPhoneName(user.id, from, name);
+      await wppSend(from, replyWppNameSaved(name));
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Verifica ação pendente (ex: seleção de veículo) ──
     const pending = getPendingAction(from);
+
+    // ── Aguardando o nome de quem está usando este número ──
+    if (pending?.type === "awaiting_wpp_name" && pending.userId === user.id) {
+      clearPendingAction(from);
+      const name = messageText.trim().slice(0, 40);
+      if (name) {
+        setWppPhoneName(user.id, from, cap(name));
+        await wppSend(from, replyWppNameSaved(cap(name)));
+      } else {
+        await wppSend(from, replyWppNameSaved(user.name));
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     if (pending?.type === "vehicle_selection" && pending.userId === user.id) {
       const choiceIdx = parseVehicleChoice(messageText, pending.vehicles);
       if (choiceIdx >= 0) {
@@ -256,7 +283,7 @@ export async function POST(req: NextRequest) {
         if (exp) {
           const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
           const newExp = exp.expenses[exp.expenses.length - 1];
-          const f = addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: vCatMap[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp" });
+          const f = addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: vCatMap[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp", registeredBy: from });
           setExpenseFinanceId(chosen.id, newExp.id, f.id);
           const total = getVehicleTotalExpenses(exp);
           await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
@@ -467,6 +494,7 @@ export async function POST(req: NextRequest) {
             category: cap(fd.category), description: cap(fd.description),
             date: financeDate, mode: financeMode, source: "whatsapp",
             status: isPending ? "pending" : "posted",
+            registeredBy: from,
           });
           const bal = getBalance(user.id, financeMode, year, month);
           const modeSuffix = ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_`;
@@ -490,6 +518,7 @@ export async function POST(req: NextRequest) {
               category: cap(fd.category), description: cap(fd.description),
               date: financeDate, mode: financeMode, source: "whatsapp",
               status: isPending ? "pending" : "posted",
+              registeredBy: from,
             });
             registered.push({ ...f, pending: isPending });
           }
@@ -718,6 +747,17 @@ export async function POST(req: NextRequest) {
 
       case "finance_query":
       case "balance_query": {
+        if (ai.personName) {
+          const personPhone = getWppPhoneByName(user, ai.personName);
+          if (!personPhone) {
+            await wppSend(from, replyPersonNotFound(ai.personName));
+            break;
+          }
+          const personal = getBalance(user.id, "personal", year, month, personPhone);
+          const business = getBalance(user.id, "business", year, month, personPhone);
+          await wppSend(from, replyBalance(personal, business, ai.personName));
+          break;
+        }
         const personal = getBalance(user.id, "personal", year, month);
         const business = getBalance(user.id, "business", year, month);
         await wppSend(from, replyBalance(personal, business));
@@ -862,7 +902,7 @@ export async function POST(req: NextRequest) {
 
         // Sem veículos → registra como despesa financeira
         if (allVehicles.length === 0) {
-          const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode, source: "whatsapp" });
+          const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode, source: "whatsapp", registeredBy: from });
           const bal = getBalance(user.id, mode, year, month).balance;
           await wppSend(from, `${replyFinanceRegistered(f, bal)}\n\n💡 _Dica: Cadastre seu veículo no dashboard → Veículos para controlar gastos separadamente!_`);
           break;
@@ -883,7 +923,7 @@ export async function POST(req: NextRequest) {
           if (exp) {
             const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
             const newExp = exp.expenses[exp.expenses.length - 1];
-            const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: vCatMap[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode, source: "whatsapp" });
+            const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: vCatMap[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode, source: "whatsapp", registeredBy: from });
             setExpenseFinanceId(targetVehicle.id, newExp.id, f.id);
             const total = getVehicleTotalExpenses(exp);
             await wppSend(from, `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
