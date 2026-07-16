@@ -130,6 +130,7 @@ export type AIResult = {
   mode?: UserMode;
   financeType?: "income" | "expense"; // para finance_detail: qual tipo mostrar
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
+  personName?: string; // nome de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou")
   response?: string; // resposta direta para how_to
   confidence: number;
 };
@@ -163,9 +164,9 @@ INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular)
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
-- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato")
+- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria") — isso é usado em contas compartilhadas por várias pessoas da família, cada uma com seu próprio número de WhatsApp vinculado, para filtrar só os gastos registrados por aquela pessoa.
 - finance_detail: extrato DETALHADO do mês atual, listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal".
-- balance_query: saldo atual ("qual meu saldo", "quanto tenho")
+- balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName" do finance_query quando a pergunta cita o nome de outra pessoa (ex: "qual o saldo da Ana").
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais")
 - task_create: criar uma tarefa
 - task_update: atualizar/concluir uma tarefa
@@ -265,6 +266,13 @@ Exemplo modo empresa:
     "date": "2026-07-03",
     "mode": "business"
   }
+}
+
+Exemplo finance_query com nome de pessoa ("quanto a Ana gastou esse mês?"):
+{
+  "intent": "finance_query",
+  "confidence": 0.9,
+  "personName": "Ana"
 }
 
 Exemplo how_to ("como faço para registrar uma despesa?"):

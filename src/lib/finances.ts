@@ -28,6 +28,7 @@ export type Finance = {
   mode: FinanceMode;
   source: FinanceSource;
   status?: FinanceStatus; // undefined = posted (retrocompatível)
+  registeredBy?: string; // número de WhatsApp de quem registrou (para contas com vários números vinculados)
   createdAt: string;
 };
 
@@ -56,16 +57,20 @@ export function addFinance(data: Omit<Finance, "id" | "createdAt">): Finance {
   return item;
 }
 
-export function getFinancesByUser(userId: string, mode?: FinanceMode): Finance[] {
-  return load().filter(f => f.userId === userId && (!mode || f.mode === mode));
+export function getFinancesByUser(userId: string, mode?: FinanceMode, registeredBy?: string): Finance[] {
+  return load().filter(f =>
+    f.userId === userId &&
+    (!mode || f.mode === mode) &&
+    (!registeredBy || f.registeredBy === registeredBy)
+  );
 }
 
-export function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number): {
+export function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): {
   income: number;
   expense: number;
   balance: number;
 } {
-  let items = getFinancesByUser(userId, mode).filter(isPosted);
+  let items = getFinancesByUser(userId, mode, registeredBy).filter(isPosted);
   if (year !== undefined && month !== undefined) {
     items = items.filter(f => {
       const d = new Date(f.date + "T12:00:00");
@@ -77,8 +82,8 @@ export function getBalance(userId: string, mode: FinanceMode, year?: number, mon
   return { income, expense, balance: income - expense };
 }
 
-export function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number): Record<string, number> {
-  let items = getFinancesByUser(userId, mode).filter(f => f.type === type && isPosted(f));
+export function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number, registeredBy?: string): Record<string, number> {
+  let items = getFinancesByUser(userId, mode, registeredBy).filter(f => f.type === type && isPosted(f));
   if (year && month) {
     items = items.filter(f => {
       const d = new Date(f.date + "T12:00:00");
