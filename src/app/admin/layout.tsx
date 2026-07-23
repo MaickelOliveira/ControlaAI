@@ -17,7 +17,7 @@ function SidebarContent({ pathname, logout, onNavClick }: { pathname: string; lo
     <>
       <div className="p-5 border-b border-slate-100">
         <div className="mb-4">
-          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-8 w-auto" priority />
+          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="w-full h-auto max-w-[210px]" priority />
           <p className="text-slate-400 text-xs mt-1.5">Painel do Dono</p>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center gap-2.5">
@@ -101,7 +101,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </svg>
           </button>
           <div className="flex items-center gap-2">
-            <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-6 w-auto" />
+            <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-9 w-auto" />
             <span className="font-semibold text-slate-500 text-xs">Admin</span>
           </div>
         </div>

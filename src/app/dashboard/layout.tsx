@@ -159,7 +159,7 @@ function SidebarContent({
     <>
       {/* Logo */}
       <div className="p-5 border-b border-slate-100">
-        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-8 w-auto" priority />
+        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="w-full h-auto max-w-[210px]" priority />
         <p className="text-slate-400 text-xs mt-1.5">Gestão inteligente</p>
       </div>
 
@@ -286,7 +286,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition">
             {Icons.menu}
           </button>
-          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-6 w-auto" />
+          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-9 w-auto" />
           {user && (
             <span className="ml-auto text-xs text-slate-500 truncate max-w-[120px]">
               {isPersonal ? "👤 Pessoal" : "🏢 Empresa"}
