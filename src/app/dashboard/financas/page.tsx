@@ -80,6 +80,64 @@ export default function FinancasPage() {
   const [cancellingRec, setCancellingRec] = useState<string | null>(null);
   const [confirmingPending, setConfirmingPending] = useState<string | null>(null);
 
+  const [banner, setBanner] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importSaving, setImportSaving] = useState(false);
+  const [importError, setImportError] = useState("");
+  type ImportItem = { date: string; description: string; amount: number; category: string; duplicate: boolean; selected: boolean };
+  const [importItems, setImportItems] = useState<ImportItem[]>([]);
+
+  useEffect(() => {
+    if (!banner) return;
+    const t = setTimeout(() => setBanner(""), 5000);
+    return () => clearTimeout(t);
+  }, [banner]);
+
+  function openImport() {
+    setImportFile(null); setImportError(""); setImportItems([]); setShowImport(true);
+  }
+
+  async function handleAnalyzeInvoice() {
+    if (!importFile) return;
+    setImportLoading(true); setImportError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      fd.append("mode", mode);
+      const res = await fetch("/api/finances/import-invoice", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) { setImportError(data.error || "Erro ao analisar fatura"); return; }
+      setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: !t.duplicate })));
+    } catch {
+      setImportError("Erro de conexão");
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  async function handleConfirmImport() {
+    const selected = importItems.filter(i => i.selected);
+    if (selected.length === 0) return;
+    setImportSaving(true); setImportError("");
+    try {
+      const res = await fetch("/api/finances/import-invoice/confirm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, items: selected.map(({ date, description, amount, category }) => ({ date, description, amount, category })) }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setImportError(data.error || "Erro ao importar"); return; }
+      setShowImport(false);
+      setBanner(`✅ ${data.imported} lançamento(s) importado(s) da fatura!`);
+      loadAll(mode);
+    } catch {
+      setImportError("Erro de conexão");
+    } finally {
+      setImportSaving(false);
+    }
+  }
+
   function loadCategories() {
     fetch("/api/categories").then(r => r.json()).then(d => {
       setCatsExpense(d.expense || []);
@@ -256,15 +314,26 @@ export default function FinancasPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      {banner && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm px-4 py-3">
+          {banner}
+        </div>
+      )}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">💰 Finanças</h1>
           <p className="text-slate-400 text-sm mt-0.5">{modeLabel}</p>
         </div>
-        <button onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}
-          className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition shadow-sm">
-          + Adicionar
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={openImport}
+            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition">
+            📑 Importar fatura
+          </button>
+          <button onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}
+            className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition shadow-sm">
+            + Adicionar
+          </button>
+        </div>
       </div>
 
       {/* Saldo */}
@@ -666,6 +735,66 @@ export default function FinancasPage() {
               <button onClick={handleDelete}
                 className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 transition">Excluir</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Importar fatura */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-slate-900 mb-1">📑 Importar fatura</h3>
+            <p className="text-xs text-slate-400 mb-4">Envie a fatura do cartão (PDF) ou um extrato — a IA identifica cada lançamento e sinaliza os que já parecem estar registrados, pra você não duplicar.</p>
+
+            {importItems.length === 0 ? (
+              <div className="space-y-3">
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:text-xs file:font-semibold" />
+                {importError && <p className="text-xs text-red-500">{importError}</p>}
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setShowImport(false)}
+                    className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                  <button type="button" onClick={handleAnalyzeInvoice} disabled={!importFile || importLoading}
+                    className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+                    {importLoading ? "Analisando..." : "Analisar fatura"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>{importItems.length} lançamento(s) encontrado(s)</span>
+                  <span>{importItems.filter(i => i.selected).length} selecionado(s) — {fmt(importItems.filter(i => i.selected).reduce((s, i) => s + i.amount, 0))}</span>
+                </div>
+                <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                  {importItems.map((item, idx) => (
+                    <label key={idx} className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-50">
+                      <input type="checkbox" checked={item.selected}
+                        onChange={e => setImportItems(prev => prev.map((it, i) => i === idx ? { ...it, selected: e.target.checked } : it))}
+                        className="accent-emerald-600" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-800 truncate">{item.description}</p>
+                        <p className="text-xs text-slate-400">
+                          {fmtDate(item.date)} · {item.category}
+                          {item.duplicate && <span className="ml-1.5 text-amber-600">· parece já registrado</span>}
+                        </p>
+                      </div>
+                      <span className="font-semibold text-slate-700 shrink-0">{fmt(item.amount)}</span>
+                    </label>
+                  ))}
+                </div>
+                {importError && <p className="text-xs text-red-500">{importError}</p>}
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setShowImport(false)}
+                    className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                  <button type="button" onClick={handleConfirmImport} disabled={importSaving || importItems.filter(i => i.selected).length === 0}
+                    className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+                    {importSaving ? "Importando..." : `Importar ${importItems.filter(i => i.selected).length} lançamento(s)`}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
