@@ -1294,5 +1294,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: "ok", service: "ControlaAI Bot" });
+  return NextResponse.json({ status: "ok", service: "Zelo Bot" });
 }

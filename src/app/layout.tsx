@@ -5,8 +5,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ControlaAI — Gestão Inteligente via WhatsApp",
+  title: "Zelo — Gestão Inteligente via WhatsApp",
   description: "Gerencie finanças, tarefas e lembretes pelo WhatsApp com IA",
+  icons: { icon: "/brand/zelo-icon.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
