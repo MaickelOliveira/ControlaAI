@@ -84,7 +84,18 @@ export type PendingWppName = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName;
+export type PendingReceiptSave = {
+  type: "receipt_save";
+  phone: string;
+  userId: string;
+  fileBase64: string;
+  mimeType: string;
+  suggestedName: string;
+  financeId?: string;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave;
 
 type Store = Record<string, PendingAction>;
 
@@ -108,7 +119,8 @@ type PendingActionInput =
   | Omit<PendingMeetAta, "phone" | "expiresAt">
   | Omit<PendingMeetConfirm, "phone" | "expiresAt">
   | Omit<PendingFinanceSelect, "phone" | "expiresAt">
-  | Omit<PendingWppName, "phone" | "expiresAt">;
+  | Omit<PendingWppName, "phone" | "expiresAt">
+  | Omit<PendingReceiptSave, "phone" | "expiresAt">;
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();
@@ -236,6 +248,15 @@ export function parseFinancePatchFromText(text: string): Record<string, unknown>
   if (category) patch.category = category;
 
   return patch;
+}
+
+/** Interpreta a resposta do usuário como confirmação sim/não.
+ *  Retorna true, false, ou null se não reconhecer a resposta. */
+export function parseYesNo(text: string): boolean | null {
+  const t = text.trim().toLowerCase();
+  if (/^(sim|s|ss|isso|pode|manda|salva|guarda|claro|com certeza|quero|yes|y|ok|beleza|manda ver)\b/.test(t)) return true;
+  if (/^(n[ãa]o|nao|n|não quero|nunca|no)\b/.test(t)) return false;
+  return null;
 }
 
 /** Interpreta a resposta do usuário como escolha de veículo.

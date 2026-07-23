@@ -8,7 +8,7 @@ import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTa
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo } from "@/lib/pending-actions";
 import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
 import { createMeet } from "@/lib/meets";
@@ -125,11 +125,15 @@ export async function POST(req: NextRequest) {
       // Identifica usuário antes de processar o arquivo
       const fileUser = getUserByWppPhone(from);
       if (fileUser && !isTrialExpired(fileUser)) {
-        const originalName = body.filename || `arquivo_${Date.now()}${body.mimetype?.includes("pdf") ? ".pdf" : body.mimetype?.includes("image") ? ".jpg" : ""}`;
+        const defaultExt = body.mimetype?.includes("pdf") ? ".pdf" : body.mimetype?.includes("image") ? ".jpg" : "";
         const mimeType = body.mimetype || "application/octet-stream";
         // caption: prioriza body.caption (legenda enviada junto ao arquivo), depois bodyStr se não for base64
         const captionField = typeof body.caption === "string" && body.caption ? body.caption : undefined;
-        const caption = captionField || (!bodyIsBase64File && bodyStr && bodyStr !== originalName ? bodyStr : undefined);
+        const caption = captionField || (!bodyIsBase64File && bodyStr && bodyStr !== body.filename ? bodyStr : undefined);
+
+        // Extrai um nome explícito da legenda (ex: "salva como etac", "guarda como contrato assinado")
+        const nameFromCaption = caption?.match(/(?:salva|salvar|guarda|guardar|arquiva|arquivar|nomeia|nomear|chama|chame)\s+(?:isso\s+|ele\s+|esse\s+arquivo\s+)?(?:de|como)\s+(.+)/i)?.[1]?.trim();
+        const originalName = nameFromCaption ? `${nameFromCaption}${defaultExt}` : (body.filename || `arquivo_${Date.now()}${defaultExt}`);
 
         let buffer: Buffer;
         try {
@@ -173,7 +177,19 @@ export async function POST(req: NextRequest) {
               const bal = getBalance(fileUser.id, fMode, fYear, fMonth);
               const typeLabel = financeData.type === "income" ? "Receita" : "Despesa";
               const typeEmoji = financeData.type === "income" ? "💰" : "💸";
-              await wppSend(from, `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${f.description}\n💰 ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💡 Para guardar no Drive, envie com legenda "guarda" ou "salva"._`);
+
+              const receiptExt = mimeType.includes("pdf") ? ".pdf" : ".jpg";
+              const suggestedName = `${f.category} - ${f.description} - ${f.date}${receiptExt}`.slice(0, 80);
+              setPendingAction(from, {
+                type: "receipt_save",
+                userId: fileUser.id,
+                fileBase64: buffer.toString("base64"),
+                mimeType,
+                suggestedName,
+                financeId: f.id,
+              });
+
+              await wppSend(from, `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${f.description}\n💰 ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_`);
               return NextResponse.json({ ok: true });
             }
           } catch (e) {
@@ -271,6 +287,42 @@ export async function POST(req: NextRequest) {
         await wppSend(from, replyWppNameSaved(user.name));
       }
       return NextResponse.json({ ok: true });
+    }
+
+    // ── Aguardando confirmação de guardar comprovante (foto/documento) no Drive ──
+    if (pending?.type === "receipt_save" && pending.userId === user.id) {
+      const answer = parseYesNo(messageText);
+      if (answer !== null) {
+        clearPendingAction(from);
+        if (answer) {
+          try {
+            const buffer = Buffer.from(pending.fileBase64, "base64");
+            const folders = getFolders(user.id);
+            const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
+            const { folder: suggestedFolder, keywords } = await categorizeDriveFile(pending.suggestedName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
+            const targetFolder = getFolderByName(user.id, suggestedFolder);
+            const savedFile = saveFile({
+              userId: user.id,
+              folderId: targetFolder?.id ?? null,
+              originalName: pending.suggestedName,
+              mimeType: pending.mimeType,
+              size: buffer.length,
+              aiKeywords: keywords,
+              source: "whatsapp",
+              buffer,
+            });
+            console.log(`[drive] comprovante salvo: ${savedFile.id} | ${pending.suggestedName} | pasta=${suggestedFolder}`);
+            await wppSend(from, replyFileSaved(pending.suggestedName, suggestedFolder));
+          } catch (e) {
+            console.error("[drive] erro ao salvar comprovante:", e);
+            await wppSend(from, "❌ Não consegui guardar o comprovante. Tente novamente.");
+          }
+        } else {
+          await wppSend(from, "Combinado, não vou guardar esse comprovante. 👍");
+        }
+        return NextResponse.json({ ok: true });
+      }
+      // resposta não reconhecida como sim/não — deixa expirar e processa normalmente
     }
 
     if (pending?.type === "vehicle_selection" && pending.userId === user.id) {
