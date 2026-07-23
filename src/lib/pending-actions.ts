@@ -6,6 +6,7 @@ import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
 const FILE = path.join(process.cwd(), "data", "pending.json");
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
 const TTL_RECURRING_MS = 12 * 60 * 60 * 1000; // 12 horas
+const TTL_INVOICE_MS = 30 * 60 * 1000; // 30 minutos — fatura pode ter muitos lançamentos, dá mais tempo pra revisar
 
 export type PendingVehicleSelection = {
   type: "vehicle_selection";
@@ -95,7 +96,18 @@ export type PendingReceiptSave = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave;
+export type PendingInvoiceImportItem = { date: string; description: string; amount: number; category: string };
+
+export type PendingInvoiceImport = {
+  type: "invoice_import";
+  phone: string;
+  userId: string;
+  mode: "personal" | "business";
+  items: PendingInvoiceImportItem[];
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave | PendingInvoiceImport;
 
 type Store = Record<string, PendingAction>;
 
@@ -120,7 +132,8 @@ type PendingActionInput =
   | Omit<PendingMeetConfirm, "phone" | "expiresAt">
   | Omit<PendingFinanceSelect, "phone" | "expiresAt">
   | Omit<PendingWppName, "phone" | "expiresAt">
-  | Omit<PendingReceiptSave, "phone" | "expiresAt">;
+  | Omit<PendingReceiptSave, "phone" | "expiresAt">
+  | Omit<PendingInvoiceImport, "phone" | "expiresAt">;
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();
@@ -132,6 +145,7 @@ export function setPendingAction(phone: string, action: PendingActionInput): voi
   const ttl =
     action.type === "recurring_confirmation" ? TTL_RECURRING_MS :
     action.type === "meet_ata" ? TTL_MEET_ATA_MS :
+    action.type === "invoice_import" ? TTL_INVOICE_MS :
     TTL_MS;
   store[phone] = { ...action, phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
   save(store);
