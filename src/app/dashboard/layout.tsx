@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
@@ -159,11 +160,9 @@ function SidebarContent({
       {/* Logo */}
       <div className="p-5 border-b border-slate-100">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
-            <span className="text-white text-base font-bold">C</span>
-          </div>
+          <Image src="/brand/zelo-icon.png" alt="Zelo" width={36} height={36} className="w-9 h-9 shrink-0" priority />
           <div>
-            <p className="text-slate-900 font-bold text-sm leading-none">ControlaAI</p>
+            <p className="text-slate-900 font-bold text-sm leading-none">Zelo</p>
             <p className="text-slate-400 text-xs mt-0.5">Gestão inteligente</p>
           </div>
         </div>
@@ -293,10 +292,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {Icons.menu}
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
-              <span className="text-white text-xs font-bold">C</span>
-            </div>
-            <span className="font-bold text-slate-900 text-sm">ControlaAI</span>
+            <Image src="/brand/zelo-icon.png" alt="Zelo" width={28} height={28} className="w-7 h-7 shrink-0" />
+            <span className="font-bold text-slate-900 text-sm">Zelo</span>
           </div>
           {user && (
             <span className="ml-auto text-xs text-slate-500 truncate max-w-[120px]">

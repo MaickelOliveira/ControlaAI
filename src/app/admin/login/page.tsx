@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 export default function AdminLoginPage() {
@@ -30,9 +31,9 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-            <span className="text-2xl">🤖</span>
+            <Image src="/brand/zelo-icon.png" alt="Zelo" width={32} height={32} className="w-8 h-8" priority />
           </div>
-          <h1 className="text-xl font-bold text-white">ControlaAI Admin</h1>
+          <h1 className="text-xl font-bold text-white">Zelo Admin</h1>
           <p className="text-slate-400 text-sm mt-1">Painel de Administração</p>
         </div>
 

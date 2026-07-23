@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -29,10 +30,10 @@ export default function CadastroPage() {
     setForm(f => ({ ...f, [k]: e.target.value }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-emerald-700 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-900 to-teal-700 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-6">
-          <div className="text-4xl mb-2">🤖</div>
+          <Image src="/brand/zelo-icon.png" alt="Zelo" width={56} height={56} className="mx-auto mb-2 w-14 h-14" priority />
           <h1 className="text-2xl font-bold text-gray-900">Criar conta</h1>
           <p className="text-gray-500 text-sm">14 dias grátis, sem cartão</p>
         </div>

@@ -98,7 +98,7 @@ export function replyModeSwitch(mode: UserMode): string {
 }
 
 export function replyHelp(): string {
-  return `🤖 *ControlaAI — Guia completo*
+  return `🤖 *Zelo — Guia completo*
 
 Fale de forma natural, como se estivesse conversando! Veja tudo que você pode fazer:
 
@@ -199,11 +199,11 @@ Separa as finanças da empresa das finanças pessoais:
 O modo atual aparece em cada resposta (👤 Pessoal ou 🏢 Empresa)
 
 ━━━━━━━━━━━━━━━
-💡 *Lembre-se:* fale naturalmente, como no dia a dia. O ControlaAI entende português normal!`;
+💡 *Lembre-se:* fale naturalmente, como no dia a dia. O Zelo entende português normal!`;
 }
 
 export function replyOnboardingWelcome(): string {
-  return `🎉 *Bem-vindo ao ControlaAI!*
+  return `🎉 *Bem-vindo ao Zelo!*
 
 Sou seu assistente inteligente de gestão via WhatsApp.
 
@@ -213,7 +213,7 @@ Para começar, qual é o seu nome?`;
 export function replyOnboardingPlan(name: string): string {
   return `Olá, *${name}*! 👋
 
-Você quer usar o ControlaAI para:
+Você quer usar o Zelo para:
 
 1️⃣ *Uso Pessoal* — controle de gastos e tarefas pessoais
 2️⃣ *Uso Empresarial* — gestão financeira e de equipe da empresa
@@ -226,7 +226,7 @@ export function replyOnboardingDone(name: string, plan: string): string {
 }
 
 export function replyTrialExpired(): string {
-  return `⚠️ Seu período de teste encerrou.\n\nPara continuar usando o ControlaAI, acesse o dashboard e assine um plano:\n🌐 controlaai.app/planos`;
+  return `⚠️ Seu período de teste encerrou.\n\nPara continuar usando o Zelo, acesse o dashboard e assine um plano:\n🌐 controlaai.app/planos`;
 }
 
 export function buildRecurringNotification(r: RecurringTransaction): string {
