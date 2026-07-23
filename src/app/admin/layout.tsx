@@ -16,8 +16,8 @@ function SidebarContent({ pathname, logout, onNavClick }: { pathname: string; lo
   return (
     <>
       <div className="p-5 border-b border-slate-100">
-        <div className="mb-4">
-          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="w-full h-auto max-w-[150px]" priority />
+        <div className="mb-4 text-center">
+          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="mx-auto h-auto w-full max-w-[150px]" priority />
           <p className="text-slate-400 text-base mt-1.5">Painel do Dono</p>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center gap-2.5">

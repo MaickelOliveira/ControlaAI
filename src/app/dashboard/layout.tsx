@@ -158,8 +158,8 @@ function SidebarContent({
   return (
     <>
       {/* Logo */}
-      <div className="p-5 border-b border-slate-100">
-        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="w-full h-auto max-w-[150px]" priority />
+      <div className="p-5 border-b border-slate-100 text-center">
+        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="mx-auto h-auto w-full max-w-[150px]" priority />
         <p className="text-slate-400 text-base mt-1.5">Gestão inteligente</p>
       </div>
 
