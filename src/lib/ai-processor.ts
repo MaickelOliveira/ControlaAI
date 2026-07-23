@@ -933,6 +933,87 @@ Retorne APENAS JSON válido, sem markdown.`,
   }
 }
 
+export type InvoiceTransaction = { date: string; description: string; amount: number; category: string };
+
+/** Extrai TODAS as transações de uma fatura de cartão de crédito ou extrato (várias
+ *  linhas), diferente de extractFinanceFromDocument que assume um único lançamento
+ *  (uma nota/recibo/boleto). Retorna null se o documento não parecer uma fatura/extrato
+ *  com múltiplos lançamentos. */
+export async function extractInvoiceTransactions(
+  buffer: Buffer,
+  mimeType: string,
+  caption?: string
+): Promise<{ transactions: InvoiceTransaction[] } | null> {
+  const cfg = getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  const hoje = todayStrBR();
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent([
+      `Analise este documento e determine se é uma FATURA DE CARTÃO DE CRÉDITO ou EXTRATO com MÚLTIPLAS transações/lançamentos (compras individuais).
+
+Hoje é: ${hoje}
+${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
+
+Se for uma fatura/extrato com várias transações, extraia CADA lançamento de compra individual (ignore o "total da fatura", "pagamento efetuado", "saldo anterior" e "valor mínimo" — esses NÃO são transações individuais, são resumo/pagamento da fatura em si) e retorne JSON:
+{
+  "isInvoice": true,
+  "transactions": [
+    { "date": "YYYY-MM-DD (data da compra; se só tiver dia/mês, use o ano da fatura)", "description": "descrição curta e legível (ex: Uber, Supermercado Extra, Netflix)", "amount": número positivo, "category": "uma das categorias abaixo" }
+  ]
+}
+
+Se NÃO for uma fatura/extrato com múltiplas transações (ex: é só um recibo único, uma nota fiscal, um boleto simples), retorne:
+{"isInvoice": false}
+
+CATEGORIAS: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
+
+Retorne APENAS JSON válido, sem markdown, sem comentários.`,
+      {
+        inlineData: {
+          data: buffer.toString("base64"),
+          mimeType: mimeType || "application/pdf",
+        },
+      },
+    ]);
+
+    const text = result.response.text().trim()
+      .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(text);
+
+    if (!parsed.isInvoice || !Array.isArray(parsed.transactions)) return null;
+
+    const transactions: InvoiceTransaction[] = [];
+    for (const t of parsed.transactions) {
+      const rawAmount = String(t?.amount ?? "0")
+        .replace(/\s/g, "")
+        .replace(/\.(?=\d{3}[,.])/g, "")
+        .replace(",", ".");
+      const amount = Number(rawAmount);
+      if (isNaN(amount) || amount <= 0) continue;
+
+      const rawDate = String(t?.date || "");
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
+
+      const description = String(t?.description || "").trim().slice(0, 80) || "Lançamento da fatura";
+      const category = String(t?.category || "Outros");
+
+      transactions.push({ date, description, amount, category });
+    }
+
+    if (transactions.length === 0) return null;
+    return { transactions };
+  } catch (e) {
+    console.error("[ai-processor] Erro extractInvoiceTransactions:", e);
+    return null;
+  }
+}
+
 export async function transcribeAudio(audioBuffer: Buffer, mimeType: string): Promise<string | null> {
   const cfg = getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";

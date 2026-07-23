@@ -144,6 +144,21 @@ export function getFinancesLastDays(userId: string, mode: FinanceMode | null, da
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 }
 
+/** Verifica se já existe uma despesa com o mesmo valor (tolerância de 1 centavo) e data
+ *  próxima (±3 dias) — usado ao importar fatura de cartão para não duplicar um lançamento
+ *  que o usuário já tenha registrado manualmente (por foto/texto) quando a compra aconteceu. */
+export function isLikelyDuplicateExpense(userId: string, mode: FinanceMode, amount: number, date: string): boolean {
+  const target = new Date(date + "T12:00:00").getTime();
+  const THREE_DAYS_MS = 3 * 86_400_000;
+  return load().some(f =>
+    f.userId === userId &&
+    f.mode === mode &&
+    f.type === "expense" &&
+    Math.abs(f.amount - amount) < 0.01 &&
+    Math.abs(new Date(f.date + "T12:00:00").getTime() - target) <= THREE_DAYS_MS
+  );
+}
+
 export function findFinanceByDescription(userId: string, mode: FinanceMode | null, keyword: string, limit = 5): Finance[] {
   const lower = keyword.toLowerCase();
   return load()

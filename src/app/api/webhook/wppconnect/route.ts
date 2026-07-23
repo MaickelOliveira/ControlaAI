@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones, setWppPhoneName, getWppPhoneByName } from "@/lib/users";
-import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument } from "@/lib/ai-processor";
+import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getMonthlyTransactions, getFinancesLastDays } from "@/lib/finances";
+import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getMonthlyTransactions, getFinancesLastDays, isLikelyDuplicateExpense } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
@@ -153,6 +153,45 @@ export async function POST(req: NextRequest) {
         // Verifica se o usuário pediu explicitamente para guardar no Drive
         const SAVE_KEYWORDS = ["guarda", "salva", "arquiva", "armazena", "salvar", "guardar", "arquivar", "arquivo", "pasta", "drive"];
         const hasSaveIntent = !!caption && SAVE_KEYWORDS.some(k => caption.toLowerCase().includes(k));
+
+        // Fatura de cartão/extrato costuma vir em PDF, ou o usuário avisa na legenda —
+        // nesses casos tenta extrair TODOS os lançamentos de uma vez (em vez de assumir
+        // um único gasto), identificando duplicados antes de perguntar se importa.
+        const looksLikeInvoice = !hasSaveIntent && (mimeType.includes("pdf") || /fatura|extrato/i.test(caption || ""));
+        if (looksLikeInvoice) {
+          try {
+            const invoice = await extractInvoiceTransactions(buffer, mimeType, caption);
+            if (invoice && invoice.transactions.length > 1) {
+              const fMode = fileUser.activeMode;
+              const withDup = invoice.transactions.map(t => ({
+                ...t,
+                category: cap(t.category),
+                description: cap(t.description),
+                duplicate: isLikelyDuplicateExpense(fileUser.id, fMode, t.amount, t.date),
+              }));
+              const novos = withDup.filter(t => !t.duplicate);
+              const duplicados = withDup.filter(t => t.duplicate);
+
+              if (novos.length === 0) {
+                await wppSend(from, `📑 Analisei a fatura e encontrei ${withDup.length} lançamento(s), mas todos já parecem estar registrados (mesmo valor e data próxima). Nada novo para importar.`);
+                return NextResponse.json({ ok: true });
+              }
+
+              setPendingAction(from, {
+                type: "invoice_import",
+                userId: fileUser.id,
+                mode: fMode,
+                items: novos.map(({ duplicate: _duplicate, ...rest }) => rest),
+              });
+
+              const total = novos.reduce((s, t) => s + t.amount, 0);
+              await wppSend(from, `📑 *Fatura analisada!*\n\n${withDup.length} lançamento(s) encontrados\n✅ ${novos.length} novo(s) — total ${formatCurrency(total)}${duplicados.length ? `\n♻️ ${duplicados.length} já registrado(s) (mesmo valor e data próxima) — não serão duplicados` : ""}\n\n_💾 Quer que eu registre os ${novos.length} lançamentos novos como despesa? (sim/não)_`);
+              return NextResponse.json({ ok: true });
+            }
+          } catch (e) {
+            console.error("[webhook] erro ao extrair fatura:", e);
+          }
+        }
 
         if (!hasSaveIntent) {
           // Tenta extrair dados financeiros do documento/foto via Gemini Vision
@@ -319,6 +358,36 @@ export async function POST(req: NextRequest) {
           }
         } else {
           await wppSend(from, "Combinado, não vou guardar esse comprovante. 👍");
+        }
+        return NextResponse.json({ ok: true });
+      }
+      // resposta não reconhecida como sim/não — deixa expirar e processa normalmente
+    }
+
+    // ── Aguardando confirmação de importar lançamentos de uma fatura de cartão ──
+    if (pending?.type === "invoice_import" && pending.userId === user.id) {
+      const answer = parseYesNo(messageText);
+      if (answer !== null) {
+        clearPendingAction(from);
+        if (answer) {
+          for (const item of pending.items) {
+            addFinance({
+              userId: user.id,
+              type: "expense",
+              amount: item.amount,
+              category: item.category,
+              description: item.description,
+              date: item.date,
+              mode: pending.mode,
+              source: "whatsapp",
+              registeredBy: from,
+            });
+          }
+          const fNow = nowBR();
+          const bal = getBalance(user.id, pending.mode, fNow.getFullYear(), fNow.getMonth() + 1);
+          await wppSend(from, `✅ *${pending.items.length} lançamento(s) importado(s) da fatura!*\n\n📊 Saldo ${pending.mode === "business" ? "Empresa" : "Pessoal"}: ${formatCurrency(bal.balance)}`);
+        } else {
+          await wppSend(from, "Combinado, não importei os lançamentos da fatura. 👍");
         }
         return NextResponse.json({ ok: true });
       }
