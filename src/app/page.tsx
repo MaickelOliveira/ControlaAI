@@ -73,7 +73,6 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(0);
   const [typing, setTyping] = useState(false);
-  const [typingInput, setTypingInput] = useState("");
 
   // Mantém o celular sempre do mesmo tamanho — a área de mensagens tem altura
   // fixa e rola sozinha pra baixo conforme a conversa avança, em vez de
@@ -84,7 +83,7 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
   }, [shown, typing]);
 
   useEffect(() => {
-    if (!inView) { setShown(0); setTyping(false); setTypingInput(""); return; }
+    if (!inView) { setShown(0); setTyping(false); return; }
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const at = (fn: () => void, ms: number) => { const t = setTimeout(() => { if (!cancelled) fn(); }, ms); timers.push(t); };
@@ -97,30 +96,9 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
       }
       const msg = messages[i];
       if (msg.from === "user") {
-        if (msg.typed) {
-          // Simula o usuário digitando a mensagem no campo de texto antes de enviar
-          const text = msg.typed;
-          let idx = 0;
-          const tick = () => {
-            if (cancelled) return;
-            idx++;
-            setTypingInput(text.slice(0, idx));
-            if (idx < text.length) {
-              at(tick, 40 + Math.random() * 35);
-            } else {
-              at(() => {
-                setTypingInput("");
-                setShown(i + 1);
-                at(() => step(i + 1), 550);
-              }, 550);
-            }
-          };
-          at(tick, 350);
-        } else {
-          setTyping(false);
-          setShown(i + 1);
-          at(() => step(i + 1), 550);
-        }
+        setTyping(false);
+        setShown(i + 1);
+        at(() => step(i + 1), 550);
       } else {
         setTyping(true);
         at(() => { setTyping(false); setShown(i + 1); at(() => step(i + 1), 400); }, 900);
@@ -175,19 +153,119 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
         </div>
         <div className="bg-white px-2.5 py-2 flex items-center gap-2 border-t border-slate-100">
           <span className="text-slate-400 text-xl leading-none font-light">＋</span>
-          <div className="flex-1 bg-slate-100 rounded-full px-3.5 py-2 text-[12px] min-h-[30px] flex items-center">
-            {typingInput ? (
-              <span className="text-slate-800">
-                {typingInput}
-                <span className="inline-block w-[1.5px] h-3 bg-slate-500 ml-0.5 -mb-0.5 blink-cursor" />
-              </span>
-            ) : (
-              <span className="text-slate-400">Mensagem</span>
-            )}
-          </div>
+          <div className="flex-1 bg-slate-100 rounded-full px-3.5 py-2 text-[12px] text-slate-400">Mensagem</div>
           <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.5-4.5a2 2 0 012.8 0l3.2 3.2a2 2 0 002.8 0L20 12M4 8h.01M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" /></svg>
           <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400" fill="currentColor"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-2.08A7 7 0 0019 12h-2z" /></svg>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Variante "só tela" (sem moldura de celular) com o balão de digitação
+ *  flutuando no meio — usada na seção de Finanças pra não repetir o mesmo
+ *  mockup de celular das outras seções e mostrar bem de perto a mensagem
+ *  sendo digitada antes de enviar. ── */
+function ScreenChatDemo({ messages }: { messages: Msg[] }) {
+  const { ref, inView } = useInView<HTMLDivElement>();
+  const [shown, setShown] = useState(0);
+  const [typingInput, setTypingInput] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inView) { setShown(0); setTypingInput(null); return; }
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const at = (fn: () => void, ms: number) => { const t = setTimeout(() => { if (!cancelled) fn(); }, ms); timers.push(t); };
+
+    function step(i: number) {
+      if (cancelled) return;
+      if (i >= messages.length) {
+        at(() => { setShown(0); setTypingInput(null); at(() => step(0), 700); }, 2600);
+        return;
+      }
+      const msg = messages[i];
+      if (msg.from === "user" && msg.typed) {
+        const text = msg.typed;
+        let idx = 0;
+        setTypingInput("");
+        const tick = () => {
+          if (cancelled) return;
+          idx++;
+          setTypingInput(text.slice(0, idx));
+          if (idx < text.length) {
+            at(tick, 40 + Math.random() * 35);
+          } else {
+            at(() => { setTypingInput(null); setShown(i + 1); at(() => step(i + 1), 500); }, 500);
+          }
+        };
+        at(tick, 400);
+      } else {
+        setShown(i + 1);
+        at(() => step(i + 1), 700);
+      }
+    }
+    at(() => step(0), 500);
+
+    return () => { cancelled = true; timers.forEach(clearTimeout); };
+  }, [inView, messages]);
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="pointer-events-none absolute -inset-8 rounded-[3rem] blur-3xl -z-10 bg-amber-400/20" />
+      <div className="relative w-full max-w-[320px] mx-auto h-[500px] rounded-[2.5rem] bg-[#F5F1E8] shadow-2xl overflow-hidden"
+        style={{ backgroundImage: "radial-gradient(#00000008 1px, transparent 1px)", backgroundSize: "16px 16px" }}>
+        <div className="absolute inset-0 px-5 pt-9 pb-9 flex flex-col justify-center gap-4 overflow-hidden">
+          {messages.slice(0, shown).map((m, i) => (
+            m.from === "user" ? (
+              <div key={i} className="flex justify-end chat-msg-in">
+                <div className="max-w-[78%] bg-[#d9fdd3] text-slate-800 rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm shadow-sm">
+                  {m.text}
+                  <p className="text-[10px] text-slate-400 mt-1 text-right flex items-center justify-end gap-0.5">
+                    {m.time} <span className="text-sky-500">✓✓</span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div key={i} className="flex justify-start chat-msg-in">
+                <div className="max-w-[85%] bg-white rounded-2xl rounded-tl-sm px-4 py-3 text-sm shadow-sm border border-black/[0.03]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="w-6 h-6 rounded-full bg-slate-900 flex items-center justify-center overflow-hidden shrink-0">
+                      <Image src="/brand/zelo-icon.png" alt="" width={16} height={16} />
+                    </div>
+                    <span className="font-bold text-slate-900 text-[13px] flex items-center gap-1">
+                      Zelo
+                      <svg viewBox="0 0 20 20" className="w-3.5 h-3.5 text-sky-500 shrink-0" fill="currentColor"><path d="M10 1l2.2 1.4 2.6-.3 1 2.4 2.4 1-.3 2.6L19 10l-1.4 2.2.3 2.6-2.4 1-1 2.4-2.6-.3L10 19l-2.2-1.4-2.6.3-1-2.4-2.4-1 .3-2.6L1 10l1.4-2.2-.3-2.6 2.4-1 1-2.4 2.6.3z" /><path d="M7 10l2 2 4-4" stroke="white" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </span>
+                  </div>
+                  <p className="text-slate-800 whitespace-pre-line leading-snug">{m.text}</p>
+                  {m.tags && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {m.tags.map(t => (
+                        <span key={t} className="text-[9px] border border-amber-300 text-amber-600 rounded-full px-2 py-0.5 font-medium">{t}</span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1">{m.time}</p>
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+
+        {typingInput !== null && (
+          <div className="absolute left-5 right-5 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-xl px-4 py-3.5 flex items-center gap-3 chat-msg-in">
+            <span className="text-slate-400 text-xl leading-none font-light">＋</span>
+            <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75">
+              <circle cx="12" cy="12" r="9" />
+              <path strokeLinecap="round" d="M9 10h.01M15 10h.01M8.5 14.5a4 4 0 007 0" />
+            </svg>
+            <span className="flex-1 text-slate-800 text-sm truncate">
+              {typingInput}
+              <span className="inline-block w-[1.5px] h-3.5 bg-amber-500 ml-0.5 -mb-0.5 blink-cursor" />
+            </span>
+            <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400 shrink-0" fill="currentColor"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-2.08A7 7 0 0019 12h-2z" /></svg>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -585,16 +663,12 @@ export default function LandingPage() {
           desc="Registre cada despesa ou receita em segundos. O Zelo ouve seus áudios, entende sua fala natural e categoriza tudo automaticamente — sem planilha, sem digitação."
           details={FINANCAS_DETAILS}
           visual={
-            <WhatsAppMock
-              tilt={-2}
+            <ScreenChatDemo
               messages={[
                 { from: "user", time: "09:08", typed: "Gastei 45 no mercado", text: "Gastei 45 no mercado" },
-                { time: "09:08", tags: ["Alimentação", "Categorizado"], text: `💸 Despesa registrada!\nMercado — ${fmt(45)}\n\n📊 Saldo pessoal: ${fmt(3282.4)}` },
-                { from: "user", time: "09:12", text: "🎙️ 0:08" },
-                { time: "09:12", text: "Entendi! Registrei:" },
-                { time: "09:12", tags: ["Alimentação", "Categorizado"], text: `💸 Despesa registrada!\nMercado Extra — ${fmt(184.9)}\n\n📊 Saldo pessoal: ${fmt(3241.5)}` },
-                { from: "user", time: "09:14", text: "📷 nota-farmacia.jpg" },
-                { time: "09:14", tags: ["Saúde"], text: `💊 Anotado: Farmácia São João — ${fmt(58.3)}` },
+                { time: "09:08", tags: ["Alimentação", "Categorizado"], text: `💸 Despesa registrada!\n${fmt(45)} — Mercado` },
+                { from: "user", time: "09:10", typed: "Recebi 1200 de freelance", text: "Recebi 1200 de freelance" },
+                { time: "09:10", tags: ["Receita", "Categorizado"], text: `💰 Receita registrada!\n${fmt(1200)} — Freelance` },
               ]}
             />
           }
