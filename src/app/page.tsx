@@ -436,91 +436,181 @@ function CalendarCard() {
 /* ── Moldura de celular genérica (mesmo bezel do WhatsAppMock) pra
  *  encapsular qualquer conteúdo de tela — usada na composição de dois
  *  celulares do painel financeiro. ── */
-function PhoneShell({ children, width = 230, rotate = 0, className }: { children: React.ReactNode; width?: number; rotate?: number; className?: string }) {
+function PhoneShell({ children, width = 230, rotateY = 0, rotateZ = 0, className }: { children: React.ReactNode; width?: number; rotateY?: number; rotateZ?: number; className?: string }) {
   return (
     <div
-      className={clsx("rounded-[2.8rem] border-[7px] border-slate-900 bg-slate-900 shadow-2xl overflow-hidden", className)}
-      style={{ width, transform: rotate ? `rotate(${rotate}deg)` : undefined }}
+      className="relative"
+      style={{
+        width,
+        transform: `perspective(1400px) rotateY(${rotateY}deg) rotateX(4deg) rotateZ(${rotateZ}deg)`,
+        transformStyle: "preserve-3d",
+      }}
     >
-      {children}
+      <div className={clsx("relative rounded-[2.6rem] border-[6px] border-slate-800 bg-black shadow-2xl overflow-hidden ring-1 ring-white/10", className)}>
+        <div className="absolute -left-[6px] top-[72px] w-[6px] h-7 bg-slate-800 rounded-l" />
+        <div className="absolute -left-[6px] top-[110px] w-[6px] h-11 bg-slate-800 rounded-l" />
+        <div className="absolute -right-[6px] top-[95px] w-[6px] h-14 bg-slate-800 rounded-r" />
+        {children}
+      </div>
     </div>
   );
 }
 
-function DashboardPhoneScreen({ dim = 1 }: { dim?: number }) {
+const NAV_ICONS = {
+  home: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-[15px] h-[15px]"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6" /></svg>,
+  chart: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-[15px] h-[15px]"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+  calendar: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-[15px] h-[15px]"><rect x="3" y="5" width="18" height="16" rx="2" /><path strokeLinecap="round" d="M16 3v4M8 3v4M3 10h18" /></svg>,
+  users: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-[15px] h-[15px]"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.36-1.86M17 20H7m10 0v-2a5 5 0 00-9.29-2.51M7 20H2v-2a3 3 0 015.36-1.86M7 20v-2a5 5 0 019.29-2.51M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+};
+
+function PhoneStatusBar() {
   return (
-    <div style={{ opacity: dim }}>
-      <div className="bg-slate-950 px-4 pt-2.5 pb-1.5 flex items-center justify-between relative">
-        <span className="text-[11px] text-white font-semibold">10:09</span>
-        <div className="w-20 h-[18px] rounded-full bg-black mx-auto absolute left-1/2 -translate-x-1/2 top-1" />
-        <div className="flex items-center gap-1 text-white">
-          <svg viewBox="0 0 16 12" className="w-3.5 h-2.5" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="0.5" /><rect x="4.5" y="4.5" width="3" height="7.5" rx="0.5" /><rect x="9" y="2" width="3" height="10" rx="0.5" /><rect x="13" y="0" width="3" height="12" rx="0.5" /></svg>
-          <svg viewBox="0 0 25 12" className="w-5 h-2.5" fill="none" stroke="currentColor" strokeWidth="1"><rect x="0.5" y="0.5" width="21" height="11" rx="2.5" /><rect x="2" y="2" width="16" height="8" rx="1.2" fill="currentColor" stroke="none" /></svg>
-        </div>
+    <div className="bg-slate-950 px-5 pt-2.5 pb-1 flex items-center justify-between relative">
+      <span className="text-[12px] text-white font-semibold tabular-nums">10:09</span>
+      <div className="w-[86px] h-[20px] rounded-full bg-black mx-auto absolute left-1/2 -translate-x-1/2 top-1.5 flex items-center justify-center">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-800" />
       </div>
-      <div className="bg-slate-950 px-4 pt-1 pb-4">
-        <div className="flex items-center gap-1.5 mb-4">
-          <div className="w-5 h-5 rounded-md bg-white flex items-center justify-center overflow-hidden shrink-0">
-            <Image src="/brand/zelo-icon.png" alt="" width={13} height={13} />
+      <div className="flex items-center gap-1.5 text-white">
+        <svg viewBox="0 0 16 12" className="w-4 h-3" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="0.5" /><rect x="4.5" y="4.5" width="3" height="7.5" rx="0.5" /><rect x="9" y="2" width="3" height="10" rx="0.5" /><rect x="13" y="0" width="3" height="12" rx="0.5" /></svg>
+        <svg viewBox="0 0 25 12" className="w-5 h-3" fill="none" stroke="currentColor" strokeWidth="1"><rect x="0.5" y="0.5" width="21" height="11" rx="2.5" /><rect x="2" y="2" width="16" height="8" rx="1.2" fill="currentColor" stroke="none" /></svg>
+      </div>
+    </div>
+  );
+}
+
+function PhoneNavBar({ active }: { active: keyof typeof NAV_ICONS }) {
+  return (
+    <div className="bg-slate-950 border-t border-white/[0.06] px-5 py-3 flex items-center justify-between">
+      {(Object.keys(NAV_ICONS) as (keyof typeof NAV_ICONS)[]).map(key => (
+        <span key={key} className={clsx("flex items-center justify-center w-9 h-9 rounded-xl transition", key === active ? "bg-amber-400/15 text-amber-400" : "text-slate-600")}>
+          {NAV_ICONS[key]}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ── Tela 1: painel completo (celular da frente) ── */
+function DashboardPhoneScreen() {
+  const kpis = [
+    { label: "Entradas", value: fmt(5800), tone: "emerald" as const },
+    { label: "Saídas", value: fmt(2558.5), tone: "red" as const },
+    { label: "A receber", value: fmt(420), tone: "sky" as const },
+    { label: "A pagar", value: fmt(1420), tone: "orange" as const },
+  ];
+  const tones = {
+    emerald: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+    red: "bg-red-500/10 border-red-500/20 text-red-400",
+    sky: "bg-sky-500/10 border-sky-500/20 text-sky-400",
+    orange: "bg-orange-500/10 border-orange-500/20 text-orange-400",
+  };
+  return (
+    <div>
+      <PhoneStatusBar />
+      <div className="bg-slate-950 px-5 pt-2 pb-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-white flex items-center justify-center overflow-hidden shrink-0">
+              <Image src="/brand/zelo-icon.png" alt="" width={15} height={15} />
+            </div>
+            <span className="text-white text-[13px] font-bold">Zelo</span>
           </div>
-          <span className="text-white text-[11px] font-bold">Zelo</span>
+          <span className="text-slate-400 text-[10px] font-medium">Julho 2026</span>
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 border border-white/5 p-3.5 mb-2.5">
-          <p className="text-[8px] uppercase tracking-wide text-slate-400 font-semibold">Saldo do período</p>
-          <p className="text-white text-lg font-extrabold mt-0.5">{fmt(3241.5)}</p>
-          <svg viewBox="0 0 100 24" className="w-full h-5 mt-1.5" preserveAspectRatio="none">
-            <path d="M0 18 L15 14 L30 16 L45 8 L60 11 L75 4 L100 2" fill="none" stroke="#fbbf24" strokeWidth="1.5" />
+
+        <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800/60 border border-white/[0.06] p-4 mb-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[9px] uppercase tracking-wide text-slate-400 font-semibold">Saldo do período</p>
+            <span className="text-[9px] bg-emerald-500/15 text-emerald-400 rounded-full px-1.5 py-0.5 font-semibold">▲ 12%</span>
+          </div>
+          <p className="text-white text-2xl font-extrabold mt-1 tabular-nums">{fmt(3241.5)}</p>
+          <svg viewBox="0 0 200 46" className="w-full h-9 mt-2" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.35" />
+                <stop offset="100%" stopColor="#fbbf24" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d="M0 34 L28 30 L56 36 L84 20 L112 24 L140 10 L168 15 L200 4 V46 H0 Z" fill="url(#sparkFill)" />
+            <path d="M0 34 L28 30 L56 36 L84 20 L112 24 L140 10 L168 15 L200 4" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <div className="grid grid-cols-2 gap-2 mb-2.5">
-          <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5">
-            <p className="text-[7px] uppercase tracking-wide text-emerald-400 font-semibold">Entradas</p>
-            <p className="text-emerald-300 text-[11px] font-bold mt-0.5">{fmt(5800)}</p>
-          </div>
-          <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-2.5">
-            <p className="text-[7px] uppercase tracking-wide text-red-400 font-semibold">Saídas</p>
-            <p className="text-red-300 text-[11px] font-bold mt-0.5">{fmt(2558.5)}</p>
-          </div>
-          <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 p-2.5">
-            <p className="text-[7px] uppercase tracking-wide text-sky-400 font-semibold">A receber</p>
-            <p className="text-sky-300 text-[11px] font-bold mt-0.5">{fmt(420)}</p>
-          </div>
-          <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-2.5">
-            <p className="text-[7px] uppercase tracking-wide text-orange-400 font-semibold">A pagar</p>
-            <p className="text-orange-300 text-[11px] font-bold mt-0.5">{fmt(1420)}</p>
-          </div>
+
+        <div className="grid grid-cols-2 gap-2.5 mb-3">
+          {kpis.map(k => (
+            <div key={k.label} className={clsx("rounded-xl border p-3", tones[k.tone])}>
+              <p className="text-[8.5px] uppercase tracking-wide font-semibold opacity-80">{k.label}</p>
+              <p className="text-white text-[13px] font-bold mt-1 tabular-nums">{k.value}</p>
+            </div>
+          ))}
         </div>
-        <div className="rounded-xl bg-white/[0.04] border border-white/5 p-2.5 flex items-center gap-2.5">
-          <span className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-[10px] shrink-0">↑</span>
+
+        <div className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-3 flex items-center gap-3">
+          <span className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" /></svg>
+          </span>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-[10px] font-semibold truncate">Freelance recebido</p>
-            <p className="text-slate-500 text-[8px]">Hoje</p>
+            <p className="text-white text-[11.5px] font-semibold truncate">Freelance</p>
+            <p className="text-slate-500 text-[9px]">Hoje</p>
           </div>
-          <span className="text-emerald-300 text-[10px] font-bold shrink-0">{fmt(1200)}</span>
+          <span className="text-emerald-400 text-[12px] font-bold shrink-0 tabular-nums">{fmt(1200)}</span>
         </div>
       </div>
-      <div className="bg-slate-950 border-t border-white/5 px-4 py-2.5 flex items-center justify-between">
-        {[["◈", true], ["📊", false], ["📅", false], ["👥", false]].map(([icon, active], i) => (
-          <span key={i} className={clsx("text-[13px]", active ? "text-amber-400" : "text-slate-600")}>{icon as string}</span>
-        ))}
+      <PhoneNavBar active="home" />
+    </div>
+  );
+}
+
+/* ── Tela 2: extrato (celular de trás) — mostra um pedaço diferente do
+ *  app, reforçando que é o mesmo painel visto de outro ângulo. ── */
+function TransactionsPhoneScreen() {
+  const rows = [
+    { label: "Mercado", sub: "Hoje", value: -184.9, icon: "↓" },
+    { label: "Salário", sub: "Ontem", value: 4200, icon: "↑" },
+    { label: "Uber", sub: "Ontem", value: -32.5, icon: "↓" },
+    { label: "Cliente — projeto X", sub: "22 jul", value: 1200, icon: "↑" },
+  ];
+  return (
+    <div>
+      <PhoneStatusBar />
+      <div className="bg-slate-950 px-5 pt-2 pb-4">
+        <p className="text-white text-[13px] font-bold mb-3">Extrato</p>
+        <div className="space-y-2">
+          {rows.map(r => (
+            <div key={r.label} className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-2.5 flex items-center gap-2.5">
+              <span className={clsx("w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0", r.value > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")}>
+                {r.icon}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-[11px] font-semibold truncate">{r.label}</p>
+                <p className="text-slate-500 text-[8.5px]">{r.sub}</p>
+              </div>
+              <span className={clsx("text-[11px] font-bold shrink-0 tabular-nums", r.value > 0 ? "text-emerald-400" : "text-red-400")}>
+                {r.value > 0 ? "+" : "-"}{fmt(Math.abs(r.value))}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
+      <PhoneNavBar active="chart" />
     </div>
   );
 }
 
 /* ── Composição de dois celulares mostrando o painel financeiro real,
- *  um na frente e outro atrás — como o print de referência. ── */
+ *  um na frente e outro atrás, cada um numa tela diferente — como o
+ *  print de referência. ── */
 function DualPhoneDashboard() {
   return (
-    <div className="relative mx-auto" style={{ width: 380, height: 480 }}>
+    <div className="relative mx-auto" style={{ width: 400, height: 540 }}>
       <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/25 blur-3xl -z-10" />
-      <div className="absolute right-0 top-0 z-0">
-        <PhoneShell width={185} rotate={9} className="opacity-95">
-          <DashboardPhoneScreen dim={0.85} />
+      <div className="absolute right-2 top-0 z-0">
+        <PhoneShell width={205} rotateY={18} rotateZ={5} className="opacity-90">
+          <TransactionsPhoneScreen />
         </PhoneShell>
       </div>
       <div className="absolute left-0 bottom-0 z-10">
-        <PhoneShell width={225} rotate={-7}>
+        <PhoneShell width={250} rotateY={-18} rotateZ={-4}>
           <DashboardPhoneScreen />
         </PhoneShell>
       </div>
