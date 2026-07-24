@@ -14,7 +14,12 @@ const CAT_ICON: Record<string, string> = { Mercearia: "🌾", Carnes: "🥩", Ho
 
 const LIST_TEMPLATES = [
   { key: "mercearia", label: "🌾 Mercearia", desc: "Arroz, feijão, óleo, açúcar..." },
-  { key: "carnes", label: "🥩 Carnes", desc: "Frango, carne moída, linguiça..." },
+  { key: "carnes", label: "🥩 Carnes", desc: "Picanha, alcatra, frango, linguiça..." },
+  { key: "hortifruti", label: "🥬 Hortifruti", desc: "Banana, tomate, cebola, batata..." },
+  { key: "laticinios", label: "🥛 Laticínios", desc: "Leite, queijo, iogurte, manteiga..." },
+  { key: "padaria", label: "🍞 Padaria", desc: "Pão francês, pão de forma, bolacha..." },
+  { key: "bebidas", label: "🧃 Bebidas", desc: "Água, refrigerante, suco, cerveja..." },
+  { key: "higiene", label: "🧴 Higiene", desc: "Sabonete, shampoo, papel higiênico..." },
   { key: "limpeza", label: "🧹 Limpeza", desc: "Detergente, sabão, água sanitária..." },
 ];
 
@@ -22,10 +27,12 @@ const LIST_FILTER_CATS = [
   { value: "", label: "📋 Lista Completa" },
   { value: "Mercearia", label: "🌾 Mercearia" },
   { value: "Carnes", label: "🥩 Carnes" },
-  { value: "Limpeza", label: "🧹 Limpeza" },
   { value: "Hortifruti", label: "🥬 Hortifruti" },
   { value: "Laticínios", label: "🥛 Laticínios" },
+  { value: "Padaria", label: "🍞 Padaria" },
+  { value: "Bebidas", label: "🧃 Bebidas" },
   { value: "Higiene", label: "🧴 Higiene" },
+  { value: "Limpeza", label: "🧹 Limpeza" },
 ];
 
 export default function SupermercadoPage() {
@@ -125,21 +132,33 @@ export default function SupermercadoPage() {
       {/* Overview */}
       {overview && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-amber-600 rounded-2xl p-4 text-white shadow-sm">
-            <p className="text-xs text-amber-100">Total Gasto</p>
-            <p className="text-lg font-bold mt-1">{fmt(overview.totalSpent)}</p>
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-lg shrink-0">💸</span>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">Total gasto</p>
+              <p className="text-lg font-bold text-slate-800 mt-0.5 truncate">{fmt(overview.totalSpent)}</p>
+            </div>
           </div>
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-            <p className="text-xs text-slate-400">Compras</p>
-            <p className="text-lg font-bold text-slate-800 mt-1">{overview.purchasesCount}</p>
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-lg shrink-0">🧾</span>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">Compras</p>
+              <p className="text-lg font-bold text-slate-800 mt-0.5">{overview.purchasesCount}</p>
+            </div>
           </div>
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-            <p className="text-xs text-slate-400">Mercado favorito</p>
-            <p className="text-sm font-bold text-slate-800 mt-1 truncate">{overview.topStore?.storeName || "—"}</p>
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-lg shrink-0">🏆</span>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">Mercado favorito</p>
+              <p className="text-sm font-bold text-slate-800 mt-0.5 truncate">{overview.topStore?.storeName || "—"}</p>
+            </div>
           </div>
-          <div className="bg-blue-600 rounded-2xl p-4 text-white shadow-sm">
-            <p className="text-xs text-blue-100">Na lista</p>
-            <p className="text-lg font-bold mt-1">{overview.shoppingListCount} itens</p>
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-lg shrink-0">📋</span>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">Na lista</p>
+              <p className="text-lg font-bold text-slate-800 mt-0.5">{overview.shoppingListCount} itens</p>
+            </div>
           </div>
         </div>
       )}
@@ -177,13 +196,13 @@ export default function SupermercadoPage() {
           {/* Templates */}
           {!listFilter && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-              <p className="text-sm font-semibold text-slate-700 mb-3">Gerar lista por categoria:</p>
-              <div className="flex gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-slate-700 mb-3">Gerar lista por categoria</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {LIST_TEMPLATES.map(t => (
                   <button key={t.key} onClick={() => addFromTemplate(t.key)}
-                    className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs hover:bg-slate-100 transition">
-                    <span className="font-medium">{t.label}</span>
-                    <span className="text-slate-400">{t.desc}</span>
+                    className="flex flex-col items-start gap-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-left hover:bg-amber-50 hover:border-amber-200 transition">
+                    <span className="font-semibold text-xs text-slate-800">{t.label}</span>
+                    <span className="text-slate-400 text-[11px] leading-snug">{t.desc}</span>
                   </button>
                 ))}
               </div>
@@ -225,15 +244,20 @@ export default function SupermercadoPage() {
                   </div>
                   <div className="divide-y divide-slate-50">
                     {items.map(item => (
-                      <div key={item.id} className={clsx("flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition", item.checked && "opacity-50")}>
-                        <button onClick={() => toggleItem(item.id)}
+                      <div key={item.id}
+                        role="button" tabIndex={0}
+                        onClick={() => toggleItem(item.id)}
+                        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleItem(item.id); } }}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 transition cursor-pointer select-none">
+                        <span
                           className={clsx("w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center transition",
-                            item.checked ? "bg-amber-500 border-amber-500" : "border-slate-300 hover:border-amber-400")}>
+                            item.checked ? "bg-amber-500 border-amber-500" : "border-slate-300")}>
                           {item.checked && <span className="text-white text-xs">✓</span>}
-                        </button>
-                        <span className={clsx("text-sm flex-1", item.checked && "line-through text-slate-400")}>{item.name}</span>
-                        <span className="text-xs text-slate-400">{item.quantity}</span>
-                        <button onClick={() => removeItem(item.id)} className="text-slate-300 hover:text-red-400 transition text-xs">✕</button>
+                        </span>
+                        <span className={clsx("text-sm flex-1", item.checked ? "line-through text-slate-400" : "text-slate-700")}>{item.name}</span>
+                        <span className={clsx("text-xs", item.checked ? "text-slate-300" : "text-slate-400")}>{item.quantity}</span>
+                        <button onClick={e => { e.stopPropagation(); removeItem(item.id); }}
+                          className="text-slate-300 hover:text-red-400 transition text-xs p-1 -m-1">✕</button>
                       </div>
                     ))}
                   </div>
