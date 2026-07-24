@@ -433,13 +433,97 @@ function CalendarCard() {
   );
 }
 
-function DashCard({ title, value, sub, color = "amber" }: { title: string; value: string; sub: string; color?: "amber" | "warn" | "red" }) {
-  const colors = { amber: "text-amber-600", warn: "text-orange-600", red: "text-red-500" }[color];
+/* ── Moldura de celular genérica (mesmo bezel do WhatsAppMock) pra
+ *  encapsular qualquer conteúdo de tela — usada na composição de dois
+ *  celulares do painel financeiro. ── */
+function PhoneShell({ children, width = 230, rotate = 0, className }: { children: React.ReactNode; width?: number; rotate?: number; className?: string }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{title}</p>
-      <p className={`text-xl font-extrabold mt-1 ${colors}`}>{value}</p>
-      <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>
+    <div
+      className={clsx("rounded-[2.8rem] border-[7px] border-slate-900 bg-slate-900 shadow-2xl overflow-hidden", className)}
+      style={{ width, transform: rotate ? `rotate(${rotate}deg)` : undefined }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DashboardPhoneScreen({ dim = 1 }: { dim?: number }) {
+  return (
+    <div style={{ opacity: dim }}>
+      <div className="bg-slate-950 px-4 pt-2.5 pb-1.5 flex items-center justify-between relative">
+        <span className="text-[11px] text-white font-semibold">10:09</span>
+        <div className="w-20 h-[18px] rounded-full bg-black mx-auto absolute left-1/2 -translate-x-1/2 top-1" />
+        <div className="flex items-center gap-1 text-white">
+          <svg viewBox="0 0 16 12" className="w-3.5 h-2.5" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="0.5" /><rect x="4.5" y="4.5" width="3" height="7.5" rx="0.5" /><rect x="9" y="2" width="3" height="10" rx="0.5" /><rect x="13" y="0" width="3" height="12" rx="0.5" /></svg>
+          <svg viewBox="0 0 25 12" className="w-5 h-2.5" fill="none" stroke="currentColor" strokeWidth="1"><rect x="0.5" y="0.5" width="21" height="11" rx="2.5" /><rect x="2" y="2" width="16" height="8" rx="1.2" fill="currentColor" stroke="none" /></svg>
+        </div>
+      </div>
+      <div className="bg-slate-950 px-4 pt-1 pb-4">
+        <div className="flex items-center gap-1.5 mb-4">
+          <div className="w-5 h-5 rounded-md bg-white flex items-center justify-center overflow-hidden shrink-0">
+            <Image src="/brand/zelo-icon.png" alt="" width={13} height={13} />
+          </div>
+          <span className="text-white text-[11px] font-bold">Zelo</span>
+        </div>
+        <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 border border-white/5 p-3.5 mb-2.5">
+          <p className="text-[8px] uppercase tracking-wide text-slate-400 font-semibold">Saldo do período</p>
+          <p className="text-white text-lg font-extrabold mt-0.5">{fmt(3241.5)}</p>
+          <svg viewBox="0 0 100 24" className="w-full h-5 mt-1.5" preserveAspectRatio="none">
+            <path d="M0 18 L15 14 L30 16 L45 8 L60 11 L75 4 L100 2" fill="none" stroke="#fbbf24" strokeWidth="1.5" />
+          </svg>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mb-2.5">
+          <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5">
+            <p className="text-[7px] uppercase tracking-wide text-emerald-400 font-semibold">Entradas</p>
+            <p className="text-emerald-300 text-[11px] font-bold mt-0.5">{fmt(5800)}</p>
+          </div>
+          <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-2.5">
+            <p className="text-[7px] uppercase tracking-wide text-red-400 font-semibold">Saídas</p>
+            <p className="text-red-300 text-[11px] font-bold mt-0.5">{fmt(2558.5)}</p>
+          </div>
+          <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 p-2.5">
+            <p className="text-[7px] uppercase tracking-wide text-sky-400 font-semibold">A receber</p>
+            <p className="text-sky-300 text-[11px] font-bold mt-0.5">{fmt(420)}</p>
+          </div>
+          <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-2.5">
+            <p className="text-[7px] uppercase tracking-wide text-orange-400 font-semibold">A pagar</p>
+            <p className="text-orange-300 text-[11px] font-bold mt-0.5">{fmt(1420)}</p>
+          </div>
+        </div>
+        <div className="rounded-xl bg-white/[0.04] border border-white/5 p-2.5 flex items-center gap-2.5">
+          <span className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-[10px] shrink-0">↑</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-[10px] font-semibold truncate">Freelance recebido</p>
+            <p className="text-slate-500 text-[8px]">Hoje</p>
+          </div>
+          <span className="text-emerald-300 text-[10px] font-bold shrink-0">{fmt(1200)}</span>
+        </div>
+      </div>
+      <div className="bg-slate-950 border-t border-white/5 px-4 py-2.5 flex items-center justify-between">
+        {[["◈", true], ["📊", false], ["📅", false], ["👥", false]].map(([icon, active], i) => (
+          <span key={i} className={clsx("text-[13px]", active ? "text-amber-400" : "text-slate-600")}>{icon as string}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Composição de dois celulares mostrando o painel financeiro real,
+ *  um na frente e outro atrás — como o print de referência. ── */
+function DualPhoneDashboard() {
+  return (
+    <div className="relative mx-auto" style={{ width: 380, height: 480 }}>
+      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/25 blur-3xl -z-10" />
+      <div className="absolute right-0 top-0 z-0">
+        <PhoneShell width={185} rotate={9} className="opacity-95">
+          <DashboardPhoneScreen dim={0.85} />
+        </PhoneShell>
+      </div>
+      <div className="absolute left-0 bottom-0 z-10">
+        <PhoneShell width={225} rotate={-7}>
+          <DashboardPhoneScreen />
+        </PhoneShell>
+      </div>
     </div>
   );
 }
@@ -682,23 +766,7 @@ export default function LandingPage() {
         title="Seu dinheiro organizado em um só painel."
         desc="Seus gastos, compromissos e metas organizados num painel completo. Você sempre sabe o que aconteceu, o que está pendente e o que vem pela frente."
         details={PAINEL_DETAILS}
-        visual={
-          <div className="max-w-sm mx-auto space-y-3 relative">
-            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/20 blur-3xl -z-10" />
-            <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl">
-              <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Saldo pessoal · julho</p>
-              <p className="text-3xl font-extrabold mt-1">{fmt(3241.5)}</p>
-              <div className="flex gap-2 mt-3">
-                <span className="text-[10px] bg-amber-500/15 text-amber-300 rounded-full px-2.5 py-1">+{fmt(5800)} receitas</span>
-                <span className="text-[10px] bg-red-500/10 text-red-300 rounded-full px-2.5 py-1">-{fmt(2558.5)} despesas</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <DashCard title="Meta: Viagem" value="62%" sub={`${fmt(3100)} de ${fmt(5000)}`} />
-              <DashCard title="Cartão a pagar" value={fmt(1420)} sub="vence em 6 dias" color="warn" />
-            </div>
-          </div>
-        }
+        visual={<DualPhoneDashboard />}
       />
 
       {/* ── MODO PESSOAL / MODO EMPRESA ── */}
