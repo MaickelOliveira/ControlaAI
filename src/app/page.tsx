@@ -25,7 +25,7 @@ function useInView<T extends HTMLElement>() {
   return { ref, inView };
 }
 
-type Msg = { from?: "bot" | "user"; text: React.ReactNode; tags?: string[]; time?: string };
+type Msg = { from?: "bot" | "user"; text: React.ReactNode; tags?: string[]; time?: string; typed?: string };
 type Chip = { label: string; pos: string; delay?: string };
 
 function TypingDots() {
@@ -73,6 +73,7 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(0);
   const [typing, setTyping] = useState(false);
+  const [typingInput, setTypingInput] = useState("");
 
   // Mantém o celular sempre do mesmo tamanho — a área de mensagens tem altura
   // fixa e rola sozinha pra baixo conforme a conversa avança, em vez de
@@ -83,7 +84,7 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
   }, [shown, typing]);
 
   useEffect(() => {
-    if (!inView) { setShown(0); setTyping(false); return; }
+    if (!inView) { setShown(0); setTyping(false); setTypingInput(""); return; }
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const at = (fn: () => void, ms: number) => { const t = setTimeout(() => { if (!cancelled) fn(); }, ms); timers.push(t); };
@@ -96,9 +97,30 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
       }
       const msg = messages[i];
       if (msg.from === "user") {
-        setTyping(false);
-        setShown(i + 1);
-        at(() => step(i + 1), 550);
+        if (msg.typed) {
+          // Simula o usuário digitando a mensagem no campo de texto antes de enviar
+          const text = msg.typed;
+          let idx = 0;
+          const tick = () => {
+            if (cancelled) return;
+            idx++;
+            setTypingInput(text.slice(0, idx));
+            if (idx < text.length) {
+              at(tick, 40 + Math.random() * 35);
+            } else {
+              at(() => {
+                setTypingInput("");
+                setShown(i + 1);
+                at(() => step(i + 1), 550);
+              }, 550);
+            }
+          };
+          at(tick, 350);
+        } else {
+          setTyping(false);
+          setShown(i + 1);
+          at(() => step(i + 1), 550);
+        }
       } else {
         setTyping(true);
         at(() => { setTyping(false); setShown(i + 1); at(() => step(i + 1), 400); }, 900);
@@ -153,7 +175,16 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
         </div>
         <div className="bg-white px-2.5 py-2 flex items-center gap-2 border-t border-slate-100">
           <span className="text-slate-400 text-xl leading-none font-light">＋</span>
-          <div className="flex-1 bg-slate-100 rounded-full px-3.5 py-2 text-[12px] text-slate-400">Mensagem</div>
+          <div className="flex-1 bg-slate-100 rounded-full px-3.5 py-2 text-[12px] min-h-[30px] flex items-center">
+            {typingInput ? (
+              <span className="text-slate-800">
+                {typingInput}
+                <span className="inline-block w-[1.5px] h-3 bg-slate-500 ml-0.5 -mb-0.5 blink-cursor" />
+              </span>
+            ) : (
+              <span className="text-slate-400">Mensagem</span>
+            )}
+          </div>
           <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.5-4.5a2 2 0 012.8 0l3.2 3.2a2 2 0 002.8 0L20 12M4 8h.01M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" /></svg>
           <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400" fill="currentColor"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-2.08A7 7 0 0019 12h-2z" /></svg>
         </div>
@@ -189,12 +220,55 @@ const MODULE_ICONS = {
   ),
 };
 
-type Detail = { icon: string; title: string; desc: string };
+/* ── Ícones de linha usados nos cards de função (em vez de emoji) — mesmo
+ *  estilo dos ícones do sidebar real do app: contorno simples, strokeWidth
+ *  1.75, sem preenchimento. ── */
+function FeatureIcon({ d }: { d: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-[18px] h-[18px]">
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  );
+}
+
+const FEATURE_ICONS = {
+  mic: <FeatureIcon d="M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3zM7 11a5 5 0 0010 0M12 16v4m-3 0h6" />,
+  tag: <FeatureIcon d="M9.57 3H5.25A2.25 2.25 0 003 5.25v4.32c0 .6.24 1.17.66 1.59l9.58 9.58c.7.7 1.83.7 2.53 0l7.16-7.16a1.79 1.79 0 000-2.53L12.75 3.66A2.25 2.25 0 009.57 3z" />,
+  repeat: <FeatureIcon d="M16 9.35h5v-.01M3 19.64v-5m0 0h5m-5 0l3.18 3.18a8.25 8.25 0 0013.8-3.7M4 9.86a8.25 8.25 0 0113.8-3.7L21 9.34m0-5v5" />,
+  switch: <FeatureIcon d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />,
+  chart: <FeatureIcon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+  clock: <FeatureIcon d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 3" />,
+  target: <FeatureIcon d="M12 21a9 9 0 100-18 9 9 0 000 18zm0-4a5 5 0 100-10 5 5 0 000 10zm0-3a2 2 0 100-4 2 2 0 000 4z" />,
+  pencil: <FeatureIcon d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />,
+  calculator: <FeatureIcon d="M6 3h12a1 1 0 011 1v16a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15v3M8 19h4" />,
+  building: <FeatureIcon d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />,
+  zen: <FeatureIcon d="M12 21a9 9 0 100-18 9 9 0 000 18zm-3.5-9l2 2 4.5-4.5" />,
+  chat: <FeatureIcon d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.42-4.03 8-9 8a9.86 9.86 0 01-4.26-.95L3 20l1.4-3.72C3.51 15.04 3 13.57 3 12c0-4.42 4.03-8 9-8s9 3.58 9 8z" />,
+  sync: <FeatureIcon d="M16 9.35h5v-.01M3 19.64v-5m0 0h5m-5 0l3.18 3.18a8.25 8.25 0 0013.8-3.7M4 9.86a8.25 8.25 0 0113.8-3.7L21 9.34m0-5v5" />,
+  bell: <FeatureIcon d="M15 17h5l-1.4-1.4A2 2 0 0118 14.16V11a6 6 0 00-4-5.66V5a2 2 0 10-4 0v.34C7.67 6.17 6 8.39 6 11v3.16c0 .54-.21 1.06-.6 1.44L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />,
+  check: <FeatureIcon d="M12 21a9 9 0 100-18 9 9 0 000 18zM9 12l2 2 4-4" />,
+  link: <FeatureIcon d="M13.83 10.17a4 4 0 00-5.66 0l-4 4a4 4 0 105.66 5.66l1.1-1.1m-.76-4.9a4 4 0 005.66 0l4-4a4 4 0 10-5.66-5.66l-1.1 1.1" />,
+  megaphone: <FeatureIcon d="M3 10v4a1 1 0 001 1h2l6 4V5L6 9H4a1 1 0 00-1 1zM18 8a5 5 0 010 8" />,
+  doc: <FeatureIcon d="M7 4h10a2 2 0 012 2v14l-3-2-3 2-3-2-3 2V6a2 2 0 012-2zM9 8h6M9 12h6M9 16h3" />,
+  search: <FeatureIcon d="M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35" />,
+  users: <FeatureIcon d="M17 20h5v-2a3 3 0 00-5.36-1.86M17 20H7m10 0v-2a5 5 0 00-9.29-2.51M7 20H2v-2a3 3 0 015.36-1.86M7 20v-2a5 5 0 019.29-2.51M15 7a3 3 0 11-6 0 3 3 0 016 0z" />,
+  partners: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-[18px] h-[18px]">
+      <circle cx="9" cy="12" r="6" />
+      <circle cx="15" cy="12" r="6" />
+    </svg>
+  ),
+  lock: <FeatureIcon d="M5 11h14v9a2 2 0 01-2 2H7a2 2 0 01-2-2v-9zm3 0V7a4 4 0 018 0v4" />,
+  upload: <FeatureIcon d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 8.25L12 3.75m0 0L7.5 8.25M12 3.75v13.5" />,
+  folder: <FeatureIcon d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />,
+};
+
+type Detail = { icon: React.ReactNode; title: string; desc: string };
 
 function DetailCard({ icon, title, desc, dark }: Detail & { dark?: boolean }) {
   return (
     <div className={clsx("rounded-2xl border p-4 transition", dark ? "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]" : "border-slate-100 bg-white hover:border-amber-200 hover:shadow-md")}>
-      <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-amber-500/20 flex items-center justify-center text-base shrink-0">{icon}</span>
+      <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-slate-900 shrink-0 shadow-sm shadow-amber-500/20">{icon}</span>
       <p className={clsx("font-bold text-sm mt-3", dark ? "text-white" : "text-slate-900")}>{title}</p>
       <p className={clsx("text-[13px] mt-1 leading-relaxed", dark ? "text-slate-400" : "text-slate-500")}>{desc}</p>
     </div>
@@ -338,52 +412,52 @@ function ModeToggleDemo() {
 }
 
 const FINANCAS_DETAILS: Detail[] = [
-  { icon: "🎙️", title: "Áudio, texto ou foto", desc: "Fale naturalmente, digite ou mande foto do recibo — os três formatos são entendidos na hora." },
-  { icon: "🏷️", title: "Categorização automática", desc: "Cada gasto já chega organizado por categoria, sem escolher nada na mão." },
-  { icon: "🔁", title: "Recorrentes e parcelados", desc: "Assinaturas e parcelamentos com lembrete automático a cada vencimento." },
-  { icon: "👤🏢", title: "Pessoal ou empresa", desc: "Registre no modo certo e nunca misture as contas de casa com as do negócio." },
+  { icon: FEATURE_ICONS.mic, title: "Áudio, texto ou foto", desc: "Fale naturalmente, digite ou mande foto do recibo — os três formatos são entendidos na hora." },
+  { icon: FEATURE_ICONS.tag, title: "Categorização automática", desc: "Cada gasto já chega organizado por categoria, sem escolher nada na mão." },
+  { icon: FEATURE_ICONS.repeat, title: "Recorrentes e parcelados", desc: "Assinaturas e parcelamentos com lembrete automático a cada vencimento." },
+  { icon: FEATURE_ICONS.switch, title: "Pessoal ou empresa", desc: "Registre no modo certo e nunca misture as contas de casa com as do negócio." },
 ];
 
 const PAINEL_DETAILS: Detail[] = [
-  { icon: "📊", title: "Categorias sob medida", desc: "Crie e edite suas próprias categorias, do jeito que fizer sentido pra você." },
-  { icon: "⏳", title: "Lançamentos pendentes", desc: "Contas futuras entram automaticamente no saldo assim que a data chega." },
-  { icon: "🎯", title: "Metas com prazo", desc: "Defina o valor alvo e a data, acompanhe o progresso quando quiser." },
-  { icon: "✍️", title: "Edite conversando", desc: "Mude valor, categoria ou data só descrevendo o que precisa mudar." },
+  { icon: FEATURE_ICONS.chart, title: "Categorias sob medida", desc: "Crie e edite suas próprias categorias, do jeito que fizer sentido pra você." },
+  { icon: FEATURE_ICONS.clock, title: "Lançamentos pendentes", desc: "Contas futuras entram automaticamente no saldo assim que a data chega." },
+  { icon: FEATURE_ICONS.target, title: "Metas com prazo", desc: "Defina o valor alvo e a data, acompanhe o progresso quando quiser." },
+  { icon: FEATURE_ICONS.pencil, title: "Edite conversando", desc: "Mude valor, categoria ou data só descrevendo o que precisa mudar." },
 ];
 
 const MODO_DETAILS: Detail[] = [
-  { icon: "🔀", title: "Troque com um clique", desc: "Sem trocar de conta nem digitar senha de novo — o botão fica ali no painel." },
-  { icon: "🧮", title: "Saldos separados", desc: "Categorias, metas e relatórios calculados de forma independente por modo." },
-  { icon: "🏢", title: "Empresa completa", desc: "Funcionários, veículos e fornecedores organizados do lado do negócio." },
-  { icon: "🧘", title: "Sem confusão", desc: "Ideal pra quem empreende e também cuida da vida pessoal, no mesmo lugar." },
+  { icon: FEATURE_ICONS.switch, title: "Troque com um clique", desc: "Sem trocar de conta nem digitar senha de novo — o botão fica ali no painel." },
+  { icon: FEATURE_ICONS.calculator, title: "Saldos separados", desc: "Categorias, metas e relatórios calculados de forma independente por modo." },
+  { icon: FEATURE_ICONS.building, title: "Empresa completa", desc: "Funcionários, veículos e fornecedores organizados do lado do negócio." },
+  { icon: FEATURE_ICONS.zen, title: "Sem confusão", desc: "Ideal pra quem empreende e também cuida da vida pessoal, no mesmo lugar." },
 ];
 
 const AGENDA_DETAILS: Detail[] = [
-  { icon: "🗣️", title: "Fale do seu jeito", desc: "Diga a data e o horário como preferir — o Zelo entende e agenda certinho." },
-  { icon: "🔄", title: "Sincronizado com o Google", desc: "Tudo espelhado automaticamente no Google Agenda, nos dois sentidos." },
-  { icon: "⏰", title: "Lembretes automáticos", desc: "Você é avisado antes de cada compromisso, sem configurar nada." },
-  { icon: "✅", title: "Tarefas do dia", desc: "Marque compromissos e afazeres como feitos direto pelo WhatsApp." },
+  { icon: FEATURE_ICONS.chat, title: "Fale do seu jeito", desc: "Diga a data e o horário como preferir — o Zelo entende e agenda certinho." },
+  { icon: FEATURE_ICONS.sync, title: "Sincronizado com o Google", desc: "Tudo espelhado automaticamente no Google Agenda, nos dois sentidos." },
+  { icon: FEATURE_ICONS.bell, title: "Lembretes automáticos", desc: "Você é avisado antes de cada compromisso, sem configurar nada." },
+  { icon: FEATURE_ICONS.check, title: "Tarefas do dia", desc: "Marque compromissos e afazeres como feitos direto pelo WhatsApp." },
 ];
 
 const REUNIOES_DETAILS: Detail[] = [
-  { icon: "🔗", title: "Link em segundos", desc: "Peça e o Zelo cria o Google Meet na hora, sem abrir o Google Agenda." },
-  { icon: "📣", title: "Convite automático", desc: "Participantes chamados direto pelo WhatsApp, sem trabalho manual." },
-  { icon: "📝", title: "Ata gerada por IA", desc: "Ao final, o Zelo resume decisões e próximos passos automaticamente." },
-  { icon: "🔍", title: "Fácil de encontrar depois", desc: "A ata fica salva e pode ser consultada quando você quiser." },
+  { icon: FEATURE_ICONS.link, title: "Link em segundos", desc: "Peça e o Zelo cria o Google Meet na hora, sem abrir o Google Agenda." },
+  { icon: FEATURE_ICONS.megaphone, title: "Convite automático", desc: "Participantes chamados direto pelo WhatsApp, sem trabalho manual." },
+  { icon: FEATURE_ICONS.doc, title: "Ata gerada por IA", desc: "Ao final, o Zelo resume decisões e próximos passos automaticamente." },
+  { icon: FEATURE_ICONS.search, title: "Fácil de encontrar depois", desc: "A ata fica salva e pode ser consultada quando você quiser." },
 ];
 
 const CONTA_DETAILS: Detail[] = [
-  { icon: "👫", title: "Casais", desc: "Registrem os gastos da casa numa conta só, sem duplicar controle." },
-  { icon: "🤝", title: "Sócios", desc: "Lancem despesas e receitas da empresa no mesmo lugar, no modo empresa." },
-  { icon: "🔐", title: "Sem compartilhar senha", desc: "Cada pessoa usa o próprio número de WhatsApp, com segurança." },
-  { icon: "🏷️", title: "Identificado por pessoa", desc: "Todo lançamento mostra quem da família ou da equipe registrou." },
+  { icon: FEATURE_ICONS.users, title: "Casais", desc: "Registrem os gastos da casa numa conta só, sem duplicar controle." },
+  { icon: FEATURE_ICONS.partners, title: "Sócios", desc: "Lancem despesas e receitas da empresa no mesmo lugar, no modo empresa." },
+  { icon: FEATURE_ICONS.lock, title: "Sem compartilhar senha", desc: "Cada pessoa usa o próprio número de WhatsApp, com segurança." },
+  { icon: FEATURE_ICONS.tag, title: "Identificado por pessoa", desc: "Todo lançamento mostra quem da família ou da equipe registrou." },
 ];
 
 const DRIVE_DETAILS: Detail[] = [
-  { icon: "📤", title: "Envie qualquer arquivo", desc: "Direto pelo WhatsApp, sem app extra e sem fazer login em lugar nenhum." },
-  { icon: "🗂️", title: "Organização automática", desc: "O Zelo entende o conteúdo e guarda na pasta certa sozinho." },
-  { icon: "🔎", title: "Busca por significado", desc: "Descreva o que procura, mesmo sem lembrar o nome — a IA encontra." },
-  { icon: "✏️", title: "Renomeie conversando", desc: "Peça pra renomear o último arquivo só digitando o novo nome." },
+  { icon: FEATURE_ICONS.upload, title: "Envie qualquer arquivo", desc: "Direto pelo WhatsApp, sem app extra e sem fazer login em lugar nenhum." },
+  { icon: FEATURE_ICONS.folder, title: "Organização automática", desc: "O Zelo entende o conteúdo e guarda na pasta certa sozinho." },
+  { icon: FEATURE_ICONS.search, title: "Busca por significado", desc: "Descreva o que procura, mesmo sem lembrar o nome — a IA encontra." },
+  { icon: FEATURE_ICONS.pencil, title: "Renomeie conversando", desc: "Peça pra renomear o último arquivo só digitando o novo nome." },
 ];
 
 const FAQS = [
@@ -514,6 +588,8 @@ export default function LandingPage() {
             <WhatsAppMock
               tilt={-2}
               messages={[
+                { from: "user", time: "09:08", typed: "Gastei 45 no mercado", text: "Gastei 45 no mercado" },
+                { time: "09:08", tags: ["Alimentação", "Categorizado"], text: `💸 Despesa registrada!\nMercado — ${fmt(45)}\n\n📊 Saldo pessoal: ${fmt(3282.4)}` },
                 { from: "user", time: "09:12", text: "🎙️ 0:08" },
                 { time: "09:12", text: "Entendi! Registrei:" },
                 { time: "09:12", tags: ["Alimentação", "Categorizado"], text: `💸 Despesa registrada!\nMercado Extra — ${fmt(184.9)}\n\n📊 Saldo pessoal: ${fmt(3241.5)}` },
@@ -740,12 +816,12 @@ export default function LandingPage() {
       </div>
 
       {/* ── CTA banner ── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-black via-slate-950 to-slate-900 py-24">
-        <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "26px 26px" }} />
+      <section className="relative overflow-hidden bg-gradient-to-br from-amber-400 to-amber-500 py-24">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "radial-gradient(circle, #000 1px, transparent 1px)", backgroundSize: "26px 26px" }} />
         <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <h2 className={`${heading.className} text-3xl sm:text-5xl font-extrabold text-white`}>Sua rotina, sob controle.</h2>
-          <p className="text-slate-300 mt-3 text-lg">Pessoal ou empresa — onde quer que você esteja, é só abrir o WhatsApp.</p>
-          <Link href="/cadastro" className="inline-block mt-8 rounded-xl bg-white text-slate-900 text-sm font-bold px-7 py-3.5 hover:bg-slate-100 transition shadow-xl">
+          <h2 className={`${heading.className} text-3xl sm:text-5xl font-extrabold text-slate-900`}>Sua rotina, sob controle.</h2>
+          <p className="text-slate-800/80 mt-3 text-lg">Pessoal ou empresa — onde quer que você esteja, é só abrir o WhatsApp.</p>
+          <Link href="/cadastro" className="inline-block mt-8 rounded-xl bg-slate-900 text-white text-sm font-bold px-7 py-3.5 hover:bg-slate-800 transition shadow-xl">
             Começar agora →
           </Link>
         </div>

@@ -49,3 +49,11 @@ body {
 .float-chip {
   animation: float-chip 4.5s ease-in-out infinite;
 }
+
+@keyframes blink-cursor {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.blink-cursor {
+  animation: blink-cursor 1s step-start infinite;
+}
