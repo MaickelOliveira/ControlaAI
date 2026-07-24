@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { clsx } from "clsx";
 import { Plus_Jakarta_Sans } from "next/font/google";
 
 const heading = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-heading" });
@@ -10,10 +11,95 @@ function fmt(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-/* ── WhatsApp mock — moldura + header, reutilizado em várias seções ── */
-function WhatsAppMock({ children }: { children: React.ReactNode }) {
+/* ── Dispara quando o elemento entra/sai da tela — usado pra tocar as animações
+ *  da conversa do WhatsApp toda vez que a seção aparece na tela. ── */
+function useInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.4 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { ref, inView };
+}
+
+type Msg = { from?: "bot" | "user"; text: React.ReactNode; tags?: string[]; time?: string };
+
+function TypingDots() {
   return (
-    <div className="w-full max-w-[320px] mx-auto rounded-[2rem] border-4 border-slate-900 bg-slate-900 shadow-2xl overflow-hidden">
+    <div className="flex justify-start">
+      <div className="bg-[#1f2c34] rounded-xl rounded-tl-sm px-3.5 py-3 flex items-center gap-1">
+        {[0, 1, 2].map(i => (
+          <span key={i} className="chat-typing-dot w-1.5 h-1.5 rounded-full bg-slate-400" style={{ animationDelay: `${i * 0.15}s` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChatBubble({ from = "bot", tags, text, time = "20:40" }: Msg) {
+  const isUser = from === "user";
+  return (
+    <div className={clsx("flex chat-msg-in", isUser ? "justify-end" : "justify-start")}>
+      <div className={clsx("max-w-[85%] rounded-xl px-3 py-2 text-[12.5px] leading-snug whitespace-pre-line", isUser ? "bg-[#005c4b] text-white rounded-tr-sm" : "bg-[#1f2c34] text-slate-100 rounded-tl-sm")}>
+        {text}
+        {tags && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {tags.map(t => (
+              <span key={t} className="text-[9px] bg-emerald-500/15 text-emerald-300 rounded-full px-2 py-0.5 font-medium">{t}</span>
+            ))}
+          </div>
+        )}
+        <p className={clsx("text-[9px] mt-1 text-right", isUser ? "text-emerald-100/70" : "text-slate-400")}>{time}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Moldura de WhatsApp com a conversa animada: as mensagens aparecem em
+ *  sequência, com "digitando..." antes de cada resposta do Zelo, disparando
+ *  toda vez que o mockup entra na tela. ── */
+function WhatsAppMock({ messages }: { messages: Msg[] }) {
+  const { ref, inView } = useInView<HTMLDivElement>();
+  const [shown, setShown] = useState(0);
+  const [typing, setTyping] = useState(false);
+
+  useEffect(() => {
+    if (!inView) { setShown(0); setTyping(false); return; }
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    function schedule(i: number, delay: number) {
+      const t = setTimeout(() => {
+        if (cancelled || i >= messages.length) return;
+        const msg = messages[i];
+        if (msg.from === "user") {
+          setTyping(false);
+          setShown(i + 1);
+          schedule(i + 1, 500);
+        } else {
+          setTyping(true);
+          const t2 = setTimeout(() => {
+            if (cancelled) return;
+            setTyping(false);
+            setShown(i + 1);
+            schedule(i + 1, 350);
+          }, 850);
+          timers.push(t2);
+        }
+      }, delay);
+      timers.push(t);
+    }
+    schedule(0, 500);
+
+    return () => { cancelled = true; timers.forEach(clearTimeout); };
+  }, [inView, messages]);
+
+  return (
+    <div ref={ref} className="w-full max-w-[320px] mx-auto rounded-[2rem] border-4 border-slate-900 bg-slate-900 shadow-2xl overflow-hidden">
       <div className="bg-[#0b141a] px-3 pt-2 pb-1 flex items-center justify-between">
         <span className="text-[10px] text-slate-300 font-medium">17:13</span>
         <div className="flex items-center gap-1">
@@ -28,42 +114,21 @@ function WhatsAppMock({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-white text-[13px] font-semibold leading-tight">Zelo</p>
-          <p className="text-emerald-200 text-[10px] leading-tight">online agora</p>
+          <p className="text-emerald-200 text-[10px] leading-tight">{typing ? "digitando..." : "online agora"}</p>
         </div>
         <div className="flex items-center gap-3 text-white/80 text-sm">
           <span>📹</span>
           <span>📞</span>
         </div>
       </div>
-      <div
-        className="px-2.5 py-3 space-y-2 min-h-[380px]"
-        style={{ background: "#0b141a linear-gradient(180deg,#111b21,#0b141a)" }}
-      >
-        {children}
+      <div className="px-2.5 py-3 space-y-2 min-h-[380px]" style={{ background: "linear-gradient(180deg,#111b21,#0b141a)" }}>
+        {messages.slice(0, shown).map((m, i) => <ChatBubble key={i} {...m} />)}
+        {typing && <TypingDots />}
       </div>
       <div className="bg-[#1f2c34] px-2.5 py-2 flex items-center gap-2">
         <span className="text-slate-400 text-lg leading-none">＋</span>
         <div className="flex-1 bg-[#2a3942] rounded-full px-3 py-1.5 text-[11px] text-slate-400">Zelo</div>
         <span className="text-slate-400">🎙️</span>
-      </div>
-    </div>
-  );
-}
-
-function Bubble({ from = "bot", tags, children, time = "20:40" }: { from?: "bot" | "user"; tags?: string[]; children: React.ReactNode; time?: string }) {
-  const isUser = from === "user";
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[85%] rounded-xl px-3 py-2 text-[12.5px] leading-snug ${isUser ? "bg-[#005c4b] text-white rounded-tr-sm" : "bg-[#1f2c34] text-slate-100 rounded-tl-sm"}`}>
-        {children}
-        {tags && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {tags.map(t => (
-              <span key={t} className="text-[9px] bg-emerald-500/15 text-emerald-300 rounded-full px-2 py-0.5 font-medium">{t}</span>
-            ))}
-          </div>
-        )}
-        <p className={`text-[9px] mt-1 ${isUser ? "text-emerald-100/70" : "text-slate-400"} text-right`}>{time}</p>
       </div>
     </div>
   );
@@ -112,11 +177,54 @@ function DashCard({ title, value, sub, color = "emerald" }: { title: string; val
   );
 }
 
+/* ── Demo interativa do Modo Pessoal / Modo Empresa ── */
+const MODE_DATA = {
+  personal: {
+    label: "👤 Pessoal", sub: "Saldo pessoal · julho", balance: 3241.5,
+    cats: [["Alimentação", 620], ["Transporte", 310], ["Lazer", 180]] as [string, number][],
+  },
+  business: {
+    label: "🏢 Empresa", sub: "Saldo da empresa · julho", balance: 18420.9,
+    cats: [["Fornecedores", 4200], ["Marketing", 1800], ["Funcionários", 9600]] as [string, number][],
+  },
+};
+
+function ModeToggleDemo() {
+  const [mode, setMode] = useState<"personal" | "business">("personal");
+  const d = MODE_DATA[mode];
+  return (
+    <div className="max-w-sm mx-auto">
+      <div className="flex bg-slate-100 rounded-xl p-1 mb-4">
+        {(["personal", "business"] as const).map(key => (
+          <button key={key} onClick={() => setMode(key)}
+            className={clsx("flex-1 py-2.5 rounded-lg text-xs font-bold transition", mode === key ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600")}>
+            {MODE_DATA[key].label}
+          </button>
+        ))}
+      </div>
+      <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl transition-all">
+        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{d.sub}</p>
+        <p className="text-3xl font-extrabold mt-1 transition-all">{fmt(d.balance)}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mt-3">
+        {d.cats.map(([cat, val]) => (
+          <div key={cat} className="rounded-xl border border-slate-100 p-2.5 text-center">
+            <p className="text-[9px] text-slate-400 truncate">{cat}</p>
+            <p className="text-xs font-bold text-slate-700 mt-0.5">{fmt(val)}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-[11px] text-slate-400 mt-3">↑ clique pra alternar entre os modos</p>
+    </div>
+  );
+}
+
 const FAQS = [
   { q: "O que é o Zelo e como ele funciona?", a: "O Zelo é um assistente pessoal por IA que vive no seu WhatsApp. Você fala, digita ou manda foto do que precisa registrar — finanças, compromissos, tarefas — e ele organiza tudo automaticamente, com um painel web pra você acompanhar sempre que quiser." },
   { q: "Preciso instalar algum aplicativo?", a: "Não. Todo o dia a dia acontece no seu WhatsApp normal, sem instalar nada. O painel web é opcional, pra quando você quiser uma visão mais completa." },
+  { q: "Como funciona o Modo Pessoal e o Modo Empresa?", a: "É a mesma conta e o mesmo WhatsApp, mas com dois ambientes separados: um pra vida pessoal e outro pra empresa. Você troca de modo com um clique no painel (ou pedindo pro Zelo), e cada um tem seu próprio saldo, categorias e metas — sem misturar as contas." },
   { q: "Como funciona a importação da fatura do cartão?", a: "Envie o PDF da fatura pelo WhatsApp (ou pelo painel) e o Zelo lê cada lançamento sozinho, categoriza automaticamente e avisa quando algum gasto já foi registrado antes — assim você nunca duplica uma compra." },
-  { q: "Posso compartilhar minha conta com outras pessoas?", a: "Sim. Você pode vincular o número de família, sócios ou da sua equipe à mesma conta — cada um registra pelo próprio WhatsApp e tudo cai no mesmo painel." },
+  { q: "Posso compartilhar minha conta com outras pessoas?", a: "Sim. Você pode vincular o número de família, sócios ou da sua equipe à mesma conta — cada um registra pelo próprio WhatsApp, identificado pelo nome, e tudo cai no mesmo painel." },
   { q: "O que acontece com minhas reuniões do Google Meet?", a: "Você pode pedir pro Zelo criar o link da reunião, chamar os participantes pelo WhatsApp e, quando terminar, ele gera automaticamente uma ata com os principais pontos discutidos." },
   { q: "Como funciona o Drive Inteligente?", a: "Mande qualquer arquivo pelo WhatsApp e o Zelo guarda na pasta certa sozinho. Depois, é só descrever o que procura — \"ache o comprovante do mecânico\" — que ele encontra pra você." },
   { q: "Meus dados estão seguros?", a: "Sim. Seus dados ficam vinculados à sua conta e nunca são compartilhados entre usuários diferentes — cada família, sócio ou equipe só enxerga a própria informação." },
@@ -159,9 +267,9 @@ export default function LandingPage() {
           <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-7 w-auto" priority />
           <nav className="hidden md:flex items-center gap-7 text-sm text-slate-300">
             <a href="#financas" className="hover:text-white transition">Finanças</a>
+            <a href="#modo" className="hover:text-white transition">Modo Empresa</a>
             <a href="#agenda" className="hover:text-white transition">Agenda</a>
             <a href="#drive" className="hover:text-white transition">Drive</a>
-            <a href="#fatura" className="hover:text-white transition">Fatura de cartão</a>
             <a href="#planos" className="hover:text-white transition">Planos</a>
           </nav>
           <div className="flex items-center gap-4">
@@ -187,7 +295,7 @@ export default function LandingPage() {
               <span className="bg-gradient-to-br from-emerald-400 to-teal-400 bg-clip-text text-transparent">direto no WhatsApp.</span>
             </h1>
             <p className="text-slate-400 mt-5 text-[15px] leading-relaxed max-w-md">
-              Finanças, agenda, tarefas, veículos e documentos. Organizados por IA, sem sair da conversa que você já usa todos os dias.
+              Finanças, agenda, tarefas, veículos e documentos. Organizados por IA, sem sair da conversa que você já usa todos os dias — no modo pessoal ou no modo empresa.
             </p>
             <div className="mt-7 flex items-center gap-4">
               <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/10">
@@ -201,15 +309,15 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <WhatsAppMock>
-            <Bubble from="user" time="20:40">Bom dia, organiza meu dia?</Bubble>
-            <Bubble time="20:40">Claro! Vou cuidar da sua <b>agenda</b>, <b>finanças</b> e prioridades em um só lugar.</Bubble>
-            <Bubble time="20:40" tags={["Resumo", "Rotina"]}>
-              📆 Passando rapidinho:{"\n"}Vi <b>R$ 87,40</b> no cartão hoje.{"\n\n"}Já categorizei, salvei no painel e deixei tudo bonito por lá ✨
-            </Bubble>
-            <Bubble from="user" time="20:41">Marca reunião amanhã 10h com a Carla</Bubble>
-            <Bubble time="20:41" tags={["Google Agenda", "Lembrete criado"]}>Marcado! ✅ Vou te lembrar 15 min antes.</Bubble>
-          </WhatsAppMock>
+          <WhatsAppMock
+            messages={[
+              { from: "user", time: "20:40", text: "Bom dia, organiza meu dia?" },
+              { time: "20:40", text: <>Claro! Vou cuidar da sua <b>agenda</b>, <b>finanças</b> e prioridades em um só lugar.</> },
+              { time: "20:40", tags: ["Resumo", "Rotina"], text: `📆 Passando rapidinho:\nVi R$ 87,40 no cartão hoje.\n\nJá categorizei, salvei no painel e deixei tudo bonito por lá ✨` },
+              { from: "user", time: "20:41", text: "Marca reunião amanhã 10h com a Carla" },
+              { time: "20:41", tags: ["Google Agenda", "Lembrete criado"], text: "Marcado! ✅ Vou te lembrar 15 min antes." },
+            ]}
+          />
         </div>
 
         {/* trust strip */}
@@ -229,17 +337,23 @@ export default function LandingPage() {
           eyebrow="📋 Controle Financeiro"
           title="Anote seus gastos por áudio, texto ou foto."
           desc="Registre cada despesa ou receita em segundos. O Zelo ouve seus áudios, entende sua fala natural e categoriza tudo automaticamente — sem planilha, sem digitação."
-          bullets={["Consulte qualquer gasto pelo WhatsApp", "Seus gastos já chegam categorizados", "Resumo do dia direto pra você", "Receitas e despesas, pessoal ou empresa"]}
+          bullets={[
+            "Consulte qualquer gasto pelo WhatsApp, a qualquer hora",
+            "Seus gastos já chegam categorizados sozinhos",
+            "Lançamentos futuros ficam pendentes e entram no saldo certinho no dia",
+            "Contas recorrentes e parceladas com lembrete automático de confirmação",
+            "Receitas e despesas, no modo pessoal ou no modo empresa",
+          ]}
           visual={
-            <WhatsAppMock>
-              <Bubble from="user" time="09:12">🎙️ 0:08</Bubble>
-              <Bubble time="09:12">Entendi! Registrei:</Bubble>
-              <Bubble time="09:12" tags={["Alimentação", "Categorizado"]}>
-                💸 <b>Despesa registrada!</b>{"\n"}Mercado Extra — {fmt(184.9)}{"\n\n"}📊 Saldo pessoal: {fmt(3241.5)}
-              </Bubble>
-              <Bubble from="user" time="09:14">📷 nota-farmacia.jpg</Bubble>
-              <Bubble time="09:14" tags={["Saúde"]}>💊 Anotado: Farmácia São João — {fmt(58.3)}</Bubble>
-            </WhatsAppMock>
+            <WhatsAppMock
+              messages={[
+                { from: "user", time: "09:12", text: "🎙️ 0:08" },
+                { time: "09:12", text: "Entendi! Registrei:" },
+                { time: "09:12", tags: ["Alimentação", "Categorizado"], text: `💸 Despesa registrada!\nMercado Extra — ${fmt(184.9)}\n\n📊 Saldo pessoal: ${fmt(3241.5)}` },
+                { from: "user", time: "09:14", text: "📷 nota-farmacia.jpg" },
+                { time: "09:14", tags: ["Saúde"], text: `💊 Anotado: Farmácia São João — ${fmt(58.3)}` },
+              ]}
+            />
           }
         />
       </div>
@@ -249,7 +363,13 @@ export default function LandingPage() {
         reverse
         title="Seu dinheiro organizado em um só painel."
         desc="Seus gastos, compromissos e metas organizados num painel completo. Você sempre sabe o que aconteceu, o que está pendente e o que vem pela frente."
-        bullets={["Veja seus gastos separados por categoria", "Contas recorrentes e parceladas sob controle", "Defina metas e acompanhe se está cumprindo", "Exporte seus dados quando precisar"]}
+        bullets={[
+          "Veja seus gastos separados por categoria, com categorias 100% personalizáveis",
+          "Contas recorrentes e parceladas sob controle, com confirmação a cada vencimento",
+          "Defina metas com prazo e acompanhe o quanto já alcançou",
+          "Edite ou apague qualquer lançamento só descrevendo o que mudar",
+          "Exporte seus dados quando precisar",
+        ]}
         visual={
           <div className="max-w-sm mx-auto space-y-3">
             <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl">
@@ -268,13 +388,40 @@ export default function LandingPage() {
         }
       />
 
+      {/* ── MODO PESSOAL / MODO EMPRESA ── */}
+      <section id="modo" className="bg-slate-50 py-24 border-y border-slate-100">
+        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">👤🏢 Modo Pessoal e Modo Empresa</span>
+            <h2 className={`${heading.className} text-3xl sm:text-[2.15rem] font-extrabold text-slate-900 mt-4 leading-tight`}>A mesma conta. Duas vidas, sem misturar.</h2>
+            <p className="text-slate-500 mt-4 text-[15px] leading-relaxed">
+              Alterne entre Modo Pessoal e Modo Empresa direto no painel ou pelo WhatsApp. Cada um com seu próprio saldo, categorias, metas e relatórios — perfeito pra quem empreende e também cuida da vida pessoal, sem abrir uma segunda conta.
+            </p>
+            <ul className="mt-5 space-y-2.5">
+              {[
+                "Troque de modo com um clique, sem trocar de conta ou senha",
+                "Saldo, categorias e metas calculados separadamente por modo",
+                "Funcionários, veículos e fornecedores organizados do lado da empresa",
+                "Ideal pra quem empreende e também organiza a vida pessoal no mesmo lugar",
+              ].map(b => (
+                <li key={b} className="flex items-start gap-2.5 text-sm text-slate-700">
+                  <span className="mt-0.5 w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-[9px] shrink-0">✓</span>
+                  {b}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <ModeToggleDemo />
+        </div>
+      </section>
+
       {/* ── FATURA DE CARTÃO (destaque) ── */}
       <section id="fatura" className="bg-slate-950 py-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto mb-14">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">💳 Fatura do Cartão</span>
             <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>Chega de digitar cada gasto do cartão.</h2>
-            <p className="text-slate-400 mt-3 text-sm leading-relaxed">Envie a fatura em PDF pelo WhatsApp ou pelo painel. O Zelo lê cada lançamento sozinho, categoriza automaticamente e nunca registra o mesmo gasto duas vezes.</p>
+            <p className="text-slate-400 mt-3 text-sm leading-relaxed">Envie a fatura em PDF pelo WhatsApp ou pelo painel. O Zelo lê cada lançamento, categoriza automaticamente e nunca registra o mesmo gasto duas vezes — se algo já bate com valor e data de um lançamento existente, ele avisa antes de importar.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-5">
             <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-5">
@@ -293,7 +440,8 @@ export default function LandingPage() {
               <p className="text-xs text-amber-400/70 mt-1">já estavam registrados — ignorados</p>
             </div>
           </div>
-          <div className="text-center mt-10">
+          <p className="text-center text-slate-500 text-xs mt-6">Você sempre revisa a lista antes de confirmar — nada é importado sem sua aprovação.</p>
+          <div className="text-center mt-8">
             <Link href="/cadastro" className="inline-block rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition">
               Importar minha fatura →
             </Link>
@@ -307,13 +455,20 @@ export default function LandingPage() {
           eyebrow="📅 Agenda Inteligente"
           title="Nunca mais esqueça um compromisso."
           desc="Tenha lembretes e resumos diários. Registre compromissos no WhatsApp falando do seu jeito: o Zelo entende e organiza sua rotina. Tudo sincronizado com o Google Agenda."
-          bullets={["Consulte sua agenda pelo WhatsApp", "Marque tarefas do dia como feitas", "Sincronizado com o Google Agenda", "Lembretes automáticos, sem precisar pedir"]}
+          bullets={[
+            "Consulte, remarque ou cancele compromissos pelo WhatsApp",
+            "Marque tarefas do dia como feitas, sem abrir o painel",
+            "Sincronizado automaticamente com o Google Agenda",
+            "Lembretes automáticos antes de cada compromisso, sem precisar pedir",
+          ]}
           visual={
-            <WhatsAppMock>
-              <Bubble from="user" time="20:40">Marcar reunião hoje às 14h com o time todo</Bubble>
-              <Bubble time="20:40" tags={["Google Agenda"]}>A reunião com o time todo está marcada para hoje às 14h! Vou te enviar um lembrete às 12h.</Bubble>
-              <Bubble time="20:40">Se precisar de mais alguma coisa, estou por aqui! 🌿</Bubble>
-            </WhatsAppMock>
+            <WhatsAppMock
+              messages={[
+                { from: "user", time: "20:40", text: "Marcar reunião hoje às 14h com o time todo" },
+                { time: "20:40", tags: ["Google Agenda"], text: "A reunião com o time todo está marcada para hoje às 14h! Vou te enviar um lembrete às 12h." },
+                { time: "20:40", text: "Se precisar de mais alguma coisa, estou por aqui! 🌿" },
+              ]}
+            />
           }
         />
       </div>
@@ -323,7 +478,12 @@ export default function LandingPage() {
         reverse
         title="Reuniões marcadas e resumidas sozinhas."
         desc="Peça pro Zelo criar o link do Google Meet, convocar os participantes pelo WhatsApp e, quando a reunião terminar, ele mesmo gera a ata com os pontos principais."
-        bullets={["Crie a reunião só falando com o Zelo", "Participantes convocados pelo WhatsApp", "Ata gerada automaticamente ao final", "Tudo fica salvo e fácil de encontrar depois"]}
+        bullets={[
+          "Crie a reunião só falando com o Zelo, sem abrir o Google Agenda",
+          "Participantes convocados automaticamente pelo WhatsApp",
+          "Ata gerada por IA ao final, com decisões e próximos passos",
+          "Tudo fica salvo e fácil de encontrar depois",
+        ]}
         visual={
           <div className="max-w-sm mx-auto space-y-3">
             <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm flex items-center gap-3">
@@ -334,7 +494,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold text-slate-800 mb-1.5">📝 Ata gerada</p>
+              <p className="text-xs font-semibold text-slate-800 mb-1.5">📝 Ata gerada automaticamente</p>
               <p className="text-xs text-slate-500 leading-relaxed">Decidido: fechamento da proposta até sexta. Ação: Carla envia contrato revisado. Próxima reunião: quinta-feira.</p>
             </div>
           </div>
@@ -347,14 +507,14 @@ export default function LandingPage() {
           <div className="text-center max-w-xl mx-auto mb-12">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">✨ Muito mais</span>
             <h2 className={`${heading.className} text-3xl font-extrabold text-slate-900 mt-4`}>Muito mais que finanças.</h2>
-            <p className="text-slate-500 mt-3 text-sm">Tudo o que organiza sua rotina, em um só assistente.</p>
+            <p className="text-slate-500 mt-3 text-sm">Tudo o que organiza sua rotina — pessoal ou da empresa — em um só assistente.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
-              { icon: "🎯", title: "Metas", desc: "Defina objetivos com prazo e acompanhe quanto falta." },
-              { icon: "🚗", title: "Veículos", desc: "Combustível, manutenção e quilometragem, tudo num lugar." },
-              { icon: "👥", title: "Funcionários", desc: "Cargos, salários e a folha da sua equipe organizados." },
-              { icon: "🛒", title: "Lista de mercado", desc: "Compras por categoria, preço e loja, direto pelo WhatsApp." },
+              { icon: "🎯", title: "Metas", desc: "Defina objetivos com valor alvo e prazo, e acompanhe quanto já falta pra chegar lá." },
+              { icon: "🚗", title: "Veículos", desc: "Combustível, manutenção, seguro e quilometragem de cada veículo, tudo num lugar." },
+              { icon: "👥", title: "Funcionários", desc: "Cargo, salário e status de cada funcionário da sua empresa, sempre à mão." },
+              { icon: "🛒", title: "Lista de mercado", desc: "Compras por categoria, preço, quantidade e loja, direto pelo WhatsApp." },
             ].map(c => (
               <div key={c.title} className="rounded-2xl border border-slate-100 p-6 hover:border-emerald-200 hover:shadow-sm transition">
                 <span className="text-2xl">{c.icon}</span>
@@ -371,7 +531,12 @@ export default function LandingPage() {
         eyebrow="👨‍👩‍👧 Conta Compartilhada"
         title="Convide quem precisar, sem senha."
         desc="Compartilhe o Zelo com sua família, sócios ou equipe. Cada pessoa registra pelo próprio WhatsApp, e você mantém visibilidade total sobre tudo num painel só."
-        bullets={["Casais registram gastos em uma conta única", "Sócios lançam despesas e receitas no mesmo lugar", "Sua equipe alimenta o sistema, com segurança"]}
+        bullets={[
+          "Casais registram gastos em uma conta única, sem duplicar controle",
+          "Sócios lançam despesas e receitas no mesmo lugar, no modo empresa",
+          "Sua equipe alimenta o sistema, com segurança e sem compartilhar senha",
+          "Cada lançamento mostra quem da família ou da equipe registrou",
+        ]}
         visual={
           <div className="relative w-full max-w-sm mx-auto aspect-square flex items-center justify-center">
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-xl z-10">
@@ -398,14 +563,21 @@ export default function LandingPage() {
           reverse
           title="Seus documentos guardados. Encontrados por IA."
           desc="Envie qualquer arquivo pelo WhatsApp e tenha tudo salvo e organizado. Quando precisar, é só descrever com suas palavras que o Zelo encontra pra você."
-          bullets={["Envie arquivos direto pelo WhatsApp", "O Zelo organiza nas pastas certas sozinho", "Ache qualquer arquivo só descrevendo ele"]}
+          bullets={[
+            "Envie arquivos direto pelo WhatsApp, sem app e sem login",
+            "O Zelo organiza nas pastas certas sozinho, por IA",
+            "Ache qualquer arquivo só descrevendo o que ele é",
+            "Peça pra renomear um arquivo só digitando o novo nome",
+          ]}
           visual={
-            <WhatsAppMock>
-              <Bubble from="user" time="10:02">📄 comprovante_mecanico.pdf{"\n"}Salva isso na pasta de comprovantes</Bubble>
-              <Bubble time="10:02" tags={["Comprovantes"]}>Pronto! Salvei na pasta Comprovantes ✅</Bubble>
-              <Bubble from="user" time="10:20">Ache o comprovante que fiz pro mecânico esse ano</Bubble>
-              <Bubble time="10:20">Achei! Aqui está 👇{"\n"}📄 comprovante_mecanico.pdf</Bubble>
-            </WhatsAppMock>
+            <WhatsAppMock
+              messages={[
+                { from: "user", time: "10:02", text: "📄 comprovante_mecanico.pdf\nSalva isso na pasta de comprovantes" },
+                { time: "10:02", tags: ["Comprovantes"], text: "Pronto! Salvei na pasta Comprovantes ✅" },
+                { from: "user", time: "10:20", text: "Ache o comprovante que fiz pro mecânico esse ano" },
+                { time: "10:20", text: "Achei! Aqui está 👇\n📄 comprovante_mecanico.pdf" },
+              ]}
+            />
           }
         />
       </div>
@@ -414,7 +586,7 @@ export default function LandingPage() {
       <section className="bg-gradient-to-br from-slate-950 via-emerald-950 to-teal-900 py-20">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white`}>Sua rotina, sob controle.</h2>
-          <p className="text-slate-300 mt-2">Onde quer que você esteja — é só abrir o WhatsApp.</p>
+          <p className="text-slate-300 mt-2">Pessoal ou empresa — onde quer que você esteja, é só abrir o WhatsApp.</p>
           <Link href="/cadastro" className="inline-block mt-7 rounded-xl bg-white text-slate-900 text-sm font-bold px-7 py-3.5 hover:bg-slate-100 transition">
             Começar agora →
           </Link>
@@ -431,7 +603,15 @@ export default function LandingPage() {
           <div className="mt-8 rounded-3xl bg-white border border-slate-200 shadow-sm p-7 text-left">
             <p className="font-bold text-slate-900 mb-4">Tudo incluso no período de teste:</p>
             <ul className="space-y-2.5">
-              {["Zelo no seu WhatsApp", "Painel completo pelo navegador", "Finanças, agenda e metas", "Importação de fatura de cartão", "Drive inteligente com IA", "Conta compartilhada com sua equipe ou família"].map(f => (
+              {[
+                "Zelo no seu WhatsApp",
+                "Painel completo pelo navegador",
+                "Modo Pessoal e Modo Empresa",
+                "Finanças, agenda, metas e reuniões",
+                "Importação de fatura de cartão",
+                "Drive inteligente com IA",
+                "Conta compartilhada com sua equipe ou família",
+              ].map(f => (
                 <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
                   <span className="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-[9px] shrink-0">✓</span>
                   {f}
@@ -456,9 +636,9 @@ export default function LandingPage() {
           </div>
           <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400">
             <a href="#financas" className="hover:text-white transition">Finanças</a>
+            <a href="#modo" className="hover:text-white transition">Modo Empresa</a>
             <a href="#agenda" className="hover:text-white transition">Agenda</a>
             <a href="#drive" className="hover:text-white transition">Drive</a>
-            <a href="#fatura" className="hover:text-white transition">Fatura de cartão</a>
             <Link href="/login" className="hover:text-white transition">Login</Link>
             <Link href="/cadastro" className="hover:text-white transition">Criar conta</Link>
           </nav>
