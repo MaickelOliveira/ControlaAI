@@ -35,11 +35,11 @@ export async function proxy(req: NextRequest) {
     if (clientRole !== "client") return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // ── Raiz: redireciona para o dashboard relevante (cliente tem prioridade)
+  // ── Raiz: se já estiver logado, manda pro dashboard certo; senão mostra a landing page pública
   if (pathname === "/") {
     if (clientRole === "client") return NextResponse.redirect(new URL("/dashboard", req.url));
     if (adminRole === "admin") return NextResponse.redirect(new URL("/admin", req.url));
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.next();
   }
 
   // ── Não deixa admin já logado ver /admin/login
