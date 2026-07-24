@@ -288,7 +288,7 @@ export async function POST(req: NextRequest) {
     const user = getUserByWppPhone(from);
 
     if (!user) {
-      await wppSend(from, "⛔ *Ops!* Seu número não está cadastrado em nossa plataforma.\n\nSe você é cliente, acesse o dashboard em *Configurações* e clique em *Vincular WhatsApp* para gerar seu código.\n\nPara contratar: controlaai.app 🚀");
+      await wppSend(from, "Olá! Sou o Zelo, mas ainda não encontrei seu número na minha lista de clientes.\n\nSe você já tem conta, acesse *Configurações* no painel e clique em *Vincular WhatsApp* para gerar seu código.\n\nPara conhecer o Zelo: controlaai.app");
       return NextResponse.json({ ok: true });
     }
 
