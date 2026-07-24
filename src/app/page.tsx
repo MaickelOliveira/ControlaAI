@@ -31,9 +31,9 @@ type Chip = { label: string; pos: string; delay?: string };
 function TypingDots() {
   return (
     <div className="flex justify-start">
-      <div className="bg-[#1f2c34] rounded-xl rounded-tl-sm px-3.5 py-3 flex items-center gap-1">
+      <div className="bg-white border border-black/[0.03] shadow-sm rounded-2xl rounded-tl-sm px-3.5 py-3 flex items-center gap-1">
         {[0, 1, 2].map(i => (
-          <span key={i} className="chat-typing-dot w-1.5 h-1.5 rounded-full bg-slate-400" style={{ animationDelay: `${i * 0.15}s` }} />
+          <span key={i} className="chat-typing-dot w-1.5 h-1.5 rounded-full bg-slate-300" style={{ animationDelay: `${i * 0.15}s` }} />
         ))}
       </div>
     </div>
@@ -44,16 +44,22 @@ function ChatBubble({ from = "bot", tags, text, time = "20:40" }: Msg) {
   const isUser = from === "user";
   return (
     <div className={clsx("flex chat-msg-in", isUser ? "justify-end" : "justify-start")}>
-      <div className={clsx("max-w-[85%] rounded-xl px-3 py-2 text-[12.5px] leading-snug whitespace-pre-line", isUser ? "bg-[#005c4b] text-white rounded-tr-sm" : "bg-[#1f2c34] text-slate-100 rounded-tl-sm")}>
+      <div className={clsx(
+        "max-w-[85%] rounded-2xl px-3 py-2 text-[12.5px] leading-snug whitespace-pre-line shadow-sm",
+        isUser ? "bg-[#d9fdd3] text-slate-800 rounded-tr-sm" : "bg-white text-slate-800 rounded-tl-sm border border-black/[0.03]"
+      )}>
         {text}
         {tags && (
           <div className="flex flex-wrap gap-1 mt-1.5">
             {tags.map(t => (
-              <span key={t} className="text-[9px] bg-emerald-500/15 text-emerald-300 rounded-full px-2 py-0.5 font-medium">{t}</span>
+              <span key={t} className="text-[9px] border border-emerald-300 text-emerald-600 rounded-full px-2 py-0.5 font-medium">{t}</span>
             ))}
           </div>
         )}
-        <p className={clsx("text-[9px] mt-1 text-right", isUser ? "text-emerald-100/70" : "text-slate-400")}>{time}</p>
+        <p className={clsx("text-[9px] mt-1 text-right flex items-center justify-end gap-0.5", "text-slate-400")}>
+          {time}
+          {isUser && <span className="text-sky-500">✓✓</span>}
+        </p>
       </div>
     </div>
   );
@@ -62,7 +68,7 @@ function ChatBubble({ from = "bot", tags, text, time = "20:40" }: Msg) {
 /* ── Moldura de WhatsApp com a conversa animada EM LOOP: as mensagens
  *  aparecem em sequência, com "digitando..." antes de cada resposta do
  *  Zelo; ao terminar, pausa e recomeça — enquanto o mockup estiver visível. ── */
-function WhatsAppMock({ messages, chips, glow = "emerald" }: { messages: Msg[]; chips?: Chip[]; glow?: "emerald" | "teal" }) {
+function WhatsAppMock({ messages, chips, glow = "emerald", tilt = 0 }: { messages: Msg[]; chips?: Chip[]; glow?: "emerald" | "teal"; tilt?: number }) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const [shown, setShown] = useState(0);
   const [typing, setTyping] = useState(false);
@@ -103,45 +109,76 @@ function WhatsAppMock({ messages, chips, glow = "emerald" }: { messages: Msg[]; 
           {c.label}
         </div>
       ))}
-      <div className="relative w-full max-w-[320px] mx-auto rounded-[2.5rem] border-[6px] border-slate-900 bg-slate-900 shadow-2xl overflow-hidden">
-        <div className="absolute -left-[6px] top-24 w-[6px] h-8 bg-slate-900 rounded-l" />
-        <div className="absolute -left-[6px] top-36 w-[6px] h-12 bg-slate-900 rounded-l" />
-        <div className="absolute -right-[6px] top-32 w-[6px] h-16 bg-slate-900 rounded-r" />
-        <div className="bg-[#0b141a] px-3 pt-2 pb-1 flex items-center justify-between">
-          <span className="text-[10px] text-slate-300 font-medium">17:13</span>
-          <div className="w-20 h-4 rounded-full bg-black mx-auto absolute left-1/2 -translate-x-1/2 top-1" />
-          <div className="flex items-center gap-1">
-            <span className="w-3 h-2 rounded-sm bg-slate-500" />
-            <span className="w-3 h-2 rounded-sm bg-slate-500" />
-            <span className="w-4 h-2 rounded-sm bg-slate-300" />
+      <div className="relative w-[300px] shrink-0 mx-auto rounded-[3rem] border-[7px] border-slate-900 bg-slate-900 shadow-2xl overflow-hidden transition-transform hover:rotate-0" style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}>
+        <div className="absolute -left-[7px] top-24 w-[7px] h-8 bg-slate-900 rounded-l" />
+        <div className="absolute -left-[7px] top-36 w-[7px] h-12 bg-slate-900 rounded-l" />
+        <div className="absolute -right-[7px] top-32 w-[7px] h-16 bg-slate-900 rounded-r" />
+        <div className="bg-[#F5F1E8] px-4 pt-2.5 pb-1 flex items-center justify-between relative">
+          <span className="text-[11px] text-slate-900 font-semibold">17:13</span>
+          <div className="w-24 h-[22px] rounded-full bg-black mx-auto absolute left-1/2 -translate-x-1/2 top-1.5" />
+          <div className="flex items-center gap-1 text-slate-900">
+            <svg viewBox="0 0 16 12" className="w-4 h-3" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="0.5" /><rect x="4.5" y="4.5" width="3" height="7.5" rx="0.5" /><rect x="9" y="2" width="3" height="10" rx="0.5" /><rect x="13" y="0" width="3" height="12" rx="0.5" /></svg>
+            <svg viewBox="0 0 16 12" className="w-4 h-3" fill="currentColor"><path d="M8 10.5a1.3 1.3 0 100-2.6 1.3 1.3 0 000 2.6zM4.6 6.8a5 5 0 016.8 0l-1.4 1.5a3 3 0 00-4 0L4.6 6.8zM2 4.3a8.5 8.5 0 0112 0L12.6 5.8a6.5 6.5 0 00-9.2 0L2 4.3z" /></svg>
+            <svg viewBox="0 0 25 12" className="w-6 h-3" fill="none" stroke="currentColor" strokeWidth="1"><rect x="0.5" y="0.5" width="21" height="11" rx="2.5" /><rect x="2" y="2" width="16" height="8" rx="1.2" fill="currentColor" stroke="none" /><rect x="22.5" y="4" width="1.5" height="4" rx="0.7" fill="currentColor" /></svg>
           </div>
         </div>
-        <div className="bg-[#005c4b] px-3 py-2.5 flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0">
+        <div className="bg-white px-3 py-2.5 flex items-center gap-2.5 border-b border-slate-100">
+          <div className="w-9 h-9 rounded-full bg-slate-900 flex items-center justify-center overflow-hidden shrink-0">
             <Image src="/brand/zelo-icon.png" alt="" width={22} height={22} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-[13px] font-semibold leading-tight">Zelo</p>
-            <p className="text-emerald-200 text-[10px] leading-tight">{typing ? "digitando..." : "online agora"}</p>
+            <p className="text-slate-900 text-[13.5px] font-bold leading-tight flex items-center gap-1">
+              Zelo
+              <svg viewBox="0 0 20 20" className="w-3.5 h-3.5 text-sky-500 shrink-0" fill="currentColor"><path d="M10 1l2.2 1.4 2.6-.3 1 2.4 2.4 1-.3 2.6L19 10l-1.4 2.2.3 2.6-2.4 1-1 2.4-2.6-.3L10 19l-2.2-1.4-2.6.3-1-2.4-2.4-1 .3-2.6L1 10l1.4-2.2-.3-2.6 2.4-1 1-2.4 2.6.3z" /><path d="M7 10l2 2 4-4" stroke="white" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </p>
+            <p className="text-slate-400 text-[10.5px] leading-tight">{typing ? "digitando..." : "online agora"}</p>
           </div>
-          <div className="flex items-center gap-3 text-white/80 text-sm">
-            <span>📹</span>
-            <span>📞</span>
+          <div className="flex items-center gap-3.5 text-sky-500">
+            <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.55-2.4A1 1 0 0121 8.5v7a1 1 0 01-1.45.9L15 14M4 6h9a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z" /></svg>
+            <svg viewBox="0 0 24 24" className="w-[17px] h-[17px]" fill="currentColor"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11 11 0 003.5.56 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.56 3.5 1 1 0 01-.25 1z" /></svg>
           </div>
         </div>
-        <div className="px-2.5 py-3 space-y-2 min-h-[380px]" style={{ background: "linear-gradient(180deg,#111b21,#0b141a)" }}>
+        <div className="relative px-2.5 py-3 space-y-2 min-h-[380px] bg-[#F5F1E8]" style={{ backgroundImage: "radial-gradient(#00000008 1px, transparent 1px)", backgroundSize: "16px 16px" }}>
           {messages.slice(0, shown).map((m, i) => <ChatBubble key={i} {...m} />)}
           {typing && <TypingDots />}
         </div>
-        <div className="bg-[#1f2c34] px-2.5 py-2 flex items-center gap-2">
-          <span className="text-slate-400 text-lg leading-none">＋</span>
-          <div className="flex-1 bg-[#2a3942] rounded-full px-3 py-1.5 text-[11px] text-slate-400">Zelo</div>
-          <span className="text-slate-400">🎙️</span>
+        <div className="bg-white px-2.5 py-2 flex items-center gap-2 border-t border-slate-100">
+          <span className="text-slate-400 text-xl leading-none font-light">＋</span>
+          <div className="flex-1 bg-slate-100 rounded-full px-3.5 py-2 text-[12px] text-slate-400">Mensagem</div>
+          <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.5-4.5a2 2 0 012.8 0l3.2 3.2a2 2 0 002.8 0L20 12M4 8h.01M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" /></svg>
+          <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-slate-400" fill="currentColor"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-2.08A7 7 0 0019 12h-2z" /></svg>
         </div>
       </div>
     </div>
   );
 }
+
+/* ── Ícones de linha (mesmos usados no sidebar real do dashboard) — usados
+ *  na grade de módulos secundários no lugar de emoji. ── */
+const MODULE_ICONS = {
+  target: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
+    </svg>
+  ),
+  car: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 17H3v-4.5l2.5-5.5h11L19 12.5V17h-2M5 17a2 2 0 104 0m6 0a2 2 0 104 0M5 17h8" />
+    </svg>
+  ),
+  users: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  cart: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 4h12M9 19.5a.5.5 0 11-1 0 .5.5 0 011 0zm7 0a.5.5 0 11-1 0 .5.5 0 011 0z" />
+    </svg>
+  ),
+};
 
 type Detail = { icon: string; title: string; desc: string };
 
@@ -180,6 +217,58 @@ function Feature({
         <div>{visual}</div>
       </div>
     </section>
+  );
+}
+
+/* ── Card de agenda semanal — visual diferente do mockup de WhatsApp,
+ *  reforça a ideia de sincronização com o Google Agenda. ── */
+function CalendarCard() {
+  const days = ["S", "T", "Q", "Q", "S", "S", "D"];
+  const dates = [13, 14, 15, 16, 17, 18, 19];
+  const todayIdx = 4;
+  return (
+    <div className="max-w-sm mx-auto space-y-3 relative">
+      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-emerald-300/20 blur-3xl -z-10" />
+      <div className="rounded-2xl border border-slate-100 bg-white shadow-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-bold text-slate-900 text-sm">Julho, esta semana</p>
+          <span className="text-[10px] bg-emerald-50 text-emerald-600 rounded-full px-2.5 py-1 font-semibold">✓ Google Agenda</span>
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {days.map((d, i) => (
+            <div key={i} className="text-center">
+              <p className="text-[10px] text-slate-400 font-semibold mb-1.5">{d}</p>
+              <div className={clsx("aspect-square rounded-lg flex items-center justify-center text-xs font-bold", i === todayIdx ? "bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md" : "text-slate-500 bg-slate-50")}>
+                {dates[i]}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 flex items-center gap-3">
+        <span className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-emerald-600">
+            <circle cx="12" cy="12" r="9" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 3" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-800 truncate">Reunião com o time todo</p>
+          <p className="text-xs text-slate-400">Hoje, 14:00 · lembrete às 12:00</p>
+        </div>
+      </div>
+      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 flex items-center gap-3">
+        <span className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-teal-600">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-800 truncate">Consulta médica</p>
+          <p className="text-xs text-slate-400">Sexta, 09:30 · confirmada pelo WhatsApp</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -415,6 +504,7 @@ export default function LandingPage() {
           visual={
             <WhatsAppMock
               glow="teal"
+              tilt={-2}
               messages={[
                 { from: "user", time: "09:12", text: "🎙️ 0:08" },
                 { time: "09:12", text: "Entendi! Registrei:" },
@@ -535,15 +625,7 @@ export default function LandingPage() {
           title="Nunca mais esqueça um compromisso."
           desc="Tenha lembretes e resumos diários. Registre compromissos no WhatsApp falando do seu jeito: o Zelo entende e organiza sua rotina. Tudo sincronizado com o Google Agenda."
           details={AGENDA_DETAILS}
-          visual={
-            <WhatsAppMock
-              messages={[
-                { from: "user", time: "20:40", text: "Marcar reunião hoje às 14h com o time todo" },
-                { time: "20:40", tags: ["Google Agenda"], text: "A reunião com o time todo está marcada para hoje às 14h! Vou te enviar um lembrete às 12h." },
-                { time: "20:40", text: "Se precisar de mais alguma coisa, estou por aqui! 🌿" },
-              ]}
-            />
-          }
+          visual={<CalendarCard />}
         />
       </div>
 
@@ -582,13 +664,13 @@ export default function LandingPage() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
-              { icon: "🎯", title: "Metas", desc: "Defina objetivos com valor alvo e prazo, e acompanhe quanto já falta pra chegar lá." },
-              { icon: "🚗", title: "Veículos", desc: "Combustível, manutenção, seguro e quilometragem de cada veículo, tudo num lugar." },
-              { icon: "👥", title: "Funcionários", desc: "Cargo, salário e status de cada funcionário da sua empresa, sempre à mão." },
-              { icon: "🛒", title: "Lista de mercado", desc: "Compras por categoria, preço, quantidade e loja, direto pelo WhatsApp." },
+              { icon: MODULE_ICONS.target, title: "Metas", desc: "Defina objetivos com valor alvo e prazo, e acompanhe quanto já falta pra chegar lá." },
+              { icon: MODULE_ICONS.car, title: "Veículos", desc: "Combustível, manutenção, seguro e quilometragem de cada veículo, tudo num lugar." },
+              { icon: MODULE_ICONS.users, title: "Funcionários", desc: "Cargo, salário e status de cada funcionário da sua empresa, sempre à mão." },
+              { icon: MODULE_ICONS.cart, title: "Lista de mercado", desc: "Compras por categoria, preço, quantidade e loja, direto pelo WhatsApp." },
             ].map(c => (
               <div key={c.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 hover:bg-white/[0.06] hover:border-emerald-400/30 transition">
-                <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400/20 to-teal-500/20 flex items-center justify-center text-xl">{c.icon}</span>
+                <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">{c.icon}</span>
                 <p className="font-bold text-white mt-4">{c.title}</p>
                 <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{c.desc}</p>
               </div>
@@ -638,6 +720,7 @@ export default function LandingPage() {
           visual={
             <WhatsAppMock
               glow="teal"
+              tilt={2}
               messages={[
                 { from: "user", time: "10:02", text: "📄 comprovante_mecanico.pdf\nSalva isso na pasta de comprovantes" },
                 { time: "10:02", tags: ["Comprovantes"], text: "Pronto! Salvei na pasta Comprovantes ✅" },
