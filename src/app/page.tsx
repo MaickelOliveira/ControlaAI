@@ -70,8 +70,17 @@ function ChatBubble({ from = "bot", tags, text, time = "20:40" }: Msg) {
  *  Zelo; ao terminar, pausa e recomeça — enquanto o mockup estiver visível. ── */
 function WhatsAppMock({ messages, chips, glow = "emerald", tilt = 0 }: { messages: Msg[]; chips?: Chip[]; glow?: "emerald" | "teal"; tilt?: number }) {
   const { ref, inView } = useInView<HTMLDivElement>();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(0);
   const [typing, setTyping] = useState(false);
+
+  // Mantém o celular sempre do mesmo tamanho — a área de mensagens tem altura
+  // fixa e rola sozinha pra baixo conforme a conversa avança, em vez de
+  // esticar o celular (e o container) a cada mensagem nova.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [shown, typing]);
 
   useEffect(() => {
     if (!inView) { setShown(0); setTyping(false); return; }
@@ -138,7 +147,7 @@ function WhatsAppMock({ messages, chips, glow = "emerald", tilt = 0 }: { message
             <svg viewBox="0 0 24 24" className="w-[17px] h-[17px]" fill="currentColor"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11 11 0 003.5.56 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.56 3.5 1 1 0 01-.25 1z" /></svg>
           </div>
         </div>
-        <div className="relative px-2.5 py-3 space-y-2 min-h-[380px] bg-[#F5F1E8]" style={{ backgroundImage: "radial-gradient(#00000008 1px, transparent 1px)", backgroundSize: "16px 16px" }}>
+        <div ref={scrollRef} className="relative px-2.5 py-3 space-y-2 h-[380px] overflow-y-auto bg-[#F5F1E8]" style={{ backgroundImage: "radial-gradient(#00000008 1px, transparent 1px)", backgroundSize: "16px 16px" }}>
           {messages.slice(0, shown).map((m, i) => <ChatBubble key={i} {...m} />)}
           {typing && <TypingDots />}
         </div>
