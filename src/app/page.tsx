@@ -210,7 +210,7 @@ function Feature({
   return (
     <section className={clsx("relative overflow-hidden", dark ? "bg-slate-950" : tint ? "bg-gradient-to-b from-amber-50/60 to-white" : "bg-white")}>
       <div className={clsx("pointer-events-none absolute -top-24 w-[26rem] h-[26rem] rounded-full blur-[110px] -z-0", dark ? "bg-amber-500/10" : "bg-amber-300/20", reverse ? "-left-24" : "-right-24")} />
-      <div className={`relative max-w-6xl mx-auto px-6 py-24 grid md:grid-cols-2 gap-14 items-center ${reverse ? "md:[&>*:first-child]:order-2" : ""}`}>
+      <div className={`relative max-w-7xl mx-auto px-6 py-24 grid md:grid-cols-2 gap-14 items-center ${reverse ? "md:[&>*:first-child]:order-2" : ""}`}>
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs font-semibold px-3 py-1.5">
             {eyebrow}
@@ -430,7 +430,7 @@ export default function LandingPage() {
     <div className={heading.variable}>
       {/* ── NAV ── */}
       <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur border-b border-white/5">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Image src="/brand/zelo-wordmark-light.png" alt="Zelo" width={640} height={293} className="h-7 w-auto" priority />
           <nav className="hidden md:flex items-center gap-7 text-sm text-slate-300">
             <a href="#financas" className="hover:text-white transition">Finanças</a>
@@ -453,7 +453,7 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-amber-500/20 blur-[120px]" />
         <div className="pointer-events-none absolute top-10 -right-32 w-[28rem] h-[28rem] rounded-full bg-amber-500/15 blur-[120px]" />
         <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
-        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-20 grid md:grid-cols-2 gap-14 items-center">
+        <div className="relative max-w-7xl mx-auto px-6 pt-16 pb-20 grid md:grid-cols-2 gap-14 items-center">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> IA no WhatsApp para sua rotina
@@ -494,7 +494,7 @@ export default function LandingPage() {
 
         {/* trust strip */}
         <div className="relative border-t border-white/5 bg-slate-950/60">
-          <div className="max-w-6xl mx-auto px-6 py-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-xs text-slate-500">
+          <div className="max-w-7xl mx-auto px-6 py-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-xs text-slate-500">
             <span>🔒 Dados isolados por conta</span>
             <span>🤖 IA Google Gemini</span>
             <span>📱 100% pelo WhatsApp</span>
@@ -554,7 +554,7 @@ export default function LandingPage() {
       {/* ── MODO PESSOAL / MODO EMPRESA ── */}
       <section id="modo" className="relative overflow-hidden bg-slate-950 py-24">
         <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-amber-500/10 blur-[120px]" />
-        <div className="relative max-w-6xl mx-auto px-6">
+        <div className="relative max-w-7xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto mb-14">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">👤🏢 Modo Pessoal e Modo Empresa</span>
             <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>A mesma conta. Duas vidas, sem misturar.</h2>
@@ -574,7 +574,7 @@ export default function LandingPage() {
       {/* ── FATURA DE CARTÃO (destaque) ── */}
       <section id="fatura" className="relative overflow-hidden bg-white py-24">
         <div className="pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-amber-300/20 blur-[120px]" />
-        <div className="relative max-w-6xl mx-auto px-6">
+        <div className="relative max-w-7xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto mb-14">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs font-semibold px-3 py-1.5">💳 Fatura do Cartão</span>
             <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-slate-900 mt-4`}>Chega de digitar cada gasto do cartão.</h2>
@@ -664,7 +664,7 @@ export default function LandingPage() {
       {/* ── GRID DE MÓDULOS SECUNDÁRIOS ── */}
       <section className="relative overflow-hidden bg-slate-950 py-24">
         <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[44rem] h-[26rem] rounded-full bg-amber-500/10 blur-[130px]" />
-        <div className="relative max-w-6xl mx-auto px-6">
+        <div className="relative max-w-7xl mx-auto px-6">
           <div className="text-center max-w-xl mx-auto mb-12">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">✨ Muito mais</span>
             <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>Muito mais que finanças.</h2>
@@ -788,7 +788,7 @@ export default function LandingPage() {
 
       {/* ── FOOTER ── */}
       <footer className="bg-slate-950 border-t border-white/5 py-12">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex flex-col items-center sm:items-start gap-1.5">
             <Image src="/brand/zelo-wordmark-light.png" alt="Zelo" width={640} height={293} className="h-6 w-auto" />
             <p className="text-slate-500 text-xs">Gestão inteligente, direto no WhatsApp.</p>
