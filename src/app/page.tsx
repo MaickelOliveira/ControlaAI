@@ -11,15 +11,14 @@ function fmt(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-/* ── Dispara quando o elemento entra/sai da tela — usado pra tocar as animações
- *  da conversa do WhatsApp toda vez que a seção aparece na tela. ── */
+/* ── Dispara quando o elemento entra/sai da tela ── */
 function useInView<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [inView, setInView] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obs = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.4 });
+    const obs = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.35 });
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
@@ -27,6 +26,7 @@ function useInView<T extends HTMLElement>() {
 }
 
 type Msg = { from?: "bot" | "user"; text: React.ReactNode; tags?: string[]; time?: string };
+type Chip = { label: string; pos: string; delay?: string };
 
 function TypingDots() {
   return (
@@ -59,10 +59,10 @@ function ChatBubble({ from = "bot", tags, text, time = "20:40" }: Msg) {
   );
 }
 
-/* ── Moldura de WhatsApp com a conversa animada: as mensagens aparecem em
- *  sequência, com "digitando..." antes de cada resposta do Zelo, disparando
- *  toda vez que o mockup entra na tela. ── */
-function WhatsAppMock({ messages }: { messages: Msg[] }) {
+/* ── Moldura de WhatsApp com a conversa animada EM LOOP: as mensagens
+ *  aparecem em sequência, com "digitando..." antes de cada resposta do
+ *  Zelo; ao terminar, pausa e recomeça — enquanto o mockup estiver visível. ── */
+function WhatsAppMock({ messages, chips, glow = "emerald" }: { messages: Msg[]; chips?: Chip[]; glow?: "emerald" | "teal" }) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const [shown, setShown] = useState(0);
   const [typing, setTyping] = useState(false);
@@ -71,94 +71,111 @@ function WhatsAppMock({ messages }: { messages: Msg[] }) {
     if (!inView) { setShown(0); setTyping(false); return; }
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    const at = (fn: () => void, ms: number) => { const t = setTimeout(() => { if (!cancelled) fn(); }, ms); timers.push(t); };
 
-    function schedule(i: number, delay: number) {
-      const t = setTimeout(() => {
-        if (cancelled || i >= messages.length) return;
-        const msg = messages[i];
-        if (msg.from === "user") {
-          setTyping(false);
-          setShown(i + 1);
-          schedule(i + 1, 500);
-        } else {
-          setTyping(true);
-          const t2 = setTimeout(() => {
-            if (cancelled) return;
-            setTyping(false);
-            setShown(i + 1);
-            schedule(i + 1, 350);
-          }, 850);
-          timers.push(t2);
-        }
-      }, delay);
-      timers.push(t);
+    function step(i: number) {
+      if (cancelled) return;
+      if (i >= messages.length) {
+        at(() => { setShown(0); setTyping(false); at(() => step(0), 700); }, 2800);
+        return;
+      }
+      const msg = messages[i];
+      if (msg.from === "user") {
+        setTyping(false);
+        setShown(i + 1);
+        at(() => step(i + 1), 550);
+      } else {
+        setTyping(true);
+        at(() => { setTyping(false); setShown(i + 1); at(() => step(i + 1), 400); }, 900);
+      }
     }
-    schedule(0, 500);
+    at(() => step(0), 500);
 
     return () => { cancelled = true; timers.forEach(clearTimeout); };
   }, [inView, messages]);
 
   return (
-    <div ref={ref} className="w-full max-w-[320px] mx-auto rounded-[2rem] border-4 border-slate-900 bg-slate-900 shadow-2xl overflow-hidden">
-      <div className="bg-[#0b141a] px-3 pt-2 pb-1 flex items-center justify-between">
-        <span className="text-[10px] text-slate-300 font-medium">17:13</span>
-        <div className="flex items-center gap-1">
-          <span className="w-3 h-2 rounded-sm bg-slate-500" />
-          <span className="w-3 h-2 rounded-sm bg-slate-500" />
-          <span className="w-4 h-2 rounded-sm bg-slate-300" />
+    <div ref={ref} className="relative">
+      <div className={clsx("pointer-events-none absolute -inset-8 rounded-[3rem] blur-3xl -z-10", glow === "emerald" ? "bg-emerald-400/20" : "bg-teal-400/20")} />
+      {chips?.map((c, i) => (
+        <div key={c.label} className={clsx("float-chip hidden lg:block absolute z-20 rounded-xl bg-white shadow-lg border border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700", c.pos)}
+          style={{ animationDelay: c.delay ?? `${i * 0.6}s` }}>
+          {c.label}
+        </div>
+      ))}
+      <div className="relative w-full max-w-[320px] mx-auto rounded-[2.5rem] border-[6px] border-slate-900 bg-slate-900 shadow-2xl overflow-hidden">
+        <div className="absolute -left-[6px] top-24 w-[6px] h-8 bg-slate-900 rounded-l" />
+        <div className="absolute -left-[6px] top-36 w-[6px] h-12 bg-slate-900 rounded-l" />
+        <div className="absolute -right-[6px] top-32 w-[6px] h-16 bg-slate-900 rounded-r" />
+        <div className="bg-[#0b141a] px-3 pt-2 pb-1 flex items-center justify-between">
+          <span className="text-[10px] text-slate-300 font-medium">17:13</span>
+          <div className="w-20 h-4 rounded-full bg-black mx-auto absolute left-1/2 -translate-x-1/2 top-1" />
+          <div className="flex items-center gap-1">
+            <span className="w-3 h-2 rounded-sm bg-slate-500" />
+            <span className="w-3 h-2 rounded-sm bg-slate-500" />
+            <span className="w-4 h-2 rounded-sm bg-slate-300" />
+          </div>
+        </div>
+        <div className="bg-[#005c4b] px-3 py-2.5 flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0">
+            <Image src="/brand/zelo-icon.png" alt="" width={22} height={22} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-[13px] font-semibold leading-tight">Zelo</p>
+            <p className="text-emerald-200 text-[10px] leading-tight">{typing ? "digitando..." : "online agora"}</p>
+          </div>
+          <div className="flex items-center gap-3 text-white/80 text-sm">
+            <span>📹</span>
+            <span>📞</span>
+          </div>
+        </div>
+        <div className="px-2.5 py-3 space-y-2 min-h-[380px]" style={{ background: "linear-gradient(180deg,#111b21,#0b141a)" }}>
+          {messages.slice(0, shown).map((m, i) => <ChatBubble key={i} {...m} />)}
+          {typing && <TypingDots />}
+        </div>
+        <div className="bg-[#1f2c34] px-2.5 py-2 flex items-center gap-2">
+          <span className="text-slate-400 text-lg leading-none">＋</span>
+          <div className="flex-1 bg-[#2a3942] rounded-full px-3 py-1.5 text-[11px] text-slate-400">Zelo</div>
+          <span className="text-slate-400">🎙️</span>
         </div>
       </div>
-      <div className="bg-[#005c4b] px-3 py-2.5 flex items-center gap-2">
-        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0">
-          <Image src="/brand/zelo-icon.png" alt="" width={22} height={22} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-[13px] font-semibold leading-tight">Zelo</p>
-          <p className="text-emerald-200 text-[10px] leading-tight">{typing ? "digitando..." : "online agora"}</p>
-        </div>
-        <div className="flex items-center gap-3 text-white/80 text-sm">
-          <span>📹</span>
-          <span>📞</span>
-        </div>
-      </div>
-      <div className="px-2.5 py-3 space-y-2 min-h-[380px]" style={{ background: "linear-gradient(180deg,#111b21,#0b141a)" }}>
-        {messages.slice(0, shown).map((m, i) => <ChatBubble key={i} {...m} />)}
-        {typing && <TypingDots />}
-      </div>
-      <div className="bg-[#1f2c34] px-2.5 py-2 flex items-center gap-2">
-        <span className="text-slate-400 text-lg leading-none">＋</span>
-        <div className="flex-1 bg-[#2a3942] rounded-full px-3 py-1.5 text-[11px] text-slate-400">Zelo</div>
-        <span className="text-slate-400">🎙️</span>
-      </div>
+    </div>
+  );
+}
+
+type Detail = { icon: string; title: string; desc: string };
+
+function DetailCard({ icon, title, desc, dark }: Detail & { dark?: boolean }) {
+  return (
+    <div className={clsx("rounded-2xl border p-4 transition", dark ? "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]" : "border-slate-100 bg-white hover:border-emerald-200 hover:shadow-md")}>
+      <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400/20 to-teal-500/20 flex items-center justify-center text-base shrink-0">{icon}</span>
+      <p className={clsx("font-bold text-sm mt-3", dark ? "text-white" : "text-slate-900")}>{title}</p>
+      <p className={clsx("text-[13px] mt-1 leading-relaxed", dark ? "text-slate-400" : "text-slate-500")}>{desc}</p>
     </div>
   );
 }
 
 /* ── Seção de feature com texto de um lado e visual do outro ── */
 function Feature({
-  eyebrow, title, desc, bullets, reverse, dark, visual,
+  eyebrow, title, desc, details, reverse, dark, tint, visual,
 }: {
-  eyebrow: string; title: React.ReactNode; desc: string; bullets: string[]; reverse?: boolean; dark?: boolean; visual: React.ReactNode;
+  eyebrow: string; title: React.ReactNode; desc: string; details: Detail[]; reverse?: boolean; dark?: boolean; tint?: boolean; visual: React.ReactNode;
 }) {
   return (
-    <section className={dark ? "bg-slate-950" : "bg-white"}>
-      <div className={`max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center ${reverse ? "md:[&>*:first-child]:order-2" : ""}`}>
+    <section className={clsx("relative overflow-hidden", dark ? "bg-slate-950" : tint ? "bg-gradient-to-b from-emerald-50/60 to-white" : "bg-white")}>
+      <div className={clsx("pointer-events-none absolute -top-24 w-[26rem] h-[26rem] rounded-full blur-[110px] -z-0", dark ? "bg-teal-500/10" : "bg-emerald-300/20", reverse ? "-left-24" : "-right-24")} />
+      <div className={`relative max-w-6xl mx-auto px-6 py-24 grid md:grid-cols-2 gap-14 items-center ${reverse ? "md:[&>*:first-child]:order-2" : ""}`}>
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">
             {eyebrow}
           </span>
-          <h2 className={`${heading.className} text-3xl sm:text-[2.15rem] font-extrabold mt-4 leading-tight ${dark ? "text-white" : "text-slate-900"}`}>
+          <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold mt-4 leading-tight ${dark ? "text-white" : "text-slate-900"}`}>
             {title}
           </h2>
-          <p className={`mt-4 text-[15px] leading-relaxed ${dark ? "text-slate-400" : "text-slate-500"}`}>{desc}</p>
-          <ul className="mt-5 space-y-2.5">
-            {bullets.map(b => (
-              <li key={b} className={`flex items-start gap-2.5 text-sm ${dark ? "text-slate-200" : "text-slate-700"}`}>
-                <span className="mt-0.5 w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-[9px] shrink-0">✓</span>
-                {b}
-              </li>
-            ))}
-          </ul>
+          <p className={`mt-4 text-[15px] leading-relaxed max-w-lg ${dark ? "text-slate-400" : "text-slate-500"}`}>{desc}</p>
+          <div className="mt-7 grid sm:grid-cols-2 gap-3">
+            {details.map(d => <DetailCard key={d.title} {...d} dark={dark} />)}
+          </div>
         </div>
         <div>{visual}</div>
       </div>
@@ -193,31 +210,83 @@ function ModeToggleDemo() {
   const [mode, setMode] = useState<"personal" | "business">("personal");
   const d = MODE_DATA[mode];
   return (
-    <div className="max-w-sm mx-auto">
-      <div className="flex bg-slate-100 rounded-xl p-1 mb-4">
-        {(["personal", "business"] as const).map(key => (
-          <button key={key} onClick={() => setMode(key)}
-            className={clsx("flex-1 py-2.5 rounded-lg text-xs font-bold transition", mode === key ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600")}>
-            {MODE_DATA[key].label}
-          </button>
-        ))}
-      </div>
-      <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl transition-all">
-        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{d.sub}</p>
-        <p className="text-3xl font-extrabold mt-1 transition-all">{fmt(d.balance)}</p>
-      </div>
-      <div className="grid grid-cols-3 gap-2 mt-3">
-        {d.cats.map(([cat, val]) => (
-          <div key={cat} className="rounded-xl border border-slate-100 p-2.5 text-center">
-            <p className="text-[9px] text-slate-400 truncate">{cat}</p>
-            <p className="text-xs font-bold text-slate-700 mt-0.5">{fmt(val)}</p>
-          </div>
-        ))}
+    <div className="max-w-sm mx-auto relative">
+      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-gradient-to-br from-emerald-300/25 to-teal-300/25 blur-3xl -z-10" />
+      <div className="rounded-3xl bg-white border border-slate-100 shadow-xl p-5">
+        <div className="flex bg-slate-100 rounded-xl p-1 mb-4">
+          {(["personal", "business"] as const).map(key => (
+            <button key={key} onClick={() => setMode(key)}
+              className={clsx("flex-1 py-2.5 rounded-lg text-xs font-bold transition", mode === key ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600")}>
+              {MODE_DATA[key].label}
+            </button>
+          ))}
+        </div>
+        <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl transition-all">
+          <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{d.sub}</p>
+          <p className="text-3xl font-extrabold mt-1 transition-all">{fmt(d.balance)}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {d.cats.map(([cat, val]) => (
+            <div key={cat} className="rounded-xl border border-slate-100 p-2.5 text-center">
+              <p className="text-[9px] text-slate-400 truncate">{cat}</p>
+              <p className="text-xs font-bold text-slate-700 mt-0.5">{fmt(val)}</p>
+            </div>
+          ))}
+        </div>
       </div>
       <p className="text-center text-[11px] text-slate-400 mt-3">↑ clique pra alternar entre os modos</p>
     </div>
   );
 }
+
+const FINANCAS_DETAILS: Detail[] = [
+  { icon: "🎙️", title: "Áudio, texto ou foto", desc: "Fale naturalmente, digite ou mande foto do recibo — os três formatos são entendidos na hora." },
+  { icon: "🏷️", title: "Categorização automática", desc: "Cada gasto já chega organizado por categoria, sem escolher nada na mão." },
+  { icon: "🔁", title: "Recorrentes e parcelados", desc: "Assinaturas e parcelamentos com lembrete automático a cada vencimento." },
+  { icon: "👤🏢", title: "Pessoal ou empresa", desc: "Registre no modo certo e nunca misture as contas de casa com as do negócio." },
+];
+
+const PAINEL_DETAILS: Detail[] = [
+  { icon: "📊", title: "Categorias sob medida", desc: "Crie e edite suas próprias categorias, do jeito que fizer sentido pra você." },
+  { icon: "⏳", title: "Lançamentos pendentes", desc: "Contas futuras entram automaticamente no saldo assim que a data chega." },
+  { icon: "🎯", title: "Metas com prazo", desc: "Defina o valor alvo e a data, acompanhe o progresso quando quiser." },
+  { icon: "✍️", title: "Edite conversando", desc: "Mude valor, categoria ou data só descrevendo o que precisa mudar." },
+];
+
+const MODO_DETAILS: Detail[] = [
+  { icon: "🔀", title: "Troque com um clique", desc: "Sem trocar de conta nem digitar senha de novo — o botão fica ali no painel." },
+  { icon: "🧮", title: "Saldos separados", desc: "Categorias, metas e relatórios calculados de forma independente por modo." },
+  { icon: "🏢", title: "Empresa completa", desc: "Funcionários, veículos e fornecedores organizados do lado do negócio." },
+  { icon: "🧘", title: "Sem confusão", desc: "Ideal pra quem empreende e também cuida da vida pessoal, no mesmo lugar." },
+];
+
+const AGENDA_DETAILS: Detail[] = [
+  { icon: "🗣️", title: "Fale do seu jeito", desc: "Diga a data e o horário como preferir — o Zelo entende e agenda certinho." },
+  { icon: "🔄", title: "Sincronizado com o Google", desc: "Tudo espelhado automaticamente no Google Agenda, nos dois sentidos." },
+  { icon: "⏰", title: "Lembretes automáticos", desc: "Você é avisado antes de cada compromisso, sem configurar nada." },
+  { icon: "✅", title: "Tarefas do dia", desc: "Marque compromissos e afazeres como feitos direto pelo WhatsApp." },
+];
+
+const REUNIOES_DETAILS: Detail[] = [
+  { icon: "🔗", title: "Link em segundos", desc: "Peça e o Zelo cria o Google Meet na hora, sem abrir o Google Agenda." },
+  { icon: "📣", title: "Convite automático", desc: "Participantes chamados direto pelo WhatsApp, sem trabalho manual." },
+  { icon: "📝", title: "Ata gerada por IA", desc: "Ao final, o Zelo resume decisões e próximos passos automaticamente." },
+  { icon: "🔍", title: "Fácil de encontrar depois", desc: "A ata fica salva e pode ser consultada quando você quiser." },
+];
+
+const CONTA_DETAILS: Detail[] = [
+  { icon: "👫", title: "Casais", desc: "Registrem os gastos da casa numa conta só, sem duplicar controle." },
+  { icon: "🤝", title: "Sócios", desc: "Lancem despesas e receitas da empresa no mesmo lugar, no modo empresa." },
+  { icon: "🔐", title: "Sem compartilhar senha", desc: "Cada pessoa usa o próprio número de WhatsApp, com segurança." },
+  { icon: "🏷️", title: "Identificado por pessoa", desc: "Todo lançamento mostra quem da família ou da equipe registrou." },
+];
+
+const DRIVE_DETAILS: Detail[] = [
+  { icon: "📤", title: "Envie qualquer arquivo", desc: "Direto pelo WhatsApp, sem app extra e sem fazer login em lugar nenhum." },
+  { icon: "🗂️", title: "Organização automática", desc: "O Zelo entende o conteúdo e guarda na pasta certa sozinho." },
+  { icon: "🔎", title: "Busca por significado", desc: "Descreva o que procura, mesmo sem lembrar o nome — a IA encontra." },
+  { icon: "✏️", title: "Renomeie conversando", desc: "Peça pra renomear o último arquivo só digitando o novo nome." },
+];
 
 const FAQS = [
   { q: "O que é o Zelo e como ele funciona?", a: "O Zelo é um assistente pessoal por IA que vive no seu WhatsApp. Você fala, digita ou manda foto do que precisa registrar — finanças, compromissos, tarefas — e ele organiza tudo automaticamente, com um painel web pra você acompanhar sempre que quiser." },
@@ -264,7 +333,7 @@ export default function LandingPage() {
       {/* ── NAV ── */}
       <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur border-b border-white/5">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-7 w-auto" priority />
+          <Image src="/brand/zelo-wordmark-light.png" alt="Zelo" width={640} height={293} className="h-7 w-auto" priority />
           <nav className="hidden md:flex items-center gap-7 text-sm text-slate-300">
             <a href="#financas" className="hover:text-white transition">Finanças</a>
             <a href="#modo" className="hover:text-white transition">Modo Empresa</a>
@@ -285,20 +354,21 @@ export default function LandingPage() {
       <section className="relative bg-slate-950 overflow-hidden">
         <div className="pointer-events-none absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-emerald-500/20 blur-[120px]" />
         <div className="pointer-events-none absolute top-10 -right-32 w-[28rem] h-[28rem] rounded-full bg-teal-500/15 blur-[120px]" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-20 grid md:grid-cols-2 gap-14 items-center">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> IA no WhatsApp para sua rotina
             </span>
-            <h1 className={`${heading.className} text-4xl sm:text-5xl font-extrabold text-white mt-5 leading-[1.1]`}>
+            <h1 className={`${heading.className} text-4xl sm:text-6xl font-extrabold text-white mt-5 leading-[1.05]`}>
               Sua rotina organizada,{" "}
               <span className="bg-gradient-to-br from-emerald-400 to-teal-400 bg-clip-text text-transparent">direto no WhatsApp.</span>
             </h1>
-            <p className="text-slate-400 mt-5 text-[15px] leading-relaxed max-w-md">
+            <p className="text-slate-400 mt-5 text-[16px] leading-relaxed max-w-md">
               Finanças, agenda, tarefas, veículos e documentos. Organizados por IA, sem sair da conversa que você já usa todos os dias — no modo pessoal ou no modo empresa.
             </p>
-            <div className="mt-7 flex items-center gap-4">
-              <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/10">
+            <div className="mt-8 flex items-center gap-4">
+              <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/20">
                 Começar agora →
               </Link>
             </div>
@@ -310,6 +380,10 @@ export default function LandingPage() {
           </div>
 
           <WhatsAppMock
+            chips={[
+              { label: "💸 Gasto categorizado", pos: "-left-8 top-10" },
+              { label: "📅 Compromisso marcado", pos: "-right-6 bottom-24", delay: "1.4s" },
+            ]}
             messages={[
               { from: "user", time: "20:40", text: "Bom dia, organiza meu dia?" },
               { time: "20:40", text: <>Claro! Vou cuidar da sua <b>agenda</b>, <b>finanças</b> e prioridades em um só lugar.</> },
@@ -337,15 +411,10 @@ export default function LandingPage() {
           eyebrow="📋 Controle Financeiro"
           title="Anote seus gastos por áudio, texto ou foto."
           desc="Registre cada despesa ou receita em segundos. O Zelo ouve seus áudios, entende sua fala natural e categoriza tudo automaticamente — sem planilha, sem digitação."
-          bullets={[
-            "Consulte qualquer gasto pelo WhatsApp, a qualquer hora",
-            "Seus gastos já chegam categorizados sozinhos",
-            "Lançamentos futuros ficam pendentes e entram no saldo certinho no dia",
-            "Contas recorrentes e parceladas com lembrete automático de confirmação",
-            "Receitas e despesas, no modo pessoal ou no modo empresa",
-          ]}
+          details={FINANCAS_DETAILS}
           visual={
             <WhatsAppMock
+              glow="teal"
               messages={[
                 { from: "user", time: "09:12", text: "🎙️ 0:08" },
                 { time: "09:12", text: "Entendi! Registrei:" },
@@ -361,17 +430,13 @@ export default function LandingPage() {
       <Feature
         eyebrow="📊 Seu Painel Financeiro"
         reverse
+        tint
         title="Seu dinheiro organizado em um só painel."
         desc="Seus gastos, compromissos e metas organizados num painel completo. Você sempre sabe o que aconteceu, o que está pendente e o que vem pela frente."
-        bullets={[
-          "Veja seus gastos separados por categoria, com categorias 100% personalizáveis",
-          "Contas recorrentes e parceladas sob controle, com confirmação a cada vencimento",
-          "Defina metas com prazo e acompanhe o quanto já alcançou",
-          "Edite ou apague qualquer lançamento só descrevendo o que mudar",
-          "Exporte seus dados quando precisar",
-        ]}
+        details={PAINEL_DETAILS}
         visual={
-          <div className="max-w-sm mx-auto space-y-3">
+          <div className="max-w-sm mx-auto space-y-3 relative">
+            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-emerald-300/20 blur-3xl -z-10" />
             <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl">
               <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Saldo pessoal · julho</p>
               <p className="text-3xl font-extrabold mt-1">{fmt(3241.5)}</p>
@@ -389,60 +454,73 @@ export default function LandingPage() {
       />
 
       {/* ── MODO PESSOAL / MODO EMPRESA ── */}
-      <section id="modo" className="bg-slate-50 py-24 border-y border-slate-100">
-        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">👤🏢 Modo Pessoal e Modo Empresa</span>
-            <h2 className={`${heading.className} text-3xl sm:text-[2.15rem] font-extrabold text-slate-900 mt-4 leading-tight`}>A mesma conta. Duas vidas, sem misturar.</h2>
-            <p className="text-slate-500 mt-4 text-[15px] leading-relaxed">
+      <section id="modo" className="relative overflow-hidden bg-slate-950 py-24">
+        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-emerald-500/10 blur-[120px]" />
+        <div className="relative max-w-6xl mx-auto px-6">
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">👤🏢 Modo Pessoal e Modo Empresa</span>
+            <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>A mesma conta. Duas vidas, sem misturar.</h2>
+            <p className="text-slate-400 mt-3 text-sm leading-relaxed">
               Alterne entre Modo Pessoal e Modo Empresa direto no painel ou pelo WhatsApp. Cada um com seu próprio saldo, categorias, metas e relatórios — perfeito pra quem empreende e também cuida da vida pessoal, sem abrir uma segunda conta.
             </p>
-            <ul className="mt-5 space-y-2.5">
-              {[
-                "Troque de modo com um clique, sem trocar de conta ou senha",
-                "Saldo, categorias e metas calculados separadamente por modo",
-                "Funcionários, veículos e fornecedores organizados do lado da empresa",
-                "Ideal pra quem empreende e também organiza a vida pessoal no mesmo lugar",
-              ].map(b => (
-                <li key={b} className="flex items-start gap-2.5 text-sm text-slate-700">
-                  <span className="mt-0.5 w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-[9px] shrink-0">✓</span>
-                  {b}
-                </li>
-              ))}
-            </ul>
           </div>
-          <ModeToggleDemo />
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="grid sm:grid-cols-2 gap-3">
+              {MODO_DETAILS.map(d => <DetailCard key={d.title} {...d} dark />)}
+            </div>
+            <ModeToggleDemo />
+          </div>
         </div>
       </section>
 
       {/* ── FATURA DE CARTÃO (destaque) ── */}
-      <section id="fatura" className="bg-slate-950 py-24">
-        <div className="max-w-6xl mx-auto px-6">
+      <section id="fatura" className="relative overflow-hidden bg-white py-24">
+        <div className="pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-teal-300/20 blur-[120px]" />
+        <div className="relative max-w-6xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto mb-14">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">💳 Fatura do Cartão</span>
-            <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>Chega de digitar cada gasto do cartão.</h2>
-            <p className="text-slate-400 mt-3 text-sm leading-relaxed">Envie a fatura em PDF pelo WhatsApp ou pelo painel. O Zelo lê cada lançamento, categoriza automaticamente e nunca registra o mesmo gasto duas vezes — se algo já bate com valor e data de um lançamento existente, ele avisa antes de importar.</p>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">💳 Fatura do Cartão</span>
+            <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-slate-900 mt-4`}>Chega de digitar cada gasto do cartão.</h2>
+            <p className="text-slate-500 mt-3 text-sm leading-relaxed">Envie a fatura em PDF pelo WhatsApp ou pelo painel. O Zelo lê cada lançamento, categoriza automaticamente e nunca registra o mesmo gasto duas vezes.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-5">
-            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-5">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-3">Fatura analisada</p>
-              <p className="text-white font-bold text-lg">34 lançamentos</p>
-              <p className="text-xs text-slate-500 mt-1">encontrados no PDF</p>
-            </div>
-            <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-5">
-              <p className="text-[10px] uppercase tracking-wide text-emerald-400 font-semibold mb-3">✅ Novos</p>
-              <p className="text-emerald-300 font-bold text-lg">29 lançamentos</p>
-              <p className="text-xs text-emerald-400/70 mt-1">prontos pra importar</p>
-            </div>
-            <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-5">
-              <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-3">♻️ Duplicados</p>
-              <p className="text-amber-300 font-bold text-lg">5 lançamentos</p>
-              <p className="text-xs text-amber-400/70 mt-1">já estavam registrados — ignorados</p>
-            </div>
+
+          <div className="grid sm:grid-cols-4 gap-4 mb-14">
+            {[
+              { icon: "📤", title: "1. Envie o PDF", desc: "Pelo WhatsApp ou pelo painel web." },
+              { icon: "🔍", title: "2. A IA lê tudo", desc: "Cada lançamento é identificado e categorizado." },
+              { icon: "♻️", title: "3. Compara duplicados", desc: "Cruza valor e data com o que já existe." },
+              { icon: "✅", title: "4. Você confirma", desc: "Revisa a lista e importa só o que quiser." },
+            ].map(s => (
+              <div key={s.title} className="rounded-2xl border border-slate-100 p-4 text-center">
+                <span className="text-2xl">{s.icon}</span>
+                <p className="font-bold text-slate-900 text-sm mt-2">{s.title}</p>
+                <p className="text-xs text-slate-500 mt-1">{s.desc}</p>
+              </div>
+            ))}
           </div>
-          <p className="text-center text-slate-500 text-xs mt-6">Você sempre revisa a lista antes de confirmar — nada é importado sem sua aprovação.</p>
-          <div className="text-center mt-8">
-            <Link href="/cadastro" className="inline-block rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition">
+
+          <div className="rounded-3xl bg-slate-950 p-8 sm:p-10">
+            <div className="grid md:grid-cols-3 gap-5">
+              <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-5">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-3">Fatura analisada</p>
+                <p className="text-white font-bold text-lg">34 lançamentos</p>
+                <p className="text-xs text-slate-500 mt-1">encontrados no PDF</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-5">
+                <p className="text-[10px] uppercase tracking-wide text-emerald-400 font-semibold mb-3">✅ Novos</p>
+                <p className="text-emerald-300 font-bold text-lg">29 lançamentos</p>
+                <p className="text-xs text-emerald-400/70 mt-1">prontos pra importar</p>
+              </div>
+              <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-5">
+                <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-3">♻️ Duplicados</p>
+                <p className="text-amber-300 font-bold text-lg">5 lançamentos</p>
+                <p className="text-xs text-amber-400/70 mt-1">já estavam registrados — ignorados</p>
+              </div>
+            </div>
+            <p className="text-center text-slate-500 text-xs mt-6">Você sempre revisa a lista antes de confirmar — nada é importado sem sua aprovação.</p>
+          </div>
+
+          <div className="text-center mt-10">
+            <Link href="/cadastro" className="inline-block rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/20">
               Importar minha fatura →
             </Link>
           </div>
@@ -453,14 +531,10 @@ export default function LandingPage() {
       <div id="agenda">
         <Feature
           eyebrow="📅 Agenda Inteligente"
+          tint
           title="Nunca mais esqueça um compromisso."
           desc="Tenha lembretes e resumos diários. Registre compromissos no WhatsApp falando do seu jeito: o Zelo entende e organiza sua rotina. Tudo sincronizado com o Google Agenda."
-          bullets={[
-            "Consulte, remarque ou cancele compromissos pelo WhatsApp",
-            "Marque tarefas do dia como feitas, sem abrir o painel",
-            "Sincronizado automaticamente com o Google Agenda",
-            "Lembretes automáticos antes de cada compromisso, sem precisar pedir",
-          ]}
+          details={AGENDA_DETAILS}
           visual={
             <WhatsAppMock
               messages={[
@@ -478,14 +552,10 @@ export default function LandingPage() {
         reverse
         title="Reuniões marcadas e resumidas sozinhas."
         desc="Peça pro Zelo criar o link do Google Meet, convocar os participantes pelo WhatsApp e, quando a reunião terminar, ele mesmo gera a ata com os pontos principais."
-        bullets={[
-          "Crie a reunião só falando com o Zelo, sem abrir o Google Agenda",
-          "Participantes convocados automaticamente pelo WhatsApp",
-          "Ata gerada por IA ao final, com decisões e próximos passos",
-          "Tudo fica salvo e fácil de encontrar depois",
-        ]}
+        details={REUNIOES_DETAILS}
         visual={
-          <div className="max-w-sm mx-auto space-y-3">
+          <div className="max-w-sm mx-auto space-y-3 relative">
+            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-teal-300/20 blur-3xl -z-10" />
             <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm flex items-center gap-3">
               <span className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-lg">📹</span>
               <div>
@@ -502,12 +572,13 @@ export default function LandingPage() {
       />
 
       {/* ── GRID DE MÓDULOS SECUNDÁRIOS ── */}
-      <section className="bg-white py-24 border-t border-slate-100">
-        <div className="max-w-6xl mx-auto px-6">
+      <section className="relative overflow-hidden bg-slate-950 py-24">
+        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[44rem] h-[26rem] rounded-full bg-emerald-500/10 blur-[130px]" />
+        <div className="relative max-w-6xl mx-auto px-6">
           <div className="text-center max-w-xl mx-auto mb-12">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">✨ Muito mais</span>
-            <h2 className={`${heading.className} text-3xl font-extrabold text-slate-900 mt-4`}>Muito mais que finanças.</h2>
-            <p className="text-slate-500 mt-3 text-sm">Tudo o que organiza sua rotina — pessoal ou da empresa — em um só assistente.</p>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">✨ Muito mais</span>
+            <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>Muito mais que finanças.</h2>
+            <p className="text-slate-400 mt-3 text-sm">Tudo o que organiza sua rotina — pessoal ou da empresa — em um só assistente.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
@@ -516,10 +587,10 @@ export default function LandingPage() {
               { icon: "👥", title: "Funcionários", desc: "Cargo, salário e status de cada funcionário da sua empresa, sempre à mão." },
               { icon: "🛒", title: "Lista de mercado", desc: "Compras por categoria, preço, quantidade e loja, direto pelo WhatsApp." },
             ].map(c => (
-              <div key={c.title} className="rounded-2xl border border-slate-100 p-6 hover:border-emerald-200 hover:shadow-sm transition">
-                <span className="text-2xl">{c.icon}</span>
-                <p className="font-bold text-slate-900 mt-3">{c.title}</p>
-                <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{c.desc}</p>
+              <div key={c.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 hover:bg-white/[0.06] hover:border-emerald-400/30 transition">
+                <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400/20 to-teal-500/20 flex items-center justify-center text-xl">{c.icon}</span>
+                <p className="font-bold text-white mt-4">{c.title}</p>
+                <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{c.desc}</p>
               </div>
             ))}
           </div>
@@ -529,16 +600,16 @@ export default function LandingPage() {
       {/* ── CONTA COMPARTILHADA ── */}
       <Feature
         eyebrow="👨‍👩‍👧 Conta Compartilhada"
+        tint
         title="Convide quem precisar, sem senha."
         desc="Compartilhe o Zelo com sua família, sócios ou equipe. Cada pessoa registra pelo próprio WhatsApp, e você mantém visibilidade total sobre tudo num painel só."
-        bullets={[
-          "Casais registram gastos em uma conta única, sem duplicar controle",
-          "Sócios lançam despesas e receitas no mesmo lugar, no modo empresa",
-          "Sua equipe alimenta o sistema, com segurança e sem compartilhar senha",
-          "Cada lançamento mostra quem da família ou da equipe registrou",
-        ]}
+        details={CONTA_DETAILS}
         visual={
           <div className="relative w-full max-w-sm mx-auto aspect-square flex items-center justify-center">
+            <div className="pointer-events-none absolute inset-0 rounded-full bg-emerald-300/20 blur-3xl -z-10" />
+            <svg className="absolute inset-0 w-full h-full -z-0 opacity-40" viewBox="0 0 300 300">
+              <circle cx="150" cy="150" r="110" fill="none" stroke="#10b981" strokeWidth="1" strokeDasharray="3 6" />
+            </svg>
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-xl z-10">
               <Image src="/brand/zelo-icon.png" alt="" width={40} height={40} />
             </div>
@@ -547,8 +618,8 @@ export default function LandingPage() {
               { label: "Carla · Família", pos: "top-1/3 right-0" },
               { label: "Pedro · Esposo", pos: "bottom-2 left-8" },
               { label: "Marina · Equipe", pos: "bottom-6 right-6" },
-            ].map(p => (
-              <div key={p.label} className={`absolute ${p.pos} bg-white rounded-xl border border-slate-100 shadow-sm px-3 py-2 text-xs font-medium text-slate-600`}>
+            ].map((p, i) => (
+              <div key={p.label} className={clsx("float-chip absolute bg-white rounded-xl border border-slate-100 shadow-lg px-3 py-2 text-xs font-medium text-slate-600", p.pos)} style={{ animationDelay: `${i * 0.5}s` }}>
                 {p.label}
               </div>
             ))}
@@ -563,14 +634,10 @@ export default function LandingPage() {
           reverse
           title="Seus documentos guardados. Encontrados por IA."
           desc="Envie qualquer arquivo pelo WhatsApp e tenha tudo salvo e organizado. Quando precisar, é só descrever com suas palavras que o Zelo encontra pra você."
-          bullets={[
-            "Envie arquivos direto pelo WhatsApp, sem app e sem login",
-            "O Zelo organiza nas pastas certas sozinho, por IA",
-            "Ache qualquer arquivo só descrevendo o que ele é",
-            "Peça pra renomear um arquivo só digitando o novo nome",
-          ]}
+          details={DRIVE_DETAILS}
           visual={
             <WhatsAppMock
+              glow="teal"
               messages={[
                 { from: "user", time: "10:02", text: "📄 comprovante_mecanico.pdf\nSalva isso na pasta de comprovantes" },
                 { time: "10:02", tags: ["Comprovantes"], text: "Pronto! Salvei na pasta Comprovantes ✅" },
@@ -583,24 +650,26 @@ export default function LandingPage() {
       </div>
 
       {/* ── CTA banner ── */}
-      <section className="bg-gradient-to-br from-slate-950 via-emerald-950 to-teal-900 py-20">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white`}>Sua rotina, sob controle.</h2>
-          <p className="text-slate-300 mt-2">Pessoal ou empresa — onde quer que você esteja, é só abrir o WhatsApp.</p>
-          <Link href="/cadastro" className="inline-block mt-7 rounded-xl bg-white text-slate-900 text-sm font-bold px-7 py-3.5 hover:bg-slate-100 transition">
+      <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-emerald-950 to-teal-900 py-24">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "26px 26px" }} />
+        <div className="relative max-w-4xl mx-auto px-6 text-center">
+          <h2 className={`${heading.className} text-3xl sm:text-5xl font-extrabold text-white`}>Sua rotina, sob controle.</h2>
+          <p className="text-slate-300 mt-3 text-lg">Pessoal ou empresa — onde quer que você esteja, é só abrir o WhatsApp.</p>
+          <Link href="/cadastro" className="inline-block mt-8 rounded-xl bg-white text-slate-900 text-sm font-bold px-7 py-3.5 hover:bg-slate-100 transition shadow-xl">
             Começar agora →
           </Link>
         </div>
       </section>
 
       {/* ── PLANOS ── */}
-      <section id="planos" className="bg-slate-50 py-24">
-        <div className="max-w-md mx-auto px-6 text-center">
+      <section id="planos" className="relative overflow-hidden bg-slate-50 py-24">
+        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[36rem] h-[20rem] rounded-full bg-emerald-300/25 blur-[110px]" />
+        <div className="relative max-w-md mx-auto px-6 text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">🌿 Experimente sem risco</span>
-          <h2 className={`${heading.className} text-3xl font-extrabold text-slate-900 mt-4`}>Comece grátis por 14 dias.</h2>
+          <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-slate-900 mt-4`}>Comece grátis por 14 dias.</h2>
           <p className="text-slate-500 mt-2 text-sm">Sem cartão de crédito. Acesso completo a todas as funções, desde o primeiro dia.</p>
 
-          <div className="mt-8 rounded-3xl bg-white border border-slate-200 shadow-sm p-7 text-left">
+          <div className="mt-8 rounded-3xl bg-white border border-slate-200 shadow-xl p-7 text-left">
             <p className="font-bold text-slate-900 mb-4">Tudo incluso no período de teste:</p>
             <ul className="space-y-2.5">
               {[
@@ -618,7 +687,7 @@ export default function LandingPage() {
                 </li>
               ))}
             </ul>
-            <Link href="/cadastro" className="mt-6 block text-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition">
+            <Link href="/cadastro" className="mt-6 block text-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/20">
               Criar minha conta →
             </Link>
           </div>
@@ -631,7 +700,7 @@ export default function LandingPage() {
       <footer className="bg-slate-950 border-t border-white/5 py-12">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex flex-col items-center sm:items-start gap-1.5">
-            <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-6 w-auto" />
+            <Image src="/brand/zelo-wordmark-light.png" alt="Zelo" width={640} height={293} className="h-6 w-auto" />
             <p className="text-slate-500 text-xs">Gestão inteligente, direto no WhatsApp.</p>
           </div>
           <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400">
