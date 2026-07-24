@@ -117,7 +117,7 @@ export default function SupermercadoPage() {
           <p className="text-slate-400 text-sm mt-0.5">👤 Pessoal</p>
         </div>
         <button onClick={() => setShowAddPurchase(true)}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition">
+          className="px-4 py-2 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition">
           + Registrar Compra
         </button>
       </div>
@@ -125,8 +125,8 @@ export default function SupermercadoPage() {
       {/* Overview */}
       {overview && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-emerald-600 rounded-2xl p-4 text-white shadow-sm">
-            <p className="text-xs text-emerald-100">Total Gasto</p>
+          <div className="bg-amber-600 rounded-2xl p-4 text-white shadow-sm">
+            <p className="text-xs text-amber-100">Total Gasto</p>
             <p className="text-lg font-bold mt-1">{fmt(overview.totalSpent)}</p>
           </div>
           <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
@@ -228,7 +228,7 @@ export default function SupermercadoPage() {
                       <div key={item.id} className={clsx("flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition", item.checked && "opacity-50")}>
                         <button onClick={() => toggleItem(item.id)}
                           className={clsx("w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center transition",
-                            item.checked ? "bg-emerald-500 border-emerald-500" : "border-slate-300 hover:border-emerald-400")}>
+                            item.checked ? "bg-amber-500 border-amber-500" : "border-slate-300 hover:border-amber-400")}>
                           {item.checked && <span className="text-white text-xs">✓</span>}
                         </button>
                         <span className={clsx("text-sm flex-1", item.checked && "line-through text-slate-400")}>{item.name}</span>
@@ -259,7 +259,7 @@ export default function SupermercadoPage() {
                   <p className="font-semibold text-slate-800">🛒 {p.storeName}</p>
                   <p className="text-xs text-slate-400">{new Date(p.date + "T12:00:00").toLocaleDateString("pt-BR")} · {p.items.length} itens</p>
                 </div>
-                <span className="text-base font-bold text-emerald-600">{fmt(p.total)}</span>
+                <span className="text-base font-bold text-amber-600">{fmt(p.total)}</span>
               </div>
               <div className="grid grid-cols-2 gap-1">
                 {p.items.map((item, i) => (
@@ -296,17 +296,17 @@ export default function SupermercadoPage() {
                     <p className="text-xs text-slate-400">{CAT_ICON[p.category]} {p.category}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-emerald-600 font-semibold">Economize {fmt(diff)}</p>
+                    <p className="text-xs text-amber-600 font-semibold">Economize {fmt(diff)}</p>
                     <p className="text-xs text-slate-400">comprando no {min.storeName}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {sorted.map(s => (
-                    <div key={s.storeName} className={clsx("flex items-center justify-between px-3 py-2 rounded-xl text-sm", s.storeName === min.storeName ? "bg-emerald-50 border border-emerald-200" : "bg-slate-50")}>
+                    <div key={s.storeName} className={clsx("flex items-center justify-between px-3 py-2 rounded-xl text-sm", s.storeName === min.storeName ? "bg-amber-50 border border-amber-200" : "bg-slate-50")}>
                       <span className="font-medium text-slate-700">{s.storeName}</span>
                       <div className="flex items-center gap-2">
-                        <span className={clsx("font-bold", s.storeName === min.storeName ? "text-emerald-600" : "text-red-500")}>{fmt(s.price)}</span>
-                        {s.storeName === min.storeName && <span className="text-xs bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">Mais barato</span>}
+                        <span className={clsx("font-bold", s.storeName === min.storeName ? "text-amber-600" : "text-red-500")}>{fmt(s.price)}</span>
+                        {s.storeName === min.storeName && <span className="text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded-full">Mais barato</span>}
                       </div>
                     </div>
                   ))}
@@ -343,7 +343,7 @@ export default function SupermercadoPage() {
                         <span className="font-bold text-slate-800">{fmt(s.total)}</span>
                       </div>
                       <div className="h-2 bg-slate-100 rounded-full">
-                        <div className="h-2 bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="h-2 bg-amber-500 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5 text-right">{pct}% do total</p>
                     </div>
@@ -410,7 +410,7 @@ export default function SupermercadoPage() {
                   </div>
                 ))}
                 <button type="button" onClick={() => setPurchaseForm(f => ({ ...f, items: [...f.items, { productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] }))}
-                  className="text-xs text-emerald-600 hover:underline font-medium">+ Adicionar produto</button>
+                  className="text-xs text-amber-600 hover:underline font-medium">+ Adicionar produto</button>
               </div>
 
               <div className="text-right text-sm font-semibold text-slate-800">
@@ -419,7 +419,7 @@ export default function SupermercadoPage() {
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowAddPurchase(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition">Registrar</button>
+                <button type="submit" className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition">Registrar</button>
               </div>
             </form>
           </div>

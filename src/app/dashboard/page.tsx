@@ -81,7 +81,7 @@ export default function DashboardPage() {
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="text-center">
-        <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <div className="w-10 h-10 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
         <p className="text-slate-400 text-sm">Carregando...</p>
       </div>
     </div>
@@ -242,7 +242,7 @@ export default function DashboardPage() {
 
       {/* Como usar */}
       {recentTransactions.length === 0 && (
-        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-6">
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100/40 border border-amber-100 rounded-2xl p-6">
           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
             <span>🚀</span> Como usar pelo WhatsApp
           </h3>
@@ -252,7 +252,7 @@ export default function DashboardPage() {
               { icon: "📋", ex: "\"Criar tarefa: ligar pro cliente\"" },
               { icon: "🎯", ex: "\"Meta: guardar 5000 para viagem\"" },
             ].map(i => (
-              <div key={i.ex} className="bg-white rounded-xl p-3 border border-emerald-100">
+              <div key={i.ex} className="bg-white rounded-xl p-3 border border-amber-100">
                 <span className="text-xl">{i.icon}</span>
                 <p className="text-xs text-slate-500 mt-2 font-mono">{i.ex}</p>
               </div>

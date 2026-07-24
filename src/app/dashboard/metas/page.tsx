@@ -145,7 +145,7 @@ export default function MetasPage() {
         <div className="space-y-3">
           {active.map(goal => {
             const p = pct(goal);
-            const barColor = p >= 100 ? "bg-emerald-500" : p >= 75 ? "bg-indigo-500" : p >= 50 ? "bg-indigo-400" : "bg-indigo-300";
+            const barColor = p >= 100 ? "bg-amber-500" : p >= 75 ? "bg-indigo-500" : p >= 50 ? "bg-indigo-400" : "bg-indigo-300";
             return (
               <div key={goal.id} className="group bg-white rounded-2xl border border-slate-100 shadow-sm p-5 hover:shadow-md transition">
                 <div className="flex items-start justify-between mb-3">
@@ -154,7 +154,7 @@ export default function MetasPage() {
                     <p className="text-xs text-slate-400 mt-0.5">{goal.category}{goal.deadline && ` · Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}`}</p>
                   </div>
                   <div className="flex items-center gap-2 ml-3 shrink-0">
-                    <span className={clsx("text-xs rounded-full px-2.5 py-0.5 font-semibold border", p >= 100 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-indigo-100 text-indigo-600 border-indigo-200")}>
+                    <span className={clsx("text-xs rounded-full px-2.5 py-0.5 font-semibold border", p >= 100 ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-indigo-100 text-indigo-600 border-indigo-200")}>
                       {p}%
                     </span>
                     <div className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex gap-1">
@@ -179,7 +179,7 @@ export default function MetasPage() {
                       + Adicionar
                     </button>
                     <button onClick={() => handleComplete(goal)}
-                      className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition font-medium">
+                      className="text-xs px-3 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition font-medium">
                       ✓ Concluir
                     </button>
                   </div>
@@ -193,11 +193,11 @@ export default function MetasPage() {
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 mt-5">🏆 Concluídas ({completed.length})</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {completed.map(goal => (
-                  <div key={goal.id} className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-base shrink-0">🏆</div>
+                  <div key={goal.id} className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 text-base shrink-0">🏆</div>
                     <div className="min-w-0">
                       <p className="font-medium text-slate-700 text-sm truncate">{goal.title}</p>
-                      <p className="text-xs text-emerald-600 mt-0.5">{fmt(goal.targetAmount || 0)} atingido!</p>
+                      <p className="text-xs text-amber-600 mt-0.5">{fmt(goal.targetAmount || 0)} atingido!</p>
                     </div>
                   </div>
                 ))}

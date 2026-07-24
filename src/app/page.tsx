@@ -52,7 +52,7 @@ function ChatBubble({ from = "bot", tags, text, time = "20:40" }: Msg) {
         {tags && (
           <div className="flex flex-wrap gap-1 mt-1.5">
             {tags.map(t => (
-              <span key={t} className="text-[9px] border border-emerald-300 text-emerald-600 rounded-full px-2 py-0.5 font-medium">{t}</span>
+              <span key={t} className="text-[9px] border border-amber-300 text-amber-600 rounded-full px-2 py-0.5 font-medium">{t}</span>
             ))}
           </div>
         )}
@@ -68,7 +68,7 @@ function ChatBubble({ from = "bot", tags, text, time = "20:40" }: Msg) {
 /* ── Moldura de WhatsApp com a conversa animada EM LOOP: as mensagens
  *  aparecem em sequência, com "digitando..." antes de cada resposta do
  *  Zelo; ao terminar, pausa e recomeça — enquanto o mockup estiver visível. ── */
-function WhatsAppMock({ messages, chips, glow = "emerald", tilt = 0 }: { messages: Msg[]; chips?: Chip[]; glow?: "emerald" | "teal"; tilt?: number }) {
+function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: Chip[]; tilt?: number }) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(0);
@@ -111,7 +111,7 @@ function WhatsAppMock({ messages, chips, glow = "emerald", tilt = 0 }: { message
 
   return (
     <div ref={ref} className="relative">
-      <div className={clsx("pointer-events-none absolute -inset-8 rounded-[3rem] blur-3xl -z-10", glow === "emerald" ? "bg-emerald-400/20" : "bg-teal-400/20")} />
+      <div className="pointer-events-none absolute -inset-8 rounded-[3rem] blur-3xl -z-10 bg-amber-400/20" />
       {chips?.map((c, i) => (
         <div key={c.label} className={clsx("float-chip hidden lg:block absolute z-20 rounded-xl bg-white shadow-lg border border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700", c.pos)}
           style={{ animationDelay: c.delay ?? `${i * 0.6}s` }}>
@@ -193,8 +193,8 @@ type Detail = { icon: string; title: string; desc: string };
 
 function DetailCard({ icon, title, desc, dark }: Detail & { dark?: boolean }) {
   return (
-    <div className={clsx("rounded-2xl border p-4 transition", dark ? "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]" : "border-slate-100 bg-white hover:border-emerald-200 hover:shadow-md")}>
-      <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400/20 to-teal-500/20 flex items-center justify-center text-base shrink-0">{icon}</span>
+    <div className={clsx("rounded-2xl border p-4 transition", dark ? "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]" : "border-slate-100 bg-white hover:border-amber-200 hover:shadow-md")}>
+      <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-amber-500/20 flex items-center justify-center text-base shrink-0">{icon}</span>
       <p className={clsx("font-bold text-sm mt-3", dark ? "text-white" : "text-slate-900")}>{title}</p>
       <p className={clsx("text-[13px] mt-1 leading-relaxed", dark ? "text-slate-400" : "text-slate-500")}>{desc}</p>
     </div>
@@ -208,11 +208,11 @@ function Feature({
   eyebrow: string; title: React.ReactNode; desc: string; details: Detail[]; reverse?: boolean; dark?: boolean; tint?: boolean; visual: React.ReactNode;
 }) {
   return (
-    <section className={clsx("relative overflow-hidden", dark ? "bg-slate-950" : tint ? "bg-gradient-to-b from-emerald-50/60 to-white" : "bg-white")}>
-      <div className={clsx("pointer-events-none absolute -top-24 w-[26rem] h-[26rem] rounded-full blur-[110px] -z-0", dark ? "bg-teal-500/10" : "bg-emerald-300/20", reverse ? "-left-24" : "-right-24")} />
+    <section className={clsx("relative overflow-hidden", dark ? "bg-slate-950" : tint ? "bg-gradient-to-b from-amber-50/60 to-white" : "bg-white")}>
+      <div className={clsx("pointer-events-none absolute -top-24 w-[26rem] h-[26rem] rounded-full blur-[110px] -z-0", dark ? "bg-amber-500/10" : "bg-amber-300/20", reverse ? "-left-24" : "-right-24")} />
       <div className={`relative max-w-6xl mx-auto px-6 py-24 grid md:grid-cols-2 gap-14 items-center ${reverse ? "md:[&>*:first-child]:order-2" : ""}`}>
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs font-semibold px-3 py-1.5">
             {eyebrow}
           </span>
           <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold mt-4 leading-tight ${dark ? "text-white" : "text-slate-900"}`}>
@@ -237,17 +237,17 @@ function CalendarCard() {
   const todayIdx = 4;
   return (
     <div className="max-w-sm mx-auto space-y-3 relative">
-      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-emerald-300/20 blur-3xl -z-10" />
+      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/20 blur-3xl -z-10" />
       <div className="rounded-2xl border border-slate-100 bg-white shadow-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <p className="font-bold text-slate-900 text-sm">Julho, esta semana</p>
-          <span className="text-[10px] bg-emerald-50 text-emerald-600 rounded-full px-2.5 py-1 font-semibold">✓ Google Agenda</span>
+          <span className="text-[10px] bg-amber-50 text-amber-600 rounded-full px-2.5 py-1 font-semibold">✓ Google Agenda</span>
         </div>
         <div className="grid grid-cols-7 gap-1.5">
           {days.map((d, i) => (
             <div key={i} className="text-center">
               <p className="text-[10px] text-slate-400 font-semibold mb-1.5">{d}</p>
-              <div className={clsx("aspect-square rounded-lg flex items-center justify-center text-xs font-bold", i === todayIdx ? "bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md" : "text-slate-500 bg-slate-50")}>
+              <div className={clsx("aspect-square rounded-lg flex items-center justify-center text-xs font-bold", i === todayIdx ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900 shadow-md" : "text-slate-500 bg-slate-50")}>
                 {dates[i]}
               </div>
             </div>
@@ -255,8 +255,8 @@ function CalendarCard() {
         </div>
       </div>
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 flex items-center gap-3">
-        <span className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-emerald-600">
+        <span className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-amber-600">
             <circle cx="12" cy="12" r="9" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 3" />
           </svg>
@@ -267,8 +267,8 @@ function CalendarCard() {
         </div>
       </div>
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 flex items-center gap-3">
-        <span className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-teal-600">
+        <span className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-amber-600">
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </span>
@@ -281,8 +281,8 @@ function CalendarCard() {
   );
 }
 
-function DashCard({ title, value, sub, color = "emerald" }: { title: string; value: string; sub: string; color?: "emerald" | "amber" | "red" }) {
-  const colors = { emerald: "text-emerald-600", amber: "text-amber-600", red: "text-red-500" }[color];
+function DashCard({ title, value, sub, color = "amber" }: { title: string; value: string; sub: string; color?: "amber" | "warn" | "red" }) {
+  const colors = { amber: "text-amber-600", warn: "text-orange-600", red: "text-red-500" }[color];
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{title}</p>
@@ -309,7 +309,7 @@ function ModeToggleDemo() {
   const d = MODE_DATA[mode];
   return (
     <div className="max-w-sm mx-auto relative">
-      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-gradient-to-br from-emerald-300/25 to-teal-300/25 blur-3xl -z-10" />
+      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-gradient-to-br from-amber-300/25 to-amber-300/25 blur-3xl -z-10" />
       <div className="rounded-3xl bg-white border border-slate-100 shadow-xl p-5">
         <div className="flex bg-slate-100 rounded-xl p-1 mb-4">
           {(["personal", "business"] as const).map(key => (
@@ -441,7 +441,7 @@ export default function LandingPage() {
           </nav>
           <div className="flex items-center gap-4">
             <Link href="/login" className="hidden sm:block text-sm text-slate-300 hover:text-white transition">Entrar</Link>
-            <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 text-sm font-bold px-4 py-2.5 hover:opacity-90 transition">
+            <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 text-sm font-bold px-4 py-2.5 hover:opacity-90 transition">
               Começar agora →
             </Link>
           </div>
@@ -450,23 +450,23 @@ export default function LandingPage() {
 
       {/* ── HERO ── */}
       <section className="relative bg-slate-950 overflow-hidden">
-        <div className="pointer-events-none absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-emerald-500/20 blur-[120px]" />
-        <div className="pointer-events-none absolute top-10 -right-32 w-[28rem] h-[28rem] rounded-full bg-teal-500/15 blur-[120px]" />
+        <div className="pointer-events-none absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-amber-500/20 blur-[120px]" />
+        <div className="pointer-events-none absolute top-10 -right-32 w-[28rem] h-[28rem] rounded-full bg-amber-500/15 blur-[120px]" />
         <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-20 grid md:grid-cols-2 gap-14 items-center">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> IA no WhatsApp para sua rotina
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> IA no WhatsApp para sua rotina
             </span>
             <h1 className={`${heading.className} text-4xl sm:text-6xl font-extrabold text-white mt-5 leading-[1.05]`}>
               Sua rotina organizada,{" "}
-              <span className="bg-gradient-to-br from-emerald-400 to-teal-400 bg-clip-text text-transparent">direto no WhatsApp.</span>
+              <span className="bg-gradient-to-br from-amber-300 to-amber-500 bg-clip-text text-transparent">direto no WhatsApp.</span>
             </h1>
             <p className="text-slate-400 mt-5 text-[16px] leading-relaxed max-w-md">
               Finanças, agenda, tarefas, veículos e documentos. Organizados por IA, sem sair da conversa que você já usa todos os dias — no modo pessoal ou no modo empresa.
             </p>
             <div className="mt-8 flex items-center gap-4">
-              <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/20">
+              <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
                 Começar agora →
               </Link>
             </div>
@@ -512,7 +512,6 @@ export default function LandingPage() {
           details={FINANCAS_DETAILS}
           visual={
             <WhatsAppMock
-              glow="teal"
               tilt={-2}
               messages={[
                 { from: "user", time: "09:12", text: "🎙️ 0:08" },
@@ -535,18 +534,18 @@ export default function LandingPage() {
         details={PAINEL_DETAILS}
         visual={
           <div className="max-w-sm mx-auto space-y-3 relative">
-            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-emerald-300/20 blur-3xl -z-10" />
+            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/20 blur-3xl -z-10" />
             <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl">
               <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Saldo pessoal · julho</p>
               <p className="text-3xl font-extrabold mt-1">{fmt(3241.5)}</p>
               <div className="flex gap-2 mt-3">
-                <span className="text-[10px] bg-emerald-500/15 text-emerald-300 rounded-full px-2.5 py-1">+{fmt(5800)} receitas</span>
+                <span className="text-[10px] bg-amber-500/15 text-amber-300 rounded-full px-2.5 py-1">+{fmt(5800)} receitas</span>
                 <span className="text-[10px] bg-red-500/10 text-red-300 rounded-full px-2.5 py-1">-{fmt(2558.5)} despesas</span>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <DashCard title="Meta: Viagem" value="62%" sub={`${fmt(3100)} de ${fmt(5000)}`} />
-              <DashCard title="Cartão a pagar" value={fmt(1420)} sub="vence em 6 dias" color="amber" />
+              <DashCard title="Cartão a pagar" value={fmt(1420)} sub="vence em 6 dias" color="warn" />
             </div>
           </div>
         }
@@ -554,7 +553,7 @@ export default function LandingPage() {
 
       {/* ── MODO PESSOAL / MODO EMPRESA ── */}
       <section id="modo" className="relative overflow-hidden bg-slate-950 py-24">
-        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-emerald-500/10 blur-[120px]" />
+        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-amber-500/10 blur-[120px]" />
         <div className="relative max-w-6xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto mb-14">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">👤🏢 Modo Pessoal e Modo Empresa</span>
@@ -574,10 +573,10 @@ export default function LandingPage() {
 
       {/* ── FATURA DE CARTÃO (destaque) ── */}
       <section id="fatura" className="relative overflow-hidden bg-white py-24">
-        <div className="pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-teal-300/20 blur-[120px]" />
+        <div className="pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-amber-300/20 blur-[120px]" />
         <div className="relative max-w-6xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto mb-14">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">💳 Fatura do Cartão</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs font-semibold px-3 py-1.5">💳 Fatura do Cartão</span>
             <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-slate-900 mt-4`}>Chega de digitar cada gasto do cartão.</h2>
             <p className="text-slate-500 mt-3 text-sm leading-relaxed">Envie a fatura em PDF pelo WhatsApp ou pelo painel. O Zelo lê cada lançamento, categoriza automaticamente e nunca registra o mesmo gasto duas vezes.</p>
           </div>
@@ -604,10 +603,10 @@ export default function LandingPage() {
                 <p className="text-white font-bold text-lg">34 lançamentos</p>
                 <p className="text-xs text-slate-500 mt-1">encontrados no PDF</p>
               </div>
-              <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-5">
-                <p className="text-[10px] uppercase tracking-wide text-emerald-400 font-semibold mb-3">✅ Novos</p>
-                <p className="text-emerald-300 font-bold text-lg">29 lançamentos</p>
-                <p className="text-xs text-emerald-400/70 mt-1">prontos pra importar</p>
+              <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-5">
+                <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-3">✅ Novos</p>
+                <p className="text-amber-300 font-bold text-lg">29 lançamentos</p>
+                <p className="text-xs text-amber-400/70 mt-1">prontos pra importar</p>
               </div>
               <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-5">
                 <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-3">♻️ Duplicados</p>
@@ -619,7 +618,7 @@ export default function LandingPage() {
           </div>
 
           <div className="text-center mt-10">
-            <Link href="/cadastro" className="inline-block rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/20">
+            <Link href="/cadastro" className="inline-block rounded-xl bg-gradient-to-br from-amber-500 to-amber-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
               Importar minha fatura →
             </Link>
           </div>
@@ -646,9 +645,9 @@ export default function LandingPage() {
         details={REUNIOES_DETAILS}
         visual={
           <div className="max-w-sm mx-auto space-y-3 relative">
-            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-teal-300/20 blur-3xl -z-10" />
+            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/20 blur-3xl -z-10" />
             <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm flex items-center gap-3">
-              <span className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-lg">📹</span>
+              <span className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-lg">📹</span>
               <div>
                 <p className="text-sm font-semibold text-slate-800">Reunião — Time Comercial</p>
                 <p className="text-xs text-slate-400">14:00 · Google Meet</p>
@@ -664,7 +663,7 @@ export default function LandingPage() {
 
       {/* ── GRID DE MÓDULOS SECUNDÁRIOS ── */}
       <section className="relative overflow-hidden bg-slate-950 py-24">
-        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[44rem] h-[26rem] rounded-full bg-emerald-500/10 blur-[130px]" />
+        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[44rem] h-[26rem] rounded-full bg-amber-500/10 blur-[130px]" />
         <div className="relative max-w-6xl mx-auto px-6">
           <div className="text-center max-w-xl mx-auto mb-12">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">✨ Muito mais</span>
@@ -678,8 +677,8 @@ export default function LandingPage() {
               { icon: MODULE_ICONS.users, title: "Funcionários", desc: "Cargo, salário e status de cada funcionário da sua empresa, sempre à mão." },
               { icon: MODULE_ICONS.cart, title: "Lista de mercado", desc: "Compras por categoria, preço, quantidade e loja, direto pelo WhatsApp." },
             ].map(c => (
-              <div key={c.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 hover:bg-white/[0.06] hover:border-emerald-400/30 transition">
-                <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">{c.icon}</span>
+              <div key={c.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 hover:bg-white/[0.06] hover:border-amber-400/30 transition">
+                <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-slate-900 shadow-lg shadow-amber-500/20">{c.icon}</span>
                 <p className="font-bold text-white mt-4">{c.title}</p>
                 <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">{c.desc}</p>
               </div>
@@ -697,11 +696,11 @@ export default function LandingPage() {
         details={CONTA_DETAILS}
         visual={
           <div className="relative w-full max-w-sm mx-auto aspect-square flex items-center justify-center">
-            <div className="pointer-events-none absolute inset-0 rounded-full bg-emerald-300/20 blur-3xl -z-10" />
+            <div className="pointer-events-none absolute inset-0 rounded-full bg-amber-300/20 blur-3xl -z-10" />
             <svg className="absolute inset-0 w-full h-full -z-0 opacity-40" viewBox="0 0 300 300">
               <circle cx="150" cy="150" r="110" fill="none" stroke="#10b981" strokeWidth="1" strokeDasharray="3 6" />
             </svg>
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-xl z-10">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center shadow-xl z-10">
               <Image src="/brand/zelo-icon.png" alt="" width={40} height={40} />
             </div>
             {[
@@ -728,7 +727,6 @@ export default function LandingPage() {
           details={DRIVE_DETAILS}
           visual={
             <WhatsAppMock
-              glow="teal"
               tilt={2}
               messages={[
                 { from: "user", time: "10:02", text: "📄 comprovante_mecanico.pdf\nSalva isso na pasta de comprovantes" },
@@ -742,7 +740,7 @@ export default function LandingPage() {
       </div>
 
       {/* ── CTA banner ── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-emerald-950 to-teal-900 py-24">
+      <section className="relative overflow-hidden bg-gradient-to-br from-black via-slate-950 to-slate-900 py-24">
         <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "26px 26px" }} />
         <div className="relative max-w-4xl mx-auto px-6 text-center">
           <h2 className={`${heading.className} text-3xl sm:text-5xl font-extrabold text-white`}>Sua rotina, sob controle.</h2>
@@ -755,9 +753,9 @@ export default function LandingPage() {
 
       {/* ── PLANOS ── */}
       <section id="planos" className="relative overflow-hidden bg-slate-50 py-24">
-        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[36rem] h-[20rem] rounded-full bg-emerald-300/25 blur-[110px]" />
+        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[36rem] h-[20rem] rounded-full bg-amber-300/25 blur-[110px]" />
         <div className="relative max-w-md mx-auto px-6 text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold px-3 py-1.5">🌿 Experimente sem risco</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs font-semibold px-3 py-1.5">🌿 Experimente sem risco</span>
           <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-slate-900 mt-4`}>Comece grátis por 14 dias.</h2>
           <p className="text-slate-500 mt-2 text-sm">Sem cartão de crédito. Acesso completo a todas as funções, desde o primeiro dia.</p>
 
@@ -774,12 +772,12 @@ export default function LandingPage() {
                 "Conta compartilhada com sua equipe ou família",
               ].map(f => (
                 <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
-                  <span className="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-[9px] shrink-0">✓</span>
+                  <span className="w-4 h-4 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-slate-900 text-[9px] font-bold shrink-0">✓</span>
                   {f}
                 </li>
               ))}
             </ul>
-            <Link href="/cadastro" className="mt-6 block text-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-emerald-500/20">
+            <Link href="/cadastro" className="mt-6 block text-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
               Criar minha conta →
             </Link>
           </div>

@@ -7,7 +7,7 @@ type Task = { id: string; title: string; status: string; priority: string; dueDa
 const STATUS_COLS = [
   { key: "pending", label: "Pendente", icon: "📌", color: "border-orange-200 bg-orange-50/50" },
   { key: "in_progress", label: "Em andamento", icon: "🔄", color: "border-blue-200 bg-blue-50/50" },
-  { key: "completed", label: "Concluído", icon: "✅", color: "border-emerald-200 bg-emerald-50/50" },
+  { key: "completed", label: "Concluído", icon: "✅", color: "border-amber-200 bg-amber-50/50" },
 ] as const;
 
 const PR_COLOR: Record<string, string> = {

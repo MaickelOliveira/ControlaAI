@@ -572,7 +572,7 @@ function DayEventRow({ evt, onEdit, onDone, onDelete }: {
         )}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
           <button onClick={() => onDone(evt.id)} title="Concluído"
-            className="p-1 rounded text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition">
+            className="p-1 rounded text-slate-300 hover:text-amber-700 hover:bg-amber-50 transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
@@ -661,7 +661,7 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, onNew, loadin
                     )}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                       <button onClick={() => onDone(evt.id)} title="Concluído"
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition">
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-amber-700 hover:bg-amber-50 transition">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>

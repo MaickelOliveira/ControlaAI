@@ -28,7 +28,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-900 to-teal-700 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-black via-slate-950 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-8">
           <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={160} height={73} className="mx-auto mb-3 h-auto w-40" priority />
@@ -40,7 +40,7 @@ export default function LoginPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               placeholder="seu@email.com"
             />
           </div>
@@ -48,14 +48,14 @@ export default function LoginPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
             <input
               type="password" value={password} onChange={e => setPassword(e.target.value)} required
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               placeholder="••••••"
             />
           </div>
           {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2">{error}</p>}
           <button
             type="submit" disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 transition disabled:opacity-50"
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl py-3 transition disabled:opacity-50"
           >
             {loading ? "Entrando..." : "Entrar"}
           </button>
@@ -63,7 +63,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-gray-500 mt-6">
           Não tem conta?{" "}
-          <Link href="/cadastro" className="text-emerald-600 font-semibold hover:underline">
+          <Link href="/cadastro" className="text-amber-600 font-semibold hover:underline">
             Cadastre-se grátis
           </Link>
         </p>

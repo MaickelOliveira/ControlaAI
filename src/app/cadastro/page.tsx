@@ -30,7 +30,7 @@ export default function CadastroPage() {
     setForm(f => ({ ...f, [k]: e.target.value }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-900 to-teal-700 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-black via-slate-950 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-6">
           <Image src="/brand/zelo-icon.png" alt="Zelo" width={56} height={56} className="mx-auto mb-2 w-14 h-14" priority />
@@ -51,7 +51,7 @@ export default function CadastroPage() {
                 type={f.type} value={(form as Record<string,string>)[f.key]}
                 onChange={set(f.key)} required
                 placeholder={f.placeholder}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
           ))}
@@ -59,7 +59,7 @@ export default function CadastroPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de uso</label>
             <select value={form.plan} onChange={set("plan")}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
               <option value="personal">👤 Pessoal — finanças e tarefas individuais</option>
               <option value="business">🏢 Empresarial — gestão da empresa e equipe</option>
             </select>
@@ -71,7 +71,7 @@ export default function CadastroPage() {
               <input
                 type="text" value={form.company} onChange={set("company")}
                 placeholder="Minha Empresa Ltda"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
           )}
@@ -79,13 +79,13 @@ export default function CadastroPage() {
           {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
           <button type="submit" disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 transition disabled:opacity-50">
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl py-3 transition disabled:opacity-50">
             {loading ? "Criando conta..." : "Criar conta grátis 🚀"}
           </button>
         </form>
 
         <p className="text-center text-sm text-gray-500 mt-4">
-          Já tem conta? <Link href="/login" className="text-emerald-600 font-semibold hover:underline">Entrar</Link>
+          Já tem conta? <Link href="/login" className="text-amber-600 font-semibold hover:underline">Entrar</Link>
         </p>
       </div>
     </div>

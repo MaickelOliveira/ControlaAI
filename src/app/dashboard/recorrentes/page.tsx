@@ -186,14 +186,14 @@ export default function RecorrentesPage() {
                           </p>
                           <div className="mt-2 flex items-center gap-2">
                             <div className="flex-1 bg-slate-100 rounded-full h-1.5">
-                              <div className="bg-emerald-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                              <div className="bg-amber-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
                             </div>
                             <span className="text-xs text-slate-500 shrink-0">{pct}%</span>
                           </div>
                         </div>
                         <div className="flex flex-col gap-1 shrink-0">
                           <button onClick={() => markPaid(item)} disabled={confirming === item.id}
-                            className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition disabled:opacity-50">
+                            className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition disabled:opacity-50">
                             {confirming === item.id ? "..." : "✓ Pagar"}
                           </button>
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
@@ -236,7 +236,7 @@ export default function RecorrentesPage() {
                           <button onClick={() => cancelItem(item)} className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 text-xs">🗑️</button>
                         </div>
                         <button onClick={() => markPaid(item)} disabled={confirming === item.id}
-                          className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition disabled:opacity-50">
+                          className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition disabled:opacity-50">
                           {confirming === item.id ? "..." : "✓ Confirmar"}
                         </button>
                       </div>

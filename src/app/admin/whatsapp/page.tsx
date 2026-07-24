@@ -71,7 +71,7 @@ export default function AdminWhatsappPage() {
   }
 
   const statusInfo = {
-    CONNECTED:    { label: "Conectado", dot: "bg-emerald-400 animate-pulse", bar: "bg-emerald-950/30 border-emerald-900/50", text: "text-emerald-400" },
+    CONNECTED:    { label: "Conectado", dot: "bg-amber-400 animate-pulse", bar: "bg-amber-950/30 border-amber-900/50", text: "text-amber-400" },
     DISCONNECTED: { label: "Desconectado", dot: "bg-red-400", bar: "bg-red-950/30 border-red-900/50", text: "text-red-400" },
     UNKNOWN:      { label: "Verificando...", dot: "bg-slate-500", bar: "bg-slate-100 border-slate-200", text: "text-slate-400" },
   }[cfg.connectionStatus] ?? { label: "?", dot: "bg-slate-500", bar: "bg-slate-100 border-slate-200", text: "text-slate-400" };
@@ -115,7 +115,7 @@ export default function AdminWhatsappPage() {
           {steps.map(s => (
             <div key={s.num} className="flex items-center gap-3">
               <div className={clsx("w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                s.done ? "bg-emerald-500 text-slate-900" : "bg-slate-200 text-slate-400")}>
+                s.done ? "bg-amber-500 text-slate-900" : "bg-slate-200 text-slate-400")}>
                 {s.done ? "✓" : s.num}
               </div>
               <span className={clsx("text-sm", s.done ? "text-slate-600" : "text-slate-400")}>{s.label}</span>
@@ -130,7 +130,7 @@ export default function AdminWhatsappPage() {
           <h3 className="font-bold text-slate-900 mb-1">📱 Escaneie o QR Code</h3>
           <p className="text-slate-400 text-sm mb-4">WhatsApp → ⋮ → Aparelhos conectados → Conectar aparelho</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={qr} alt="QR Code" className="w-56 h-56 rounded-xl border-2 border-emerald-500/30 mx-auto" />
+          <img src={qr} alt="QR Code" className="w-56 h-56 rounded-xl border-2 border-amber-500/30 mx-auto" />
           <p className="text-slate-400 text-xs mt-3 animate-pulse">Aguardando conexão...</p>
         </div>
       )}
@@ -153,21 +153,21 @@ export default function AdminWhatsappPage() {
               <label className="block text-[11px] text-slate-400 mb-1">URL do servidor</label>
               <input value={cfg.wppServer} onChange={e => setCfg(c => ({ ...c, wppServer: e.target.value }))}
                 placeholder="https://trafegopago-wppconect.ztcjzs.easypanel.host"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
               <p className="text-[11px] text-slate-400 mt-1">É o mesmo servidor WPPConnect que você usa no trafegopago</p>
             </div>
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">Secret Key do servidor</label>
               <input type="password" value={cfg.wppSecretKey} onChange={e => setCfg(c => ({ ...c, wppSecretKey: e.target.value }))}
                 placeholder="THISISMYSECURETOKEN"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
               <p className="text-[11px] text-slate-400 mt-1">Chave secreta do servidor (variável WPPCONNECT_SECRET_KEY no EasyPanel do wppconnect)</p>
             </div>
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">Nome da sessão</label>
               <input value={cfg.wppSession} onChange={e => setCfg(c => ({ ...c, wppSession: e.target.value }))}
                 placeholder="controlaai"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
               <p className="text-[11px] text-slate-400 mt-1">Use um nome diferente das sessões do trafegopago (ex: controlaai)</p>
             </div>
           </div>
@@ -179,21 +179,21 @@ export default function AdminWhatsappPage() {
               Token de sessão
             </p>
             {cfg.hasToken ? (
-              <div className="flex items-center gap-2 bg-emerald-900/20 border border-emerald-800 rounded-lg px-3 py-2">
-                <span className="text-emerald-400 text-sm">✓</span>
-                <span className="text-emerald-300 text-xs">Token gerado: {cfg.wppToken}</span>
+              <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-800 rounded-lg px-3 py-2">
+                <span className="text-amber-400 text-sm">✓</span>
+                <span className="text-amber-300 text-xs">Token gerado: {cfg.wppToken}</span>
               </div>
             ) : (
               <p className="text-amber-400 text-xs">⚠ Token não gerado ainda — salve as configurações acima primeiro</p>
             )}
             {genMsg && (
-              <p className={clsx("text-xs rounded-lg px-3 py-2 border", genMsg.type === "ok" ? "text-emerald-400 bg-emerald-900/20 border-emerald-800" : "text-red-400 bg-red-900/20 border-red-800")}>
+              <p className={clsx("text-xs rounded-lg px-3 py-2 border", genMsg.type === "ok" ? "text-amber-400 bg-amber-900/20 border-amber-800" : "text-red-400 bg-red-900/20 border-red-800")}>
                 {genMsg.text}
               </p>
             )}
             <button type="button" disabled={generating || !cfg.wppServer}
               onClick={generateToken}
-              className="w-full flex items-center justify-center gap-2 bg-slate-200 hover:bg-emerald-600 text-slate-900 rounded-xl py-2.5 text-sm font-medium transition disabled:opacity-40">
+              className="w-full flex items-center justify-center gap-2 bg-slate-200 hover:bg-amber-600 text-slate-900 rounded-xl py-2.5 text-sm font-medium transition disabled:opacity-40">
               {generating ? (
                 <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
               ) : (
@@ -215,26 +215,26 @@ export default function AdminWhatsappPage() {
               <label className="block text-[11px] text-slate-400 mb-1">Chave Gemini AI</label>
               <input type="password" value={cfg.geminiApiKey} onChange={e => setCfg(c => ({ ...c, geminiApiKey: e.target.value }))}
                 placeholder="AIza..."
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
             </div>
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">URL desta plataforma</label>
               <input value={cfg.appBaseUrl} onChange={e => setCfg(c => ({ ...c, appBaseUrl: e.target.value }))}
                 placeholder="https://lp-controlaai.ztcjzs.easypanel.host"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
             </div>
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">Número do bot WhatsApp (com DDI, sem + ou espaços)</label>
               <input value={cfg.wppBotNumber} onChange={e => setCfg(c => ({ ...c, wppBotNumber: e.target.value.replace(/\D/g, "") }))}
                 placeholder="5544999999999"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition font-mono" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
               <p className="text-[11px] text-slate-400 mt-1">Número conectado ao WPPConnect — exibido para os clientes vincularem o WhatsApp</p>
             </div>
             {webhookUrl && (
               <div className="bg-slate-100 border border-slate-200 rounded-xl p-3">
                 <p className="text-[11px] text-slate-400 mb-1">Webhook (configure no WPPConnect — Events → onmessage):</p>
                 <div className="flex items-center gap-2">
-                  <code className="text-xs text-emerald-400 flex-1 break-all">{webhookUrl}</code>
+                  <code className="text-xs text-amber-400 flex-1 break-all">{webhookUrl}</code>
                   <button type="button" onClick={() => navigator.clipboard.writeText(webhookUrl)}
                     className="text-xs text-slate-400 hover:text-slate-900 border border-slate-600 rounded-lg px-2 py-1 shrink-0 transition">
                     📋
@@ -249,7 +249,7 @@ export default function AdminWhatsappPage() {
             <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
               <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">4</span>
               Google OAuth — para criação de Google Meet
-              {cfg.hasGoogleOAuth && <span className="ml-auto text-emerald-500 text-[10px] font-semibold">✓ Configurado</span>}
+              {cfg.hasGoogleOAuth && <span className="ml-auto text-amber-500 text-[10px] font-semibold">✓ Configurado</span>}
             </p>
             <p className="text-[11px] text-slate-400">
               Crie um app OAuth no <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline text-blue-400">Google Cloud Console</a>.
@@ -257,7 +257,7 @@ export default function AdminWhatsappPage() {
             </p>
             {cfg.appBaseUrl && (
               <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
-                <code className="text-xs text-emerald-500 flex-1 break-all">{cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback</code>
+                <code className="text-xs text-amber-500 flex-1 break-all">{cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback</code>
                 <button type="button" onClick={() => navigator.clipboard.writeText(`${cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback`)}
                   className="text-xs text-slate-400 hover:text-slate-900 border border-slate-300 rounded-lg px-2 py-1 shrink-0 transition">📋</button>
               </div>
@@ -266,19 +266,19 @@ export default function AdminWhatsappPage() {
               <label className="block text-[11px] text-slate-400 mb-1">Client ID</label>
               <input value={cfg.googleClientId} onChange={e => setCfg(c => ({ ...c, googleClientId: e.target.value }))}
                 placeholder="999999999-abc123.apps.googleusercontent.com"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition font-mono" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
             </div>
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">Client Secret</label>
               <input type="password" value={cfg.googleClientSecret} onChange={e => setCfg(c => ({ ...c, googleClientSecret: e.target.value }))}
                 placeholder="GOCSPX-..."
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
               <p className="text-[11px] text-slate-400 mt-1">Esses dados ficam salvos no servidor — os clientes só clicam em &quot;Conectar Google&quot; no dashboard deles.</p>
             </div>
           </div>
 
           <button type="submit" disabled={saving}
-            className="w-full bg-slate-200 hover:bg-emerald-600 text-slate-900 font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
+            className="w-full bg-slate-200 hover:bg-amber-600 text-slate-900 font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
             {saving ? "Salvando..." : saved ? "✓ Salvo!" : "💾 Salvar configurações"}
           </button>
         </form>
@@ -292,7 +292,7 @@ export default function AdminWhatsappPage() {
         </p>
         <button disabled={connecting || !cfg.hasToken}
           onClick={connect}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-semibold rounded-xl py-3 text-sm transition disabled:opacity-40 flex items-center justify-center gap-2">
+          className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl py-3 text-sm transition disabled:opacity-40 flex items-center justify-center gap-2">
           {connecting ? (
             <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aguardando QR Code...</>
           ) : (

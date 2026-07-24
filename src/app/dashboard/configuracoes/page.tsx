@@ -130,14 +130,14 @@ export default function ClienteConfigPage() {
                 Dê um nome a cada número (ex: Ana, Gabriel) para identificar quem registrou cada gasto quando várias pessoas usarem o bot.
               </p>
               {user.wppPhones.map(phone => (
-                <div key={phone} className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                <div key={phone} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-sm shrink-0">✓</div>
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600 text-sm shrink-0">✓</div>
                       <div className="min-w-0">
-                        <p className="text-sm font-mono text-emerald-700">+{phone}</p>
+                        <p className="text-sm font-mono text-amber-700">+{phone}</p>
                         {user.wppPhoneNames[phone] && editingNamePhone !== phone && (
-                          <p className="text-xs text-emerald-600 font-semibold truncate">{user.wppPhoneNames[phone]}</p>
+                          <p className="text-xs text-amber-600 font-semibold truncate">{user.wppPhoneNames[phone]}</p>
                         )}
                       </div>
                     </div>
@@ -157,9 +157,9 @@ export default function ClienteConfigPage() {
                         onKeyDown={e => { if (e.key === "Enter") saveName(phone); if (e.key === "Escape") setEditingNamePhone(null); }}
                         placeholder="Nome da pessoa"
                         maxLength={40}
-                        className="flex-1 text-xs border border-emerald-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-emerald-500 transition" />
+                        className="flex-1 text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-amber-500 transition" />
                       <button onClick={() => saveName(phone)} disabled={savingName || !nameInput.trim()}
-                        className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 transition disabled:opacity-50">
+                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-2.5 py-1.5 transition disabled:opacity-50">
                         {savingName ? "..." : "Salvar"}
                       </button>
                       <button onClick={() => setEditingNamePhone(null)}
@@ -169,7 +169,7 @@ export default function ClienteConfigPage() {
                     </div>
                   ) : (
                     <button onClick={() => startEditName(phone)}
-                      className="text-[11px] text-emerald-700 hover:underline mt-1.5">
+                      className="text-[11px] text-amber-700 hover:underline mt-1.5">
                       {user.wppPhoneNames[phone] ? "✏️ Alterar nome" : "+ Adicionar nome"}
                     </button>
                   )}
@@ -195,7 +195,7 @@ export default function ClienteConfigPage() {
             <button
               onClick={generateCode}
               disabled={linking || (user ? user.wppPhones.length >= user.maxWppPhones : false)}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
               {linking ? (
                 <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
               ) : user && user.wppPhones.length >= user.maxWppPhones ? (
@@ -219,9 +219,9 @@ export default function ClienteConfigPage() {
               </div>
 
               {/* Instrução */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                <p className="text-sm font-semibold text-emerald-800 mb-2">Como vincular:</p>
-                <ol className="space-y-1.5 text-xs text-emerald-700">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-amber-800 mb-2">Como vincular:</p>
+                <ol className="space-y-1.5 text-xs text-amber-700">
                   <li className="flex gap-2"><span className="font-bold shrink-0">1.</span> Clique no botão verde abaixo para abrir o WhatsApp</li>
                   <li className="flex gap-2"><span className="font-bold shrink-0">2.</span> O código <strong className="font-mono">{code}</strong> já estará digitado — só clique em enviar</li>
                   <li className="flex gap-2"><span className="font-bold shrink-0">3.</span> O bot confirma e você já pode usar!</li>
@@ -271,7 +271,7 @@ export default function ClienteConfigPage() {
 
             {/* Avatar */}
             <div className="flex flex-col items-center mb-5">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-2xl font-bold shadow-sm mb-3">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white text-2xl font-bold shadow-sm mb-3">
                 {user.name.charAt(0).toUpperCase()}
               </div>
               <p className="font-semibold text-slate-800">{user.name}</p>
@@ -287,7 +287,7 @@ export default function ClienteConfigPage() {
                 <span className="text-xs text-slate-500">WhatsApp</span>
                 <span className="text-xs font-semibold text-slate-800">
                   {user.wppPhones.length > 0
-                    ? <span className="text-emerald-600">✓ {user.wppPhones.length}/{user.maxWppPhones} número{user.maxWppPhones > 1 ? "s" : ""}</span>
+                    ? <span className="text-amber-600">✓ {user.wppPhones.length}/{user.maxWppPhones} número{user.maxWppPhones > 1 ? "s" : ""}</span>
                     : <span className="text-amber-600">⚠ Não vinculado</span>}
                 </span>
               </div>
@@ -330,7 +330,7 @@ export default function ClienteConfigPage() {
               <p className="text-sm font-semibold text-slate-800">Google Calendar / Meet</p>
               <p className="text-xs text-slate-400 mt-0.5">Crie reuniões no Google Meet diretamente pelo WhatsApp</p>
               {googleStatus?.connected && googleStatus.email && (
-                <p className="text-xs text-emerald-600 mt-1 font-medium">✓ {googleStatus.email}</p>
+                <p className="text-xs text-amber-600 mt-1 font-medium">✓ {googleStatus.email}</p>
               )}
             </div>
           </div>
@@ -366,7 +366,7 @@ export default function ClienteConfigPage() {
           <input type="password" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required placeholder="Nova senha (mín. 6 caracteres)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
           <input type="password" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required placeholder="Confirmar nova senha" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
           {pwMsg && (
-            <p className={`text-xs px-3 py-2 rounded-lg ${pwMsg.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>{pwMsg.text}</p>
+            <p className={`text-xs px-3 py-2 rounded-lg ${pwMsg.ok ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-600"}`}>{pwMsg.text}</p>
           )}
           <button type="submit" disabled={pwLoading} className="bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl px-5 py-2.5 text-sm transition disabled:opacity-50">
             {pwLoading ? "Salvando..." : "Alterar senha"}
