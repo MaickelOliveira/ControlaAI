@@ -64,7 +64,7 @@ export default function ClientesPage() {
           <p className="text-slate-400 text-sm">Todos os usuários da plataforma</p>
         </div>
         <button onClick={() => { setModal(true); setError(""); setForm(EMPTY_FORM); }}
-          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-semibold rounded-xl px-4 py-2.5 text-sm transition">
+          className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl px-4 py-2.5 text-sm transition">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
@@ -75,11 +75,11 @@ export default function ClientesPage() {
       {/* Filtros */}
       <div className="flex gap-3 flex-wrap">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar nome ou email..."
-          className="bg-white border border-slate-200 text-slate-900 rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 flex-1 min-w-0" />
+          className="bg-white border border-slate-200 text-slate-900 rounded-xl px-4 py-2 text-sm outline-none focus:border-amber-500 flex-1 min-w-0" />
         {["all", "trial", "active", "expired"].map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={clsx("px-4 py-2 rounded-xl text-sm font-medium transition border",
-              filter === f ? "bg-emerald-600/20 text-emerald-400 border-emerald-600/40" : "text-slate-400 border-slate-200 hover:text-slate-900 hover:bg-slate-100")}>
+              filter === f ? "bg-amber-600/20 text-amber-400 border-amber-600/40" : "text-slate-400 border-slate-200 hover:text-slate-900 hover:bg-slate-100")}>
             {f === "all" ? "Todos" : f === "trial" ? "Trial" : f === "active" ? "Ativos" : "Expirados"}
           </button>
         ))}
@@ -123,7 +123,7 @@ export default function ClientesPage() {
                         const phones = c.wppPhones?.length ? c.wppPhones : c.wppPhone ? [c.wppPhone] : [];
                         const max = c.maxWppPhones ?? 1;
                         return phones.length > 0 ? (
-                          <span className="text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-900/40 rounded-lg px-2 py-0.5">✓ {phones.length}/{max} número{max > 1 ? "s" : ""}</span>
+                          <span className="text-xs text-amber-400 bg-amber-900/20 border border-amber-900/40 rounded-lg px-2 py-0.5">✓ {phones.length}/{max} número{max > 1 ? "s" : ""}</span>
                         ) : (
                           <span className="text-xs text-slate-400">Não vinculado ({max} slot{max > 1 ? "s" : ""})</span>
                         );
@@ -139,7 +139,7 @@ export default function ClientesPage() {
                           c.status === "trial" ? "bg-amber-900/30 text-amber-400 border-amber-800" :
                           "bg-red-900/30 text-red-400 border-red-800"
                         )}>{c.status === "active" ? "Ativo" : c.status === "trial" ? "Trial" : "Expirado"}</span>
-                        {c.activeToday && <span className="text-xs text-emerald-400">● Hoje</span>}
+                        {c.activeToday && <span className="text-xs text-amber-400">● Hoje</span>}
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
@@ -150,7 +150,7 @@ export default function ClientesPage() {
                         </Link>
                         {c.status !== "active" && (
                           <button onClick={async () => { await clienteAction(c.id, "activate"); load(); }}
-                            className="text-xs border border-emerald-200 text-emerald-600 hover:bg-emerald-50 rounded-lg px-2.5 py-1 transition">
+                            className="text-xs border border-amber-200 text-amber-600 hover:bg-amber-50 rounded-lg px-2.5 py-1 transition">
                             Ativar
                           </button>
                         )}
@@ -209,30 +209,30 @@ export default function ClientesPage() {
                   <label className="block text-xs text-slate-400 mb-1">Nome completo *</label>
                   <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                     placeholder="João Silva"
-                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs text-slate-400 mb-1">Email *</label>
                   <input required type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                     placeholder="joao@email.com"
-                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500" />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Senha *</label>
                   <input required type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                     placeholder="••••••••"
-                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500" />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">WhatsApp</label>
                   <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="5544999999999"
-                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500" />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Plano</label>
                   <select value={form.plan} onChange={e => setForm(f => ({ ...f, plan: e.target.value }))}
-                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500">
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500">
                     <option value="personal">👤 Pessoal</option>
                     <option value="business">🏢 Empresa</option>
                   </select>
@@ -242,7 +242,7 @@ export default function ClientesPage() {
                     <label className="block text-xs text-slate-400 mb-1">Nome da empresa</label>
                     <input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
                       placeholder="Empresa Ltda"
-                      className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                      className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500" />
                   </div>
                 )}
               </div>
@@ -251,7 +251,7 @@ export default function ClientesPage() {
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Números de WhatsApp permitidos</label>
                 <select value={form.maxWppPhones} onChange={e => setForm(f => ({ ...f, maxWppPhones: e.target.value }))}
-                  className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500">
+                  className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500">
                   {[1, 2, 3, 5, 10].map(n => (
                     <option key={n} value={n}>{n} número{n > 1 ? "s" : ""}</option>
                   ))}
@@ -270,7 +270,7 @@ export default function ClientesPage() {
                   </button>
                   <button type="button" onClick={() => setForm(f => ({ ...f, isTrial: false }))}
                     className={clsx("rounded-xl px-3 py-2.5 text-sm font-medium border transition text-left",
-                      !form.isTrial ? "bg-emerald-600/20 text-emerald-300 border-emerald-600/40" : "text-slate-400 border-slate-200 hover:bg-slate-100")}>
+                      !form.isTrial ? "bg-amber-600/20 text-amber-300 border-amber-600/40" : "text-slate-400 border-slate-200 hover:bg-slate-100")}>
                     <p>✅ Acesso ativo</p>
                     <p className="text-[10px] opacity-70 mt-0.5">Sem restrição de prazo</p>
                   </button>
@@ -280,7 +280,7 @@ export default function ClientesPage() {
                     <label className="block text-xs text-slate-400 mb-1">Dias de trial</label>
                     <input type="number" min="1" max="365" value={form.trialDays}
                       onChange={e => setForm(f => ({ ...f, trialDays: e.target.value }))}
-                      className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                      className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500" />
                   </div>
                 )}
               </div>
@@ -291,7 +291,7 @@ export default function ClientesPage() {
                   Cancelar
                 </button>
                 <button type="submit" disabled={saving}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-slate-900 rounded-xl py-2.5 text-sm font-semibold transition disabled:opacity-50">
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-slate-900 rounded-xl py-2.5 text-sm font-semibold transition disabled:opacity-50">
                   {saving ? "Criando..." : "Criar Cliente"}
                 </button>
               </div>

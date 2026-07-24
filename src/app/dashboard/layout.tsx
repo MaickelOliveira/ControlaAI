@@ -204,12 +204,12 @@ function SidebarContent({
               className={clsx(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition",
                 isActive
-                  ? "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200"
+                  ? "bg-amber-50 text-amber-700 font-semibold border border-amber-200"
                   : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
               )}>
               <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
               {item.label}
-              {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+              {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-500" />}
             </Link>
           );
         })}

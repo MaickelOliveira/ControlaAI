@@ -137,7 +137,7 @@ export default function DrivePage() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-60"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition disabled:opacity-60"
           >
             {uploading ? "Enviando..." : (
               <>
@@ -153,11 +153,11 @@ export default function DrivePage() {
       </div>
 
       {/* WhatsApp hint */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
         <span className="text-2xl shrink-0">💡</span>
-        <div className="text-sm text-emerald-800">
+        <div className="text-sm text-amber-800">
           <p className="font-semibold">Envie arquivos pelo WhatsApp!</p>
-          <p className="text-emerald-700 mt-0.5">Mande PDF, imagem ou documento direto no chat e a IA organiza automaticamente. Para buscar: <em>"Ache o comprovante do mecânico"</em></p>
+          <p className="text-amber-700 mt-0.5">Mande PDF, imagem ou documento direto no chat e a IA organiza automaticamente. Para buscar: <em>"Ache o comprovante do mecânico"</em></p>
         </div>
       </div>
 
@@ -172,11 +172,11 @@ export default function DrivePage() {
               onChange={e => setNewFolderName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleCreateFolder()}
               placeholder="Nome da pasta..."
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 transition">Cancelar</button>
-              <button onClick={handleCreateFolder} disabled={savingFolder || !newFolderName.trim()} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-60">
+              <button onClick={handleCreateFolder} disabled={savingFolder || !newFolderName.trim()} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition disabled:opacity-60">
                 {savingFolder ? "Criando..." : "Criar"}
               </button>
             </div>
@@ -193,7 +193,7 @@ export default function DrivePage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Buscar arquivos..."
-          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
         />
       </div>
 
@@ -231,7 +231,7 @@ export default function DrivePage() {
                       <div
                         key={folder.id}
                         onClick={() => setCurrentFolder(folder)}
-                        className="group relative bg-white border border-slate-200 rounded-xl p-4 cursor-pointer hover:border-emerald-300 hover:bg-emerald-50 transition"
+                        className="group relative bg-white border border-slate-200 rounded-xl p-4 cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition"
                       >
                         <button
                           onClick={e => handleDeleteFolder(folder.id, e)}
@@ -282,7 +282,7 @@ export default function DrivePage() {
                             )}
                             <span className="text-xs text-slate-400">· {formatDate(file.createdAt)}</span>
                             {file.source === "whatsapp" && (
-                              <span className="text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 rounded px-1.5 py-0.5">WhatsApp</span>
+                              <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded px-1.5 py-0.5">WhatsApp</span>
                             )}
                           </div>
                         </div>

@@ -145,23 +145,23 @@ export default function LembretesPage() {
           </p>
         </div>
         <button onClick={openNew}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition shadow-sm">
+          className="px-4 py-2 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition shadow-sm">
           + Novo lembrete
         </button>
       </div>
 
       {/* Como usar via WhatsApp */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-        <p className="text-sm font-semibold text-emerald-800 mb-2">💬 Crie lembretes pelo WhatsApp:</p>
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+        <p className="text-sm font-semibold text-amber-800 mb-2">💬 Crie lembretes pelo WhatsApp:</p>
         <div className="grid md:grid-cols-3 gap-2">
           {[
             { ex: '"Me lembra de tomar remédio todo dia às 8h"', desc: "Diário" },
             { ex: '"Lembrete: pagar conta sexta às 14h"', desc: "Único" },
             { ex: '"Todo mês dia 5 pagar aluguel"', desc: "Mensal" },
           ].map(i => (
-            <div key={i.ex} className="bg-white rounded-xl p-2.5 border border-emerald-100">
+            <div key={i.ex} className="bg-white rounded-xl p-2.5 border border-amber-100">
               <p className="text-xs text-slate-600 font-mono leading-relaxed">{i.ex}</p>
-              <p className="text-[10px] text-emerald-600 font-semibold mt-1">{i.desc}</p>
+              <p className="text-[10px] text-amber-600 font-semibold mt-1">{i.desc}</p>
             </div>
           ))}
         </div>
@@ -212,7 +212,7 @@ export default function LembretesPage() {
                   "w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0",
                   r.sent ? "bg-slate-100" :
                   overdue ? "bg-red-100" :
-                  "bg-emerald-100"
+                  "bg-amber-100"
                 )}>
                   {r.sent ? "✓" : REPEAT_ICON[r.repeat] || "🔔"}
                 </div>
@@ -277,8 +277,8 @@ export default function LembretesPage() {
                         onClick={() => setForm(f => ({ ...f, message: p }))}
                         className={clsx("text-xs px-2.5 py-1.5 rounded-lg border transition",
                           form.message === p
-                            ? "bg-emerald-600 text-white border-emerald-600"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700")}>
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700")}>
                         {p}
                       </button>
                     ))}
@@ -290,7 +290,7 @@ export default function LembretesPage() {
                 <label className="text-xs text-slate-500 font-medium mb-1 block">Mensagem do lembrete</label>
                 <input value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} required
                   placeholder="Ex: Tomar remédio de pressão"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200" />
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -314,7 +314,7 @@ export default function LembretesPage() {
                       onClick={() => setForm(f => ({ ...f, repeat: key }))}
                       className={clsx("py-2 rounded-xl text-xs font-medium border transition text-center",
                         form.repeat === key
-                          ? "bg-emerald-600 text-white border-emerald-600"
+                          ? "bg-amber-600 text-white border-amber-600"
                           : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100")}>
                       <div>{REPEAT_ICON[key]}</div>
                       <div className="mt-0.5">{label}</div>
@@ -329,7 +329,7 @@ export default function LembretesPage() {
                   Cancelar
                 </button>
                 <button type="submit"
-                  className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition">
+                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition">
                   {editingId ? "Salvar" : "Criar lembrete"}
                 </button>
               </div>

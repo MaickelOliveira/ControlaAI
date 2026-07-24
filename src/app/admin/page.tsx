@@ -21,7 +21,7 @@ export default function AdminPage() {
 
   const kpis = [
     { label: "Total de Clientes", value: stats?.total ?? 0, icon: "👥", color: "text-blue-400" },
-    { label: "Ativos Hoje", value: stats?.activeToday ?? 0, icon: "🟢", color: "text-emerald-400" },
+    { label: "Ativos Hoje", value: stats?.activeToday ?? 0, icon: "🟢", color: "text-amber-400" },
     { label: "Em Trial", value: stats?.trial ?? 0, icon: "⏳", color: "text-amber-400" },
     { label: "Plano Ativo", value: stats?.active ?? 0, icon: "⭐", color: "text-purple-400" },
   ];
@@ -52,7 +52,7 @@ export default function AdminPage() {
       <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-semibold text-slate-900">Clientes Recentes</h2>
-          <Link href="/admin/clientes" className="text-emerald-400 text-sm hover:underline">Ver todos →</Link>
+          <Link href="/admin/clientes" className="text-amber-400 text-sm hover:underline">Ver todos →</Link>
         </div>
         {loading ? (
           <p className="text-slate-400 text-sm">Carregando...</p>
@@ -64,7 +64,7 @@ export default function AdminPage() {
               <Link href={`/admin/clientes/${c.id}`} key={c.id}
                 className="flex items-center justify-between p-3 bg-slate-50/80 hover:bg-slate-100 rounded-xl transition group">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-600/20 flex items-center justify-center text-sm font-bold text-emerald-400">
+                  <div className="w-8 h-8 rounded-xl bg-amber-600/20 flex items-center justify-center text-sm font-bold text-amber-400">
                     {c.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -73,7 +73,7 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {c.activeToday && <span className="text-xs bg-emerald-900/50 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded-full">Ativo hoje</span>}
+                  {c.activeToday && <span className="text-xs bg-amber-900/50 text-amber-400 border border-amber-800 px-2 py-0.5 rounded-full">Ativo hoje</span>}
                   <span className={clsx("text-xs px-2 py-0.5 rounded-full border",
                     c.status === "active" ? "bg-blue-900/30 text-blue-400 border-blue-800" :
                     c.status === "trial" ? "bg-amber-900/30 text-amber-400 border-amber-800" :

@@ -315,7 +315,7 @@ export default function FinancasPage() {
   return (
     <div className="space-y-5">
       {banner && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm px-4 py-3">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-sm px-4 py-3">
           {banner}
         </div>
       )}
@@ -330,7 +330,7 @@ export default function FinancasPage() {
             📑 Importar fatura
           </button>
           <button onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}
-            className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition shadow-sm">
+            className="px-5 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition shadow-sm">
             + Adicionar
           </button>
         </div>
@@ -358,7 +358,7 @@ export default function FinancasPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-slate-800 text-sm">📊 Despesas por Categoria</h3>
             <button onClick={() => { setCatType("expense"); setCatName(""); setCatError(""); setShowCatModal(true); }}
-              className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1 transition">
+              className="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1 transition">
               <span className="text-base leading-none">+</span> Categoria
             </button>
           </div>
@@ -378,7 +378,7 @@ export default function FinancasPage() {
                       <span className="font-semibold text-slate-800">{fmt(val)}</span>
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full">
-                      <div className="h-2 bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="h-2 bg-amber-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5 text-right">{pct}% do total</p>
                   </div>
@@ -433,7 +433,7 @@ export default function FinancasPage() {
                         </div>
                         <button onClick={() => handleMarkPaid(r)} disabled={markingPaid === r.id}
                           className={clsx("px-2.5 py-1 rounded-lg text-xs font-semibold transition shrink-0 disabled:opacity-50",
-                            r.type === "income" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-emerald-600 text-white hover:bg-emerald-700")}>
+                            r.type === "income" ? "bg-amber-600 text-white hover:bg-amber-700" : "bg-amber-600 text-white hover:bg-amber-700")}>
                           {markingPaid === r.id ? "..." : r.type === "income" ? "✓ Recebido" : "✓ Pago"}
                         </button>
                       </div>
@@ -473,7 +473,7 @@ export default function FinancasPage() {
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Excluir">🗑️</button>
                         </div>
                         <button onClick={() => handleConfirmPending(f)} disabled={confirmingPending === f.id}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold transition shrink-0 disabled:opacity-50 bg-emerald-600 text-white hover:bg-emerald-700">
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold transition shrink-0 disabled:opacity-50 bg-amber-600 text-white hover:bg-amber-700">
                           {confirmingPending === f.id ? "..." : f.type === "income" ? "✓ Recebido" : "✓ Pago"}
                         </button>
                       </div>
@@ -530,7 +530,7 @@ export default function FinancasPage() {
                 {([["expense", "💸 Despesa"], ["income", "💰 Receita"]] as const).map(([v, l]) => (
                   <button key={v} type="button" onClick={() => setForm(f => ({ ...f, type: v, category: "" }))}
                     className={clsx("py-2.5 rounded-xl text-sm font-semibold border transition",
-                      form.type === v ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>
+                      form.type === v ? "bg-amber-600 text-white border-amber-600" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>
                     {l}
                   </button>
                 ))}
@@ -550,7 +550,7 @@ export default function FinancasPage() {
               {/* Campos comuns */}
               <input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required
                 placeholder={form.frequency === "installment" ? "Valor por parcela (R$)" : "Valor (R$)"}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200" />
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
 
               <div className="flex gap-2 items-center">
                 <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
@@ -560,7 +560,7 @@ export default function FinancasPage() {
                   {cats.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <button type="button" onClick={() => { setCatType(form.type); setCatName(""); setCatError(""); setShowCatModal(true); }}
-                  className="shrink-0 px-3 py-2.5 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition">
+                  className="shrink-0 px-3 py-2.5 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-amber-400 hover:text-amber-600 transition">
                   + Nova
                 </button>
               </div>
@@ -603,7 +603,7 @@ export default function FinancasPage() {
                 <button type="button" onClick={() => setShowForm(false)}
                   className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
                 <button type="submit" disabled={saving}
-                  className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
                   {saving ? "Salvando..." : "Salvar"}
                 </button>
               </div>
@@ -679,7 +679,7 @@ export default function FinancasPage() {
               {(["expense", "income"] as const).map(t => (
                 <button key={t} type="button" onClick={() => setCatType(t)}
                   className={clsx("flex-1 py-2 rounded-xl text-xs font-semibold border transition",
-                    catType === t ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 text-slate-500 hover:bg-slate-50")}>
+                    catType === t ? "bg-amber-600 text-white border-amber-600" : "border-slate-200 text-slate-500 hover:bg-slate-50")}>
                   {t === "expense" ? "💸 Despesa" : "💰 Receita"}
                 </button>
               ))}
@@ -687,7 +687,7 @@ export default function FinancasPage() {
             <form onSubmit={handleSaveCategory} className="space-y-3">
               <input value={catName} onChange={e => { setCatName(e.target.value); setCatError(""); }} required autoFocus
                 placeholder="Nome da categoria (ex: Pet, Assinaturas)"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200" />
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
               {catError && <p className="text-xs text-red-500">{catError}</p>}
 
               {/* Categorias personalizadas existentes */}
@@ -710,7 +710,7 @@ export default function FinancasPage() {
                 <button type="button" onClick={() => setShowCatModal(false)}
                   className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
                 <button type="submit" disabled={catSaving}
-                  className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
                   {catSaving ? "Salvando..." : "Salvar"}
                 </button>
               </div>
@@ -750,13 +750,13 @@ export default function FinancasPage() {
               <div className="space-y-3">
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png"
                   onChange={e => setImportFile(e.target.files?.[0] ?? null)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:text-xs file:font-semibold" />
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-50 file:text-amber-700 file:text-xs file:font-semibold" />
                 {importError && <p className="text-xs text-red-500">{importError}</p>}
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={() => setShowImport(false)}
                     className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
                   <button type="button" onClick={handleAnalyzeInvoice} disabled={!importFile || importLoading}
-                    className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+                    className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
                     {importLoading ? "Analisando..." : "Analisar fatura"}
                   </button>
                 </div>
@@ -772,7 +772,7 @@ export default function FinancasPage() {
                     <label key={idx} className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-50">
                       <input type="checkbox" checked={item.selected}
                         onChange={e => setImportItems(prev => prev.map((it, i) => i === idx ? { ...it, selected: e.target.checked } : it))}
-                        className="accent-emerald-600" />
+                        className="accent-amber-600" />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-800 truncate">{item.description}</p>
                         <p className="text-xs text-slate-400">
@@ -789,7 +789,7 @@ export default function FinancasPage() {
                   <button type="button" onClick={() => setShowImport(false)}
                     className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
                   <button type="button" onClick={handleConfirmImport} disabled={importSaving || importItems.filter(i => i.selected).length === 0}
-                    className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+                    className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
                     {importSaving ? "Importando..." : `Importar ${importItems.filter(i => i.selected).length} lançamento(s)`}
                   </button>
                 </div>

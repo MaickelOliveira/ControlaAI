@@ -34,7 +34,7 @@ export default function ClienteDetailPage() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 flex items-center justify-center text-xl font-bold text-emerald-400">
+        <div className="w-12 h-12 rounded-2xl bg-amber-600/20 flex items-center justify-center text-xl font-bold text-amber-400">
           {cliente.name.charAt(0)}
         </div>
         <div>
@@ -42,7 +42,7 @@ export default function ClienteDetailPage() {
           <p className="text-slate-400 text-sm">{cliente.email} · {cliente.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</p>
         </div>
         <div className="ml-auto flex gap-2">
-          {cliente.activeToday && <span className="text-xs bg-emerald-900/30 text-emerald-400 border border-emerald-800 px-2 py-1 rounded-full">● Ativo hoje</span>}
+          {cliente.activeToday && <span className="text-xs bg-amber-900/30 text-amber-400 border border-amber-800 px-2 py-1 rounded-full">● Ativo hoje</span>}
           <span className={`text-xs px-2 py-1 rounded-full border ${
             cliente.status === "active" ? "bg-blue-900/30 text-blue-400 border-blue-800" :
             cliente.status === "trial" ? "bg-amber-900/30 text-amber-400 border-amber-800" :
