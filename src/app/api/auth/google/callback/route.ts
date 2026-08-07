@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCode } from "@/lib/google-oauth";
-import { getConfig } from "@/lib/wppconnect";
+import { getConfig } from "@/lib/whatsapp-config";
 
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);

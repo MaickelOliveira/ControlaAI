@@ -1,42 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession as getSession } from "@/lib/auth";
-import { loadAdmin, saveAdmin } from "@/lib/admin";
-import { checkConnection, startSession, getQrCode, saveConfig, getConfig, generateAndSaveToken } from "@/lib/wppconnect";
+import { getConfig, saveConfig, type WhatsAppConfig } from "@/lib/whatsapp-config";
+import { checkConnection, getQrCode } from "@/lib/whatsapp";
+import { createOrRestartInstance } from "@/lib/evolution";
 import { detectBotNumber } from "@/app/api/bot-info/route";
 
 const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
-
-/** Sincroniza admin.json → config.json para que o bot use os mesmos dados */
-function syncToConfig() {
-  const adm = loadAdmin();
-  const cur = getConfig();
-  saveConfig({
-    ...cur,
-    wppServer:          adm.wppServer          ?? cur.wppServer,
-    wppSecretKey:       adm.wppSecretKey       ?? cur.wppSecretKey,
-    wppToken:           adm.wppToken           ?? cur.wppToken,
-    wppSession:         adm.wppSession         ?? cur.wppSession,
-    geminiApiKey:       adm.geminiApiKey       ?? cur.geminiApiKey,
-    appBaseUrl:         adm.appBaseUrl         ?? cur.appBaseUrl,
-    wppBotNumber:       adm.wppBotNumber       ?? cur.wppBotNumber,
-    googleClientId:     adm.googleClientId     ?? cur.googleClientId,
-    googleClientSecret: adm.googleClientSecret ?? cur.googleClientSecret,
-  });
-}
 
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const cfg = loadAdmin();
+  const cfg = getConfig();
   const status = await checkConnection().catch(() => "UNKNOWN");
 
   return NextResponse.json({
-    wppServer: cfg.wppServer ?? "",
-    wppSecretKey: cfg.wppSecretKey ? "••••••••" : "",
-    wppToken: cfg.wppToken ? cfg.wppToken.slice(0, 20) + "..." : "",
-    hasToken: !!cfg.wppToken,
-    wppSession: cfg.wppSession ?? "controlaai",
+    provider: cfg.provider,
+    evolution: {
+      server: cfg.evolution?.server ?? "",
+      adminKey: cfg.evolution?.adminKey ? "••••••••" : "",
+      instanceName: cfg.evolution?.instanceName ?? "zelo",
+      hasApiKey: !!cfg.evolution?.instanceApiKey,
+    },
+    waba: {
+      phoneNumberId: cfg.waba?.phoneNumberId ?? "",
+      accessToken: cfg.waba?.accessToken ? "••••••••" : "",
+      verifyToken: cfg.waba?.verifyToken ?? "",
+    },
     geminiApiKey: cfg.geminiApiKey ? "••••••••" : "",
     hasGemini: !!cfg.geminiApiKey,
     appBaseUrl: cfg.appBaseUrl ?? "",
@@ -53,21 +43,28 @@ export async function PUT(req: NextRequest) {
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const current = loadAdmin();
-  const updated = {
+  const current = getConfig();
+  const updated: WhatsAppConfig = {
     ...current,
-    wppServer:          body.wppServer    ?? current.wppServer,
-    wppSecretKey:       !isMasked(body.wppSecretKey) && body.wppSecretKey ? body.wppSecretKey : current.wppSecretKey,
-    wppSession:         body.wppSession   ?? current.wppSession,
-    geminiApiKey:       !isMasked(body.geminiApiKey) && body.geminiApiKey ? body.geminiApiKey : current.geminiApiKey,
-    appBaseUrl:         body.appBaseUrl   ?? current.appBaseUrl,
-    wppBotNumber:       body.wppBotNumber ?? current.wppBotNumber,
-    googleClientId:     body.googleClientId !== undefined ? (body.googleClientId || undefined) : current.googleClientId,
+    provider: body.provider === "waba" ? "waba" : "evolution",
+    evolution: {
+      server: body.evolution?.server ?? current.evolution?.server,
+      adminKey: !isMasked(body.evolution?.adminKey) && body.evolution?.adminKey ? body.evolution.adminKey : current.evolution?.adminKey,
+      instanceName: body.evolution?.instanceName ?? current.evolution?.instanceName ?? "zelo",
+      instanceApiKey: current.evolution?.instanceApiKey, // só via ação "connect"
+    },
+    waba: {
+      phoneNumberId: body.waba?.phoneNumberId ?? current.waba?.phoneNumberId,
+      accessToken: !isMasked(body.waba?.accessToken) && body.waba?.accessToken ? body.waba.accessToken : current.waba?.accessToken,
+      verifyToken: body.waba?.verifyToken ?? current.waba?.verifyToken,
+    },
+    geminiApiKey: !isMasked(body.geminiApiKey) && body.geminiApiKey ? body.geminiApiKey : current.geminiApiKey,
+    appBaseUrl: body.appBaseUrl ?? current.appBaseUrl,
+    wppBotNumber: body.wppBotNumber ?? current.wppBotNumber,
+    googleClientId: body.googleClientId !== undefined ? (body.googleClientId || undefined) : current.googleClientId,
     googleClientSecret: !isMasked(body.googleClientSecret) && body.googleClientSecret ? body.googleClientSecret : current.googleClientSecret,
-    // wppToken não é aceito do body — só via generate_token
   };
-  saveAdmin(updated);
-  syncToConfig();
+  saveConfig(updated);
   return NextResponse.json({ ok: true });
 }
 
@@ -77,49 +74,17 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { action } = body;
+  const cfg = getConfig();
 
-  if (action === "generate_token") {
-    // Se a secret key no body estiver mascarada, forçar redigitação
-    if (isMasked(body.wppSecretKey)) {
-      return NextResponse.json({ error: "Redigite a Secret Key no campo acima e clique em Gerar Token novamente. O campo está mostrando pontos (••••) mas precisamos do valor real." }, { status: 400 });
+  if (action === "connect") {
+    // Evolution: cria/reinicia a instância e devolve o QR pra escanear.
+    const webhookUrl = `${cfg.appBaseUrl?.replace(/\/$/, "") || ""}/api/webhook/evolution`;
+    const result = await createOrRestartInstance(webhookUrl);
+    if (!result) return NextResponse.json({ error: "Falha ao conectar. Verifique servidor e admin key." }, { status: 500 });
+    if (result.apiKey) {
+      saveConfig({ ...cfg, evolution: { ...cfg.evolution, instanceApiKey: result.apiKey } });
     }
-
-    const wppSecretKey = body.wppSecretKey as string;
-    const wppServer    = !isMasked(body.wppServer) ? (body.wppServer as string) : undefined;
-    const wppSession   = !isMasked(body.wppSession) ? (body.wppSession as string) : undefined;
-
-    if (!wppSecretKey) {
-      return NextResponse.json({ error: "Preencha a Secret Key antes de gerar o token." }, { status: 400 });
-    }
-
-    // Limpa valor corrompido do admin.json e salva o valor real
-    const adm = loadAdmin();
-    const toSave = {
-      ...adm,
-      wppSecretKey,
-      ...(wppServer  ? { wppServer }  : {}),
-      ...(wppSession ? { wppSession } : {}),
-    };
-    saveAdmin(toSave);
-    syncToConfig();
-
-    const result = await generateAndSaveToken({ wppServer, wppSecretKey, wppSession });
-    if (!result || result.error) {
-      return NextResponse.json({ error: result?.error || "Falha ao gerar token", url: result?.url }, { status: 500 });
-    }
-    saveAdmin({ ...toSave, wppToken: result.token });
-    return NextResponse.json({ ok: true, token: result.token.slice(0, 20) + "..." });
-  }
-
-  if (action === "start") {
-    syncToConfig();
-    const cfg = loadAdmin();
-    const webhookUrl = `${cfg.appBaseUrl?.replace(/\/$/, "") || ""}/api/webhook/wppconnect`;
-    const ok = await startSession(webhookUrl);
-    if (!ok) return NextResponse.json({ error: "Falha ao iniciar. Verifique as configurações e se o token foi gerado." }, { status: 500 });
-    await new Promise(r => setTimeout(r, 3000));
-    const qr = await getQrCode();
-    return NextResponse.json({ ok: true, qr, webhookUrl });
+    return NextResponse.json({ ok: true, qr: result.qrBase64 });
   }
 
   if (action === "qr") {

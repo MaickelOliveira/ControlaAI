@@ -2,20 +2,36 @@
 import { useEffect, useState, useCallback } from "react";
 import { clsx } from "clsx";
 
+type Provider = "evolution" | "waba";
+
+type Cfg = {
+  provider: Provider;
+  evolution: { server: string; adminKey: string; instanceName: string; hasApiKey: boolean };
+  waba: { phoneNumberId: string; accessToken: string; verifyToken: string };
+  geminiApiKey: string; hasGemini: boolean;
+  appBaseUrl: string; wppBotNumber: string; connectionStatus: string;
+  googleClientId: string; googleClientSecret: string; hasGoogleOAuth: boolean;
+};
+
+const EMPTY_CFG: Cfg = {
+  provider: "evolution",
+  evolution: { server: "", adminKey: "", instanceName: "zelo", hasApiKey: false },
+  waba: { phoneNumberId: "", accessToken: "", verifyToken: "" },
+  geminiApiKey: "", hasGemini: false,
+  appBaseUrl: "", wppBotNumber: "", connectionStatus: "UNKNOWN",
+  googleClientId: "", googleClientSecret: "", hasGoogleOAuth: false,
+};
+
 export default function AdminWhatsappPage() {
-  const [cfg, setCfg] = useState({
-    wppServer: "", wppSecretKey: "", wppToken: "", hasToken: false,
-    wppSession: "controlaai", geminiApiKey: "", hasGemini: false,
-    appBaseUrl: "", wppBotNumber: "", connectionStatus: "UNKNOWN",
-    googleClientId: "", googleClientSecret: "", hasGoogleOAuth: false,
-  });
+  const [cfg, setCfg] = useState<Cfg>(EMPTY_CFG);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [genMsg, setGenMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [qr, setQr] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [connMsg, setConnMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
+  const [testingWaba, setTestingWaba] = useState(false);
+  const [detecting, setDetecting] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/admin/whatsapp");
@@ -45,29 +61,33 @@ export default function AdminWhatsappPage() {
     e.preventDefault(); setSaving(true);
     await fetch("/api/admin/whatsapp", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg) });
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 3000);
+    await load();
   }
 
-  async function generateToken() {
-    setGenerating(true); setGenMsg(null);
-    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "generate_token", wppServer: cfg.wppServer, wppSecretKey: cfg.wppSecretKey, wppSession: cfg.wppSession }) });
+  async function connectEvolution() {
+    setConnecting(true); setQr(null); setConnMsg(null);
+    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "connect" }) });
     const d = await r.json();
-    if (r.ok) {
-      setGenMsg({ type: "ok", text: `✓ Token gerado! (${d.token})` });
-      await load();
-    } else {
-      setGenMsg({ type: "err", text: d.error || "Falha ao gerar token" });
-    }
-    setGenerating(false);
-  }
-
-  async function connect() {
-    setConnecting(true); setQr(null);
-    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start" }) });
-    const d = await r.json();
-    if (!r.ok) { alert(d.error || "Erro ao iniciar sessão"); setConnecting(false); return; }
-    // Sessão iniciada — QR pode demorar alguns segundos para ficar pronto
+    if (!r.ok) { setConnMsg({ type: "err", text: d.error || "Erro ao conectar" }); setConnecting(false); return; }
     if (d.qr) setQr(d.qr);
-    setPolling(true); // sempre faz polling para aguardar QR e depois CONNECTED
+    setPolling(true);
+  }
+
+  async function testWaba() {
+    setTestingWaba(true); setConnMsg(null);
+    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "status" }) });
+    const d = await r.json();
+    setCfg(c => ({ ...c, connectionStatus: d.status }));
+    setConnMsg(d.status === "CONNECTED" ? { type: "ok", text: "✓ Conexão com a API Oficial validada!" } : { type: "err", text: "Não foi possível validar — confira Phone Number ID e Access Token." });
+    setTestingWaba(false);
+  }
+
+  async function detectNumber() {
+    setDetecting(true);
+    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "detect_number" }) });
+    const d = await r.json();
+    if (d.wppBotNumber) setCfg(c => ({ ...c, wppBotNumber: d.wppBotNumber }));
+    setDetecting(false);
   }
 
   const statusInfo = {
@@ -76,16 +96,8 @@ export default function AdminWhatsappPage() {
     UNKNOWN:      { label: "Verificando...", dot: "bg-slate-500", bar: "bg-slate-100 border-slate-200", text: "text-slate-400" },
   }[cfg.connectionStatus] ?? { label: "?", dot: "bg-slate-500", bar: "bg-slate-100 border-slate-200", text: "text-slate-400" };
 
-  const webhookUrl = cfg.appBaseUrl ? `${cfg.appBaseUrl.replace(/\/$/, "")}/api/webhook/wppconnect` : "";
-
-  const steps = [
-    { num: 1, done: !!cfg.wppServer, label: "URL do servidor preenchida" },
-    { num: 2, done: !!cfg.wppSecretKey || cfg.wppSecretKey === "••••••••", label: "Secret key preenchida" },
-    { num: 3, done: cfg.hasToken, label: "Token gerado" },
-    { num: 4, done: cfg.hasGemini, label: "Chave Gemini preenchida" },
-    { num: 5, done: !!cfg.appBaseUrl, label: "URL da plataforma preenchida" },
-    { num: 6, done: cfg.connectionStatus === "CONNECTED", label: "WhatsApp conectado" },
-  ];
+  const webhookPath = cfg.provider === "waba" ? "/api/webhook/waba" : "/api/webhook/evolution";
+  const webhookUrl = cfg.appBaseUrl ? `${cfg.appBaseUrl.replace(/\/$/, "")}${webhookPath}` : "";
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -100,7 +112,7 @@ export default function AdminWhatsappPage() {
           <div className={clsx("w-2.5 h-2.5 rounded-full", statusInfo.dot)} />
           <div>
             <p className={clsx("font-medium text-sm", statusInfo.text)}>Bot {statusInfo.label}</p>
-            <p className="text-slate-400 text-xs">Número central que recebe as mensagens dos clientes</p>
+            <p className="text-slate-400 text-xs">Provedor ativo: {cfg.provider === "waba" ? "API Oficial (Meta)" : "Evolution API"}</p>
           </div>
         </div>
         <button onClick={load} className="text-xs text-slate-400 hover:text-slate-900 border border-slate-200 rounded-lg px-3 py-1.5 transition">
@@ -108,24 +120,27 @@ export default function AdminWhatsappPage() {
         </button>
       </div>
 
-      {/* Checklist de setup */}
+      {/* Seletor de provedor */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Progresso da configuração</p>
-        <div className="space-y-2">
-          {steps.map(s => (
-            <div key={s.num} className="flex items-center gap-3">
-              <div className={clsx("w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                s.done ? "bg-amber-500 text-slate-900" : "bg-slate-200 text-slate-400")}>
-                {s.done ? "✓" : s.num}
-              </div>
-              <span className={clsx("text-sm", s.done ? "text-slate-600" : "text-slate-400")}>{s.label}</span>
-            </div>
-          ))}
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Provedor de conexão</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setCfg(c => ({ ...c, provider: "evolution" }))}
+            className={clsx("rounded-xl px-4 py-3 text-sm font-medium border transition text-left",
+              cfg.provider === "evolution" ? "bg-amber-600 border-amber-600 text-slate-900" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300")}>
+            🧬 Evolution API
+            <p className={clsx("text-[11px] font-normal mt-0.5", cfg.provider === "evolution" ? "text-slate-800" : "text-slate-400")}>Auto-hospedado, QR Code</p>
+          </button>
+          <button type="button" onClick={() => setCfg(c => ({ ...c, provider: "waba" }))}
+            className={clsx("rounded-xl px-4 py-3 text-sm font-medium border transition text-left",
+              cfg.provider === "waba" ? "bg-amber-600 border-amber-600 text-slate-900" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300")}>
+            🏢 API Oficial (Meta)
+            <p className={clsx("text-[11px] font-normal mt-0.5", cfg.provider === "waba" ? "text-slate-800" : "text-slate-400")}>Evita bloqueios, exige aprovação Meta</p>
+          </button>
         </div>
       </div>
 
-      {/* QR Code */}
-      {qr && (
+      {/* QR Code (só Evolution) */}
+      {qr && cfg.provider === "evolution" && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center">
           <h3 className="font-bold text-slate-900 mb-1">📱 Escaneie o QR Code</h3>
           <p className="text-slate-400 text-sm mb-4">WhatsApp → ⋮ → Aparelhos conectados → Conectar aparelho</p>
@@ -135,174 +150,183 @@ export default function AdminWhatsappPage() {
         </div>
       )}
 
-      {/* Formulário */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-1">⚙️ Configurações</h2>
-        <p className="text-slate-400 text-xs mb-4">
-          Use o mesmo servidor WPPConnect do trafegopago — é o mesmo para todos os seus sistemas.
-        </p>
-
-        <form onSubmit={save} className="space-y-4">
-          {/* Passo 1 e 2 */}
-          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
-              <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">1</span>
-              Servidor WPPConnect
-            </p>
+      <form onSubmit={save} className="space-y-4">
+        {cfg.provider === "evolution" ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+            <h2 className="font-semibold text-slate-900 mb-1">⚙️ Evolution API</h2>
+            <p className="text-slate-400 text-xs mb-2">Use o mesmo servidor Evolution que você já roda no trafegopago.</p>
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">URL do servidor</label>
-              <input value={cfg.wppServer} onChange={e => setCfg(c => ({ ...c, wppServer: e.target.value }))}
-                placeholder="https://trafegopago-wppconect.ztcjzs.easypanel.host"
+              <input value={cfg.evolution.server} onChange={e => setCfg(c => ({ ...c, evolution: { ...c.evolution, server: e.target.value } }))}
+                placeholder="https://sua-evolution-api.exemplo.com"
                 className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
-              <p className="text-[11px] text-slate-400 mt-1">É o mesmo servidor WPPConnect que você usa no trafegopago</p>
             </div>
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Secret Key do servidor</label>
-              <input type="password" value={cfg.wppSecretKey} onChange={e => setCfg(c => ({ ...c, wppSecretKey: e.target.value }))}
-                placeholder="THISISMYSECURETOKEN"
+              <label className="block text-[11px] text-slate-400 mb-1">Admin Key (AUTHENTICATION_API_KEY)</label>
+              <input type="password" value={cfg.evolution.adminKey} onChange={e => setCfg(c => ({ ...c, evolution: { ...c.evolution, adminKey: e.target.value } }))}
+                placeholder="••••••••"
                 className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
-              <p className="text-[11px] text-slate-400 mt-1">Chave secreta do servidor (variável WPPCONNECT_SECRET_KEY no EasyPanel do wppconnect)</p>
             </div>
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Nome da sessão</label>
-              <input value={cfg.wppSession} onChange={e => setCfg(c => ({ ...c, wppSession: e.target.value }))}
-                placeholder="controlaai"
+              <label className="block text-[11px] text-slate-400 mb-1">Nome da instância</label>
+              <input value={cfg.evolution.instanceName} onChange={e => setCfg(c => ({ ...c, evolution: { ...c.evolution, instanceName: e.target.value } }))}
+                placeholder="zelo"
                 className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
-              <p className="text-[11px] text-slate-400 mt-1">Use um nome diferente das sessões do trafegopago (ex: controlaai)</p>
+              <p className="text-[11px] text-slate-400 mt-1">Use um nome diferente das instâncias do trafegopago (ex: zelo)</p>
             </div>
-          </div>
-
-          {/* Passo 3: Gerar token */}
-          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
-              <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">2</span>
-              Token de sessão
-            </p>
-            {cfg.hasToken ? (
+            {cfg.evolution.hasApiKey && (
               <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-800 rounded-lg px-3 py-2">
                 <span className="text-amber-400 text-sm">✓</span>
-                <span className="text-amber-300 text-xs">Token gerado: {cfg.wppToken}</span>
+                <span className="text-amber-300 text-xs">Instância já conectada anteriormente</span>
               </div>
-            ) : (
-              <p className="text-amber-400 text-xs">⚠ Token não gerado ainda — salve as configurações acima primeiro</p>
             )}
-            {genMsg && (
-              <p className={clsx("text-xs rounded-lg px-3 py-2 border", genMsg.type === "ok" ? "text-amber-400 bg-amber-900/20 border-amber-800" : "text-red-400 bg-red-900/20 border-red-800")}>
-                {genMsg.text}
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+            <h2 className="font-semibold text-slate-900 mb-1">🏢 API Oficial do WhatsApp (Meta Cloud API)</h2>
+            <p className="text-slate-400 text-xs mb-2">Requer um app configurado no Meta Business — evita bloqueios de número, mas exige aprovação.</p>
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Phone Number ID</label>
+              <input value={cfg.waba.phoneNumberId} onChange={e => setCfg(c => ({ ...c, waba: { ...c.waba, phoneNumberId: e.target.value } }))}
+                placeholder="1234567890"
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Access Token (permanente)</label>
+              <input type="password" value={cfg.waba.accessToken} onChange={e => setCfg(c => ({ ...c, waba: { ...c.waba, accessToken: e.target.value } }))}
+                placeholder="EAAxxxxx..."
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Verify Token</label>
+              <input value={cfg.waba.verifyToken} onChange={e => setCfg(c => ({ ...c, waba: { ...c.waba, verifyToken: e.target.value } }))}
+                placeholder="zelo-webhook-verify"
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+              <p className="text-[11px] text-slate-400 mt-1">Escolha um valor qualquer e use o mesmo ao cadastrar o webhook no Meta Business</p>
+            </div>
+            {connMsg && (
+              <p className={clsx("text-xs rounded-lg px-3 py-2 border", connMsg.type === "ok" ? "text-amber-400 bg-amber-900/20 border-amber-800" : "text-red-400 bg-red-900/20 border-red-800")}>
+                {connMsg.text}
               </p>
             )}
-            <button type="button" disabled={generating || !cfg.wppServer}
-              onClick={generateToken}
+            <button type="button" disabled={testingWaba || !cfg.waba.phoneNumberId}
+              onClick={testWaba}
               className="w-full flex items-center justify-center gap-2 bg-slate-200 hover:bg-amber-600 text-slate-900 rounded-xl py-2.5 text-sm font-medium transition disabled:opacity-40">
-              {generating ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
-              ) : (
-                <>{cfg.hasToken ? "🔄 Regerar Token" : "⚡ Gerar Token"}</>
-              )}
+              {testingWaba ? "Testando..." : "🔌 Testar conexão"}
             </button>
-            <p className="text-[11px] text-slate-400">
-              Clique depois de preencher a URL e a secret key. O token é gerado automaticamente.
-            </p>
           </div>
+        )}
 
-          {/* Passo 4 e 5 */}
-          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
-              <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">3</span>
-              IA e URL da plataforma
+        {webhookUrl && (
+          <div className="bg-slate-100 border border-slate-200 rounded-xl p-3">
+            <p className="text-[11px] text-slate-400 mb-1">
+              {cfg.provider === "waba" ? "Webhook (cadastre no Meta Business — assine o campo \"messages\"):" : "Webhook (configurado automaticamente ao conectar):"}
             </p>
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Chave Gemini AI</label>
-              <input type="password" value={cfg.geminiApiKey} onChange={e => setCfg(c => ({ ...c, geminiApiKey: e.target.value }))}
-                placeholder="AIza..."
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+            <div className="flex items-center gap-2">
+              <code className="text-xs text-amber-600 flex-1 break-all">{webhookUrl}</code>
+              <button type="button" onClick={() => navigator.clipboard.writeText(webhookUrl)}
+                className="text-xs text-slate-400 hover:text-slate-900 border border-slate-300 rounded-lg px-2 py-1 shrink-0 transition">
+                📋
+              </button>
             </div>
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">URL desta plataforma</label>
-              <input value={cfg.appBaseUrl} onChange={e => setCfg(c => ({ ...c, appBaseUrl: e.target.value }))}
-                placeholder="https://lp-controlaai.ztcjzs.easypanel.host"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Número do bot WhatsApp (com DDI, sem + ou espaços)</label>
+          </div>
+        )}
+
+        {/* IA e URL da plataforma */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+          <h2 className="font-semibold text-slate-900 mb-1">🧠 IA e URL da plataforma</h2>
+          <div>
+            <label className="block text-[11px] text-slate-400 mb-1">Chave Gemini AI</label>
+            <input type="password" value={cfg.geminiApiKey} onChange={e => setCfg(c => ({ ...c, geminiApiKey: e.target.value }))}
+              placeholder="AIza..."
+              className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-400 mb-1">URL desta plataforma</label>
+            <input value={cfg.appBaseUrl} onChange={e => setCfg(c => ({ ...c, appBaseUrl: e.target.value }))}
+              placeholder="https://lp-controlaai.ztcjzs.easypanel.host"
+              className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-400 mb-1">Número do bot WhatsApp (com DDI, sem + ou espaços)</label>
+            <div className="flex gap-2">
               <input value={cfg.wppBotNumber} onChange={e => setCfg(c => ({ ...c, wppBotNumber: e.target.value.replace(/\D/g, "") }))}
                 placeholder="5544999999999"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
-              <p className="text-[11px] text-slate-400 mt-1">Número conectado ao WPPConnect — exibido para os clientes vincularem o WhatsApp</p>
+                className="flex-1 bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
+              {cfg.provider === "evolution" && (
+                <button type="button" onClick={detectNumber} disabled={detecting}
+                  className="text-xs text-slate-500 hover:text-slate-900 border border-slate-200 rounded-xl px-3 shrink-0 transition disabled:opacity-40">
+                  {detecting ? "..." : "🔍 Detectar"}
+                </button>
+              )}
             </div>
-            {webhookUrl && (
-              <div className="bg-slate-100 border border-slate-200 rounded-xl p-3">
-                <p className="text-[11px] text-slate-400 mb-1">Webhook (configure no WPPConnect — Events → onmessage):</p>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs text-amber-400 flex-1 break-all">{webhookUrl}</code>
-                  <button type="button" onClick={() => navigator.clipboard.writeText(webhookUrl)}
-                    className="text-xs text-slate-400 hover:text-slate-900 border border-slate-600 rounded-lg px-2 py-1 shrink-0 transition">
-                    📋
-                  </button>
-                </div>
-              </div>
-            )}
+            <p className="text-[11px] text-slate-400 mt-1">Exibido para os clientes vincularem o WhatsApp</p>
           </div>
+        </div>
 
-          {/* Google OAuth */}
-          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
-              <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px]">4</span>
-              Google OAuth — para criação de Google Meet
-              {cfg.hasGoogleOAuth && <span className="ml-auto text-amber-500 text-[10px] font-semibold">✓ Configurado</span>}
-            </p>
-            <p className="text-[11px] text-slate-400">
-              Crie um app OAuth no <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline text-blue-400">Google Cloud Console</a>.
-              Ative a API Google Calendar. Adicione a URI de redirecionamento:
-            </p>
-            {cfg.appBaseUrl && (
-              <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
-                <code className="text-xs text-amber-500 flex-1 break-all">{cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback</code>
-                <button type="button" onClick={() => navigator.clipboard.writeText(`${cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback`)}
-                  className="text-xs text-slate-400 hover:text-slate-900 border border-slate-300 rounded-lg px-2 py-1 shrink-0 transition">📋</button>
-              </div>
-            )}
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Client ID</label>
-              <input value={cfg.googleClientId} onChange={e => setCfg(c => ({ ...c, googleClientId: e.target.value }))}
-                placeholder="999999999-abc123.apps.googleusercontent.com"
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
+        {/* Google OAuth */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+          <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            Google OAuth — para criação de Google Meet
+            {cfg.hasGoogleOAuth && <span className="ml-auto text-amber-500 text-[10px] font-semibold">✓ Configurado</span>}
+          </p>
+          <p className="text-[11px] text-slate-400">
+            Crie um app OAuth no <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline text-blue-500">Google Cloud Console</a>.
+            Ative a API Google Calendar. Adicione a URI de redirecionamento:
+          </p>
+          {cfg.appBaseUrl && (
+            <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
+              <code className="text-xs text-amber-600 flex-1 break-all">{cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback</code>
+              <button type="button" onClick={() => navigator.clipboard.writeText(`${cfg.appBaseUrl.replace(/\/$/, "")}/api/auth/google/callback`)}
+                className="text-xs text-slate-400 hover:text-slate-900 border border-slate-300 rounded-lg px-2 py-1 shrink-0 transition">📋</button>
             </div>
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Client Secret</label>
-              <input type="password" value={cfg.googleClientSecret} onChange={e => setCfg(c => ({ ...c, googleClientSecret: e.target.value }))}
-                placeholder="GOCSPX-..."
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
-              <p className="text-[11px] text-slate-400 mt-1">Esses dados ficam salvos no servidor — os clientes só clicam em &quot;Conectar Google&quot; no dashboard deles.</p>
-            </div>
-          </div>
-
-          <button type="submit" disabled={saving}
-            className="w-full bg-slate-200 hover:bg-amber-600 text-slate-900 font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
-            {saving ? "Salvando..." : saved ? "✓ Salvo!" : "💾 Salvar configurações"}
-          </button>
-        </form>
-      </div>
-
-      {/* Passo 6: Conectar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-1">📱 Conectar WhatsApp</h2>
-        <p className="text-slate-400 text-sm mb-4">
-          Após salvar e gerar o token, clique para escanear o QR Code com o celular que vai ser o número do bot.
-        </p>
-        <button disabled={connecting || !cfg.hasToken}
-          onClick={connect}
-          className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl py-3 text-sm transition disabled:opacity-40 flex items-center justify-center gap-2">
-          {connecting ? (
-            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aguardando QR Code...</>
-          ) : (
-            "📱 Conectar WhatsApp"
           )}
+          <div>
+            <label className="block text-[11px] text-slate-400 mb-1">Client ID</label>
+            <input value={cfg.googleClientId} onChange={e => setCfg(c => ({ ...c, googleClientId: e.target.value }))}
+              placeholder="999999999-abc123.apps.googleusercontent.com"
+              className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-400 mb-1">Client Secret</label>
+            <input type="password" value={cfg.googleClientSecret} onChange={e => setCfg(c => ({ ...c, googleClientSecret: e.target.value }))}
+              placeholder="GOCSPX-..."
+              className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+          </div>
+        </div>
+
+        <button type="submit" disabled={saving}
+          className="w-full bg-slate-200 hover:bg-amber-600 text-slate-900 font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
+          {saving ? "Salvando..." : saved ? "✓ Salvo!" : "💾 Salvar configurações"}
         </button>
-        {!cfg.hasToken && (
-          <p className="text-amber-400 text-xs text-center mt-2">⚠ Gere o token primeiro antes de conectar</p>
-        )}
-      </div>
+      </form>
+
+      {/* Conectar (só Evolution — WABA não tem QR, usa o botão "Testar conexão" acima) */}
+      {cfg.provider === "evolution" && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <h2 className="font-semibold text-slate-900 mb-1">📱 Conectar WhatsApp</h2>
+          <p className="text-slate-400 text-sm mb-4">
+            Após salvar servidor e admin key, clique para criar/reiniciar a instância e escanear o QR Code.
+          </p>
+          {connMsg && (
+            <p className={clsx("text-xs rounded-lg px-3 py-2 border mb-3", connMsg.type === "ok" ? "text-amber-400 bg-amber-900/20 border-amber-800" : "text-red-400 bg-red-900/20 border-red-800")}>
+              {connMsg.text}
+            </p>
+          )}
+          <button disabled={connecting || !cfg.evolution.server}
+            onClick={connectEvolution}
+            className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl py-3 text-sm transition disabled:opacity-40 flex items-center justify-center gap-2">
+            {connecting ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aguardando QR Code...</>
+            ) : (
+              "📱 Conectar WhatsApp"
+            )}
+          </button>
+          {!cfg.evolution.server && (
+            <p className="text-amber-500 text-xs text-center mt-2">⚠ Preencha e salve o servidor Evolution primeiro</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

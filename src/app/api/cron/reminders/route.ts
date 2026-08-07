@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDueReminders, markReminderSent } from "@/lib/reminders";
-import { sendText } from "@/lib/wppconnect";
+import { sendText } from "@/lib/whatsapp";
 
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");

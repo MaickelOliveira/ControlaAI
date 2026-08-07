@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getUserById, generateWppVerifyCode, getWppPhones, getMaxWppPhones, removeWppPhone, setWppPhoneName } from "@/lib/users";
-import { getAdminWppConfig } from "@/lib/admin";
 
 export async function POST() {
   const session = await getSession();
@@ -17,8 +16,7 @@ export async function POST() {
   }
 
   const code = generateWppVerifyCode(session.sub);
-  const { wppSession } = getAdminWppConfig();
-  return NextResponse.json({ code, session: wppSession });
+  return NextResponse.json({ code });
 }
 
 export async function DELETE(req: NextRequest) {

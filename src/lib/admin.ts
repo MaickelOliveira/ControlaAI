@@ -5,15 +5,6 @@ import bcrypt from "bcryptjs";
 export type AdminConfig = {
   adminEmail?: string;
   adminPasswordHash?: string;
-  wppServer?: string;
-  wppSecretKey?: string;   // secret key para gerar tokens no servidor WPPConnect
-  wppToken?: string;       // JWT gerado automaticamente (não digitar manualmente)
-  wppSession?: string;
-  geminiApiKey?: string;
-  appBaseUrl?: string;
-  wppBotNumber?: string;
-  googleClientId?: string;
-  googleClientSecret?: string;
 };
 
 const FILE = path.join(process.cwd(), "data", "admin.json");
@@ -48,16 +39,4 @@ export async function setAdminPassword(email: string, password: string) {
   cfg.adminEmail = email;
   cfg.adminPasswordHash = await bcrypt.hash(password, 10);
   saveAdmin(cfg);
-}
-
-// Re-exporta funções de wppconnect usando admin config
-export function getAdminWppConfig() {
-  const cfg = loadAdmin();
-  return {
-    wppServer: cfg.wppServer || process.env.WPPCONNECT_SERVER || "",
-    wppToken: cfg.wppToken || process.env.WPPCONNECT_TOKEN || "",
-    wppSession: cfg.wppSession || process.env.WPPCONNECT_SESSION || "controlaai",
-    geminiApiKey: cfg.geminiApiKey || process.env.GEMINI_API_KEY || "",
-    appBaseUrl: cfg.appBaseUrl || "",
-  };
 }

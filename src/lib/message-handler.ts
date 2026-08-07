@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones, setWppPhoneName, getWppPhoneByName } from "@/lib/users";
-import { processMessage, transcribeAudio, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getMonthlyTransactions, getFinancesLastDays, isLikelyDuplicateExpense } from "@/lib/finances";
@@ -11,11 +10,11 @@ import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTota
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo } from "@/lib/pending-actions";
 import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
-import { createMeet } from "@/lib/meets";
 import { createMeetEvent } from "@/lib/google-meet";
 import { isConnected } from "@/lib/google-oauth";
 import { generateMeetAta } from "@/lib/ai-processor";
-import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/wppconnect";
+import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/whatsapp";
+import { addMessage, getAiPaused } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
@@ -53,102 +52,44 @@ function modeLabelFull(m: string): string {
   return m === "business" ? "🏢 Empresa" : "👤 Pessoal";
 }
 
-export async function POST(req: NextRequest) {
-  let _from = ""; // acessível no catch para enviar mensagem de erro
+/** Mensagem recebida já normalizada pelo webhook do provider (Evolution ou
+ *  WABA) — parsing do payload específico e transcrição de áudio acontecem no
+ *  webhook, antes de chamar isso; aqui só entra texto/mídia já resolvidos. */
+export type IncomingMessage = {
+  from: string;
+  text: string;
+  contactName?: string;
+  isFileMessage?: boolean;
+  fileBuffer?: Buffer;
+  fileMimeType?: string;
+  fileCaption?: string;
+  fileName?: string;
+};
+
+export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
+  const from = msg.from;
   try {
-    const body = await req.json().catch(() => null);
-    if (!body) return NextResponse.json({ ok: true });
+    let messageText = msg.text;
 
-    const event = (body.event as string ?? "").toLowerCase();
-    if (event !== "onmessage" && event !== "message" && event !== "onanymessage") {
-      return NextResponse.json({ ok: true });
-    }
-
-    const rawFrom = body.from ?? body.data?.from ?? "";
-    const from = (rawFrom as string).replace("@c.us", "").replace(/\D/g, "");
-    _from = from;
-    const fromMe = body.fromMe ?? body.data?.fromMe ?? false;
-    const bodyText = body.body ?? body.data?.body ?? body.content ?? body.data?.content ?? "";
-    console.log(`[webhook] event=${event} from=${from} fromMe=${fromMe}`);
-    console.log(`[webhook] keys=${Object.keys(body).join(",")}`);
-    console.log(`[webhook] full=${JSON.stringify(body)}`);
-    if (!from || fromMe) return NextResponse.json({ ok: true });
-
-    // Classificação do tipo de mensagem
-    const isFileType = ["document", "image", "video"].includes(body.type);
-    // "ptt" = push-to-talk (nota de voz WhatsApp), "audio" = arquivo de áudio
-    const isAudio = ["audio", "ptt"].includes(body.type);
-    const mediaUrl = body.mediaUrl || body.url;
-    const bodyStr = typeof body.body === "string" ? body.body : "";
-    // Para áudio/ptt o WPPConnect sempre coloca o base64 em body.body (independente de mediaUrl)
-    const bodyIsBase64Audio = isAudio && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
-    // Para arquivos, base64 só quando não tem URL
-    const bodyIsBase64File = isFileType && !mediaUrl && bodyStr.length > 200 && /^[A-Za-z0-9+/]/.test(bodyStr);
-    const bodyIsBase64 = bodyIsBase64Audio || bodyIsBase64File;
-
-    // Áudio/arquivo nunca usa body.body como texto
-    let messageText = (isFileType || isAudio) ? "" : (bodyText as string ?? "").trim();
-
-    // ── Transcreve áudio/voz ──
-    if (isAudio) {
-      let transcribed = false;
-      // Gemini exige mime limpo — strip "; codecs=opus" etc.
-      const rawMime = (body.mimetype as string | undefined) || "audio/ogg";
-      const mime = rawMime.split(";")[0].trim() || "audio/ogg";
-      try {
-        // Tenta base64 primeiro (body.body é sempre preenchido pelo WPPConnect)
-        if (bodyIsBase64Audio) {
-          const buf = Buffer.from(bodyStr, "base64");
-          const transcript = await transcribeAudio(buf, mime);
-          if (transcript) { messageText = transcript; transcribed = true; }
-        }
-        // Fallback: tenta URL (pode precisar de auth, mas vale tentar)
-        if (!transcribed && mediaUrl) {
-          const audioRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(20_000) });
-          if (audioRes.ok) {
-            const buf = Buffer.from(await audioRes.arrayBuffer());
-            const transcript = await transcribeAudio(buf, mime);
-            if (transcript) { messageText = transcript; transcribed = true; }
-          }
-        }
-      } catch { /* ignora */ }
-      if (!transcribed) {
-        await wppSend(from, "🎤 Não consegui entender o áudio. Pode digitar sua mensagem?");
-        return NextResponse.json({ ok: true });
-      }
+    if (from) {
+      addMessage(from, { role: "user", content: messageText || (msg.isFileMessage ? "[Arquivo]" : ""), ts: Date.now() }, { contactName: msg.contactName });
     }
 
     // ── Detecta arquivo/documento enviado via WhatsApp ──
-    const isFileMessage = isFileType && (mediaUrl || bodyIsBase64File) && !fromMe;
+    const isFileMessage = !!msg.isFileMessage && !!msg.fileBuffer;
 
     if (isFileMessage) {
       // Identifica usuário antes de processar o arquivo
       const fileUser = getUserByWppPhone(from);
       if (fileUser && !isTrialExpired(fileUser)) {
-        const defaultExt = body.mimetype?.includes("pdf") ? ".pdf" : body.mimetype?.includes("image") ? ".jpg" : "";
-        const mimeType = body.mimetype || "application/octet-stream";
-        // caption: prioriza body.caption (legenda enviada junto ao arquivo), depois bodyStr se não for base64
-        const captionField = typeof body.caption === "string" && body.caption ? body.caption : undefined;
-        const caption = captionField || (!bodyIsBase64File && bodyStr && bodyStr !== body.filename ? bodyStr : undefined);
+        const buffer = msg.fileBuffer!;
+        const mimeType = msg.fileMimeType || "application/octet-stream";
+        const defaultExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("image") ? ".jpg" : "";
+        const caption = msg.fileCaption;
 
         // Extrai um nome explícito da legenda (ex: "salva como etac", "guarda como contrato assinado")
         const nameFromCaption = caption?.match(/(?:salva|salvar|guarda|guardar|arquiva|arquivar|nomeia|nomear|chama|chame)\s+(?:isso\s+|ele\s+|esse\s+arquivo\s+)?(?:de|como)\s+(.+)/i)?.[1]?.trim();
-        const originalName = nameFromCaption ? `${nameFromCaption}${defaultExt}` : (body.filename || `arquivo_${Date.now()}${defaultExt}`);
-
-        let buffer: Buffer;
-        try {
-          if (mediaUrl) {
-            const mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(30_000) });
-            if (!mediaRes.ok) throw new Error(`HTTP ${mediaRes.status}`);
-            buffer = Buffer.from(await mediaRes.arrayBuffer());
-          } else {
-            buffer = Buffer.from(bodyStr, "base64");
-          }
-        } catch (e) {
-          console.error("[drive] erro ao obter arquivo:", e);
-          await wppSend(from, "❌ Não consegui processar o arquivo. Tente novamente.");
-          return NextResponse.json({ ok: true });
-        }
+        const originalName = nameFromCaption ? `${nameFromCaption}${defaultExt}` : (msg.fileName || `arquivo_${Date.now()}${defaultExt}`);
 
         // Verifica se o usuário pediu explicitamente para guardar no Drive
         const SAVE_KEYWORDS = ["guarda", "salva", "arquiva", "armazena", "salvar", "guardar", "arquivar", "arquivo", "pasta", "drive"];
@@ -174,7 +115,7 @@ export async function POST(req: NextRequest) {
 
               if (novos.length === 0) {
                 await wppSend(from, `📑 Analisei a fatura e encontrei ${withDup.length} lançamento(s), mas todos já parecem estar registrados (mesmo valor e data próxima). Nada novo para importar.`);
-                return NextResponse.json({ ok: true });
+                return;
               }
 
               setPendingAction(from, {
@@ -186,7 +127,7 @@ export async function POST(req: NextRequest) {
 
               const total = novos.reduce((s, t) => s + t.amount, 0);
               await wppSend(from, `📑 *Fatura analisada!*\n\n${withDup.length} lançamento(s) encontrados\n✅ ${novos.length} novo(s) — total ${formatCurrency(total)}${duplicados.length ? `\n♻️ ${duplicados.length} já registrado(s) (mesmo valor e data próxima) — não serão duplicados` : ""}\n\n_💾 Quer que eu registre os ${novos.length} lançamentos novos como despesa? (sim/não)_`);
-              return NextResponse.json({ ok: true });
+              return;
             }
           } catch (e) {
             console.error("[webhook] erro ao extrair fatura:", e);
@@ -229,7 +170,7 @@ export async function POST(req: NextRequest) {
               });
 
               await wppSend(from, `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${f.description}\n💰 ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_`);
-              return NextResponse.json({ ok: true });
+              return;
             }
           } catch (e) {
             console.error("[webhook] erro ao extrair finanças do documento:", e);
@@ -263,10 +204,10 @@ export async function POST(req: NextRequest) {
         }
       }
       // Se não há legenda/caption para processar, encerra aqui
-      if (!messageText) return NextResponse.json({ ok: true });
+      if (!messageText) return;
     }
 
-    if (!messageText) return NextResponse.json({ ok: true });
+    if (!messageText) return;
 
     // ── Verifica se é um código de vinculação (4 dígitos) ──
     const codeMatch = messageText.trim().match(/^(\d{4})$/);
@@ -278,7 +219,7 @@ export async function POST(req: NextRequest) {
         await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*`);
         setPendingAction(from, { type: "awaiting_wpp_name", userId: codeUser.id });
         await wppSend(from, replyAskWppName());
-        return NextResponse.json({ ok: true });
+        return;
       }
     }
 
@@ -289,13 +230,13 @@ export async function POST(req: NextRequest) {
 
     if (!user) {
       await wppSend(from, "Olá! Sou o Zelo, mas ainda não encontrei seu número na minha lista de clientes.\n\nSe você já tem conta, acesse *Configurações* no painel e clique em *Vincular WhatsApp* para gerar seu código.\n\nPara conhecer o Zelo: controlaai.app");
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ── Verifica trial ──
     if (isTrialExpired(user)) {
       await wppSend(from, replyTrialExpired());
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     const mode = user.activeMode;
@@ -309,7 +250,7 @@ export async function POST(req: NextRequest) {
       const name = cap(nameCmdMatch[1].trim());
       setWppPhoneName(user.id, from, name);
       await wppSend(from, replyWppNameSaved(name));
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ── Verifica ação pendente (ex: seleção de veículo) ──
@@ -325,7 +266,7 @@ export async function POST(req: NextRequest) {
       } else {
         await wppSend(from, replyWppNameSaved(user.name));
       }
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ── Aguardando confirmação de guardar comprovante (foto/documento) no Drive ──
@@ -359,7 +300,7 @@ export async function POST(req: NextRequest) {
         } else {
           await wppSend(from, "Combinado, não vou guardar esse comprovante. 👍");
         }
-        return NextResponse.json({ ok: true });
+        return;
       }
       // resposta não reconhecida como sim/não — deixa expirar e processa normalmente
     }
@@ -389,7 +330,7 @@ export async function POST(req: NextRequest) {
         } else {
           await wppSend(from, "Combinado, não importei os lançamentos da fatura. 👍");
         }
-        return NextResponse.json({ ok: true });
+        return;
       }
       // resposta não reconhecida como sim/não — deixa expirar e processa normalmente
     }
@@ -409,7 +350,7 @@ export async function POST(req: NextRequest) {
           const total = getVehicleTotalExpenses(exp);
           await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
         }
-        return NextResponse.json({ ok: true });
+        return;
       } else {
         // não é uma resposta de veículo — limpa pendência e processa normalmente
         clearPendingAction(from);
@@ -428,7 +369,7 @@ export async function POST(req: NextRequest) {
           const emoji = p >= 100 ? "🎉" : p >= 75 ? "🚀" : "📈";
           await wppSend(from, `${emoji} *${formatCurrency(pending.amount)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${p}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
         }
-        return NextResponse.json({ ok: true });
+        return;
       } else {
         clearPendingAction(from);
       }
@@ -445,7 +386,7 @@ export async function POST(req: NextRequest) {
         const patch = parseFinancePatchFromText(messageText);
         if (Object.keys(patch).length === 0) {
           await wppSend(from, `❓ Não entendi o que alterar. Ex: _"80 reais"_ ou _"categoria Lazer"_`);
-          return NextResponse.json({ ok: true });
+          return;
         }
         clearPendingAction(from);
         const chosen = pending.candidates[0];
@@ -455,7 +396,7 @@ export async function POST(req: NextRequest) {
           const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
           await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
         }
-        return NextResponse.json({ ok: true });
+        return;
       }
 
       const choiceIdx = parseFinanceChoice(messageText, pending.candidates);
@@ -470,7 +411,7 @@ export async function POST(req: NextRequest) {
             candidates: [chosen],
           });
           await wppSend(from, `🔍 Encontrei: *${chosen.description}* — ${formatCurrency(chosen.amount)} (${chosen.category}) · ${modeLabelFull(chosen.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
-          return NextResponse.json({ ok: true });
+          return;
         }
 
         clearPendingAction(from);
@@ -488,14 +429,14 @@ export async function POST(req: NextRequest) {
             await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${chosen.description} — ${formatCurrency(chosen.amount)}\n📅 ${new Date(chosen.date + "T12:00:00").toLocaleDateString("pt-BR")}\n${modeLabelFull(chosen.mode)}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
           }
         }
-        return NextResponse.json({ ok: true });
+        return;
       }
       // Resposta inválida: lista novamente
       const list = pending.candidates.map((c, i) =>
         `${i + 1}️⃣ ${formatCurrency(c.amount)} · ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
       ).join("\n");
       await wppSend(from, `❓ Não entendi. Responda com o número ou a data:\n\n${list}\n\nEx: *1* ou *04/07*`);
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ── Confirmação de Meet (sim/não) ──
@@ -535,7 +476,7 @@ export async function POST(req: NextRequest) {
       } else {
         await wppSend(from, `Responda *Sim* para incluir o link do Google Meet ou *Não* para criar só o compromisso.`);
       }
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ── Resposta de ata de reunião ──
@@ -551,7 +492,7 @@ export async function POST(req: NextRequest) {
       } else {
         await wppSend(from, `Para gerar a ata, me envie um *áudio* ou *texto* com o resumo da reunião. ⏱ ${replyMeetAtaRequest(pending.meetTitle)}`);
       }
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ── Confirmação de recorrente/parcela (resposta ao lembrete das 20h) ──
@@ -571,7 +512,13 @@ export async function POST(req: NextRequest) {
       } else {
         await wppSend(from, `Não entendi. Responda *sim* se ${pending.installmentNumber ? "a parcela foi paga" : "foi pago/recebido"} ou *não* para deixar pendente.`);
       }
-      return NextResponse.json({ ok: true });
+      return;
+    }
+
+    // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──
+    if (getAiPaused(from)) {
+      console.log(`[message-handler] from=${from} — IA pausada, não processa`);
+      return;
     }
 
     // ── Processa com IA ──
@@ -590,7 +537,7 @@ export async function POST(req: NextRequest) {
         ? `🔔 Mensagem: ${ai.reminder.message}`
         : "";
       await wppSend(from, replyLowConfidence(ai.intent, details, messageText));
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     switch (ai.intent) {
@@ -1352,16 +1299,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true });
+    return;
   } catch (e) {
-    console.error("[webhook]", e);
-    if (_from) {
-      try { await wppSend(_from, "❌ Ocorreu um erro interno. Tente novamente em instantes."); } catch { /* ignora */ }
+    console.error("[message-handler]", e);
+    if (from) {
+      try { await wppSend(from, "❌ Ocorreu um erro interno. Tente novamente em instantes."); } catch { /* ignora */ }
     }
-    return NextResponse.json({ ok: true });
+    return;
   }
-}
-
-export async function GET() {
-  return NextResponse.json({ status: "ok", service: "Zelo Bot" });
 }
