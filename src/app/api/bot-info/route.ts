@@ -1,62 +1,18 @@
 import { NextResponse } from "next/server";
-import { getConfig, saveConfig } from "@/lib/wppconnect";
-import { loadAdmin, saveAdmin } from "@/lib/admin";
-
-type WppResponse = Record<string, unknown>;
-
-function extractPhone(data: WppResponse): string {
-  const r = (data?.response ?? {}) as WppResponse;
-  const wid = (r?.wid ?? data?.wid ?? {}) as WppResponse;
-
-  // Formatos WPPConnect: response.wid.user / response.wid._serialized / response.id / id / phone
-  const candidates = [
-    wid?.user,
-    String(wid?._serialized ?? "").split("@")[0],
-    r?.id,
-    r?.phone,
-    r?.number,
-    (data?.me as WppResponse)?.id,
-    data?.id,
-    data?.phone,
-    data?.number,
-  ];
-
-  for (const c of candidates) {
-    const phone = String(c ?? "").replace(/[^0-9]/g, "");
-    if (phone.length >= 8) return phone;
-  }
-  return "";
-}
+import { getConfig, saveConfig } from "@/lib/whatsapp-config";
+import { getInstancePhone } from "@/lib/evolution";
 
 export async function detectBotNumber(): Promise<string> {
   const cfg = getConfig();
-  const base = (cfg.wppServer || "").replace(/\/$/, "");
-  const token = cfg.wppToken || "";
-  const session = cfg.wppSession || "controlaai";
-  if (!base || !token) return "";
 
-  const endpoints = [
-    `${base}/api/${session}/host-device`,
-    `${base}/api/${session}/me`,
-    `${base}/api/${session}/check-connection-session`,
-  ];
+  // WABA: não tem endpoint de "meu número" sem permissões extras — o admin
+  // informa o Phone Number ID e o número diretamente na tela de config.
+  if (cfg.provider === "waba") return cfg.wppBotNumber ?? "";
 
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (!res.ok) continue;
-      const data = await res.json() as WppResponse;
-      const phone = extractPhone(data);
-      if (phone) {
-        saveConfig({ ...cfg, wppBotNumber: phone });
-        const adm = loadAdmin();
-        saveAdmin({ ...adm, wppBotNumber: phone });
-        return phone;
-      }
-    } catch { /* continua tentando */ }
+  const phone = await getInstancePhone();
+  if (phone) {
+    saveConfig({ ...cfg, wppBotNumber: phone });
+    return phone;
   }
   return "";
 }

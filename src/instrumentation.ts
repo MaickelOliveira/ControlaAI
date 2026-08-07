@@ -26,7 +26,7 @@ export async function register() {
       }
 
       const remindersModule = await import("./lib/reminders").catch(() => null);
-      const wppModule = await import("./lib/wppconnect").catch(() => null);
+      const wppModule = await import("./lib/whatsapp").catch(() => null);
       if (!remindersModule || !wppModule) return;
 
       const { getDueReminders, markReminderSent } = remindersModule;

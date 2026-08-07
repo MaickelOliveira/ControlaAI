@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
-import { getConfig } from "./wppconnect";
+import { getConfig } from "./whatsapp-config";
 
 const TOKEN_FILE = path.join(process.cwd(), "data", "google-tokens.json");
 

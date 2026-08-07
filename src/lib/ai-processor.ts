@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getConfig } from "./wppconnect";
+import { getConfig } from "./whatsapp-config";
 import { nowISOBR, todayStrBR } from "./date-br";
 import type { UserMode } from "./users";
 
