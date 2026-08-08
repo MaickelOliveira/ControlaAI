@@ -171,6 +171,14 @@ export function removeShoppingItem(id: string, userId: string) {
   save(d);
 }
 
+/** Popula a lista de compras a partir de um template pronto (ex: "mercearia")
+ *  — usado pelo painel e pelo bot, pra não duplicar o loop nos dois lugares. */
+export function addFromTemplate(userId: string, templateKey: string): number {
+  const items = LIST_TEMPLATES[templateKey] ?? [];
+  for (const item of items) addToShoppingList(userId, item.name, item.category, item.quantity);
+  return items.length;
+}
+
 // Templates pré-configurados de lista por categoria
 export const LIST_TEMPLATES: Record<string, Array<{ name: string; category: GroceryCategory; quantity: string }>> = {
   mercearia: [

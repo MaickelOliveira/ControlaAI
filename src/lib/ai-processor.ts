@@ -3,6 +3,7 @@ import { getConfig } from "./whatsapp-config";
 import { nowISOBR, todayStrBR } from "./date-br";
 import type { UserMode, User } from "./users";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
+import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
 
 export type Intent =
   | "finance_register"
@@ -42,6 +43,15 @@ export type Intent =
   | "meet_create"
   | "finance_detail"
   | "finance_confirm_pending"
+  | "grocery_list_add"
+  | "grocery_list_show"
+  | "grocery_list_check"
+  | "grocery_purchase"
+  | "grocery_spend_query"
+  | "employee_create"
+  | "employee_list"
+  | "employee_update"
+  | "employee_deactivate"
   | "how_to"
   | "help"
   | "unknown";
@@ -130,6 +140,34 @@ export type RecurringData = {
   mode?: "personal" | "business"; // detectado automaticamente
 };
 
+export type GroceryItemData = {
+  productName: string;
+  category?: GroceryCategory;
+  price?: number;
+  quantity?: number;
+  unit?: string;
+};
+
+export type GroceryData = {
+  storeName?: string;
+  date?: string;
+  items?: GroceryItemData[];
+  /** grocery_list_add/grocery_list_check: nomes de itens da lista envolvidos */
+  itemNames?: string[];
+  /** grocery_list_add a partir de modelo pronto — chave de LIST_TEMPLATES
+   *  (ex: "mercearia", "carnes", "hortifruti", "laticinios", "padaria", "bebidas", "higiene", "limpeza") */
+  template?: string;
+};
+
+export type EmployeeData = {
+  name?: string;
+  role?: string;
+  salary?: number;
+  startDate?: string;
+  phone?: string;
+  email?: string;
+};
+
 export type AIResult = {
   intent: Intent;
   finance?: FinanceData;
@@ -141,6 +179,8 @@ export type AIResult = {
   recurring?: RecurringData;
   agendaData?: AgendaData;
   meetData?: MeetData;
+  grocery?: GroceryData;
+  employee?: EmployeeData;
   mode?: UserMode;
   financeType?: "income" | "expense"; // para finance_detail/finance_query: qual tipo mostrar (padrão "expense")
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
@@ -230,7 +270,8 @@ ${nextDays.join("\n")}
 ${periodsRef}
 
 CATEGORIAS DE DESPESA: ${expenseCats.join(", ")}
-CATEGORIAS DE RECEITA: ${incomeCats.join(", ")}${modeLine}`;
+CATEGORIAS DE RECEITA: ${incomeCats.join(", ")}
+CATEGORIAS DE SUPERMERCADO (para grocery.items[].category): ${GROCERY_CATEGORIES.join(", ")}${modeLine}`;
 }
 
 /** Parte do prompt que NÃO muda entre chamadas — vai no systemInstruction
@@ -290,6 +331,15 @@ INTENÇÕES POSSÍVEIS:
 - meet_create: criar uma reunião do Google Meet ("criar meet amanhã às 14h", "meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). Diferente de agenda_create — esse cria um link real do Google Meet.
 - vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
+- grocery_list_add: adicionar item(ns) à lista de compras de mercado ("põe arroz na lista", "adiciona leite e ovos na lista de compras", "preciso comprar detergente"). Use "grocery.items" com productName (e category se der pra inferir). ⚠️ Se pedir uma lista PRONTA por categoria ("põe a lista de mercearia", "quero a lista de carnes", "adiciona os itens de limpeza"), use "grocery.template" com a chave em minúsculo sem acento (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) em vez de "items".
+- grocery_list_show: ver a lista de compras ("o que tem na lista de compras", "minha lista do mercado", "o que falta comprar")
+- grocery_list_check: marcar item(ns) da lista como já comprado(s) ("comprei o arroz", "já peguei leite e ovos", "risca o detergente da lista"). Use "grocery.itemNames" com os nomes mencionados.
+- grocery_purchase: registrar uma compra de mercado COMPLETA, com itens e valores ("comprei no Assaí: arroz 25, feijão 8, leite 6"). Use "grocery.storeName" e "grocery.items" (productName, price, quantity). ⚠️ DIFERENTE de finance_register: se a mensagem só disser um valor total sem listar os itens ("gastei 350 no mercado"), é finance_register (categoria Alimentação), NÃO grocery_purchase — só use grocery_purchase quando os itens individuais forem listados.
+- grocery_spend_query: perguntar sobre gastos/preços de mercado especificamente ("quanto gastei no mercado esse mês", "onde o leite tá mais barato", "qual mercado eu gasto mais")
+- employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create).
+- employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
+- employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
+- employee_deactivate: desativar/demitir um funcionário ("demite o João", "desativa a Ana", "o João não trabalha mais aqui"). Use "keyword" com o nome.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos"). Nesse caso, escreva uma explicação clara e amigável no campo "response".
 - help: pedir lista de comandos ("ajuda", "help", "o que você faz")
@@ -695,6 +745,89 @@ Exemplo veículo da empresa ("no modo empresa, gastei 200 de combustível na Van
     "name": "Van",
     "mode": "business"
   }
+}
+
+OU para adicionar item à lista de compras ("põe arroz e feijão na lista"):
+{
+  "intent": "grocery_list_add",
+  "confidence": 0.9,
+  "grocery": {
+    "items": [
+      { "productName": "Arroz", "category": "Mercearia" },
+      { "productName": "Feijão", "category": "Mercearia" }
+    ]
+  }
+}
+
+OU para adicionar lista pronta por categoria ("põe a lista de mercearia"):
+{
+  "intent": "grocery_list_add",
+  "confidence": 0.9,
+  "grocery": { "template": "mercearia" }
+}
+
+OU para ver a lista de compras ("o que tem na lista de compras"):
+{
+  "intent": "grocery_list_show",
+  "confidence": 0.9
+}
+
+OU para marcar item como comprado ("já comprei o arroz"):
+{
+  "intent": "grocery_list_check",
+  "confidence": 0.9,
+  "grocery": { "itemNames": ["arroz"] }
+}
+
+OU para registrar compra completa ("comprei no Assaí: arroz 25, feijão 8"):
+{
+  "intent": "grocery_purchase",
+  "confidence": 0.9,
+  "grocery": {
+    "storeName": "Assaí",
+    "items": [
+      { "productName": "Arroz", "category": "Mercearia", "price": 25.00, "quantity": 1 },
+      { "productName": "Feijão", "category": "Mercearia", "price": 8.00, "quantity": 1 }
+    ]
+  }
+}
+
+OU para gasto de mercado ("quanto gastei no mercado esse mês"):
+{
+  "intent": "grocery_spend_query",
+  "confidence": 0.85
+}
+
+OU para cadastrar funcionário ("cadastra a Ana como vendedora, salário 2000"):
+{
+  "intent": "employee_create",
+  "confidence": 0.9,
+  "employee": {
+    "name": "Ana",
+    "role": "Vendedora",
+    "salary": 2000.00
+  }
+}
+
+OU para listar funcionários/folha ("meus funcionários", "quanto pago de folha"):
+{
+  "intent": "employee_list",
+  "confidence": 0.9
+}
+
+OU para editar funcionário ("muda o salário da Ana para 2200"):
+{
+  "intent": "employee_update",
+  "confidence": 0.9,
+  "keyword": "Ana",
+  "employee": { "salary": 2200.00 }
+}
+
+OU para desativar funcionário ("demite o João"):
+{
+  "intent": "employee_deactivate",
+  "confidence": 0.9,
+  "keyword": "João"
 }
 
 OU para parcelamento ("comprei geladeira 5000 em 10x de 500 todo dia 10"):

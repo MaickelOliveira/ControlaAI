@@ -11,7 +11,11 @@ import { createRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
 import { createAppointment } from "./agenda";
 import { todayStrBR, spToUTC } from "./date-br";
-import { replyRecurringCreated, replyAgendaCreated } from "./bot-replies";
+import { findOrCreateStore, addPurchase, type GroceryPurchaseItem } from "./grocery";
+import { createEmployee } from "./employees";
+import {
+  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyEmployeeCreated,
+} from "./bot-replies";
 import { formatCurrency } from "./finances";
 
 /**
@@ -26,6 +30,23 @@ import { formatCurrency } from "./finances";
 
 function cap(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+/** Interpreta texto livre como itens de compra: "arroz 25, feijão 8" →
+ *  [{productName:"Arroz",price:25,...}]. Sem preço reconhecido no trecho,
+ *  ainda cria o item com price:0 — melhor um item incompleto que perder a
+ *  compra inteira; o usuário corrige no painel se precisar. */
+function parseGroceryItemsText(text: string): GroceryPurchaseItem[] | null {
+  const segments = text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  if (!segments.length) return null;
+  const items: GroceryPurchaseItem[] = [];
+  for (const seg of segments) {
+    const amount = parseAmountBR(seg);
+    const name = (amount !== null ? seg.replace(/[\d.,]+/g, "") : seg).trim();
+    if (!name) continue;
+    items.push({ productName: cap(name), category: "Outros", price: amount ?? 0, quantity: 1, unit: "un" });
+  }
+  return items.length ? items : null;
 }
 
 export type Draft = Record<string, unknown>;
@@ -514,5 +535,117 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
     },
 
     giveUp: () => `❌ Não consegui agendar — faltou o título ou a data. Tente de novo, ex: _"agendar reunião amanhã às 14h"_.`,
+  },
+
+  grocery_purchase: {
+    seed(ai) {
+      const g = ai.grocery;
+      return {
+        storeName: g?.storeName,
+        date: g?.date,
+        items: g?.items?.length ? g.items.map(i => ({
+          productName: cap(i.productName), category: i.category ?? "Outros",
+          price: i.price ?? 0, quantity: i.quantity ?? 1, unit: i.unit ?? "un",
+        })) : undefined,
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      const q: string[] = [];
+      if (!draft.storeName) q.push("storeName");
+      if (!Array.isArray(draft.items) || draft.items.length === 0) q.push("items");
+      return q;
+    },
+
+    slots: {
+      storeName: {
+        key: "storeName",
+        label: "mercado",
+        parse: slotText(1),
+        ask: () => `🏪 Em qual mercado foi a compra?`,
+        fallback: () => "Não informado",
+      },
+      items: {
+        key: "items",
+        label: "itens",
+        parse: (text) => {
+          const items = parseGroceryItemsText(text);
+          return items ? { ok: true, value: items } : { ok: false };
+        },
+        ask: () => `🧾 Quais itens? _(ex: "arroz 25, feijão 8, leite 6")_`,
+        // sem fallback — slot duro, compra sem item nenhum não faz sentido
+      },
+    },
+
+    finalize(draft, ctx) {
+      const items = draft.items as GroceryPurchaseItem[];
+      const store = findOrCreateStore(ctx.userId, (draft.storeName as string) || "Não informado");
+      const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
+      const purchase = addPurchase({
+        userId: ctx.userId,
+        storeId: store.id,
+        storeName: store.name,
+        date: (draft.date as string) || todayStrBR(),
+        items,
+        total,
+      });
+      return replyGroceryPurchaseSaved(purchase);
+    },
+
+    giveUp: () => `❌ Não consegui registrar a compra — faltaram os itens. Tente de novo, ex: _"comprei no Assaí: arroz 25, feijão 8"_.`,
+  },
+
+  employee_create: {
+    seed(ai) {
+      const e = ai.employee;
+      return {
+        name: e?.name ? cap(e.name.trim()) : "",
+        role: e?.role,
+        salary: e?.salary && e.salary > 0 ? e.salary : undefined,
+        startDate: e?.startDate,
+        phone: e?.phone,
+        email: e?.email,
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      const q: string[] = [];
+      if (!draft.name) q.push("name");
+      if (!(typeof draft.salary === "number" && draft.salary > 0)) q.push("salary");
+      return q;
+    },
+
+    slots: {
+      name: {
+        key: "name",
+        label: "nome",
+        parse: slotText(2),
+        ask: () => `👤 Qual o nome do funcionário?`,
+        // sem fallback — slot duro
+      },
+      salary: {
+        key: "salary",
+        label: "salário",
+        parse: slotMoney(),
+        ask: () => `💰 Qual o salário?`,
+        // sem fallback — slot duro, corromperia o cálculo de folha
+      },
+    },
+
+    finalize(draft, ctx) {
+      const employee = createEmployee({
+        userId: ctx.userId,
+        name: draft.name as string,
+        role: (draft.role as string) || "Funcionário",
+        salary: draft.salary as number,
+        startDate: (draft.startDate as string) || todayStrBR(),
+        status: "active",
+        phone: draft.phone as string | undefined,
+        email: draft.email as string | undefined,
+      });
+      return replyEmployeeCreated(employee);
+    },
+
+    giveUp: () => `❌ Não consegui cadastrar — faltou o nome ou o salário. Tente de novo, ex: _"cadastra a Ana como vendedora, 2000"_.`,
   },
 };
