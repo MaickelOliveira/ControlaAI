@@ -4,7 +4,7 @@ import {
   getStoresByUser, findOrCreateStore, addPurchase, getPurchasesByUser,
   getSpendByStore, getPriceComparison,
   getShoppingList, addToShoppingList, toggleShoppingItem,
-  clearCheckedItems, removeShoppingItem, LIST_TEMPLATES,
+  clearCheckedItems, removeShoppingItem, LIST_TEMPLATES, addFromTemplate,
   type GroceryCategory,
 } from "@/lib/grocery";
 
@@ -74,12 +74,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "list_from_template") {
-    const { template } = body;
-    const items = LIST_TEMPLATES[template] ?? [];
-    for (const item of items) {
-      addToShoppingList(session.sub, item.name, item.category, item.quantity);
-    }
-    return NextResponse.json({ ok: true, added: items.length });
+    const added = addFromTemplate(session.sub, body.template);
+    return NextResponse.json({ ok: true, added });
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 });

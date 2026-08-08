@@ -8,6 +8,8 @@ import { formatCurrency } from "./finances";
 import { PRIORITY_LABEL, formatDueDate } from "./tasks";
 import type { UserMode } from "./users";
 import { formatDateBR, formatDateTimeBR } from "./date-br";
+import type { ShoppingListItem, GroceryPurchase } from "./grocery";
+import type { Employee } from "./employees";
 
 const TZ = "America/Sao_Paulo";
 
@@ -434,4 +436,68 @@ export function replyLowConfidence(intent: string, details: string, originalMsg:
   };
   const label = intentLabel[intent] || intent;
   return `Entendi que você quer *${label}*, mas não fiquei seguro de um detalhe.\n\n> _"${originalMsg}"_\n\n${details}\n\nEstá certo? Se sim, é só confirmar. Se não, me corrige que eu ajusto.`;
+}
+
+// ── Supermercado ──────────────────────────
+
+export function replyGroceryListAdded(count: number, source?: string): string {
+  if (count === 0) return `❓ Não consegui identificar o que adicionar na lista.`;
+  const originLine = source ? ` da lista de *${source}*` : "";
+  return `🛒 Adicionei ${count} ${count === 1 ? "item" : "itens"}${originLine} na sua lista de compras.`;
+}
+
+export function replyGroceryList(items: ShoppingListItem[]): string {
+  const pending = items.filter(i => !i.checked);
+  if (!pending.length) return `🛒 Sua lista de compras está vazia — nada pendente.`;
+  let msg = `🛒 *Lista de compras (${pending.length}):*\n\n`;
+  let lastCategory = "";
+  pending.forEach(i => {
+    if (i.category !== lastCategory) { msg += `\n*${i.category}*\n`; lastCategory = i.category; }
+    msg += `• ${i.name}${i.quantity ? ` — ${i.quantity}` : ""}\n`;
+  });
+  return msg.trim();
+}
+
+export function replyGroceryItemChecked(checked: string[], notFound: string[]): string {
+  let msg = "";
+  if (checked.length) msg += `✅ Marquei como comprado: ${checked.join(", ")}.`;
+  if (notFound.length) msg += `${msg ? "\n" : ""}❓ Não achei na lista: ${notFound.join(", ")}.`;
+  return msg || "❓ Não encontrei nenhum desses itens na sua lista.";
+}
+
+export function replyGroceryPurchaseSaved(p: GroceryPurchase): string {
+  let msg = `🧾 *Compra registrada!*\n\n🏪 ${p.storeName}\n📅 ${formatDateBR(p.date)}\n\n`;
+  p.items.forEach(i => { msg += `• ${i.productName} — ${formatCurrency(i.price)}${i.quantity > 1 ? ` × ${i.quantity}` : ""}\n`; });
+  msg += `\n💰 *Total: ${formatCurrency(p.total)}*`;
+  return msg;
+}
+
+export function replyGrocerySpend(spend: Array<{ storeName: string; total: number; visits: number }>, totalSpent: number): string {
+  if (!spend.length) return `🛒 Nenhuma compra de mercado registrada ainda.`;
+  let msg = `💲 *Gastos no mercado:*\n\n`;
+  spend.slice(0, 6).forEach(s => { msg += `🏪 ${s.storeName} — ${formatCurrency(s.total)} _(${s.visits}x)_\n`; });
+  msg += `\n💰 *Total geral: ${formatCurrency(totalSpent)}*`;
+  return msg;
+}
+
+// ── Funcionários ──────────────────────────
+
+export function replyEmployeeCreated(e: Employee): string {
+  return `Cadastrado. 👥\n\n*${e.name}* — ${e.role}\n💰 ${formatCurrency(e.salary)}\n📅 Início: ${formatDateBR(e.startDate)}\n\n🏢 Veja em Funcionários no dashboard.`;
+}
+
+export function replyEmployeeList(employees: Employee[], totalPayroll: number): string {
+  if (!employees.length) return `👥 Nenhum funcionário ativo cadastrado.`;
+  let msg = `👥 *Funcionários ativos (${employees.length}):*\n\n`;
+  employees.forEach(e => { msg += `• ${e.name} — ${e.role} — ${formatCurrency(e.salary)}\n`; });
+  msg += `\n💰 *Folha mensal: ${formatCurrency(totalPayroll)}*`;
+  return msg;
+}
+
+export function replyEmployeeUpdated(e: Employee): string {
+  return `✏️ Atualizado.\n\n*${e.name}* — ${e.role}\n💰 ${formatCurrency(e.salary)}`;
+}
+
+export function replyEmployeeDeactivated(e: Employee): string {
+  return `🗑️ *${e.name}* foi desativado(a).`;
 }

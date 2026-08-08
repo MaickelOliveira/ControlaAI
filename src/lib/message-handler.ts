@@ -7,6 +7,8 @@ import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTa
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
+import { addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore } from "@/lib/grocery";
+import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
@@ -26,6 +28,8 @@ import {
   replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
   replyMeetCreated, replyMeetInvite, replyMeetAtaRequest, replyMeetAtaGenerated,
   replyPersonNotFound, replyAskWppName, replyWppNameSaved,
+  replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
+  replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
 } from "@/lib/bot-replies";
 
 function phoneMatches(stored: string, incoming: string): boolean {
@@ -1154,6 +1158,92 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           });
           await wppSend(from, msg.trim());
         }
+        break;
+      }
+
+      case "grocery_list_add": {
+        const g = ai.grocery;
+        if (g?.template) {
+          const added = addFromTemplate(user.id, g.template);
+          await wppSend(from, replyGroceryListAdded(added, g.template));
+        } else if (g?.items?.length) {
+          g.items.forEach(i => addToShoppingList(user.id, cap(i.productName), i.category ?? "Outros", i.quantity ? String(i.quantity) : "1"));
+          await wppSend(from, replyGroceryListAdded(g.items.length));
+        } else {
+          await wppSend(from, replyGroceryListAdded(0));
+        }
+        break;
+      }
+
+      case "grocery_list_show": {
+        const list = getShoppingList(user.id);
+        await wppSend(from, replyGroceryList(list));
+        break;
+      }
+
+      case "grocery_list_check": {
+        const names = ai.grocery?.itemNames ?? [];
+        if (!names.length) { await wppSend(from, "❓ Qual item deseja marcar como comprado?"); break; }
+        const pendingItems = getShoppingList(user.id).filter(i => !i.checked);
+        const checked: string[] = [];
+        const notFound: string[] = [];
+        for (const name of names) {
+          const lower = name.toLowerCase();
+          const found = pendingItems.find(i => i.name.toLowerCase().includes(lower) || lower.includes(i.name.toLowerCase()));
+          if (found && toggleShoppingItem(found.id, user.id)) checked.push(found.name);
+          else notFound.push(name);
+        }
+        await wppSend(from, replyGroceryItemChecked(checked, notFound));
+        break;
+      }
+
+      case "grocery_spend_query": {
+        const spend = getSpendByStore(user.id);
+        const totalSpent = spend.reduce((s, x) => s + x.total, 0);
+        await wppSend(from, replyGrocerySpend(spend, totalSpent));
+        break;
+      }
+
+      case "grocery_purchase": {
+        const { reply: groceryReply } = await beginSlotFill("grocery_purchase", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, groceryReply);
+        break;
+      }
+
+      case "employee_create": {
+        const { reply: employeeReply } = await beginSlotFill("employee_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, employeeReply);
+        break;
+      }
+
+      case "employee_list": {
+        const employees = getEmployeesByUser(user.id, "active");
+        const totalPayroll = getTotalPayroll(user.id);
+        await wppSend(from, replyEmployeeList(employees, totalPayroll));
+        break;
+      }
+
+      case "employee_update": {
+        const empKeyword = ai.keyword || ai.employee?.name || "";
+        const empTarget = empKeyword ? findEmployeeByName(user.id, empKeyword) : null;
+        if (!empTarget) { await wppSend(from, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista."); break; }
+        const empPatch: Partial<Employee> = {};
+        if (ai.employee?.role) empPatch.role = cap(ai.employee.role);
+        if (ai.employee?.salary && ai.employee.salary > 0) empPatch.salary = ai.employee.salary;
+        if (ai.employee?.phone) empPatch.phone = ai.employee.phone;
+        if (ai.employee?.email) empPatch.email = ai.employee.email;
+        if (Object.keys(empPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o salário da Ana para 2200\"_"); break; }
+        const empUpdated = updateEmployee(empTarget.id, user.id, empPatch);
+        if (empUpdated) await wppSend(from, replyEmployeeUpdated(empUpdated));
+        break;
+      }
+
+      case "employee_deactivate": {
+        const deactKeyword = ai.keyword || ai.employee?.name || "";
+        const deactTarget = deactKeyword ? findEmployeeByName(user.id, deactKeyword) : null;
+        if (!deactTarget) { await wppSend(from, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista."); break; }
+        const deactivated = updateEmployee(deactTarget.id, user.id, { status: "inactive" });
+        if (deactivated) await wppSend(from, replyEmployeeDeactivated(deactivated));
         break;
       }
 
