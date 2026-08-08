@@ -8,8 +8,11 @@ import {
   parseAmountBR,
 } from "./pending-actions";
 import { createRecurring, type RecurringTransaction } from "./recurring";
-import { todayStrBR } from "./date-br";
-import { replyRecurringCreated } from "./bot-replies";
+import { createGoal, getGoalProgress } from "./goals";
+import { createAppointment } from "./agenda";
+import { todayStrBR, spToUTC } from "./date-br";
+import { replyRecurringCreated, replyAgendaCreated } from "./bot-replies";
+import { formatCurrency } from "./finances";
 
 /**
  * Motor genérico de "perguntar o que falta" (slot-filling), usado quando uma
@@ -235,6 +238,51 @@ export function slotCountOrForever(): SlotDef["parse"] {
   };
 }
 
+/** Texto livre, com tamanho mínimo — usado pra título/nome quando a IA não
+ *  conseguiu extrair nada da mensagem original. */
+export function slotText(min = 2): SlotDef["parse"] {
+  return (text) => {
+    const t = text.trim();
+    return t.length >= min ? { ok: true, value: t } : { ok: false };
+  };
+}
+
+/** Data em YYYY-MM-DD a partir de "hoje", "amanhã", "DD/MM" ou "DD/MM/AAAA". */
+export function slotDate(): SlotDef["parse"] {
+  return (text) => {
+    const t = text.trim().toLowerCase();
+    const today = todayStrBR();
+    if (/^hoje$/.test(t)) return { ok: true, value: today };
+    if (/^amanh[ãa]$/.test(t)) {
+      const d = new Date(today + "T12:00:00-03:00");
+      d.setDate(d.getDate() + 1);
+      return { ok: true, value: d.toISOString().slice(0, 10) };
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return { ok: true, value: t };
+    const m = t.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?$/);
+    if (m) {
+      const day = m[1].padStart(2, "0");
+      const mon = m[2].padStart(2, "0");
+      const year = m[3] || today.slice(0, 4);
+      return { ok: true, value: `${year}-${mon}-${day}` };
+    }
+    return { ok: false };
+  };
+}
+
+/** Horário em HH:MM a partir de "14h", "14:30", "9h30", "às 9". */
+export function slotTime(): SlotDef["parse"] {
+  return (text) => {
+    const t = text.trim().toLowerCase();
+    const m = t.match(/(\d{1,2})[:h](\d{2})?/);
+    if (!m) return { ok: false };
+    const hh = parseInt(m[1], 10);
+    const mm = parseInt(m[2] || "0", 10);
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return { ok: false };
+    return { ok: true, value: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}` };
+  };
+}
+
 // ── Fluxos ──
 
 // Preenchido progressivamente por fase — apenas os intents já migrados para
@@ -332,5 +380,139 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
     },
 
     giveUp: () => `❌ Não consegui cadastrar — faltou o valor. Tente de novo, ex: _"academia 100 por mês"_.`,
+  },
+
+  goal_create: {
+    seed(ai, ctx) {
+      const g = ai.goal;
+      return {
+        title: g?.title ? cap(g.title.trim()) : "",
+        targetAmount: g?.targetAmount && g.targetAmount > 0 ? g.targetAmount : undefined,
+        currentAmount: g?.currentAmount ?? 0,
+        deadline: g?.deadline,
+        category: g?.category,
+        mode: g?.mode ?? ctx.mode,
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      const q: string[] = [];
+      if (!draft.title) q.push("title");
+      if (!(typeof draft.targetAmount === "number" && draft.targetAmount > 0)) q.push("targetAmount");
+      return q;
+    },
+
+    slots: {
+      title: {
+        key: "title",
+        label: "nome",
+        parse: slotText(2),
+        ask: () => `🎯 Qual o nome da meta?`,
+        // sem fallback — slot duro, um título vazio quebra a listagem de metas
+      },
+      targetAmount: {
+        key: "targetAmount",
+        label: "valor alvo",
+        parse: slotMoney(),
+        ask: () => `💰 Qual o valor alvo?`,
+        // sem fallback — slot duro
+      },
+    },
+
+    finalize(draft, ctx) {
+      const goal = createGoal({
+        userId: ctx.userId,
+        title: draft.title as string,
+        targetAmount: draft.targetAmount as number,
+        currentAmount: (draft.currentAmount as number) || 0,
+        deadline: draft.deadline as string | undefined,
+        category: (draft.category as string) || "Geral",
+        mode: (draft.mode as "personal" | "business") || ctx.mode,
+        status: "active",
+      });
+      const pct = getGoalProgress(goal);
+      const currentLine = goal.currentAmount > 0 ? `\n💵 Já guardado: ${formatCurrency(goal.currentAmount)}` : "";
+      const deadlineLine = goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : "";
+      return `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoria: ${goal.category}${deadlineLine}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`;
+    },
+
+    giveUp: () => `❌ Não consegui criar a meta — faltou o nome ou o valor. Tente de novo, ex: _"quero guardar 3000 para viagem"_.`,
+  },
+
+  agenda_create: {
+    seed(ai) {
+      const d = ai.agendaData;
+      return {
+        title: d?.title ? cap(d.title.trim()) : "",
+        description: d?.description,
+        location: d?.location,
+        startDate: d?.startDate,
+        startTime: d?.startTime,
+        endDate: d?.endDate,
+        endTime: d?.endTime,
+        allDay: d?.allDay ?? false,
+        repeat: d?.repeat ?? "none",
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      const q: string[] = [];
+      if (!draft.title) q.push("title");
+      if (!draft.startDate) q.push("startDate");
+      if (!draft.startTime && !draft.allDay) q.push("startTime");
+      return q;
+    },
+
+    slots: {
+      title: {
+        key: "title",
+        label: "título",
+        parse: slotText(2),
+        ask: () => `🗓️ Qual o título do compromisso?`,
+        // sem fallback — slot duro
+      },
+      startDate: {
+        key: "startDate",
+        label: "data",
+        parse: slotDate(),
+        ask: () => `📅 Para quando? _(ex: "amanhã", "15/08")_`,
+        // sem fallback — slot duro
+      },
+      startTime: {
+        key: "startTime",
+        label: "horário",
+        parse: (text, draft, ctx) => {
+          if (/^dia todo$/i.test(text.trim())) return { ok: true, value: "ALLDAY" };
+          return slotTime()(text, draft, ctx);
+        },
+        ask: () => `🕒 Que horas? _(ou responda *dia todo*)_`,
+        fallback: () => "ALLDAY", // sem resposta clara, vira evento de dia inteiro em vez de meia-noite
+        apply: (value, draft) => {
+          if (value === "ALLDAY") draft.allDay = true;
+          else draft.startTime = value;
+        },
+      },
+    },
+
+    finalize(draft, ctx) {
+      const startTime = draft.allDay ? "00:00" : (draft.startTime as string) || "00:00";
+      const startAt = spToUTC(`${draft.startDate}T${startTime}:00`);
+      const endAt = draft.endDate ? spToUTC(`${draft.endDate}T${(draft.endTime as string) || "00:00"}:00`) : undefined;
+      const apt = createAppointment({
+        userId: ctx.userId,
+        title: draft.title as string,
+        description: draft.description as string | undefined,
+        location: draft.location as string | undefined,
+        startAt,
+        endAt,
+        allDay: (draft.allDay as boolean) ?? false,
+        repeat: (draft.repeat as "none" | "daily" | "weekly" | "monthly" | "yearly") ?? "none",
+        status: "scheduled",
+        source: "whatsapp",
+      });
+      return replyAgendaCreated(apt);
+    },
+
+    giveUp: () => `❌ Não consegui agendar — faltou o título ou a data. Tente de novo, ex: _"agendar reunião amanhã às 14h"_.`,
   },
 };

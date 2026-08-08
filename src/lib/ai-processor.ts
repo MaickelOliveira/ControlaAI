@@ -16,12 +16,15 @@ export type Intent =
   | "task_delete"
   | "reminder_set"
   | "reminder_list"
+  | "reminder_update"
+  | "reminder_delete"
   | "mode_switch"
   | "balance_query"
   | "goal_create"
   | "goal_add"
   | "goal_query"
   | "goal_complete"
+  | "goal_cancel"
   | "vehicle_expense"
   | "vehicle_query"
   | "recurring_create"
@@ -35,8 +38,10 @@ export type Intent =
   | "agenda_update"
   | "agenda_delete"
   | "agenda_add_meet"
+  | "agenda_done"
   | "meet_create"
   | "finance_detail"
+  | "finance_confirm_pending"
   | "how_to"
   | "help"
   | "unknown";
@@ -78,9 +83,10 @@ export type TaskData = {
 };
 
 export type ReminderData = {
-  message: string;
-  scheduledAt: string;
-  repeat: "none" | "daily" | "weekly" | "monthly";
+  // obrigatórios em reminder_set; em reminder_update só os campos que mudaram
+  message?: string;
+  scheduledAt?: string;
+  repeat?: "none" | "daily" | "weekly" | "monthly";
 };
 
 export type MeetData = {
@@ -248,15 +254,21 @@ INTENÇÕES POSSÍVEIS:
   Em ambos os casos, inclua "financeType" com "expense" ou "income" conforme o verbo da REGRA CRÍTICA abaixo (padrão "expense"). ⚠️ Se a pergunta mencionar um PERÍODO diferente do mês atual (ex: "mês passado", "semana passada", "essa semana", "primeira semana do mês", "esse ano"), inclua "period" usando EXATAMENTE os valores da lista de períodos pré-calculados no início de cada mensagem — NUNCA calcule essas datas você mesmo. Sem período mencionado, não inclua "period" (o sistema usa o mês atual por padrão).
 - finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
+- finance_confirm_pending: confirmar/antecipar um lançamento AGENDADO (data futura, ainda não contabilizado) antes da data chegar sozinha ("já paguei aquela conta que agendei", "confirma o pagamento do aluguel que tá agendado", "antecipa o lançamento de X"). Use "keyword" com o termo de busca do lançamento.
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
-- task_create: criar uma tarefa
-- task_update: atualizar/concluir uma tarefa
+- task_create: criar uma tarefa ("cria uma tarefa", "lembra de", "preciso fazer", "anota a tarefa"). Extraia SEMPRE que possível: "priority" ("high" se a mensagem disser "urgente"/"importante"/"prioridade"/"o quanto antes"; "low" se disser "sem pressa"/"quando der"/"não urgente"; senão "medium"); "dueDate" (YYYY-MM-DD, se a mensagem mencionar um prazo — use o calendário do início da mensagem pra resolver dias da semana).
+- task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título) pra identificar qual.
+- task_delete: apagar/excluir uma tarefa ("apaga a tarefa 3", "remove a tarefa de ligar pro cliente", "deleta essa tarefa"). Use "taskNumber" ou "title" igual ao task_update.
 - task_query: listar tarefas
 - reminder_set: criar lembrete agendado
+- reminder_list: listar lembretes ativos ("meus lembretes", "quais lembretes eu tenho", "o que eu tenho agendado pra me avisar")
+- reminder_update: editar um lembrete existente — mensagem, data/hora ou repetição ("muda o lembrete do remédio pra 8h", "troca o lembrete da conta de luz pra todo dia 5"). Use "keyword" com o termo de busca e "reminder" com os novos valores (só os campos que mudaram).
+- reminder_delete: cancelar/apagar um lembrete ("cancela o lembrete do remédio", "apaga o lembrete da reunião", "não precisa mais me lembrar disso"). Use "keyword" com o termo de busca.
 - goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para", "quero juntar X para Y", "quero guardar X para Z"). SEMPRE inclua "title" com o nome da meta e "targetAmount" com o valor alvo. Se o usuário mencionar "já tenho X", "ja tenho X", "tenho X guardado", inclua "currentAmount" com esse valor. Se o valor alvo não for especificado, use targetAmount: 0 (o sistema pedirá ao usuário).
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
 - goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
 - goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo")
+- goal_cancel: cancelar/desistir de uma meta ("cancela a meta da viagem", "desisti de juntar pra isso", "apaga essa meta"). Use "keyword" com o nome da meta.
 - recurring_create: cadastrar despesa ou receita parcelada ou recorrente ("comprei geladeira em 10x", "pago netflix todo mês", "recebo salário todo dia 10", "parcela do carro", "assinatura mensal"). Use recurrenceType: "installment" para parcelamentos (compra dividida em N vezes, tem totalInstallments) e "recurring" para recorrentes contínuos (assinatura, mensalidade, conta fixa). Campos que ajudam MUITO se a mensagem trouxer (extraia sempre que possível, mas não invente se não tiver pista):
   • "dayOfMonth": o dia do mês em que vence, se mencionado (ex: "todo dia 10" → dayOfMonth: 10). Sem isso o sistema pergunta ao usuário, porque o dia do vencimento muda quando o cron avisa.
   • "repeatUnit": "monthly" (padrão), "weekly", "daily" ou "yearly" — só usa algo diferente de monthly se a mensagem disser claramente ("toda semana" → weekly, "todo ano"/"anual" → yearly).
@@ -269,8 +281,9 @@ INTENÇÕES POSSÍVEIS:
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
-- agenda_create: agendar um compromisso, reunião, consulta ou evento com data e hora ("agendar reunião amanhã às 14h", "consulta médica sexta às 10h", "evento no sábado às 9h"). Use "agendaData" com título, startDate, startTime e opcionalmente location, endDate, endTime, repeat.
+- agenda_create: agendar um compromisso, reunião, consulta ou evento com data e hora ("agendar reunião amanhã às 14h", "consulta médica sexta às 10h", "evento no sábado às 9h"). Use "agendaData" com título, startDate, startTime e opcionalmente location, description, endDate, endTime, repeat, allDay (true se for um evento de dia inteiro, sem horário específico, ex: "aniversário dia 15" sem hora).
 - agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
+- agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com o termo de busca. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
 - agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com o termo de busca e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
 - agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com o termo de busca.
 - agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com o nome/descrição do compromisso. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
@@ -452,6 +465,27 @@ OU para atualização de tarefa:
   }
 }
 
+OU para apagar tarefa ("apaga a tarefa 3"):
+{
+  "intent": "task_delete",
+  "confidence": 0.9,
+  "task": {
+    "taskNumber": 3,
+    "title": "",
+    "priority": "medium"
+  }
+}
+
+Exemplo apagar tarefa por título ("remove a tarefa de ligar pro cliente"):
+{
+  "intent": "task_delete",
+  "confidence": 0.85,
+  "task": {
+    "title": "ligar pro cliente",
+    "priority": "medium"
+  }
+}
+
 OU para lembrete:
 {
   "intent": "reminder_set",
@@ -461,6 +495,31 @@ OU para lembrete:
     "scheduledAt": "2026-07-05T09:00:00",
     "repeat": "monthly"
   }
+}
+
+OU para listar lembretes ("meus lembretes"):
+{
+  "intent": "reminder_list",
+  "confidence": 0.9
+}
+
+OU para editar lembrete ("muda o lembrete do remédio pra 8h"):
+{
+  "intent": "reminder_update",
+  "confidence": 0.9,
+  "keyword": "remédio",
+  "reminder": {
+    "message": "",
+    "scheduledAt": "2026-07-05T08:00:00",
+    "repeat": "daily"
+  }
+}
+
+OU para cancelar lembrete ("cancela o lembrete do remédio"):
+{
+  "intent": "reminder_delete",
+  "confidence": 0.9,
+  "keyword": "remédio"
 }
 
 OU para editar lançamento (finance_edit) — "keyword" é o TERMO DE BUSCA do lançamento original, "finance" contém os NOVOS VALORES:
@@ -580,6 +639,13 @@ OU para adicionar valor em meta existente (goal_add) — "title" é o nome da me
     "title": "viagem",
     "targetAmount": 900.00
   }
+}
+
+OU para cancelar meta ("cancela a meta da viagem"):
+{
+  "intent": "goal_cancel",
+  "confidence": 0.9,
+  "keyword": "viagem"
 }
 
 OU para gasto de veículo (vehicle_expense) — SEMPRE inclua "amount" com o valor e "expenseType" correto:
@@ -813,6 +879,13 @@ OU para cancelar compromisso ("cancelar o almoço de sexta") — "keyword" é o 
   "keyword": "almoço"
 }
 
+OU para marcar compromisso como realizado ("já fiz a reunião com o cliente"):
+{
+  "intent": "agenda_done",
+  "confidence": 0.9,
+  "keyword": "reunião com o cliente"
+}
+
 OU para adicionar Meet a compromisso existente ("coloca via meet essa reunião", "adiciona meet no compromisso de sexta"):
 {
   "intent": "agenda_add_meet",
@@ -887,6 +960,13 @@ OU para análise de gastos ("no que eu gastei mais", "me ajude a economizar"):
 {
   "intent": "finance_analysis",
   "confidence": 0.9
+}
+
+OU para confirmar lançamento agendado antes da data ("já paguei aquele aluguel que tinha agendado"):
+{
+  "intent": "finance_confirm_pending",
+  "confidence": 0.9,
+  "keyword": "aluguel"
 }
 
 OU genérico:
