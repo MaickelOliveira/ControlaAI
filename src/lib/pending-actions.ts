@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
 import { VehicleExpenseType } from "./vehicles";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
+import type { RecurringData } from "./ai-processor";
 
 const FILE = path.join(process.cwd(), "data", "pending.json");
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
@@ -137,7 +138,22 @@ export type PendingSlotFill = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill;
+/** Pergunta "para qual funcionário é esse pagamento?" quando recurring_create
+ *  identifica um pagamento de funcionário (employeePayment) mas não dá pra
+ *  saber sozinho qual — mesmo padrão de PendingVehicleSelection, só que aqui
+ *  o alvo final é retomar recurring_create com a descrição já vinculada. */
+export type PendingEmployeePaymentSelect = {
+  type: "employee_payment_select";
+  phone: string;
+  userId: string;
+  mode: string;
+  recurringData: RecurringData;
+  originalText: string;
+  employees: Array<{ id: string; name: string; role: string }>;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect;
 
 type Store = Record<string, PendingAction>;
 
@@ -169,7 +185,8 @@ type PendingActionInput =
   | Omit<PendingWppName, "phone" | "expiresAt">
   | Omit<PendingReceiptSave, "phone" | "expiresAt">
   | Omit<PendingInvoiceImport, "phone" | "expiresAt">
-  | Omit<PendingSlotFill, "phone" | "expiresAt">;
+  | Omit<PendingSlotFill, "phone" | "expiresAt">
+  | Omit<PendingEmployeePaymentSelect, "phone" | "expiresAt">;
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   recurring_confirmation: TTL_RECURRING_MS,
