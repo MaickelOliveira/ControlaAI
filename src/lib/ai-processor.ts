@@ -46,6 +46,7 @@ export type GoalData = {
   currentAmount?: number;
   deadline?: string;
   category?: string;
+  mode?: "personal" | "business"; // detectado automaticamente
 };
 
 export type VehicleData = {
@@ -54,6 +55,7 @@ export type VehicleData = {
   amount?: number;
   km?: number;
   description?: string;
+  mode?: "personal" | "business"; // detectado automaticamente
 };
 
 export type FinanceData = {
@@ -71,6 +73,7 @@ export type TaskData = {
   dueDate?: string;
   taskNumber?: number;
   newStatus?: "pending" | "in_progress" | "completed";
+  mode?: "personal" | "business"; // detectado automaticamente
 };
 
 export type ReminderData = {
@@ -113,7 +116,7 @@ export type RecurringData = {
   dayOfMonth?: number;
   startDate?: string;
   category?: string;
-  mode?: string;
+  mode?: "personal" | "business"; // detectado automaticamente
 };
 
 export type AIResult = {
@@ -206,11 +209,12 @@ Exemplo: "gastei 500 com vendedor" → type: "expense", category: "Outros"
 CATEGORIAS DE DESPESA: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
 CATEGORIAS DE RECEITA: Salário, Freelance, Vendas, Investimentos, Aluguel, Serviços, Reembolso, Outros
 
-MODO (business ou personal):
-- Detecte "mode" no finance baseado no contexto da mensagem:
-- business: mensagem contém "modo empresa", "empresa", "FGTS", "INSS", "funcionário", "funcionarios", "salário funcionário", "folha", "fornecedor", "marketing", "nota fiscal", "cliente", "receita empresa", "faturamento", ou categoria é Funcionários/Marketing/Fornecedores/Impostos de empresa
-- personal: mensagem contém "modo pessoal", "pessoal", ou é uma despesa/receita pessoal clara (mercado, salário, médico, lazer etc.)
-- Se não identificado claramente, não inclua o campo "mode" no JSON (deixe undefined).
+MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, finance_edit, task_create, goal_create, vehicle_expense, recurring_create, recurring_edit. Sempre que a intenção criar/editar algo, tente identificar o campo "mode":
+1. PRIORIDADE MÁXIMA — pedido explícito: se a mensagem disser "modo empresa"/"empresarial"/"para empresa"/"na empresa" → mode: "business". Se disser "modo pessoal"/"pessoal" → mode: "personal". Isso vale mesmo que o conteúdo pareça sugerir o modo contrário — o pedido explícito do usuário sempre vence.
+2. Sem pedido explícito, infira pelo CONTEÚDO/CONTEXTO:
+   - business: menções a FGTS, INSS, funcionário(s), salário de funcionário, folha, fornecedor, marketing, nota fiscal, cliente, faturamento, ou nome de projeto/cliente que soe como trabalho (ex: "construir site [nome de cliente]", "reunião com [cliente]", "entregar proposta para [empresa]"), ou categoria Funcionários/Marketing/Fornecedores/Impostos de empresa
+   - personal: mercado, casa, família, lazer, saúde pessoal, contas domésticas etc. — despesa/receita/tarefa/meta claramente pessoal
+3. Se realmente não der para identificar nada (ambíguo, sem pistas), não inclua o campo "mode" no JSON — o sistema usa o modo ativo do usuário como padrão.
 
 Para datas relativas: use SEMPRE o calendário acima para resolver dias da semana — não calcule por conta própria. Ex: se hoje é domingo e o usuário diz "terça-feira", pegue a data de terça-feira listada acima.
 
@@ -289,7 +293,41 @@ OU para tarefa:
   "task": {
     "title": "Ligar para o cliente João",
     "priority": "high",
-    "dueDate": "2026-07-04"
+    "dueDate": "2026-07-04",
+    "mode": "business"
+  }
+}
+
+Exemplo tarefa com modo pedido explicitamente ("cadastra no modo empresa a tarefa ligar pro fornecedor"):
+{
+  "intent": "task_create",
+  "confidence": 0.9,
+  "task": {
+    "title": "Ligar pro fornecedor",
+    "priority": "medium",
+    "mode": "business"
+  }
+}
+
+Exemplo tarefa com modo identificado pelo contexto, sem pedido explícito ("agende uma tarefa construir site Vitalli" — nome de projeto/cliente indica trabalho):
+{
+  "intent": "task_create",
+  "confidence": 0.85,
+  "task": {
+    "title": "Construir site Vitalli",
+    "priority": "medium",
+    "mode": "business"
+  }
+}
+
+Exemplo tarefa claramente pessoal, sem pedido explícito ("me lembra de levar o cachorro no veterinário"):
+{
+  "intent": "task_create",
+  "confidence": 0.9,
+  "task": {
+    "title": "Levar o cachorro no veterinário",
+    "priority": "medium",
+    "mode": "personal"
   }
 }
 
@@ -395,6 +433,18 @@ Exemplo goal_create com valor já guardado ("crie a meta carro 50000 ja tenho 15
   }
 }
 
+Exemplo goal_create no modo empresa ("cria uma meta empresa de 10000 pra reformar o escritório"):
+{
+  "intent": "goal_create",
+  "confidence": 0.9,
+  "goal": {
+    "title": "Reformar o escritório",
+    "targetAmount": 10000.00,
+    "category": "Geral",
+    "mode": "business"
+  }
+}
+
 Exemplo goal_create sem valor informado ("crie uma meta pra mim") — SEM valor alvo, use targetAmount: 0:
 {
   "intent": "goal_create",
@@ -451,6 +501,19 @@ Exemplo IPVA ("paguei 800 de IPVA"):
   }
 }
 
+Exemplo veículo da empresa ("no modo empresa, gastei 200 de combustível na Van"):
+{
+  "intent": "vehicle_expense",
+  "confidence": 0.95,
+  "vehicle": {
+    "amount": 200.00,
+    "expenseType": "fuel",
+    "description": "combustível",
+    "name": "Van",
+    "mode": "business"
+  }
+}
+
 OU para parcelamento ("comprei geladeira 5000 em 10x de 500 todo dia 10"):
 {
   "intent": "recurring_create",
@@ -494,6 +557,22 @@ OU para recorrente mensal receita ("recebo salário todo dia 10, 3000"):
     "repeatUnit": "monthly",
     "dayOfMonth": 10,
     "category": "Salário"
+  }
+}
+
+Exemplo recorrente da empresa ("pago o funcionário 2000 todo dia 5" — funcionário indica modo empresa):
+{
+  "intent": "recurring_create",
+  "confidence": 0.9,
+  "recurring": {
+    "type": "expense",
+    "description": "Funcionário",
+    "amount": 2000,
+    "recurrenceType": "recurring",
+    "repeatUnit": "monthly",
+    "dayOfMonth": 5,
+    "category": "Funcionários",
+    "mode": "business"
   }
 }
 

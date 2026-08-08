@@ -14,6 +14,7 @@ export default function ClienteConfigPage() {
   const [nameInput, setNameInput] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [botNumber, setBotNumber] = useState<string>("");
+  const [botConnected, setBotConnected] = useState<boolean | null>(null);
   const [pwForm, setPwForm] = useState<PwForm>({ current: "", next: "", confirm: "" });
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pwLoading, setPwLoading] = useState(false);
@@ -22,7 +23,7 @@ export default function ClienteConfigPage() {
 
   useEffect(() => {
     fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], wppPhoneNames: d.user.wppPhoneNames ?? {}, maxWppPhones: d.user.maxWppPhones ?? 1 }); });
-    fetch("/api/bot-info").then(r => r.json()).then(d => { if (d.wppBotNumber) setBotNumber(d.wppBotNumber); });
+    fetch("/api/bot-info").then(r => r.json()).then(d => { if (d.wppBotNumber) setBotNumber(d.wppBotNumber); setBotConnected(!!d.connected); });
     fetch("/api/google/status").then(r => r.json()).then(d => setGoogleStatus(d)).catch(() => {});
   }, []);
 
@@ -112,9 +113,19 @@ export default function ClienteConfigPage() {
 
         {/* WhatsApp — 2/3 */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-          <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
-            <span className="text-xl">📱</span> Vincular WhatsApp ao Bot
-          </h2>
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <h2 className="font-semibold text-slate-800 flex items-center gap-2 text-base">
+              <span className="text-xl">📱</span> Vincular WhatsApp ao Bot
+            </h2>
+            {botConnected !== null && (
+              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                botConnected ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${botConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+                {botConnected ? "Bot conectado" : "Bot desconectado"}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-slate-400 mb-5">
             Vincule seu número para usar o assistente IA pelo WhatsApp. O sistema identifica você automaticamente.
           </p>

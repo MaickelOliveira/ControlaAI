@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getConfig, saveConfig } from "@/lib/whatsapp-config";
 import { getInstancePhone } from "@/lib/evolution";
+import { checkConnection } from "@/lib/whatsapp";
 
 export async function detectBotNumber(): Promise<string> {
   const cfg = getConfig();
@@ -21,5 +22,6 @@ export async function GET() {
   const cfg = getConfig();
   let botNumber = cfg.wppBotNumber ?? "";
   if (!botNumber) botNumber = await detectBotNumber();
-  return NextResponse.json({ wppBotNumber: botNumber });
+  const status = await checkConnection().catch(() => "UNKNOWN");
+  return NextResponse.json({ wppBotNumber: botNumber, connected: status === "CONNECTED" });
 }

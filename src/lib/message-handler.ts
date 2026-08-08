@@ -834,7 +834,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "task_create": {
         if (!ai.task) { await wppSend(from, replyUnknown(messageText)); break; }
-        const task = createTask({ userId: user.id, title: cap(ai.task.title), priority: ai.task.priority || "medium", dueDate: ai.task.dueDate, status: "pending", mode });
+        const taskMode = ai.task.mode || mode;
+        const task = createTask({ userId: user.id, title: cap(ai.task.title), priority: ai.task.priority || "medium", dueDate: ai.task.dueDate, status: "pending", mode: taskMode });
         await wppSend(from, replyTaskCreated(task));
         break;
       }
@@ -876,7 +877,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         const goalTitle = cap((ai.goal.title || "").trim() || messageText.slice(0, 60));
         const goalCurrentAmount = Number(ai.goal.currentAmount) || 0;
-        const goal = createGoal({ userId: user.id, title: goalTitle, targetAmount: ai.goal.targetAmount, currentAmount: goalCurrentAmount, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode, status: "active" });
+        const goalMode = ai.goal.mode || mode;
+        const goal = createGoal({ userId: user.id, title: goalTitle, targetAmount: ai.goal.targetAmount, currentAmount: goalCurrentAmount, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode: goalMode, status: "active" });
         const pct = getGoalProgress(goal);
         const currentLine = goalCurrentAmount > 0 ? `\n💵 Já guardado: ${formatCurrency(goalCurrentAmount)}` : "";
         await wppSend(from, `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoria: ${goal.category}${goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : ""}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`);
@@ -966,19 +968,20 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const vDate = now.toISOString().slice(0, 10);
         const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
 
-        const allVehicles = getVehiclesByUser(user.id, mode);
+        const vehicleMode = ai.vehicle?.mode || mode;
+        const allVehicles = getVehiclesByUser(user.id, vehicleMode);
 
         // Sem veículos → registra como despesa financeira
         if (allVehicles.length === 0) {
-          const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode, source: "whatsapp", registeredBy: from });
-          const bal = getBalance(user.id, mode, year, month).balance;
+          const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
+          const bal = getBalance(user.id, vehicleMode, year, month).balance;
           await wppSend(from, `${replyFinanceRegistered(f, bal)}\n\n💡 _Dica: Cadastre seu veículo no dashboard → Veículos para controlar gastos separadamente!_`);
           break;
         }
 
         // Identifica veículo pelo nome mencionado na mensagem
         let targetVehicle = ai.vehicle?.name
-          ? findVehicleByName(user.id, ai.vehicle.name, mode)
+          ? findVehicleByName(user.id, ai.vehicle.name, vehicleMode)
           : null;
 
         // Um único veículo → registra direto
@@ -991,7 +994,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           if (exp) {
             const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
             const newExp = exp.expenses[exp.expenses.length - 1];
-            const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: vCatMap[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode, source: "whatsapp", registeredBy: from });
+            const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: vCatMap[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
             setExpenseFinanceId(targetVehicle.id, newExp.id, f.id);
             const total = getVehicleTotalExpenses(exp);
             await wppSend(from, `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
@@ -1002,7 +1005,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Múltiplos veículos → pergunta qual
         const expenseData = { amount: vAmount, expenseType: vType, description: vDesc, km: vKm, date: vDate };
         const vehicleList = allVehicles.map(v => ({ id: v.id, brand: v.brand, model: v.model, year: v.year }));
-        setPendingAction(from, { type: "vehicle_selection", userId: user.id, mode, expenseData, vehicles: vehicleList });
+        setPendingAction(from, { type: "vehicle_selection", userId: user.id, mode: vehicleMode, expenseData, vehicles: vehicleList });
 
         let msg = `🚗 Você tem ${allVehicles.length} veículos cadastrados. Em qual registrar *${formatCurrency(vAmount)}* de ${vDesc}?\n\n`;
         allVehicles.forEach((v, i) => { msg += `*${i + 1}.* ${v.brand} ${v.model} (${v.year})${v.plate ? ` — ${v.plate}` : ""}\n`; });

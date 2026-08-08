@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { addFinance, getFinancesByUser, getBalance } from "@/lib/finances";
+import { addFinance, getFinancesByUser, getFinancesInRange, getBalance, isPostedFinance } from "@/lib/finances";
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,6 +9,22 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get("mode") as "personal" | "business" | undefined;
+    const from = searchParams.get("from") || undefined;
+    const to = searchParams.get("to") || undefined;
+
+    if (from || to) {
+      // Filtro de período customizado (Dashboard/Finanças com filtros ativos)
+      // — saldo calculado a partir do MESMO array retornado, pra cards,
+      // gráfico de categoria e extrato nunca terem escopos de data diferentes.
+      const finances = getFinancesInRange(session.sub, mode || undefined, from, to)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const posted = finances.filter(isPostedFinance);
+      const income = posted.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
+      const expense = posted.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
+      return NextResponse.json({ finances, balance: { income, expense, balance: income - expense } });
+    }
+
+    // Sem período — comportamento padrão (mês atual), mantido pra quem não filtra.
     const finances = getFinancesByUser(session.sub, mode || undefined)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
