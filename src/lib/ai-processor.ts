@@ -111,6 +111,10 @@ export type RecurringData = {
   amount: number;
   totalAmount?: number;
   totalInstallments?: number;
+  /** true SÓ quando o usuário disser explicitamente que não tem fim ("para
+   *  sempre", "vitalício", "sem prazo") — evita perguntar de novo o que já
+   *  foi dito. Ausente/false não significa "com prazo", só "não afirmado". */
+  lifetime?: boolean;
   recurrenceType: "installment" | "recurring";
   repeatUnit: "monthly" | "weekly" | "daily" | "yearly";
   dayOfMonth?: number;
@@ -135,6 +139,7 @@ export type AIResult = {
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
   personName?: string; // nome de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou")
   category?: string; // categoria específica perguntada em finance_query/balance_query (ex: "quanto gastei com comida" → "Alimentação")
+  newDescription?: string; // finance_edit: novo texto da descrição, quando o usuário quer RENOMEAR o lançamento. Distinto de finance.description, que ecoa o lançamento encontrado e serve de busca.
   period?: { from?: string; to?: string }; // intervalo de datas (YYYY-MM-DD) para finance_query/balance_query/finance_detail/finance_analysis quando o período não é o mês atual (ex: "mês passado", "semana passada")
   response?: string; // resposta direta para how_to
   confidence: number;
@@ -206,7 +211,7 @@ ${periodsRef}
 
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular)
-- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
+- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria") — isso é usado em contas compartilhadas por várias pessoas da família, cada uma com seu próprio número de WhatsApp vinculado, para filtrar só os gastos registrados por aquela pessoa.
   ⚠️ DISTINÇÃO IMPORTANTE — categoria genérica vs comerciante/app específico:
@@ -224,7 +229,13 @@ INTENÇÕES POSSÍVEIS:
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
 - goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
 - goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo")
-- recurring_create: cadastrar despesa ou receita parcelada ou recorrente ("comprei geladeira em 10x", "pago netflix todo mês", "recebo salário todo dia 10", "parcela do carro", "assinatura mensal"). Use recurrenceType: "installment" para parcelamentos (tem totalInstallments) e "recurring" para recorrentes contínuos.
+- recurring_create: cadastrar despesa ou receita parcelada ou recorrente ("comprei geladeira em 10x", "pago netflix todo mês", "recebo salário todo dia 10", "parcela do carro", "assinatura mensal"). Use recurrenceType: "installment" para parcelamentos (compra dividida em N vezes, tem totalInstallments) e "recurring" para recorrentes contínuos (assinatura, mensalidade, conta fixa). Campos que ajudam MUITO se a mensagem trouxer (extraia sempre que possível, mas não invente se não tiver pista):
+  • "dayOfMonth": o dia do mês em que vence, se mencionado (ex: "todo dia 10" → dayOfMonth: 10). Sem isso o sistema pergunta ao usuário, porque o dia do vencimento muda quando o cron avisa.
+  • "repeatUnit": "monthly" (padrão), "weekly", "daily" ou "yearly" — só usa algo diferente de monthly se a mensagem disser claramente ("toda semana" → weekly, "todo ano"/"anual" → yearly).
+  • "totalInstallments": nº de parcelas (installment) OU nº de meses/ocorrências de um recorrente com PRAZO (ex: "academia por 12 meses", "assinatura por 6 meses" → recurrenceType: "recurring" + totalInstallments: 12/6 — NÃO "installment", já que não é uma compra parcelada). Se o recorrente não tiver prazo mencionado (a maioria dos casos: netflix, aluguel, salário), NÃO inclua "totalInstallments" — fica perpétuo.
+  • "lifetime": true SE E SOMENTE SE o usuário disser explicitamente que não tem fim ("para sempre", "vitalício", "sem prazo", "indefinidamente"). Isso evita que o sistema pergunte de novo algo que já foi respondido. Na dúvida (a maioria das mensagens não fala nada sobre prazo), NÃO inclua "lifetime" nem "totalInstallments" — o sistema pergunta se for realmente necessário.
+  • "startDate": data de início, se mencionada explicitamente (padrão é hoje).
+  • "totalAmount": valor total da compra, se mencionado (só faz sentido em installment; o sistema calcula sozinho se não vier).
 - recurring_query: ver lançamentos recorrentes/parcelados ("minhas parcelas", "contas recorrentes", "o que tenho parcelado", "meus recorrentes")
 - recurring_cancel: cancelar um recorrente/parcelado ("cancela a parcela da geladeira", "para o netflix", "remove o recorrente do aluguel")
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
@@ -440,6 +451,14 @@ OU para editar lançamento (finance_edit) — "keyword" é o TERMO DE BUSCA do l
   }
 }
 
+Exemplo renomear a descrição ("muda a descrição do ifood para almoço com cliente"):
+{
+  "intent": "finance_edit",
+  "confidence": 0.9,
+  "keyword": "ifood",
+  "newDescription": "almoço com cliente"
+}
+
 Exemplo onde a descrição do lançamento é uma palavra que também indica tipo ("corrija a receita para 2000 no modo pessoal"):
 {
   "intent": "finance_edit",
@@ -616,6 +635,22 @@ OU para recorrente mensal despesa ("pago netflix 55 todo mês"):
   }
 }
 
+Exemplo com prazo dito explicitamente como indefinido ("pago netflix 55 todo mês dia 10, para sempre" — "lifetime": true porque o usuário AFIRMOU que não tem fim):
+{
+  "intent": "recurring_create",
+  "confidence": 0.95,
+  "recurring": {
+    "type": "expense",
+    "description": "Netflix",
+    "amount": 55,
+    "recurrenceType": "recurring",
+    "repeatUnit": "monthly",
+    "dayOfMonth": 10,
+    "lifetime": true,
+    "category": "Lazer"
+  }
+}
+
 OU para recorrente mensal receita ("recebo salário todo dia 10, 3000"):
 {
   "intent": "recurring_create",
@@ -628,6 +663,21 @@ OU para recorrente mensal receita ("recebo salário todo dia 10, 3000"):
     "repeatUnit": "monthly",
     "dayOfMonth": 10,
     "category": "Salário"
+  }
+}
+
+⚠️ Exemplo IMPORTANTE — recorrente com PRAZO não é parcelamento ("academia 100 por mês, por 12 meses"): a academia é uma mensalidade (recorrente), só que com data pra acabar — NÃO é uma compra dividida. Use recurrenceType "recurring" (não "installment") com totalInstallments indicando quantos meses:
+{
+  "intent": "recurring_create",
+  "confidence": 0.9,
+  "recurring": {
+    "type": "expense",
+    "description": "Academia",
+    "amount": 100,
+    "totalInstallments": 12,
+    "recurrenceType": "recurring",
+    "repeatUnit": "monthly",
+    "category": "Saúde"
   }
 }
 

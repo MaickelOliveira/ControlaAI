@@ -1,6 +1,6 @@
 import type { Finance } from "./finances";
 import type { Task } from "./tasks";
-import type { RecurringTransaction } from "./recurring";
+import { type RecurringTransaction, recurringRemaining } from "./recurring";
 import type { Appointment } from "./agenda";
 import type { Meet } from "./meets";
 import { formatCurrency } from "./finances";
@@ -241,7 +241,11 @@ export function buildRecurringNotification(r: RecurringTransaction): string {
 export function replyRecurringConfirmed(r: RecurringTransaction, _finance: Finance): string {
   const fmt = (v: number) => formatCurrency(v);
   if (r.status === "completed") {
-    return `Essa foi a última — todas as parcelas quitadas. 🎉\n\n💳 ${r.description}\nTotal pago: ${fmt((r.totalAmount ?? r.amount * (r.totalInstallments ?? 1)))}\n\nJá registrei o lançamento em Finanças.`;
+    const total = fmt(r.totalAmount ?? r.amount * (r.totalInstallments ?? 1));
+    if (r.recurrenceType === "installment") {
+      return `Essa foi a última — todas as parcelas quitadas. 🎉\n\n💳 ${r.description}\nTotal pago: ${total}\n\nJá registrei o lançamento em Finanças.`;
+    }
+    return `Essa foi a última — encerrei o acompanhamento de *${r.description}*. 🎉\n\n🔁 ${r.totalInstallments} de ${r.totalInstallments} ocorrências\nTotal: ${total}\n\nJá registrei o lançamento em Finanças.`;
   }
   const nextStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
   const typeLabel = r.type === "income" ? "recebimento" : "pagamento";
@@ -254,9 +258,10 @@ export function replyRecurringCreated(r: RecurringTransaction): string {
   const typeEmoji = r.type === "income" ? "💰" : "💸";
   const unitLabel: Record<string, string> = { monthly: "mensal", weekly: "semanal", daily: "diário", yearly: "anual" };
   if (r.recurrenceType === "installment") {
-    return `Cadastrado. Vou acompanhar cada parcela pra você.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/parcela × ${r.totalInstallments} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nAviso você às 20h de cada vencimento.`;
+    return `Cadastrado. Vou acompanhar cada parcela pra você.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/parcela × ${r.totalInstallments ?? "?"} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nAviso você às 20h de cada vencimento.`;
   }
-  return `Cadastrado. Fico de olho nos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}\n📅 Próximo vencimento: ${nextStr}\n\nAviso você às 20h de cada vencimento.`;
+  const termLine = r.totalInstallments ? ` · ${r.totalInstallments} vezes` : "";
+  return `Cadastrado. Fico de olho nos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso você às 20h de cada vencimento.`;
 }
 
 export function replyRecurringList(items: RecurringTransaction[]): string {
@@ -277,7 +282,9 @@ export function replyRecurringList(items: RecurringTransaction[]): string {
     msg += `*🔁 Recorrentes:*\n`;
     recurring.forEach(r => {
       const next = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
-      msg += `• ${r.description} — ${fmt(r.amount)} · próx. ${next}\n`;
+      const remaining = recurringRemaining(r);
+      const termLabel = remaining !== null ? ` · faltam ${remaining}` : "";
+      msg += `• ${r.description} — ${fmt(r.amount)} · próx. ${next}${termLabel}\n`;
     });
   }
   return msg.trim();

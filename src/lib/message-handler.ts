@@ -6,9 +6,10 @@ import { addFinance, getBalance, formatCurrency, findFinanceByDescription, delet
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
-import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId } from "@/lib/vehicles";
+import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo } from "@/lib/pending-actions";
-import { createRecurring, getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
+import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
+import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
 import { createMeetEvent } from "@/lib/google-meet";
 import { isConnected } from "@/lib/google-oauth";
@@ -20,7 +21,7 @@ import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyModeSwitch, replyHelp,
   replyTrialExpired, replyUnknown, replyLowConfidence,
-  replyRecurringConfirmed, replyRecurringCreated, replyRecurringList,
+  replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
   replyAgendaCreated, replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
   replyMeetCreated, replyMeetInvite, replyMeetAtaRequest, replyMeetAtaGenerated,
@@ -365,9 +366,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
         const exp = addVehicleExpense(chosen.id, user.id, { date: pending.expenseData.date, km: pending.expenseData.km, type: pending.expenseData.expenseType, amount: pending.expenseData.amount, description: pending.expenseData.description });
         if (exp) {
-          const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
           const newExp = exp.expenses[exp.expenses.length - 1];
-          const f = addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: vCatMap[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp", registeredBy: from });
+          const f = addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: VEHICLE_FINANCE_CATEGORY[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp", registeredBy: from });
           setExpenseFinanceId(chosen.id, newExp.id, f.id);
           const total = getVehicleTotalExpenses(exp);
           await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
@@ -537,6 +537,16 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
+    // ── Preenchimento de campos faltantes (slot filling genérico) ──
+    // Precisa estar depois de getPendingAction e antes de processMessage:
+    // uma resposta como "12" ou "dia 10" nunca pode chegar ao classificador.
+    if (pending?.type === "slot_fill" && pending.userId === user.id) {
+      const out = await runSlotFillTurn(pending, messageText, { user, userId: user.id, phone: from, mode });
+      if (out.reply) await wppSend(from, out.reply);
+      if (!out.fallThrough) return;
+      // fallThrough → usuário mudou de assunto; segue o turno normalmente com esta mensagem
+    }
+
     // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──
     if (getAiPaused(from)) {
       console.log(`[message-handler] from=${from} — IA pausada, não processa`);
@@ -648,6 +658,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.finance?.amount && ai.finance.amount > 0) editPatch.amount = ai.finance.amount;
         if (ai.finance?.category) editPatch.category = ai.finance.category;
         if (ai.finance?.date) editPatch.date = ai.finance.date;
+        if (ai.newDescription) editPatch.description = ai.newDescription;
 
         // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
         let editCandidates = keyword ? findFinanceByDescription(user.id, null, keyword) : [];
@@ -1048,9 +1059,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (targetVehicle) {
           const exp = addVehicleExpense(targetVehicle.id, user.id, { date: vDate, km: vKm, type: vType, amount: vAmount, description: vDesc });
           if (exp) {
-            const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
             const newExp = exp.expenses[exp.expenses.length - 1];
-            const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: vCatMap[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
+            const f = addFinance({ userId: user.id, type: "expense", amount: vAmount, category: VEHICLE_FINANCE_CATEGORY[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
             setExpenseFinanceId(targetVehicle.id, newExp.id, f.id);
             const total = getVehicleTotalExpenses(exp);
             await wppSend(from, `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
@@ -1087,23 +1097,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "recurring_create": {
         if (!ai.recurring) { await wppSend(from, replyUnknown(messageText)); break; }
-        const r = ai.recurring;
-        const rec = createRecurring({
-          userId: user.id,
-          type: r.type,
-          amount: r.amount,
-          totalAmount: r.totalAmount,
-          category: cap(r.category || (r.type === "income" ? "Outros" : "Outros")),
-          description: cap(r.description),
-          mode: (r.mode as "personal" | "business") || mode,
-          recurrenceType: r.recurrenceType,
-          totalInstallments: r.totalInstallments,
-          repeatUnit: r.repeatUnit || "monthly",
-          dayOfMonth: r.dayOfMonth,
-          startDate: r.startDate || todayStrBR(),
-          source: "whatsapp",
-        });
-        await wppSend(from, replyRecurringCreated(rec));
+        const { reply } = await beginSlotFill("recurring_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, reply);
         break;
       }
 

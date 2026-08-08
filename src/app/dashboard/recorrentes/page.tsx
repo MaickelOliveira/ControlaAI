@@ -113,7 +113,7 @@ export default function RecorrentesPage() {
       category: form.category,
       mode,
       recurrenceType: form.recurrenceType,
-      totalInstallments: form.recurrenceType === "installment" ? form.totalInstallments : undefined,
+      totalInstallments: form.totalInstallments || undefined,
       repeatUnit: form.repeatUnit,
       dayOfMonth: form.dayOfMonth || undefined,
       startDate: form.startDate,
@@ -224,6 +224,9 @@ export default function RecorrentesPage() {
                           <p className="font-medium text-slate-800">{item.description}</p>
                           <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{UNIT_LABEL[item.repeatUnit]}</span>
                           {item.dayOfMonth && <span className="text-xs text-slate-400">dia {item.dayOfMonth}</span>}
+                          {item.totalInstallments && (
+                            <span className="text-xs text-slate-400">{item.paidInstallments}/{item.totalInstallments} ocorrências</span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
                           Próx: <span className={clsx(isPast && "text-red-500 font-medium")}>{fmtDate(item.nextDueDate)}</span> · {item.category}
@@ -312,6 +315,11 @@ export default function RecorrentesPage() {
               {form.recurrenceType === "installment" && (
                 <input type="number" step="0.01" value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))}
                   placeholder="Valor total (opcional)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+              )}
+
+              {form.recurrenceType === "recurring" && (
+                <input type="number" min="1" value={form.totalInstallments} onChange={e => setForm(f => ({ ...f, totalInstallments: e.target.value }))}
+                  placeholder="Duração — nº de vezes (vazio = sem fim)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
               )}
 
               <div className="grid grid-cols-2 gap-3">

@@ -16,6 +16,13 @@ export type RecurringTransaction = {
   description: string;
   mode: "personal" | "business";
   recurrenceType: "installment" | "recurring";
+  /**
+   * Número total de ocorrências.
+   * • recurrenceType "installment": nº de parcelas — rotulado "(3/12)" no lançamento gerado.
+   * • recurrenceType "recurring": prazo OPCIONAL (ex: academia por 12 meses).
+   *   Encerra o acompanhamento ao atingir o total, SEM rótulo de parcela.
+   *   Ausente = perpétuo (comportamento padrão, retrocompatível com registros antigos).
+   */
   totalInstallments?: number;
   paidInstallments: number;
   repeatUnit: "daily" | "weekly" | "monthly" | "yearly";
@@ -126,7 +133,10 @@ export function confirmRecurring(id: string, userId: string): { updated: Recurri
   });
 
   rec.paidInstallments += 1;
-  if (rec.recurrenceType === "installment" && rec.totalInstallments && rec.paidInstallments >= rec.totalInstallments) {
+  // Encerra quando atinge o total, tanto em parcelamento quanto em recorrente
+  // com prazo definido (ex: "academia por 12 meses"). Recorrente sem
+  // totalInstallments continua perpétuo — compatível com registros antigos.
+  if (rec.totalInstallments && rec.paidInstallments >= rec.totalInstallments) {
     rec.status = "completed";
   } else {
     rec.nextDueDate = calcNextDueDate(rec.nextDueDate, rec.repeatUnit, rec.dayOfMonth);
@@ -179,6 +189,11 @@ export function findRecurringByDescription(userId: string, keyword: string): Rec
 
 export function getRecurringById(id: string, userId: string): RecurringTransaction | null {
   return load().find(r => r.id === id && r.userId === userId) ?? null;
+}
+
+/** Ocorrências restantes de um recorrente com prazo, ou null se perpétuo. */
+export function recurringRemaining(r: RecurringTransaction): number | null {
+  return r.totalInstallments ? Math.max(0, r.totalInstallments - r.paidInstallments) : null;
 }
 
 export function deleteRecurring(id: string, userId: string): boolean {
