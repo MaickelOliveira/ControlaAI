@@ -107,7 +107,37 @@ export type PendingInvoiceImport = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave | PendingInvoiceImport;
+/** Intents que podem abrir um fluxo de perguntas (slot-filling) quando a
+ *  mensagem original não trouxer todos os campos que mudam comportamento. */
+export type SlotFillIntent =
+  | "recurring_create"
+  | "goal_create"
+  | "agenda_create"
+  | "vehicle_expense"
+  | "vehicle_create"
+  | "employee_create"
+  | "grocery_purchase";
+
+export type PendingSlotFill = {
+  type: "slot_fill";
+  phone: string;
+  userId: string;
+  intent: SlotFillIntent;
+  /** campos já resolvidos, vindos da IA ou de respostas anteriores */
+  draft: Record<string, unknown>;
+  /** slots ainda a perguntar, EM ORDEM — missing[0] é a pergunta no ar.
+   *  Fila mutável (não índice): respostas podem remover ou acrescentar
+   *  perguntas seguintes (ex: "dia todo" remove a pergunta de horário). */
+  missing: string[];
+  /** tentativas já feitas no slot atual — guarda contra loop de re-pergunta */
+  asked: number;
+  mode: "personal" | "business";
+  /** mensagem que abriu o fluxo — usada em mensagens de desistência */
+  originalText: string;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill;
 
 type Store = Record<string, PendingAction>;
 
@@ -115,14 +145,19 @@ function load(): Store {
   try {
     if (!existsSync(FILE)) return {};
     return JSON.parse(readFileSync(FILE, "utf-8"));
-  } catch { return {}; }
+  } catch (err) { console.error("[pending-actions] falha ao ler pending.json:", err); return {}; }
 }
 
 function save(store: Store) {
-  try { writeFileSync(FILE, JSON.stringify(store, null, 2)); } catch { /* ignore */ }
+  try { writeFileSync(FILE, JSON.stringify(store, null, 2)); }
+  catch (err) { console.error("[pending-actions] falha ao gravar pending.json:", err); }
 }
 
 const TTL_MEET_ATA_MS = 4 * 60 * 60 * 1000; // 4 horas
+// Perguntas de slot-filling podem levar mais de um turno — 10 min é um
+// orçamento POR TURNO, não total, já que toda resposta válida renova o TTL
+// (setPendingAction é chamado de novo a cada avanço no fluxo).
+const TTL_SLOT_FILL_MS = 10 * 60 * 1000;
 
 type PendingActionInput =
   | Omit<PendingVehicleSelection, "phone" | "expiresAt">
@@ -133,7 +168,15 @@ type PendingActionInput =
   | Omit<PendingFinanceSelect, "phone" | "expiresAt">
   | Omit<PendingWppName, "phone" | "expiresAt">
   | Omit<PendingReceiptSave, "phone" | "expiresAt">
-  | Omit<PendingInvoiceImport, "phone" | "expiresAt">;
+  | Omit<PendingInvoiceImport, "phone" | "expiresAt">
+  | Omit<PendingSlotFill, "phone" | "expiresAt">;
+
+const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
+  recurring_confirmation: TTL_RECURRING_MS,
+  meet_ata: TTL_MEET_ATA_MS,
+  invoice_import: TTL_INVOICE_MS,
+  slot_fill: TTL_SLOT_FILL_MS,
+};
 
 export function setPendingAction(phone: string, action: PendingActionInput): void {
   const store = load();
@@ -142,11 +185,7 @@ export function setPendingAction(phone: string, action: PendingActionInput): voi
   for (const key of Object.keys(store)) {
     if (new Date(store[key].expiresAt).getTime() < now) delete store[key];
   }
-  const ttl =
-    action.type === "recurring_confirmation" ? TTL_RECURRING_MS :
-    action.type === "meet_ata" ? TTL_MEET_ATA_MS :
-    action.type === "invoice_import" ? TTL_INVOICE_MS :
-    TTL_MS;
+  const ttl = TTL_BY_TYPE[action.type] ?? TTL_MS;
   store[phone] = { ...action, phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
   save(store);
 }
@@ -171,19 +210,30 @@ export function clearPendingAction(phone: string): void {
   }
 }
 
+/** Base compartilhada de todo "escolha da lista" por número ou por texto:
+ *  número direto (1-based):índice; senão, substring bidirecional contra
+ *  qualquer um dos rótulos do item (ex: modelo OU marca de um veículo).
+ *  Usada por parseGoalChoice, parseVehicleChoice e pelo slotChoice do motor
+ *  de slot-filling — um único algoritmo de "escolha por número ou nome" no
+ *  produto todo. Retorna -1 se não reconhecer. */
+export function choiceIndexByLabels<T>(text: string, items: T[], getLabels: (item: T) => string[]): number {
+  const t = text.trim().toLowerCase();
+  const num = parseInt(t);
+  if (!isNaN(num) && num >= 1 && num <= items.length) return num - 1;
+  for (let i = 0; i < items.length; i++) {
+    const labels = getLabels(items[i]).map(l => l.toLowerCase());
+    if (labels.some(l => l.includes(t) || t.includes(l))) return i;
+  }
+  return -1;
+}
+
 /** Interpreta a resposta do usuário como escolha de meta.
  *  Aceita: "1", "2", parte do título. Retorna índice (0-based) ou -1. */
 export function parseGoalChoice(
   text: string,
   goals: Array<{ id: string; title: string; currentAmount: number; targetAmount: number }>
 ): number {
-  const t = text.trim().toLowerCase();
-  const num = parseInt(t);
-  if (!isNaN(num) && num >= 1 && num <= goals.length) return num - 1;
-  for (let i = 0; i < goals.length; i++) {
-    if (goals[i].title.toLowerCase().includes(t) || t.includes(goals[i].title.toLowerCase())) return i;
-  }
-  return -1;
+  return choiceIndexByLabels(text, goals, g => [g.title]);
 }
 
 /** Interpreta a resposta do usuário como escolha de lançamento financeiro.
@@ -241,20 +291,30 @@ export function parseFinanceChoice(
   return -1;
 }
 
+/** Extrai um valor em reais de um texto livre (ex: "80 reais", "R$ 80,50").
+ *  Converte separador decimal BR (vírgula) e remove separador de milhar
+ *  (ponto) antes de parsear. Retorna null se não achar nada válido. */
+export function parseAmountBR(text: string): number | null {
+  const match = text.replace(/\./g, "").replace(",", ".").match(/(\d+(?:\.\d{1,2})?)/);
+  if (!match) return null;
+  const val = parseFloat(match[1]);
+  return !isNaN(val) && val > 0 ? val : null;
+}
+
 /** Interpreta a resposta do usuário como o NOVO VALOR de um lançamento já
  *  escolhido (etapa final de finance_edit, quando falta só o "o que mudar").
- *  Aceita valor em reais (ex: "80 reais", "R$ 80,50") e/ou nome de categoria
- *  conhecida mencionado no texto. Retorna um patch parcial — pode vir vazio
- *  se não reconhecer nada. */
+ *  Aceita valor em reais, nome de categoria conhecida, e/ou uma nova
+ *  descrição ("descrição para X" / "nome para X"). Retorna um patch
+ *  parcial — pode vir vazio se não reconhecer nada. */
 export function parseFinancePatchFromText(text: string): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   const t = text.trim();
 
-  const amountMatch = t.replace(/\./g, "").replace(",", ".").match(/(\d+(?:\.\d{1,2})?)/);
-  if (amountMatch) {
-    const val = parseFloat(amountMatch[1]);
-    if (!isNaN(val) && val > 0) patch.amount = val;
-  }
+  const descMatch = t.match(/(?:descri[çc][ãa]o|nome)\s+(?:para|pra)\s+(.+)/i);
+  if (descMatch) patch.description = descMatch[1].trim();
+
+  const amount = parseAmountBR(t);
+  if (amount !== null) patch.amount = amount;
 
   const lower = t.toLowerCase();
   const allCategories = [...CATEGORIES_EXPENSE, ...CATEGORIES_INCOME];
@@ -279,24 +339,5 @@ export function parseVehicleChoice(
   text: string,
   vehicles: Array<{ id: string; brand: string; model: string; year: number }>
 ): number {
-  const t = text.trim().toLowerCase();
-
-  // número direto: "1", "2", etc.
-  const num = parseInt(t);
-  if (!isNaN(num) && num >= 1 && num <= vehicles.length) return num - 1;
-
-  // match por modelo ou marca
-  for (let i = 0; i < vehicles.length; i++) {
-    const v = vehicles[i];
-    if (
-      v.model.toLowerCase().includes(t) ||
-      v.brand.toLowerCase().includes(t) ||
-      t.includes(v.model.toLowerCase()) ||
-      t.includes(v.brand.toLowerCase())
-    ) {
-      return i;
-    }
-  }
-
-  return -1;
+  return choiceIndexByLabels(text, vehicles, v => [v.model, v.brand]);
 }

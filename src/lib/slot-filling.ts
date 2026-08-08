@@ -1,0 +1,336 @@
+import type { AIResult } from "./ai-processor";
+import type { User } from "./users";
+import {
+  type PendingSlotFill,
+  type SlotFillIntent,
+  setPendingAction,
+  clearPendingAction,
+  parseAmountBR,
+} from "./pending-actions";
+import { createRecurring, type RecurringTransaction } from "./recurring";
+import { todayStrBR } from "./date-br";
+import { replyRecurringCreated } from "./bot-replies";
+
+/**
+ * Motor genérico de "perguntar o que falta" (slot-filling), usado quando uma
+ * intenção precisa de um campo que muda o comportamento do sistema (ex:
+ * quantas parcelas, dia do vencimento) e a mensagem original não trouxe.
+ *
+ * Um único motor reutilizado por várias intenções em vez de um fluxo sob
+ * medida por caso — ver PendingSlotFill em pending-actions.ts para o
+ * raciocínio da fila mutável de perguntas.
+ */
+
+function cap(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+export type Draft = Record<string, unknown>;
+
+export type SlotCtx = {
+  user: User;
+  userId: string;
+  phone: string;
+  mode: "personal" | "business";
+};
+
+export type SlotParse = { ok: true; value: unknown } | { ok: false };
+
+export type SlotDef = {
+  /** chave gravada no draft (por padrão — ver `apply` para casos especiais) */
+  key: string;
+  /** nome humano do campo, usado na nota de "usei o padrão para X" */
+  label: string;
+  /** interpreta a resposta do usuário; { ok:false } = não reconheci */
+  parse: (text: string, draft: Draft, ctx: SlotCtx) => SlotParse;
+  /** a pergunta (sem a linha de TTL — o motor anexa) */
+  ask: (draft: Draft, ctx: SlotCtx) => string;
+  /** re-pergunta após resposta inválida; default: "❓ Não entendi." + ask() */
+  reask?: (draft: Draft, ctx: SlotCtx, attempt: number) => string;
+  /** valor silencioso quando o usuário pula ("tanto faz") ou desiste depois
+   *  de tentativas demais. AUSENTE = slot DURO: sem esse dado não há como criar. */
+  fallback?: (draft: Draft, ctx: SlotCtx) => unknown;
+  /** grava no draft; pode inspecionar/alterar a fila restante. Default:
+   *  grava direto em draft[key]. */
+  apply?: (value: unknown, draft: Draft, queue: string[], ctx: SlotCtx) => void;
+};
+
+export type FlowDef = {
+  /** rascunho inicial a partir do que a IA já extraiu da mensagem original */
+  seed: (ai: AIResult, ctx: SlotCtx) => Draft;
+  slots: Record<string, SlotDef>;
+  /** quais slots ainda faltam, EM ORDEM, dado o estado atual do rascunho */
+  missing: (draft: Draft, ctx: SlotCtx) => string[];
+  /** cria o registro de fato e devolve a mensagem de confirmação */
+  finalize: (draft: Draft, ctx: SlotCtx) => Promise<string> | string;
+  /** mensagem quando falta um slot DURO e não há como criar nada */
+  giveUp: (draft: Draft, ctx: SlotCtx) => string;
+};
+
+const MAX_ASK = 2; // 3 tentativas no total por slot (índice 0, 1, 2)
+
+const CANCEL_RE = /^(cancela(r)?|deixa( pra l[áa])?|esquece|para|sair|nada|desisto|n[ãa]o quero)\b/i;
+const SKIP_RE = /^(tanto faz|pode ser|voc[êe] escolhe|padr[ãa]o|qualquer|sei l[áa]|como quiser)\b/i;
+
+function isCancelWord(t: string): boolean {
+  return CANCEL_RE.test(t.trim());
+}
+function isSkipWord(t: string): boolean {
+  return SKIP_RE.test(t.trim());
+}
+
+/** Detecta se a resposta parece na verdade um comando novo (o usuário mudou
+ *  de assunto) — só é chamada depois que o parse do slot já falhou.
+ *  Heurística deliberadamente conservadora: melhor pecar por excesso de
+ *  re-pergunta do que interromper um comando genuinamente novo. */
+function looksLikeNewCommand(t: string): boolean {
+  const s = t.trim();
+  if (s.length > 60) return true;
+  return /^(gastei|paguei|comprei|recebi|ganhei|quanto|qual|meu saldo|extrato|minhas?|agenda|lembr|ajuda|help|cria|criar|adiciona|marca)\b/i.test(s);
+}
+
+function askWithTtl(slot: SlotDef, draft: Draft, ctx: SlotCtx): string {
+  return `${slot.ask(draft, ctx)}\n\n⏱ _Válido por 10 min. Responda *cancelar* para desistir._`;
+}
+
+function defaultReask(slot: SlotDef, draft: Draft, ctx: SlotCtx): string {
+  return `❓ Não entendi.\n\n${slot.ask(draft, ctx)}\n\n_Ou responda *cancelar* para deixar pra lá._`;
+}
+
+/** Aplica o fallback de cada slot restante e finaliza — usado quando o
+ *  usuário desiste (excesso de tentativas ou trocou de assunto). Retorna
+ *  null se algum slot restante for duro (sem fallback): nesse caso não há
+ *  como criar nada. */
+async function finalizeWithDefaults(flow: FlowDef, draft: Draft, queue: string[], ctx: SlotCtx): Promise<string | null> {
+  const usedLabels: string[] = [];
+  for (const key of queue) {
+    const slot = flow.slots[key];
+    if (!slot.fallback) return null;
+    const value = slot.fallback(draft, ctx);
+    (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, [], ctx);
+    usedLabels.push(slot.label);
+  }
+  const base = await flow.finalize(draft, ctx);
+  if (usedLabels.length === 0) return base;
+  return `_Não entendi sua última resposta — usei o padrão para: ${usedLabels.join(", ")}._\n\n${base}`;
+}
+
+function reconstruct(pending: PendingSlotFill, patch: Partial<PendingSlotFill>): Parameters<typeof setPendingAction>[1] {
+  return {
+    type: "slot_fill",
+    userId: pending.userId,
+    intent: pending.intent,
+    draft: pending.draft,
+    missing: pending.missing,
+    asked: pending.asked,
+    mode: pending.mode,
+    originalText: pending.originalText,
+    ...patch,
+  };
+}
+
+/** Chamada pelos `case` do switch de intents. Se a mensagem já trouxer tudo
+ *  que muda comportamento, cria na hora (mesmo comportamento de hoje, zero
+ *  perguntas extras). Só grava um pending e pergunta se faltar algo. */
+export async function beginSlotFill(
+  intent: SlotFillIntent,
+  ai: AIResult,
+  ctx: SlotCtx,
+  originalText: string
+): Promise<{ reply: string }> {
+  const flow = FLOWS[intent];
+  if (!flow) throw new Error(`[slot-filling] fluxo não implementado para intent "${intent}"`);
+  const draft = flow.seed(ai, ctx);
+  const queue = flow.missing(draft, ctx);
+
+  if (queue.length === 0) {
+    clearPendingAction(ctx.phone);
+    return { reply: await flow.finalize(draft, ctx) };
+  }
+
+  setPendingAction(ctx.phone, {
+    type: "slot_fill", userId: ctx.userId, intent, draft, missing: queue, asked: 0, mode: ctx.mode, originalText,
+  });
+  return { reply: askWithTtl(flow.slots[queue[0]], draft, ctx) };
+}
+
+/** Chamada pela banda de pendências do message-handler quando já existe um
+ *  slot_fill em andamento para esse número. */
+export async function runSlotFillTurn(
+  pending: PendingSlotFill,
+  text: string,
+  ctx: SlotCtx
+): Promise<{ reply?: string; fallThrough: boolean }> {
+  const flow = FLOWS[pending.intent];
+  if (!flow) { clearPendingAction(ctx.phone); return { reply: undefined, fallThrough: true }; }
+  const slot = flow.slots[pending.missing[0]];
+  const draft: Draft = { ...pending.draft };
+  const queue = [...pending.missing];
+  const trimmed = text.trim();
+
+  if (isCancelWord(trimmed)) {
+    clearPendingAction(ctx.phone);
+    return { reply: "Cancelado — não registrei nada. 👍", fallThrough: false };
+  }
+
+  let value: unknown;
+  if (isSkipWord(trimmed) && slot.fallback) {
+    value = slot.fallback(draft, ctx);
+  } else {
+    const r = slot.parse(text, draft, ctx);
+    if (r.ok) {
+      value = r.value;
+    } else {
+      const abandoning = looksLikeNewCommand(trimmed) || pending.asked >= MAX_ASK;
+      if (!abandoning) {
+        setPendingAction(ctx.phone, reconstruct(pending, { draft, missing: queue, asked: pending.asked + 1 }));
+        return { reply: slot.reask ? slot.reask(draft, ctx, pending.asked) : defaultReask(slot, draft, ctx), fallThrough: false };
+      }
+      clearPendingAction(ctx.phone);
+      const result = await finalizeWithDefaults(flow, draft, queue, ctx);
+      return { reply: result ?? flow.giveUp(draft, ctx), fallThrough: looksLikeNewCommand(trimmed) };
+    }
+  }
+
+  queue.shift();
+  (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
+
+  if (queue.length === 0) {
+    clearPendingAction(ctx.phone);
+    return { reply: await flow.finalize(draft, ctx), fallThrough: false };
+  }
+  setPendingAction(ctx.phone, reconstruct(pending, { draft, missing: queue, asked: 0 }));
+  return { reply: askWithTtl(flow.slots[queue[0]], draft, ctx), fallThrough: false };
+}
+
+// ── Fábricas de parser reutilizáveis por vários slots/intents ──
+
+export function slotMoney(): SlotDef["parse"] {
+  return (text) => {
+    const val = parseAmountBR(text);
+    return val !== null ? { ok: true, value: val } : { ok: false };
+  };
+}
+
+export function slotDayOfMonth(): SlotDef["parse"] {
+  return (text) => {
+    const match = text.trim().match(/(\d{1,2})/);
+    if (!match) return { ok: false };
+    const day = parseInt(match[1], 10);
+    return day >= 1 && day <= 31 ? { ok: true, value: day } : { ok: false };
+  };
+}
+
+/** Número de ocorrências, ou "sempre"/"vitalício" → null (sem fim). */
+export function slotCountOrForever(): SlotDef["parse"] {
+  return (text) => {
+    const t = text.trim().toLowerCase();
+    if (/^(sempre|vital[íi]ci[oa]|sem fim|para sempre|n[ãa]o tem fim|indetermin|nunca (acaba|termina))/.test(t)) {
+      return { ok: true, value: null };
+    }
+    const match = t.match(/(\d{1,3})/);
+    if (!match) return { ok: false };
+    const n = parseInt(match[1], 10);
+    return n >= 1 && n <= 360 ? { ok: true, value: n } : { ok: false };
+  };
+}
+
+// ── Fluxos ──
+
+// Preenchido progressivamente por fase — apenas os intents já migrados para
+// o motor têm entrada aqui. Ver beginSlotFill/runSlotFillTurn para o que
+// acontece quando um intent ainda não tem fluxo (não deve ser chamado).
+export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
+  recurring_create: {
+    seed(ai, ctx) {
+      const r = ai.recurring;
+      return {
+        type: r?.type ?? "expense",
+        description: r?.description ? cap(r.description) : "",
+        amount: r?.amount,
+        totalAmount: r?.totalAmount,
+        category: r?.category,
+        recurrenceType: r?.recurrenceType ?? "recurring",
+        repeatUnit: r?.repeatUnit ?? "monthly",
+        dayOfMonth: r?.dayOfMonth,
+        startDate: r?.startDate,
+        totalInstallments: r?.totalInstallments,
+        lifetime: r?.lifetime ?? false,
+        mode: r?.mode ?? ctx.mode,
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      const q: string[] = [];
+      if (!(typeof draft.amount === "number" && draft.amount > 0)) q.push("amount");
+      if (draft.recurrenceType === "installment") {
+        if (!draft.totalInstallments) q.push("totalInstallments");
+      } else if (draft.totalInstallments === undefined && draft.lifetime !== true) {
+        q.push("term");
+      }
+      if (draft.repeatUnit === "monthly" && !draft.dayOfMonth) q.push("dayOfMonth");
+      return q;
+    },
+
+    slots: {
+      amount: {
+        key: "amount",
+        label: "valor",
+        parse: slotMoney(),
+        ask: () => `💰 Qual o valor?`,
+        // sem fallback — slot duro, nada pode ser criado sem valor
+      },
+      totalInstallments: {
+        key: "totalInstallments",
+        label: "número de parcelas",
+        parse: slotCountOrForever(),
+        ask: () => `💳 Em quantas vezes? _(ex: "10")_`,
+        fallback: () => 1, // sem resposta, assume compra à vista (1 parcela) — encerra sozinho, não fica perpétuo por engano
+      },
+      term: {
+        key: "totalInstallments",
+        label: "duração",
+        parse: slotCountOrForever(),
+        ask: () => `🔁 Por quanto tempo? Responda o número de meses (ex: *12*) — ou *sempre*, se não tiver fim.`,
+        fallback: () => null, // sem resposta, mantém o comportamento de hoje: perpétuo
+        apply: (value, draft) => { if (value !== null) draft.totalInstallments = value; },
+      },
+      dayOfMonth: {
+        key: "dayOfMonth",
+        label: "dia do vencimento",
+        parse: slotDayOfMonth(),
+        ask: () => `📅 Todo dia quantos vence? _(ex: "10")_`,
+        fallback: () => 1, // 1º do mês — evita o vencimento cair "hoje" na maioria dos casos
+      },
+    },
+
+    async finalize(draft, ctx) {
+      const type = draft.type as "income" | "expense";
+      const amount = draft.amount as number;
+      const recurrenceType = draft.recurrenceType as "installment" | "recurring";
+      const totalInstallments = draft.totalInstallments as number | undefined;
+      const totalAmount = recurrenceType === "installment" && totalInstallments
+        ? (draft.totalAmount as number | undefined) ?? amount * totalInstallments
+        : (draft.totalAmount as number | undefined);
+
+      const rec = createRecurring({
+        userId: ctx.userId,
+        type,
+        amount,
+        totalAmount,
+        category: (draft.category as string) || "Outros",
+        description: (draft.description as string) || "Recorrente",
+        mode: (draft.mode as "personal" | "business") || ctx.mode,
+        recurrenceType,
+        totalInstallments,
+        repeatUnit: (draft.repeatUnit as RecurringTransaction["repeatUnit"]) || "monthly",
+        dayOfMonth: draft.dayOfMonth as number | undefined,
+        startDate: (draft.startDate as string) || todayStrBR(),
+        source: "whatsapp",
+      });
+      return replyRecurringCreated(rec);
+    },
+
+    giveUp: () => `❌ Não consegui cadastrar — faltou o valor. Tente de novo, ex: _"academia 100 por mês"_.`,
+  },
+};

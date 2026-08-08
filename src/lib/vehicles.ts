@@ -142,6 +142,18 @@ export const EXPENSE_TYPE_LABEL: Record<VehicleExpenseType, string> = {
   other: "📌 Outros",
 };
 
+/** Categoria financeira usada ao espelhar uma despesa de veículo em finanças.
+ *  Todos os valores DEVEM existir em CATEGORIES_EXPENSE (finances.ts) — usar
+ *  nomes fora dessa lista cria categorias órfãs, que não aparecem em nenhum
+ *  filtro do painel e sujam os relatórios. */
+export const VEHICLE_FINANCE_CATEGORY: Record<VehicleExpenseType, string> = {
+  fuel: "Transporte",
+  maintenance: "Transporte",
+  insurance: "Serviços",
+  tax: "Impostos",
+  other: "Transporte",
+};
+
 export const FUEL_TYPE_LABEL: Record<FuelType, string> = {
   gasoline: "Gasolina",
   ethanol: "Etanol",
