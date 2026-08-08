@@ -9,7 +9,7 @@ import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, ge
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
 import { addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
-import { getCustomersByUser, findCustomerByName, updateCustomer, type Customer } from "@/lib/customers";
+import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
@@ -31,7 +31,7 @@ import {
   replyPersonNotFound, replyWppNameSaved,
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
   replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
-  replyCustomerList, replyCustomerUpdated, replyCustomerDeactivated,
+  replyCustomerList, replyCustomerInfo, replyCustomerUpdated, replyCustomerDeactivated,
 } from "@/lib/bot-replies";
 
 function phoneMatches(stored: string, incoming: string): boolean {
@@ -1327,6 +1327,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "customer_query": {
+        const custQueryKeyword = ai.keyword || ai.customer?.name || "";
+        const custMatches = custQueryKeyword ? findCustomersByName(user.id, custQueryKeyword) : [];
+        await wppSend(from, replyCustomerInfo(custMatches, custQueryKeyword));
+        break;
+      }
+
       case "customer_update": {
         const custKeyword = ai.keyword || ai.customer?.name || "";
         const custTarget = custKeyword ? findCustomerByName(user.id, custKeyword) : null;
@@ -1335,6 +1342,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.customer?.phone) custPatch.phone = ai.customer.phone;
         if (ai.customer?.email) custPatch.email = ai.customer.email;
         if (ai.customer?.company) custPatch.company = ai.customer.company;
+        if (ai.customer?.address) custPatch.address = ai.customer.address;
         if (ai.customer?.notes) custPatch.notes = ai.customer.notes;
         if (Object.keys(custPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o telefone do Pedro para 11988887777\"_"); break; }
         const custUpdated = updateCustomer(custTarget.id, user.id, custPatch);

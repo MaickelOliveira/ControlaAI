@@ -14,9 +14,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const { name, phone, email, company, notes } = await req.json();
+  const { name, phone, email, company, address, notes } = await req.json();
   if (!name) return NextResponse.json({ error: "Nome obrigatório" }, { status: 400 });
-  const customer = createCustomer({ userId: session.sub, name, phone, email, company, notes, status: "active" });
+  const customer = createCustomer({ userId: session.sub, name, phone, email, company, address, notes, status: "active" });
   return NextResponse.json(customer, { status: 201 });
 }
 

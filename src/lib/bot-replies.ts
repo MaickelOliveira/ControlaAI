@@ -502,7 +502,7 @@ export function replyEmployeeDeactivated(e: Employee): string {
 // ── Clientes (CRM) ────────────────────────
 
 export function replyCustomerCreated(c: Customer): string {
-  const line = [c.phone, c.email, c.company].filter(Boolean).join(" · ");
+  const line = [c.phone, c.email, c.company, c.address].filter(Boolean).join(" · ");
   return `Cadastrado. 🧾\n\n*${c.name}*${line ? `\n${line}` : ""}\n\n🏢 Veja em Clientes no dashboard.`;
 }
 
@@ -510,6 +510,26 @@ export function replyCustomerList(customers: Customer[]): string {
   if (!customers.length) return `🧾 Nenhum cliente ativo cadastrado.`;
   let msg = `🧾 *Clientes ativos (${customers.length}):*\n\n`;
   customers.forEach(c => { msg += `• ${c.name}${c.phone ? ` — ${c.phone}` : ""}\n`; });
+  return msg.trim();
+}
+
+export function replyCustomerInfo(customers: Customer[], keyword: string): string {
+  if (!customers.length) return `❓ Não encontrei nenhum cliente com "${keyword}". Digite *meus clientes* para ver a lista.`;
+  if (customers.length === 1) {
+    const c = customers[0];
+    let msg = `🧾 *${c.name}*\n`;
+    if (c.company) msg += `🏢 ${c.company}\n`;
+    if (c.phone) msg += `📱 ${c.phone}\n`;
+    if (c.email) msg += `✉️ ${c.email}\n`;
+    if (c.address) msg += `📍 ${c.address}\n`;
+    if (c.notes) msg += `📝 ${c.notes}\n`;
+    return msg.trim();
+  }
+  let msg = `🧾 Encontrei *${customers.length}* clientes com "${keyword}" — qual deles?\n\n`;
+  customers.forEach(c => {
+    const detail = [c.company, c.phone].filter(Boolean).join(" · ");
+    msg += `• ${c.name}${detail ? ` — ${detail}` : ""}\n`;
+  });
   return msg.trim();
 }
 

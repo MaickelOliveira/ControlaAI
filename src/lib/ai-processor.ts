@@ -54,6 +54,7 @@ export type Intent =
   | "employee_deactivate"
   | "customer_create"
   | "customer_list"
+  | "customer_query"
   | "customer_update"
   | "customer_deactivate"
   | "how_to"
@@ -184,6 +185,7 @@ export type CustomerData = {
   phone?: string;
   email?: string;
   company?: string;
+  address?: string;
   notes?: string;
 };
 
@@ -360,8 +362,9 @@ INTENÇÕES POSSÍVEIS:
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
 - employee_deactivate: desativar/demitir um funcionário ("demite o João", "desativa a Ana", "o João não trabalha mais aqui"). Use "keyword" com o nome.
-- customer_create: cadastrar um novo CLIENTE da empresa (quem COMPRA/contrata, não quem trabalha lá) ("cadastra o cliente Pedro", "adiciona a empresa XPTO como cliente", "novo cliente: Maria, telefone 11999999999"). Use "customer.name" (obrigatório), e opcionalmente "customer.phone", "customer.email", "customer.company", "customer.notes". ⚠️ DIFERENTE de employee_create (funcionário TRABALHA na empresa) e de recurring_create/finance_register (lançar um valor não é cadastrar um cliente).
-- customer_list: ver clientes cadastrados ("meus clientes", "lista de clientes", "quais clientes eu tenho")
+- customer_create: cadastrar um novo CLIENTE da empresa (quem COMPRA/contrata, não quem trabalha lá) ("cadastra o cliente Pedro", "adiciona a empresa XPTO como cliente", "novo cliente: Maria, telefone 11999999999"). Use "customer.name" (obrigatório), e opcionalmente "customer.phone", "customer.email", "customer.company", "customer.address", "customer.notes". ⚠️ DIFERENTE de employee_create (funcionário TRABALHA na empresa) e de recurring_create/finance_register (lançar um valor não é cadastrar um cliente).
+- customer_list: ver TODOS os clientes cadastrados ("meus clientes", "lista de clientes", "quais clientes eu tenho") — sem citar nome específico.
+- customer_query: perguntar um dado (telefone, email, endereço, empresa) de UM cliente específico pelo nome ("qual o telefone do meu cliente Bruno", "qual o email da Maria", "endereço do cliente Pedro Silva"). Use "keyword" com o nome citado (pode ser só o primeiro nome, ou nome completo se a mensagem já disser sobrenome/identificação — quanto mais específico o nome citado, melhor a busca acha só um cliente).
 - customer_update: alterar dados de um cliente existente ("muda o telefone do Pedro", "atualiza o email da Maria"). Use "keyword" com o nome e "customer" com os campos novos.
 - customer_deactivate: desativar/remover um cliente ("remove o cliente Pedro", "esse cliente não compra mais comigo"). Use "keyword" com o nome.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
@@ -875,6 +878,20 @@ OU para listar clientes ("meus clientes", "lista de clientes"):
 {
   "intent": "customer_list",
   "confidence": 0.9
+}
+
+OU para perguntar um dado de um cliente específico ("qual o telefone do meu cliente Bruno"):
+{
+  "intent": "customer_query",
+  "confidence": 0.9,
+  "keyword": "Bruno"
+}
+
+Exemplo customer_query com nome mais específico ("qual o telefone do Bruno Ciola" — sobrenome incluído ajuda a achar só um, se houver mais de um Bruno):
+{
+  "intent": "customer_query",
+  "confidence": 0.9,
+  "keyword": "Bruno Ciola"
 }
 
 OU para editar cliente ("muda o telefone do Pedro para 11988887777"):

@@ -11,6 +11,7 @@ export type Customer = {
   phone?: string;
   email?: string;
   company?: string;
+  address?: string;
   notes?: string;
   status: CustomerStatus;
   createdAt: string;
@@ -50,4 +51,15 @@ export function updateCustomer(id: string, userId: string, patch: Partial<Custom
 export function findCustomerByName(userId: string, name: string): Customer | null {
   const lower = name.toLowerCase();
   return getCustomersByUser(userId).find(c => c.name.toLowerCase().includes(lower)) ?? null;
+}
+
+/** Todos os clientes ativos cujo nome bate com o termo — usado em consultas
+ *  ("qual o telefone do Bruno"), onde pode haver mais de um cliente com o
+ *  mesmo primeiro nome e a resposta precisa listar todos em vez de escolher
+ *  um só. Se o termo já incluir sobrenome/identificação mais específica
+ *  (ex: "Bruno Ciola"), a busca por substring naturalmente restringe a um
+ *  único resultado, sem lógica extra. */
+export function findCustomersByName(userId: string, name: string): Customer[] {
+  const lower = name.toLowerCase();
+  return getCustomersByUser(userId, "active").filter(c => c.name.toLowerCase().includes(lower));
 }

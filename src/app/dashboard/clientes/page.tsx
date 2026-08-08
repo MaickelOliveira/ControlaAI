@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 
-type Customer = { id: string; name: string; phone?: string; email?: string; company?: string; notes?: string; status: string };
+type Customer = { id: string; name: string; phone?: string; email?: string; company?: string; address?: string; notes?: string; status: string };
 
 export default function ClientesPage() {
   const [mode, setMode] = useState<string>("");
@@ -10,7 +10,7 @@ export default function ClientesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", company: "", notes: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", company: "", address: "", notes: "" });
   const [filter, setFilter] = useState<"all" | "active" | "inactive">("active");
 
   function load() {
@@ -34,12 +34,12 @@ export default function ClientesPage() {
     } else {
       await fetch("/api/admin/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
     }
-    setShowForm(false); setEditing(null); setForm({ name: "", phone: "", email: "", company: "", notes: "" }); load();
+    setShowForm(false); setEditing(null); setForm({ name: "", phone: "", email: "", company: "", address: "", notes: "" }); load();
   }
 
   function openEdit(c: Customer) {
     setEditing(c);
-    setForm({ name: c.name, phone: c.phone || "", email: c.email || "", company: c.company || "", notes: c.notes || "" });
+    setForm({ name: c.name, phone: c.phone || "", email: c.email || "", company: c.company || "", address: c.address || "", notes: c.notes || "" });
     setShowForm(true);
   }
 
@@ -67,7 +67,7 @@ export default function ClientesPage() {
           <h1 className="text-2xl font-bold text-slate-900">🧾 Clientes</h1>
           <p className="text-slate-400 text-sm mt-0.5">🏢 Empresa</p>
         </div>
-        <button onClick={() => { setEditing(null); setForm({ name: "", phone: "", email: "", company: "", notes: "" }); setShowForm(true); }}
+        <button onClick={() => { setEditing(null); setForm({ name: "", phone: "", email: "", company: "", address: "", notes: "" }); setShowForm(true); }}
           className="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-semibold hover:bg-slate-700 transition">
           + Cliente
         </button>
@@ -162,6 +162,8 @@ export default function ClientesPage() {
                 placeholder="Telefone (opcional)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
               <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                 placeholder="Email (opcional)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                placeholder="Endereço (opcional)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
               <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 placeholder="Observações" rows={2} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none resize-none" />
               <div className="flex gap-3 pt-1">
