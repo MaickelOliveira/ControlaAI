@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getUserById, updateUser } from "@/lib/users";
-
-const DEFAULT_EXPENSE = ["Alimentação", "Transporte", "Moradia", "Saúde", "Educação", "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Funcionários", "Marketing", "Fornecedores", "Outros"];
-const DEFAULT_INCOME = ["Salário", "Freelance", "Vendas", "Investimentos", "Aluguel", "Serviços", "Reembolso", "Outros"];
+import { CATEGORIES_EXPENSE as DEFAULT_EXPENSE, CATEGORIES_INCOME as DEFAULT_INCOME } from "@/lib/finances";
 
 export async function GET() {
   const session = await getSession();
