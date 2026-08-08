@@ -2,7 +2,7 @@ import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, ge
 import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
@@ -854,6 +854,20 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const catModeLabel = catMode === "business" ? "Empresa" : "Pessoal";
           const verb = catType === "income" ? "recebeu" : "gastou";
           await wppSend(from, `${catType === "income" ? "💰" : "💸"} Você ${verb} *${formatCurrency(total)}* com *${ai.category}* em ${periodLabel} (${catModeLabel}).`);
+          break;
+        }
+
+        // Comerciante/app específico (ex: "quanto gastei com ifood") — busca
+        // na descrição, não na categoria, porque a descrição pode ter ficado
+        // abreviada num extrato importado ("IFD" em vez de "iFood").
+        if (ai.keyword) {
+          const kwMode = (ai.mode as "personal" | "business" | undefined) || mode;
+          const kwType: "income" | "expense" = ai.financeType === "income" ? "income" : "expense";
+          const terms = expandMerchantAliases(ai.keyword);
+          const total = getKeywordTotal(user.id, kwMode, kwType, terms, pFrom, pTo);
+          const kwModeLabel = kwMode === "business" ? "Empresa" : "Pessoal";
+          const verb = kwType === "income" ? "recebeu" : "gastou";
+          await wppSend(from, `${kwType === "income" ? "💰" : "💸"} Você ${verb} *${formatCurrency(total)}* com *${ai.keyword}* em ${periodLabel} (${kwModeLabel}).`);
           break;
         }
 
