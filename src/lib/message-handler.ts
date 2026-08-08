@@ -2,7 +2,7 @@ import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, ge
 import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, getByCategory, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getMonthlyTransactions, getFinancesLastDays, isLikelyDuplicateExpense } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
 import { createReminder } from "@/lib/reminders";
 import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
@@ -50,6 +50,28 @@ function cap(s: string): string {
 // de qual lançamento se trata, já que descrição/categoria podem repetir entre modos.
 function modeLabelFull(m: string): string {
   return m === "business" ? "🏢 Empresa" : "👤 Pessoal";
+}
+
+// Intervalo YYYY-MM-DD do mês informado — usado como período padrão quando a
+// IA não identifica um período relativo ("mês passado" etc.) na pergunta.
+function monthBounds(year: number, month: number): [string, string] {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const from = `${year}-${pad(month)}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const to = `${year}-${pad(month)}-${pad(lastDay)}`;
+  return [from, to];
+}
+
+// Rótulo textual do período pra usar nas respostas ("julho de 2026" pro mês
+// atual, ou "01/07/2026 a 15/07/2026" pra um intervalo customizado pedido pela IA).
+function periodLabelFor(period: { from?: string; to?: string } | undefined, fallbackDate: Date): string {
+  if (!period?.from && !period?.to) {
+    return fallbackDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  }
+  const fmt = (s: string) => new Date(s + "T12:00:00").toLocaleDateString("pt-BR");
+  if (period.from && period.to) return `${fmt(period.from)} a ${fmt(period.to)}`;
+  if (period.from) return `a partir de ${fmt(period.from)}`;
+  return `até ${fmt(period.to!)}`;
 }
 
 /** Mensagem recebida já normalizada pelo webhook do provider (Evolution ou
@@ -747,9 +769,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "finance_analysis": {
-        const expCats = getByCategory(user.id, mode, "expense", year, month);
-        const incCats = getByCategory(user.id, mode, "income", year, month);
-        const analysisBal = getBalance(user.id, mode, year, month);
+        const [aFrom, aTo] = ai.period?.from || ai.period?.to
+          ? [ai.period.from, ai.period.to]
+          : monthBounds(year, month);
+        const expCats = getByCategoryInRange(user.id, mode, "expense", aFrom, aTo);
+        const incCats = getByCategoryInRange(user.id, mode, "income", aFrom, aTo);
+        const analysisBal = getBalanceInRange(user.id, mode, aFrom, aTo);
         const topExpenses = Object.entries(expCats)
           .map(([category, amount]) => ({ category, amount }))
           .sort((a, b) => b.amount - a.amount)
@@ -758,7 +783,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           .map(([category, amount]) => ({ category, amount }))
           .sort((a, b) => b.amount - a.amount)
           .slice(0, 4);
-        const monthLabel = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        const monthLabel = periodLabelFor(ai.period, now);
         const analysisReply = await generateAnalysisResponse(messageText, {
           mode, balance: analysisBal, topExpenses, topIncomes, month: monthLabel,
         });
@@ -775,11 +800,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const typeEmoji = isIncome ? "💰" : "💸";
           const catEmoji = isIncome ? "🟢" : "🔴";
 
-          const txList = getMonthlyTransactions(user.id, detailMode, year, month).filter(f =>
-            f.type === targetType && !isNaN(f.amount) && f.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? "")
+          const [dFrom, dTo] = ai.period?.from || ai.period?.to
+            ? [ai.period.from, ai.period.to]
+            : monthBounds(year, month);
+          const txList = getTransactionsInRange(user.id, detailMode, dFrom, dTo).filter(f =>
+            f.type === targetType && !isNaN(f.amount) && f.amount > 0
           );
-          const monthName = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-          const monthTitle = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+          const monthTitle = periodLabelFor(ai.period, now);
           const modeLabel = detailMode === "business" ? "Empresa" : "Pessoal";
           if (!txList.length) {
             await wppSend(from, `📋 Nenhuma ${typeLabel.toLowerCase()} registrada em *${monthTitle}* (${modeLabel}).`);
@@ -815,20 +842,35 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "finance_query":
       case "balance_query": {
+        const [pFrom, pTo] = ai.period?.from || ai.period?.to
+          ? [ai.period.from, ai.period.to]
+          : monthBounds(year, month);
+        const periodLabel = periodLabelFor(ai.period, now);
+
+        if (ai.category) {
+          const catMode = (ai.mode as "personal" | "business" | undefined) || mode;
+          const catType: "income" | "expense" = ai.financeType === "income" ? "income" : "expense";
+          const total = getCategoryTotal(user.id, catMode, catType, ai.category, pFrom, pTo);
+          const catModeLabel = catMode === "business" ? "Empresa" : "Pessoal";
+          const verb = catType === "income" ? "recebeu" : "gastou";
+          await wppSend(from, `${catType === "income" ? "💰" : "💸"} Você ${verb} *${formatCurrency(total)}* com *${ai.category}* em ${periodLabel} (${catModeLabel}).`);
+          break;
+        }
+
         if (ai.personName) {
           const personPhone = getWppPhoneByName(user, ai.personName);
           if (!personPhone) {
             await wppSend(from, replyPersonNotFound(ai.personName));
             break;
           }
-          const personal = getBalance(user.id, "personal", year, month, personPhone);
-          const business = getBalance(user.id, "business", year, month, personPhone);
-          await wppSend(from, replyBalance(personal, business, ai.personName));
+          const personal = getBalanceInRange(user.id, "personal", pFrom, pTo, personPhone);
+          const business = getBalanceInRange(user.id, "business", pFrom, pTo, personPhone);
+          await wppSend(from, replyBalance(personal, business, ai.personName, periodLabel));
           break;
         }
-        const personal = getBalance(user.id, "personal", year, month);
-        const business = getBalance(user.id, "business", year, month);
-        await wppSend(from, replyBalance(personal, business));
+        const personal = getBalanceInRange(user.id, "personal", pFrom, pTo);
+        const business = getBalanceInRange(user.id, "business", pFrom, pTo);
+        await wppSend(from, replyBalance(personal, business, undefined, periodLabel));
         break;
       }
 

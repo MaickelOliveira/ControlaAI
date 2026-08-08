@@ -94,6 +94,39 @@ export function getBalance(userId: string, mode: FinanceMode, year?: number, mon
   return { income, expense, balance: income - expense };
 }
 
+/** Equivalente a getBalance, mas por intervalo de datas em vez de ano/mês fixo
+ *  — usado quando a IA identifica um período relativo ("mês passado", "semana
+ *  passada") em vez do mês atual. */
+export function getBalanceInRange(userId: string, mode: FinanceMode, from?: string, to?: string, registeredBy?: string): {
+  income: number;
+  expense: number;
+  balance: number;
+} {
+  const items = getFinancesInRange(userId, mode, from, to)
+    .filter(isPostedFinance)
+    .filter(f => !registeredBy || f.registeredBy === registeredBy);
+  const income = items.filter(f => f.type === "income" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
+  const expense = items.filter(f => f.type === "expense" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
+  return { income, expense, balance: income - expense };
+}
+
+/** Soma os lançamentos de uma categoria específica dentro de um intervalo de
+ *  datas — usado em perguntas como "quanto gastei com comida mês passado". */
+export function getCategoryTotal(userId: string, mode: FinanceMode, type: FinanceType, category: string, from?: string, to?: string, registeredBy?: string): number {
+  const lower = category.toLowerCase();
+  return getFinancesInRange(userId, mode, from, to)
+    .filter(f => isPostedFinance(f) && f.type === type && f.category.toLowerCase() === lower && (!registeredBy || f.registeredBy === registeredBy))
+    .reduce((s, f) => s + f.amount, 0);
+}
+
+/** Lançamentos crus de um intervalo de datas, mais recente primeiro — usado
+ *  por finance_detail quando o período pedido não é o mês atual. */
+export function getTransactionsInRange(userId: string, mode: FinanceMode, from?: string, to?: string): Finance[] {
+  return getFinancesInRange(userId, mode, from, to)
+    .filter(f => isPostedFinance(f) && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? ""))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number, registeredBy?: string): Record<string, number> {
   let items = getFinancesByUser(userId, mode, registeredBy).filter(f => f.type === type && isPostedFinance(f));
   if (year && month) {
@@ -102,6 +135,17 @@ export function getByCategory(userId: string, mode: FinanceMode, type: FinanceTy
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     });
   }
+  return items.reduce((acc, f) => {
+    acc[f.category] = (acc[f.category] ?? 0) + f.amount;
+    return acc;
+  }, {} as Record<string, number>);
+}
+
+/** Equivalente a getByCategory, mas por intervalo de datas — usado por
+ *  finance_analysis quando o período pedido não é o mês atual. */
+export function getByCategoryInRange(userId: string, mode: FinanceMode, type: FinanceType, from?: string, to?: string, registeredBy?: string): Record<string, number> {
+  const items = getFinancesInRange(userId, mode, from, to)
+    .filter(f => f.type === type && isPostedFinance(f) && (!registeredBy || f.registeredBy === registeredBy));
   return items.reduce((acc, f) => {
     acc[f.category] = (acc[f.category] ?? 0) + f.amount;
     return acc;
