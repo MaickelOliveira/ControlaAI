@@ -119,6 +119,40 @@ export function getCategoryTotal(userId: string, mode: FinanceMode, type: Financ
     .reduce((s, f) => s + f.amount, 0);
 }
 
+/** Apelidos/abreviações comuns pra apps de delivery de comida — a descrição
+ *  de um lançamento pode vir tanto do usuário digitando o nome do app quanto
+ *  de um extrato importado, que costuma abreviar (ex: "IFD*IFOOD" no cartão).
+ *  Ao buscar por um desses termos, expande pra todas as variantes conhecidas
+ *  em vez de confiar só na substring literal que a IA mandou. */
+const MERCHANT_ALIASES: Record<string, string[]> = {
+  ifood: ["ifood", "ifd", "i food"],
+  aiqfome: ["aiqfome", "aiq fome", "ai que fome", "aiquefome"],
+  "99food": ["99food", "99 food", "99app", "app 99"],
+  rappi: ["rappi"],
+  ubereats: ["uber eats", "ubereats"],
+};
+
+/** Expande um termo de busca digitado pelo usuário pras variantes conhecidas
+ *  do mesmo comerciante (ex: "ifood" → também busca "ifd"), pra não perder
+ *  lançamentos cuja descrição ficou abreviada. */
+export function expandMerchantAliases(term: string): string[] {
+  const lower = term.trim().toLowerCase();
+  for (const variants of Object.values(MERCHANT_ALIASES)) {
+    if (variants.some(v => lower === v || lower.includes(v) || v.includes(lower))) return variants;
+  }
+  return [lower];
+}
+
+/** Soma os lançamentos cuja descrição bate com algum dos termos (busca OR,
+ *  case-insensitive) dentro de um intervalo de datas — usado em perguntas
+ *  sobre um comerciante/app específico ("quanto gastei com ifood"). */
+export function getKeywordTotal(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string): number {
+  return getFinancesInRange(userId, mode, from, to)
+    .filter(f => isPostedFinance(f) && f.type === type && (!registeredBy || f.registeredBy === registeredBy))
+    .filter(f => terms.some(t => f.description.toLowerCase().includes(t)))
+    .reduce((s, f) => s + f.amount, 0);
+}
+
 /** Lançamentos crus de um intervalo de datas, mais recente primeiro — usado
  *  por finance_detail quando o período pedido não é o mês atual. */
 export function getTransactionsInRange(userId: string, mode: FinanceMode, from?: string, to?: string): Finance[] {
