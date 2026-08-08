@@ -122,6 +122,7 @@ const BASE_NAV = [
 ];
 const BUSINESS_NAV = [
   { href: "/dashboard/funcionarios", label: "Funcionários", icon: Icons.users },
+  { href: "/dashboard/clientes", label: "Clientes", icon: Icons.card },
 ];
 const PERSONAL_NAV = [
   { href: "/dashboard/supermercado", label: "Supermercado", icon: Icons.cart },

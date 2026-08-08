@@ -1,8 +1,17 @@
 "use client";
 import { useEffect, useState } from "react";
 
-type UserData = { name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[]; wppPhoneNames: Record<string, string>; maxWppPhones: number };
+type UserData = {
+  name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[];
+  wppPhoneNames: Record<string, string>;
+  wppPhoneRelations: Record<string, string>;
+  wppPhoneAccess: Record<string, "personal" | "business" | "both">;
+  maxWppPhones: number;
+};
 type PwForm = { current: string; next: string; confirm: string };
+type EditForm = { name: string; relation: string; access: "personal" | "business" | "both" };
+
+const ACCESS_LABEL: Record<string, string> = { personal: "👤 Só pessoal", business: "🏢 Só empresarial", both: "🔓 Os dois modos" };
 
 export default function ClienteConfigPage() {
   const [user, setUser] = useState<UserData | null>(null);
@@ -10,8 +19,8 @@ export default function ClienteConfigPage() {
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   const [unlinkingPhone, setUnlinkingPhone] = useState<string | null>(null);
-  const [editingNamePhone, setEditingNamePhone] = useState<string | null>(null);
-  const [nameInput, setNameInput] = useState("");
+  const [editingPhone, setEditingPhone] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ name: "", relation: "", access: "both" });
   const [savingName, setSavingName] = useState(false);
   const [botNumber, setBotNumber] = useState<string>("");
   const [botConnected, setBotConnected] = useState<boolean | null>(null);
@@ -21,8 +30,19 @@ export default function ClienteConfigPage() {
   const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email?: string } | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  function normalizeUser(d: { user: Partial<UserData> }): UserData {
+    return {
+      ...(d.user as UserData),
+      wppPhones: d.user.wppPhones ?? [],
+      wppPhoneNames: d.user.wppPhoneNames ?? {},
+      wppPhoneRelations: d.user.wppPhoneRelations ?? {},
+      wppPhoneAccess: d.user.wppPhoneAccess ?? {},
+      maxWppPhones: d.user.maxWppPhones ?? 1,
+    };
+  }
+
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], wppPhoneNames: d.user.wppPhoneNames ?? {}, maxWppPhones: d.user.maxWppPhones ?? 1 }); });
+    fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser(normalizeUser(d)); });
     fetch("/api/bot-info").then(r => r.json()).then(d => { if (d.wppBotNumber) setBotNumber(d.wppBotNumber); setBotConnected(!!d.connected); });
     fetch("/api/google/status").then(r => r.json()).then(d => setGoogleStatus(d)).catch(() => {});
   }, []);
@@ -39,7 +59,7 @@ export default function ClienteConfigPage() {
 
   async function refresh() {
     const d = await fetch("/api/dashboard").then(r => r.json());
-    if (d.user) setUser({ ...d.user, wppPhones: d.user.wppPhones ?? [], wppPhoneNames: d.user.wppPhoneNames ?? {}, maxWppPhones: d.user.maxWppPhones ?? 1 });
+    if (d.user) setUser(normalizeUser(d));
     setCode(null);
   }
 
@@ -50,20 +70,27 @@ export default function ClienteConfigPage() {
     setUnlinkingPhone(null);
   }
 
-  function startEditName(phone: string) {
-    setEditingNamePhone(phone);
-    setNameInput(user?.wppPhoneNames[phone] ?? "");
+  function startEdit(phone: string) {
+    setEditingPhone(phone);
+    setEditForm({
+      name: user?.wppPhoneNames[phone] ?? "",
+      relation: user?.wppPhoneRelations[phone] ?? "",
+      access: user?.wppPhoneAccess[phone] ?? "both",
+    });
   }
 
-  async function saveName(phone: string) {
-    const name = nameInput.trim();
+  async function saveEdit(phone: string) {
+    const name = editForm.name.trim();
     if (!name) return;
     setSavingName(true);
-    const r = await fetch("/api/dashboard/wpp-link", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, name }) });
+    const r = await fetch("/api/dashboard/wpp-link", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, name, relation: editForm.relation.trim(), access: editForm.access }),
+    });
     const d = await r.json();
-    if (r.ok) setUser(u => u ? { ...u, wppPhoneNames: d.wppPhoneNames } : u);
+    if (r.ok) setUser(u => u ? { ...u, wppPhoneNames: d.wppPhoneNames, wppPhoneRelations: d.wppPhoneRelations, wppPhoneAccess: d.wppPhoneAccess } : u);
     setSavingName(false);
-    setEditingNamePhone(null);
+    setEditingPhone(null);
   }
 
   async function disconnectGoogle() {
@@ -138,7 +165,7 @@ export default function ClienteConfigPage() {
                 <span className="text-xs text-slate-400">{user.wppPhones.length}/{user.maxWppPhones}</span>
               </div>
               <p className="text-[11px] text-slate-400 -mt-1 mb-1">
-                Dê um nome a cada número (ex: Ana, Gabriel) para identificar quem registrou cada gasto quando várias pessoas usarem o bot.
+                Dê um nome, vínculo (ex: esposa, filho) e o modo que cada pessoa pode acessar — o bot já sabe quem é quem e limita o que cada uma vê.
               </p>
               {user.wppPhones.map(phone => (
                 <div key={phone} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
@@ -147,8 +174,13 @@ export default function ClienteConfigPage() {
                       <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600 text-sm shrink-0">✓</div>
                       <div className="min-w-0">
                         <p className="text-sm font-mono text-amber-700">+{phone}</p>
-                        {user.wppPhoneNames[phone] && editingNamePhone !== phone && (
-                          <p className="text-xs text-amber-600 font-semibold truncate">{user.wppPhoneNames[phone]}</p>
+                        {editingPhone !== phone && (user.wppPhoneNames[phone] || user.wppPhoneRelations[phone]) && (
+                          <p className="text-xs text-amber-600 font-semibold truncate">
+                            {user.wppPhoneNames[phone] || "Sem nome"}{user.wppPhoneRelations[phone] ? ` · ${user.wppPhoneRelations[phone]}` : ""}
+                          </p>
+                        )}
+                        {editingPhone !== phone && (
+                          <p className="text-[10px] text-slate-500 mt-0.5">{ACCESS_LABEL[user.wppPhoneAccess[phone] || "both"]}</p>
                         )}
                       </div>
                     </div>
@@ -159,29 +191,44 @@ export default function ClienteConfigPage() {
                       {unlinkingPhone === phone ? "..." : "Desvincular"}
                     </button>
                   </div>
-                  {editingNamePhone === phone ? (
-                    <div className="flex items-center gap-2 mt-2">
+                  {editingPhone === phone ? (
+                    <div className="space-y-2 mt-2">
                       <input
                         autoFocus
-                        value={nameInput}
-                        onChange={e => setNameInput(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter") saveName(phone); if (e.key === "Escape") setEditingNamePhone(null); }}
+                        value={editForm.name}
+                        onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                         placeholder="Nome da pessoa"
                         maxLength={40}
-                        className="flex-1 text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-amber-500 transition" />
-                      <button onClick={() => saveName(phone)} disabled={savingName || !nameInput.trim()}
-                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-2.5 py-1.5 transition disabled:opacity-50">
-                        {savingName ? "..." : "Salvar"}
-                      </button>
-                      <button onClick={() => setEditingNamePhone(null)}
-                        className="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1.5 transition">
-                        Cancelar
-                      </button>
+                        className="w-full text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-amber-500 transition" />
+                      <input
+                        value={editForm.relation}
+                        onChange={e => setEditForm(f => ({ ...f, relation: e.target.value }))}
+                        placeholder="Vínculo (ex: esposa, filho, sócio)"
+                        maxLength={30}
+                        className="w-full text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-amber-500 transition" />
+                      <select
+                        value={editForm.access}
+                        onChange={e => setEditForm(f => ({ ...f, access: e.target.value as EditForm["access"] }))}
+                        className="w-full text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 outline-none bg-white">
+                        <option value="personal">👤 Só pessoal</option>
+                        <option value="business">🏢 Só empresarial</option>
+                        <option value="both">🔓 Os dois modos</option>
+                      </select>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => saveEdit(phone)} disabled={savingName || !editForm.name.trim()}
+                          className="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-2.5 py-1.5 transition disabled:opacity-50">
+                          {savingName ? "..." : "Salvar"}
+                        </button>
+                        <button onClick={() => setEditingPhone(null)}
+                          className="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1.5 transition">
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <button onClick={() => startEditName(phone)}
+                    <button onClick={() => startEdit(phone)}
                       className="text-[11px] text-amber-700 hover:underline mt-1.5">
-                      {user.wppPhoneNames[phone] ? "✏️ Alterar nome" : "+ Adicionar nome"}
+                      {user.wppPhoneNames[phone] ? "✏️ Editar" : "+ Adicionar nome, vínculo e acesso"}
                     </button>
                   )}
                 </div>

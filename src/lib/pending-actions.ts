@@ -86,6 +86,19 @@ export type PendingWppName = {
   expiresAt: string;
 };
 
+/** Coleta nome, vínculo e modo permitido ANTES de vincular o número de fato
+ *  (addWppPhone só roda depois que os 3 passos terminam) — substitui o fluxo
+ *  antigo de vincular na hora e perguntar o nome depois. */
+export type PendingWppLinkInfo = {
+  type: "awaiting_wpp_link_info";
+  phone: string;
+  userId: string;
+  step: "name" | "relation" | "access";
+  name?: string;
+  relation?: string;
+  expiresAt: string;
+};
+
 export type PendingReceiptSave = {
   type: "receipt_save";
   phone: string;
@@ -93,6 +106,10 @@ export type PendingReceiptSave = {
   fileBase64: string;
   mimeType: string;
   suggestedName: string;
+  /** descrição do lançamento vinculado — vai pro campo description do
+   *  DriveFile quando o comprovante é salvo, pra não ficar sem descrição
+   *  (diferente do caminho de salvamento imediato, que já passa a legenda). */
+  description?: string;
   financeId?: string;
   expiresAt: string;
 };
@@ -117,6 +134,7 @@ export type SlotFillIntent =
   | "vehicle_expense"
   | "vehicle_create"
   | "employee_create"
+  | "customer_create"
   | "grocery_purchase";
 
 export type PendingSlotFill = {
@@ -153,7 +171,7 @@ export type PendingEmployeePaymentSelect = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect;
 
 type Store = Record<string, PendingAction>;
 
@@ -183,6 +201,7 @@ type PendingActionInput =
   | Omit<PendingMeetConfirm, "phone" | "expiresAt">
   | Omit<PendingFinanceSelect, "phone" | "expiresAt">
   | Omit<PendingWppName, "phone" | "expiresAt">
+  | Omit<PendingWppLinkInfo, "phone" | "expiresAt">
   | Omit<PendingReceiptSave, "phone" | "expiresAt">
   | Omit<PendingInvoiceImport, "phone" | "expiresAt">
   | Omit<PendingSlotFill, "phone" | "expiresAt">

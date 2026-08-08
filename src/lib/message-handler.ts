@@ -1,4 +1,4 @@
-import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones, setWppPhoneName, getWppPhoneByName } from "@/lib/users";
+import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones, setWppPhoneName, getWppPhoneByName, setWppPhoneRelation, getWppPhoneByRelation, setWppPhoneAccess, getWppPhoneAccess } from "@/lib/users";
 import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
@@ -9,6 +9,7 @@ import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, ge
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
 import { addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
+import { getCustomersByUser, findCustomerByName, updateCustomer, type Customer } from "@/lib/customers";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
@@ -27,9 +28,10 @@ import {
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
   replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
   replyMeetCreated, replyMeetInvite, replyMeetAtaRequest, replyMeetAtaGenerated,
-  replyPersonNotFound, replyAskWppName, replyWppNameSaved,
+  replyPersonNotFound, replyWppNameSaved,
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
   replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
+  replyCustomerList, replyCustomerUpdated, replyCustomerDeactivated,
 } from "@/lib/bot-replies";
 
 function phoneMatches(stored: string, incoming: string): boolean {
@@ -193,6 +195,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 fileBase64: buffer.toString("base64"),
                 mimeType,
                 suggestedName,
+                description: f.description,
                 financeId: f.id,
               });
 
@@ -237,15 +240,56 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     if (!messageText) return;
 
     // ── Verifica se é um código de vinculação (4 dígitos) ──
+    // Não vincula na hora — primeiro coleta nome, vínculo com a conta e o
+    // modo que a pessoa pode acessar (awaiting_wpp_link_info), só então
+    // chama addWppPhone. Precisa ficar ANTES de identificar o usuário pelo
+    // telefone (abaixo), porque o número ainda não está vinculado aqui.
     const codeMatch = messageText.trim().match(/^(\d{4})$/);
     if (codeMatch) {
       const codeUser = getUserByWppCode(codeMatch[1]);
       if (codeUser) {
-        addWppPhone(codeUser.id, from);
         updateUser(codeUser.id, { wppVerifyCode: undefined, wppVerifyExpires: undefined });
-        await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*`);
-        setPendingAction(from, { type: "awaiting_wpp_name", userId: codeUser.id });
-        await wppSend(from, replyAskWppName());
+        setPendingAction(from, { type: "awaiting_wpp_link_info", userId: codeUser.id, step: "name" });
+        await wppSend(from, `✅ Código confirmado!\n\nAntes de vincular, preciso saber quem vai usar esse número.\n\nComo posso te chamar?`);
+        return;
+      }
+    }
+
+    // ── Vinculação em andamento (nome → vínculo → acesso) — precisa vir
+    //    ANTES de identificar usuário pelo telefone, pelo mesmo motivo acima ──
+    const linkPending = getPendingAction(from);
+    if (linkPending?.type === "awaiting_wpp_link_info") {
+      if (linkPending.step === "name") {
+        const name = cap(messageText.trim().slice(0, 40)) || "Sem nome";
+        setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "relation", name });
+        await wppSend(from, `Prazer, ${name}! 👋\n\nQual seu vínculo com a conta? _(ex: esposa, marido, filho, sócio, tia...)_`);
+        return;
+      }
+      if (linkPending.step === "relation") {
+        const relation = cap(messageText.trim().slice(0, 30)) || "Outro";
+        setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "access", name: linkPending.name, relation });
+        await wppSend(from, `Certo. E qual modo você pode acessar?\n\n1️⃣ Só pessoal\n2️⃣ Só empresarial\n3️⃣ Os dois\n\nResponda o número ou a palavra.`);
+        return;
+      }
+      if (linkPending.step === "access") {
+        const t = messageText.trim().toLowerCase();
+        const access: "personal" | "business" | "both" | null =
+          /^1\b|pessoal/.test(t) ? "personal" :
+          /^2\b|empresa/.test(t) ? "business" :
+          /^3\b|ambos|os dois|tudo/.test(t) ? "both" : null;
+        if (!access) {
+          await wppSend(from, `❓ Não entendi. Responda *1* (só pessoal), *2* (só empresarial) ou *3* (os dois).`);
+          return;
+        }
+        clearPendingAction(from);
+        const linkName = linkPending.name || "Sem nome";
+        const linkRelation = linkPending.relation || "Outro";
+        addWppPhone(linkPending.userId, from);
+        setWppPhoneName(linkPending.userId, from, linkName);
+        setWppPhoneRelation(linkPending.userId, from, linkRelation);
+        setWppPhoneAccess(linkPending.userId, from, access);
+        const accessLabel = access === "personal" ? "modo pessoal" : access === "business" ? "modo empresarial" : "os dois modos";
+        await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*\n\n${linkName} (${linkRelation}) já pode usar o Zelo por aqui, com acesso a ${accessLabel}.`);
         return;
       }
     }
@@ -266,7 +310,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
-    const mode = user.activeMode;
+    // Quem só tem acesso a um modo (definido na vinculação) fica travado nele,
+    // independente do toggle global da conta. Quem tem acesso aos dois ("both",
+    // ou números vinculados antes dessa feature) continua usando o toggle
+    // compartilhado de sempre.
+    const phoneAccess = getWppPhoneAccess(user, from);
+    const mode: "personal" | "business" = phoneAccess === "both" ? user.activeMode : phoneAccess;
     const now = nowBR(); // horário de Brasília/São Paulo
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
@@ -280,21 +329,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
-    // ── Verifica ação pendente (ex: seleção de veículo) ──
-    const pending = getPendingAction(from);
-
-    // ── Aguardando o nome de quem está usando este número ──
-    if (pending?.type === "awaiting_wpp_name" && pending.userId === user.id) {
-      clearPendingAction(from);
-      const name = messageText.trim().slice(0, 40);
-      if (name) {
-        setWppPhoneName(user.id, from, cap(name));
-        await wppSend(from, replyWppNameSaved(cap(name)));
-      } else {
-        await wppSend(from, replyWppNameSaved(user.name));
-      }
+    // ── Comando para (re)definir o vínculo de quem usa este número ──
+    // Frase específica de propósito (igual "meu nome é X") — evita casar com
+    // mensagens comuns que começam com "sou" por acaso.
+    const relationCmdMatch = messageText.trim().match(/^meu v[íi]nculo (?:é|e)\s+(.{2,30})$/i);
+    if (relationCmdMatch) {
+      const relation = cap(relationCmdMatch[1].trim());
+      setWppPhoneRelation(user.id, from, relation);
+      await wppSend(from, `Combinado, você é *${relation}* nessa conta. 👍`);
       return;
     }
+
+    // ── Verifica ação pendente (ex: seleção de veículo) ──
+    const pending = getPendingAction(from);
 
     // ── Aguardando confirmação de guardar comprovante (foto/documento) no Drive ──
     if (pending?.type === "receipt_save" && pending.userId === user.id) {
@@ -314,6 +361,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               originalName: pending.suggestedName,
               mimeType: pending.mimeType,
               size: buffer.length,
+              description: pending.description,
               aiKeywords: keywords,
               source: "whatsapp",
               buffer,
@@ -925,7 +973,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
 
         if (ai.personName) {
-          const personPhone = getWppPhoneByName(user, ai.personName);
+          const personPhone = getWppPhoneByName(user, ai.personName) ?? getWppPhoneByRelation(user, ai.personName);
           if (!personPhone) {
             await wppSend(from, replyPersonNotFound(ai.personName));
             break;
@@ -1267,6 +1315,42 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "customer_create": {
+        const { reply: customerReply } = await beginSlotFill("customer_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, customerReply);
+        break;
+      }
+
+      case "customer_list": {
+        const customers = getCustomersByUser(user.id, "active");
+        await wppSend(from, replyCustomerList(customers));
+        break;
+      }
+
+      case "customer_update": {
+        const custKeyword = ai.keyword || ai.customer?.name || "";
+        const custTarget = custKeyword ? findCustomerByName(user.id, custKeyword) : null;
+        if (!custTarget) { await wppSend(from, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista."); break; }
+        const custPatch: Partial<Customer> = {};
+        if (ai.customer?.phone) custPatch.phone = ai.customer.phone;
+        if (ai.customer?.email) custPatch.email = ai.customer.email;
+        if (ai.customer?.company) custPatch.company = ai.customer.company;
+        if (ai.customer?.notes) custPatch.notes = ai.customer.notes;
+        if (Object.keys(custPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o telefone do Pedro para 11988887777\"_"); break; }
+        const custUpdated = updateCustomer(custTarget.id, user.id, custPatch);
+        if (custUpdated) await wppSend(from, replyCustomerUpdated(custUpdated));
+        break;
+      }
+
+      case "customer_deactivate": {
+        const custDeactKeyword = ai.keyword || ai.customer?.name || "";
+        const custDeactTarget = custDeactKeyword ? findCustomerByName(user.id, custDeactKeyword) : null;
+        if (!custDeactTarget) { await wppSend(from, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista."); break; }
+        const custDeactivated = updateCustomer(custDeactTarget.id, user.id, { status: "inactive" });
+        if (custDeactivated) await wppSend(from, replyCustomerDeactivated(custDeactivated));
+        break;
+      }
+
       case "recurring_create": {
         if (!ai.recurring) { await wppSend(from, replyUnknown(messageText)); break; }
 
@@ -1502,6 +1586,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "mode_switch": {
+        if (phoneAccess !== "both") {
+          const accessLabel = phoneAccess === "personal" ? "pessoal" : "empresarial";
+          await wppSend(from, `❌ Você só tem acesso ao modo *${accessLabel}* nessa conta.`);
+          break;
+        }
         const newMode = ai.mode || (mode === "personal" ? "business" : "personal");
         updateUser(user.id, { activeMode: newMode });
         await wppSend(from, replyModeSwitch(newMode));
