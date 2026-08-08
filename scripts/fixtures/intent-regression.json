@@ -1,0 +1,18 @@
+[
+  { "message": "gastei 50 no mercado", "expect": { "intent": "finance_register" } },
+  { "message": "recebi 500 de vendas", "expect": { "intent": "finance_register" } },
+  { "message": "quanto gastei com comida mes passado", "expect": { "intent": "finance_query", "category": "Alimentação" } },
+  { "message": "quanto gastei com ifood mes passado", "expect": { "intent": "finance_query", "keyword": "ifood" } },
+  { "message": "corrige a descrição do ifood para almoço com cliente", "expect": { "intent": "finance_edit", "newDescription": "almoço com cliente" } },
+  { "message": "pago netflix 55 todo mês dia 10", "expect": { "intent": "recurring_create", "recurring": { "recurrenceType": "recurring" } } },
+  { "message": "academia 100 por mês, por 12 meses", "expect": { "intent": "recurring_create", "recurring": { "recurrenceType": "recurring", "totalInstallments": 12 } } },
+  { "message": "comprei geladeira 5000 em 10x de 500 todo dia 10", "expect": { "intent": "recurring_create", "recurring": { "recurrenceType": "installment", "totalInstallments": 10 } } },
+  { "message": "pago o funcionário 2000 todo dia 5", "expect": { "intent": "recurring_create", "recurring": { "mode": "business" } } },
+  { "message": "cria uma tarefa: ligar pro João amanhã, urgente", "expect": { "intent": "task_create" } },
+  { "message": "quero guardar 3000 para viagem até dezembro", "expect": { "intent": "goal_create" } },
+  { "message": "agendar reunião com cliente amanhã às 14h", "expect": { "intent": "agenda_create" } },
+  { "message": "gastei 50 de combustível no Gol", "expect": { "intent": "vehicle_expense" } },
+  { "message": "muda para modo empresa", "expect": { "intent": "mode_switch", "mode": "business" } },
+  { "message": "qual meu saldo", "expect": { "intent": "balance_query" } },
+  { "message": "quanto gastei essa semana", "expect": { "intent": "finance_query" } }
+]

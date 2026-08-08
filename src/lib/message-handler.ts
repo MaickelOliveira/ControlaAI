@@ -554,7 +554,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     }
 
     // ── Processa com IA ──
-    const ai = await processMessage(messageText);
+    const ai = await processMessage(messageText, { user });
     console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
 
     // Confiança baixa — pede esclarecimento antes de agir

@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
 import { nowISOBR, todayStrBR } from "./date-br";
-import type { UserMode } from "./users";
+import type { UserMode, User } from "./users";
+import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
 
 export type Intent =
   | "finance_register"
@@ -145,7 +146,17 @@ export type AIResult = {
   confidence: number;
 };
 
-function buildSystemPrompt() {
+export type AiContext = {
+  user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome">;
+};
+
+/** Parte do prompt que muda a cada chamada (data, calendário, períodos
+ *  pré-calculados, categorias do usuário — incluindo as personalizadas,
+ *  invisíveis pra IA antes disso — e modo ativo). Fica no início da
+ *  mensagem do turno, não no systemInstruction, porque systemInstruction é
+ *  fixo por modelo — só o que realmente muda por chamada deve estar aqui,
+ *  senão nenhuma otimização de cache de contexto se aplica. */
+function buildVolatileContext(ctx?: AiContext): string {
   const hoje = todayStrBR();
   const agora = nowISOBR();
 
@@ -197,10 +208,13 @@ function buildSystemPrompt() {
     `- Este ano: from "${toYMD(yearFrom)}" to "${hoje}"`,
   ].join("\n");
 
-  return `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
-Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
+  const expenseCats = [...CATEGORIES_EXPENSE, ...(ctx?.user.customCategoriesExpense ?? [])];
+  const incomeCats = [...CATEGORIES_INCOME, ...(ctx?.user.customCategoriesIncome ?? [])];
+  const modeLine = ctx?.user.activeMode
+    ? `\nModo ativo do usuário agora: ${ctx.user.activeMode === "business" ? "empresa" : "pessoal"} — use como padrão quando a mensagem não deixar claro qual modo usar.`
+    : "";
 
-Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).
+  return `Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 
 Calendário dos próximos dias (use para resolver dias da semana sem errar):
@@ -209,15 +223,29 @@ ${nextDays.join("\n")}
 ⚠️ Períodos relativos JÁ CALCULADOS — use EXATAMENTE esses valores no campo "period" quando a mensagem mencionar o período correspondente (finance_query, balance_query, finance_detail, finance_analysis). NUNCA calcule essas datas por conta própria:
 ${periodsRef}
 
+CATEGORIAS DE DESPESA: ${expenseCats.join(", ")}
+CATEGORIAS DE RECEITA: ${incomeCats.join(", ")}${modeLine}`;
+}
+
+/** Parte do prompt que NÃO muda entre chamadas — vai no systemInstruction
+ *  do modelo (fixo, fora do turno), o que permite cache de contexto no
+ *  provedor em vez de reprocessar as mesmas ~700 linhas de instrução a
+ *  cada mensagem. */
+function buildStaticInstructions() {
+  return `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
+Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
+Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
+As categorias válidas, a data de hoje, o calendário e os períodos pré-calculados vêm no início da mensagem do usuário a cada chamada — use sempre os valores de lá, nunca invente.
+
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular)
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria") — isso é usado em contas compartilhadas por várias pessoas da família, cada uma com seu próprio número de WhatsApp vinculado, para filtrar só os gastos registrados por aquela pessoa.
   ⚠️ DISTINÇÃO IMPORTANTE — categoria genérica vs comerciante/app específico:
-  • CATEGORIA/ASSUNTO amplo (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"): inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA abaixo (ex: "comida"/"mercado"/"restaurante" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte").
+  • CATEGORIA/ASSUNTO amplo (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"): inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA (no início da mensagem) (ex: "comida"/"mercado"/"restaurante" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte").
   • COMERCIANTE/APP/MARCA específico (ex: "quanto gastei com ifood", "gastos no aiqfome", "quanto gastei no 99", "gasto com uber eats", "quanto gastei na farmácia X"): inclua "keyword" com o nome do comerciante (NÃO use "category" nesse caso — a descrição do lançamento pode estar abreviada, ex: "IFD" em vez de "iFood", e o sistema já sabe expandir essas variantes a partir do "keyword").
-  Em ambos os casos, inclua "financeType" com "expense" ou "income" conforme o verbo da REGRA CRÍTICA abaixo (padrão "expense"). ⚠️ Se a pergunta mencionar um PERÍODO diferente do mês atual (ex: "mês passado", "semana passada", "essa semana", "primeira semana do mês", "esse ano"), inclua "period" usando EXATAMENTE os valores da lista de períodos pré-calculados no topo deste prompt — NUNCA calcule essas datas você mesmo. Sem período mencionado, não inclua "period" (o sistema usa o mês atual por padrão).
+  Em ambos os casos, inclua "financeType" com "expense" ou "income" conforme o verbo da REGRA CRÍTICA abaixo (padrão "expense"). ⚠️ Se a pergunta mencionar um PERÍODO diferente do mês atual (ex: "mês passado", "semana passada", "essa semana", "primeira semana do mês", "esse ano"), inclua "period" usando EXATAMENTE os valores da lista de períodos pré-calculados no início de cada mensagem — NUNCA calcule essas datas você mesmo. Sem período mencionado, não inclua "period" (o sistema usa o mês atual por padrão).
 - finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
@@ -262,8 +290,7 @@ Exemplo: "recebi 500 de vendas" → type: "income", category: "Vendas"
 Exemplo: "vendas do mês foram 2000" → type: "income", category: "Vendas"
 Exemplo: "gastei 500 com vendedor" → type: "expense", category: "Outros"
 
-CATEGORIAS DE DESPESA: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
-CATEGORIAS DE RECEITA: Salário, Freelance, Vendas, Investimentos, Aluguel, Serviços, Reembolso, Outros
+As categorias válidas (incluindo as personalizadas do usuário, se houver) vêm no início da mensagem, em CATEGORIAS DE DESPESA/CATEGORIAS DE RECEITA.
 
 MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, finance_edit, task_create, goal_create, vehicle_expense, recurring_create, recurring_edit. Sempre que a intenção criar/editar algo, tente identificar o campo "mode":
 1. PRIORIDADE MÁXIMA — pedido explícito: se a mensagem disser "modo empresa"/"empresarial"/"para empresa"/"na empresa" → mode: "business". Se disser "modo pessoal"/"pessoal" → mode: "personal". Isso vale mesmo que o conteúdo pareça sugerir o modo contrário — o pedido explícito do usuário sempre vence.
@@ -272,7 +299,7 @@ MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não 
    - personal: mercado, casa, família, lazer, saúde pessoal, contas domésticas etc. — despesa/receita/tarefa/meta claramente pessoal
 3. Se realmente não der para identificar nada (ambíguo, sem pistas), não inclua o campo "mode" no JSON — o sistema usa o modo ativo do usuário como padrão.
 
-Para datas relativas: use SEMPRE o calendário acima para resolver dias da semana — não calcule por conta própria. Ex: se hoje é domingo e o usuário diz "terça-feira", pegue a data de terça-feira listada acima.
+Para datas relativas: use SEMPRE o calendário informado no início de cada mensagem para resolver dias da semana — não calcule por conta própria. Ex: se hoje é domingo e o usuário diz "terça-feira", pegue a data de terça-feira listada lá.
 
 Retorne SOMENTE JSON válido, sem markdown:
 
@@ -335,7 +362,7 @@ Exemplo finance_query com nome de pessoa ("quanto a Ana gastou esse mês?"):
   "personName": "Ana"
 }
 
-Exemplo finance_query com categoria e período — "quanto gastei com comida mes passado" (⚠️ os valores de "period" aqui são só ilustrativos; SEMPRE use os valores reais da lista de períodos pré-calculados no topo deste prompt):
+Exemplo finance_query com categoria e período — "quanto gastei com comida mes passado" (⚠️ os valores de "period" aqui são só ilustrativos; SEMPRE use os valores reais da lista de períodos pré-calculados no início de cada mensagem):
 {
   "intent": "finance_query",
   "confidence": 0.9,
@@ -869,7 +896,7 @@ OU genérico:
 }`;
 }
 
-export async function processMessage(message: string): Promise<AIResult> {
+export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
   const cfg = getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
 
@@ -882,10 +909,18 @@ export async function processMessage(message: string): Promise<AIResult> {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // systemInstruction fica fora do turno — não muda entre chamadas, então
+    // o provedor pode cachear/reaproveitar em vez de reprocessar as ~700
+    // linhas de instrução a cada mensagem. Só o volátil (data, categorias,
+    // modo do usuário) vai no conteúdo do turno.
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction: buildStaticInstructions(),
+      generationConfig: { temperature: 0.1 }, // classificador — não texto criativo
+    });
 
     const result = await model.generateContent(
-      `${buildSystemPrompt()}\n\nMensagem do usuário: "${message}"`
+      `${buildVolatileContext(ctx)}\n\nMensagem do usuário: "${message}"`
     );
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -1089,8 +1124,8 @@ Se for um documento financeiro, extraia os dados e retorne JSON:
 Se NÃO for um documento financeiro, retorne:
 {"isFinancial": false}
 
-CATEGORIAS DE DESPESA: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
-CATEGORIAS DE RECEITA: Salário, Freelance, Vendas, Investimentos, Aluguel, Serviços, Reembolso, Outros
+CATEGORIAS DE DESPESA: ${CATEGORIES_EXPENSE.join(", ")}
+CATEGORIAS DE RECEITA: ${CATEGORIES_INCOME.join(", ")}
 
 Retorne APENAS JSON válido, sem markdown.`,
       {
@@ -1171,7 +1206,7 @@ Se for uma fatura/extrato com várias transações, extraia CADA lançamento de 
 Se NÃO for uma fatura/extrato com múltiplas transações (ex: é só um recibo único, uma nota fiscal, um boleto simples), retorne:
 {"isInvoice": false}
 
-CATEGORIAS: Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Vestuário, Tecnologia, Serviços, Impostos, Funcionários, Marketing, Fornecedores, Outros
+CATEGORIAS: ${CATEGORIES_EXPENSE.join(", ")}
 
 Retorne APENAS JSON válido, sem markdown, sem comentários.`,
       {
