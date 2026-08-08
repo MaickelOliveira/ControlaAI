@@ -2,11 +2,12 @@
 import { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
 
 type BarEntry = { label: string; receitas: number; despesas: number };
 type PieEntry = { name: string; value: number };
+type AreaEntry = { label: string; saldo: number };
 
 const PIE_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6"];
 
@@ -36,6 +37,35 @@ export function BarChartComponent({ data }: { data: BarEntry[] }) {
         <Bar dataKey="receitas" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={36} />
         <Bar dataKey="despesas" fill="#ef4444" radius={[6, 6, 0, 0]} maxBarSize={36} />
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function AreaChartComponent({ data }: { data: AreaEntry[] }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <div className="h-[200px]" />;
+
+  const hasNegative = data.some(d => d.saldo < 0);
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="saldoGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={hasNegative ? "#f59e0b" : "#3b82f6"} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={hasNegative ? "#f59e0b" : "#3b82f6"} stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
+        <Tooltip
+          formatter={(value) => [fmt(Number(value ?? 0)), "Saldo"]}
+          contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
+        />
+        <Area type="monotone" dataKey="saldo" stroke={hasNegative ? "#f59e0b" : "#3b82f6"} strokeWidth={2} fill="url(#saldoGradient)" />
+      </AreaChart>
     </ResponsiveContainer>
   );
 }

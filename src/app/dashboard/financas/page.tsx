@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { clsx } from "clsx";
+import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
 
 type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
 
@@ -49,9 +50,9 @@ const EMPTY_FORM: FormState = {
 export default function FinancasPage() {
   const [mode, setMode] = useState("");
   const [finances, setFinances] = useState<Finance[]>([]);
-  const [balance, setBalance] = useState({ income: 0, expense: 0, balance: 0 });
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
 
   const [catsExpense, setCatsExpense] = useState<string[]>([]);
   const [catsIncome, setCatsIncome] = useState<string[]>([]);
@@ -151,21 +152,27 @@ export default function FinancasPage() {
   function loadAll(m: string) {
     setLoading(true);
     Promise.all([
-      fetch(`/api/finances?mode=${m}`).then(r => r.json()),
+      fetch(`/api/finances?mode=${m}&from=${filters.from}&to=${filters.to}`).then(r => r.json()),
       fetch(`/api/recurring?mode=${m}&status=active`).then(r => r.json()),
     ]).then(([fd, rd]) => {
       setFinances(fd.finances || []);
-      setBalance({ income: 0, expense: 0, balance: 0, ...(fd.balance || {}) });
       setRecs(Array.isArray(rd) ? rd : []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }
 
+  // Recarrega quando o período do filtro muda (categoria/tipo/busca filtram
+  // client-side sobre o que já foi buscado, sem precisar de novo fetch).
+  useEffect(() => {
+    if (!mode) return;
+    loadAll(mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, filters.from, filters.to]);
+
   useEffect(() => {
     fetch("/api/dashboard").then(r => r.json()).then(d => {
       const m = d.user?.activeMode || "personal";
       setMode(m);
-      loadAll(m);
       loadCategories();
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -293,18 +300,43 @@ export default function FinancasPage() {
   const cats = form.type === "income" ? catsIncome : catsExpense;
   const editCats = editTarget?.type === "income" ? catsIncome : catsExpense;
   const editRecCats = editRec?.type === "income" ? catsIncome : catsExpense;
+  const allCategories = useMemo(() => [...new Set([...catsExpense, ...catsIncome])], [catsExpense, catsIncome]);
+
+  // Categoria/tipo/busca filtram client-side sobre o que já foi buscado
+  // (período já veio filtrado do servidor) — cards, gráfico e extrato usam
+  // TODOS o mesmo array filtrado, o que corrige o bug de percentual (antes
+  // catTotals somava tudo sem filtro de data enquanto o saldo usado como
+  // denominador era só do mês atual).
+  const filteredFinances = useMemo(() => finances.filter(f => {
+    if (filters.type !== "all" && f.type !== filters.type) return false;
+    if (filters.categories.length > 0 && !filters.categories.includes(f.category)) return false;
+    if (filters.search.trim() && !f.description.toLowerCase().includes(filters.search.trim().toLowerCase())) return false;
+    return true;
+  }), [finances, filters]);
+
+  const filteredRecs = useMemo(() => recs.filter(r => {
+    if (filters.type !== "all" && r.type !== filters.type) return false;
+    if (filters.categories.length > 0 && !filters.categories.includes(r.category)) return false;
+    if (filters.search.trim() && !r.description.toLowerCase().includes(filters.search.trim().toLowerCase())) return false;
+    return true;
+  }), [recs, filters]);
+
+  // Finanças pendentes (data futura, status pending) separadas das confirmadas
+  const pendingFinances = filteredFinances.filter(f => f.status === "pending");
+  const postedFinances = filteredFinances.filter(f => f.status !== "pending");
+
+  const incomeTotal = postedFinances.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
+  const expenseTotal = postedFinances.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
+  const balance = { income: incomeTotal, expense: expenseTotal, balance: incomeTotal - expenseTotal };
+
   const catTotals: Record<string, number> = {};
-  finances.filter(f => f.type === "expense").forEach(f => { catTotals[f.category] = (catTotals[f.category] || 0) + f.amount; });
+  postedFinances.filter(f => f.type === "expense").forEach(f => { catTotals[f.category] = (catTotals[f.category] || 0) + f.amount; });
   const topCats = Object.entries(catTotals).sort(([, a], [, b]) => b - a).slice(0, 5);
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
 
-  // Finanças pendentes (data futura, status pending) separadas das confirmadas
-  const pendingFinances = finances.filter(f => f.status === "pending");
-  const postedFinances = finances.filter(f => f.status !== "pending");
-
   // Recs sorted: overdue first, then by nextDueDate
-  const sortedRecs = [...recs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
+  const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
 
   function recStatus(r: Recurring): { label: string; color: string } {
     if (r.nextDueDate < today) return { label: "Vencido", color: "bg-red-100 text-red-600" };
@@ -335,6 +367,8 @@ export default function FinancasPage() {
           </button>
         </div>
       </div>
+
+      <FinanceFilterBar categories={allCategories} value={filters} onChange={setFilters} />
 
       {/* Saldo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -370,7 +404,8 @@ export default function FinancasPage() {
           ) : (
             <div className="space-y-4">
               {topCats.map(([cat, val]) => {
-                const pct = balance.expense > 0 ? (val / balance.expense * 100).toFixed(0) : 0;
+                const pctRaw = balance.expense > 0 ? (val / balance.expense * 100) : 0;
+                const pct = Math.min(100, pctRaw).toFixed(0);
                 return (
                   <div key={cat}>
                     <div className="flex justify-between text-sm mb-1.5">

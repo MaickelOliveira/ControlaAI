@@ -91,8 +91,8 @@ export default function AdminWhatsappPage() {
   }
 
   const statusInfo = {
-    CONNECTED:    { label: "Conectado", dot: "bg-amber-400 animate-pulse", bar: "bg-amber-950/30 border-amber-900/50", text: "text-amber-400" },
-    DISCONNECTED: { label: "Desconectado", dot: "bg-red-400", bar: "bg-red-950/30 border-red-900/50", text: "text-red-400" },
+    CONNECTED:    { label: "WhatsApp conectado", dot: "bg-emerald-400 animate-pulse", bar: "bg-emerald-950/30 border-emerald-900/50", text: "text-emerald-400" },
+    DISCONNECTED: { label: "Bot Desconectado", dot: "bg-red-400", bar: "bg-red-950/30 border-red-900/50", text: "text-red-400" },
     UNKNOWN:      { label: "Verificando...", dot: "bg-slate-500", bar: "bg-slate-100 border-slate-200", text: "text-slate-400" },
   }[cfg.connectionStatus] ?? { label: "?", dot: "bg-slate-500", bar: "bg-slate-100 border-slate-200", text: "text-slate-400" };
 
@@ -111,7 +111,7 @@ export default function AdminWhatsappPage() {
         <div className="flex items-center gap-3">
           <div className={clsx("w-2.5 h-2.5 rounded-full", statusInfo.dot)} />
           <div>
-            <p className={clsx("font-medium text-sm", statusInfo.text)}>Bot {statusInfo.label}</p>
+            <p className={clsx("font-medium text-sm", statusInfo.text)}>{statusInfo.label}</p>
             <p className="text-slate-400 text-xs">Provedor ativo: {cfg.provider === "waba" ? "API Oficial (Meta)" : "Evolution API"}</p>
           </div>
         </div>

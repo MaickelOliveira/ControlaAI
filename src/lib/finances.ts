@@ -33,7 +33,7 @@ export type Finance = {
 };
 
 // Entrada está "postada" (contabilizada) se status for "posted" ou undefined (registros antigos)
-function isPosted(f: Finance): boolean {
+export function isPostedFinance(f: Finance): boolean {
   return !f.status || f.status === "posted";
 }
 
@@ -65,12 +65,24 @@ export function getFinancesByUser(userId: string, mode?: FinanceMode, registered
   );
 }
 
+/** Filtra por intervalo de datas (YYYY-MM-DD, inclusive nas duas pontas) em
+ *  vez do ano/mês fixo de getBalance — usado pelos filtros de período
+ *  customizados em Finanças/Dashboard. Sem from/to, retorna tudo (mesmo
+ *  comportamento de getFinancesByUser). */
+export function getFinancesInRange(userId: string, mode?: FinanceMode, from?: string, to?: string): Finance[] {
+  return getFinancesByUser(userId, mode).filter(f => {
+    if (from && f.date < from) return false;
+    if (to && f.date > to) return false;
+    return true;
+  });
+}
+
 export function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): {
   income: number;
   expense: number;
   balance: number;
 } {
-  let items = getFinancesByUser(userId, mode, registeredBy).filter(isPosted);
+  let items = getFinancesByUser(userId, mode, registeredBy).filter(isPostedFinance);
   if (year !== undefined && month !== undefined) {
     items = items.filter(f => {
       const d = new Date(f.date + "T12:00:00");
@@ -83,7 +95,7 @@ export function getBalance(userId: string, mode: FinanceMode, year?: number, mon
 }
 
 export function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number, registeredBy?: string): Record<string, number> {
-  let items = getFinancesByUser(userId, mode, registeredBy).filter(f => f.type === type && isPosted(f));
+  let items = getFinancesByUser(userId, mode, registeredBy).filter(f => f.type === type && isPostedFinance(f));
   if (year && month) {
     items = items.filter(f => {
       const d = new Date(f.date + "T12:00:00");
@@ -97,7 +109,7 @@ export function getByCategory(userId: string, mode: FinanceMode, type: FinanceTy
 }
 
 export function getDailyTotals(userId: string, mode: FinanceMode, days = 30): Array<{ date: string; income: number; expense: number }> {
-  const items = getFinancesByUser(userId, mode).filter(isPosted);
+  const items = getFinancesByUser(userId, mode).filter(isPostedFinance);
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
 
@@ -172,14 +184,14 @@ export function findFinanceByDescription(userId: string, mode: FinanceMode | nul
 
 export function getRecentTransactions(userId: string, mode: FinanceMode, limit = 10): Finance[] {
   return getFinancesByUser(userId, mode)
-    .filter(isPosted)
+    .filter(isPostedFinance)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, limit);
 }
 
 export function getMonthlyTransactions(userId: string, mode: FinanceMode, year: number, month: number): Finance[] {
   return getFinancesByUser(userId, mode)
-    .filter(f => isPosted(f) && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? ""))
+    .filter(f => isPostedFinance(f) && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? ""))
     .filter(f => {
       const d = new Date(f.date + "T12:00:00");
       return d.getFullYear() === year && d.getMonth() + 1 === month;
