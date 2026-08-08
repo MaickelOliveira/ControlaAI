@@ -8,6 +8,7 @@ import { clsx } from "clsx";
 const navItems = [
   { href: "/admin", label: "Visão Geral", icon: "📊" },
   { href: "/admin/clientes", label: "Clientes", icon: "👥" },
+  { href: "/admin/faturamento", label: "Faturamento", icon: "💰" },
   { href: "/admin/whatsapp", label: "WhatsApp Bot", icon: "📱" },
   { href: "/admin/inbox", label: "Inbox", icon: "💬" },
   { href: "/admin/configuracoes", label: "Configurações", icon: "⚙️" },

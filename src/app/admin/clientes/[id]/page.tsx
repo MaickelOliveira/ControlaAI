@@ -7,7 +7,7 @@ type ClienteDetail = {
   id: string; name: string; email: string; phone: string; wppPhone?: string;
   plan: string; status: string; activeMode: string; company?: string;
   financesCount: number; tasksCount: number; lastActivity: string; activeToday: boolean;
-  trialEndsAt: string; createdAt: string;
+  trialEndsAt: string; createdAt: string; priceOverride?: number;
 };
 
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -15,13 +15,27 @@ function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [cliente, setCliente] = useState<ClienteDetail | null>(null);
+  const [priceInput, setPriceInput] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
 
-  useEffect(() => {
+  function load() {
     fetch("/api/admin/clientes").then(r => r.json()).then(d => {
       const found = d.clientes?.find((c: ClienteDetail) => c.id === id);
-      if (found) setCliente(found);
+      if (found) { setCliente(found); setPriceInput(found.priceOverride ? String(found.priceOverride) : ""); }
     });
-  }, [id]);
+  }
+
+  useEffect(() => { load(); }, [id]);
+
+  async function savePriceOverride() {
+    setSavingPrice(true);
+    await fetch(`/api/admin/clientes/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "set_price_override", priceOverride: priceInput }),
+    });
+    setSavingPrice(false);
+    load();
+  }
 
   if (!cliente) return <div className="text-slate-400 p-4">Carregando...</div>;
 
@@ -84,6 +98,29 @@ export default function ClienteDetailPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
+        <h2 className="font-semibold text-slate-900 mb-1">Valor negociado</h2>
+        <p className="text-slate-400 text-xs mb-4">
+          Deixe em branco pra usar o preço padrão do plano ({cliente.plan === "business" ? "Empresa" : "Pessoal"}), definido em{" "}
+          <Link href="/admin/faturamento" className="text-amber-600 hover:underline">Faturamento</Link>.
+        </p>
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">R$/mês</label>
+            <input type="number" step="0.01" min="0" value={priceInput} onChange={e => setPriceInput(e.target.value)}
+              placeholder="Preço padrão do plano"
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none w-48" />
+          </div>
+          <button onClick={savePriceOverride} disabled={savingPrice}
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition disabled:opacity-50">
+            {savingPrice ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+        {cliente.priceOverride !== undefined && (
+          <p className="text-xs text-purple-600 mt-2">🤝 Atualmente pagando {fmt(cliente.priceOverride)}/mês (negociado)</p>
+        )}
       </div>
     </div>
   );

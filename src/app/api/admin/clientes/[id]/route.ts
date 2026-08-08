@@ -12,15 +12,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
   const { id } = await params;
   const body = await req.json();
-  const { action, trialDays, maxWppPhones } = body;
+  const { action, trialDays, maxWppPhones, priceOverride } = body;
 
   const user = getUserById(id);
   if (!user) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
 
   if (action === "activate") {
-    updateUser(id, { status: "active" });
+    // activatedAt só é setado na PRIMEIRA vez que o cliente vira "active" —
+    // reativações depois de um período inativo não reescrevem o marco original.
+    updateUser(id, { status: "active", ...(user.activatedAt ? {} : { activatedAt: new Date().toISOString() }) });
   } else if (action === "deactivate") {
-    updateUser(id, { status: "inactive" });
+    updateUser(id, { status: "inactive", deactivatedAt: new Date().toISOString() });
   } else if (action === "extend_trial") {
     const days = Number(trialDays) || 14;
     const trialEnd = new Date();
@@ -29,6 +31,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
   } else if (action === "set_wpp_limit") {
     const limit = Math.max(1, Number(maxWppPhones) || 1);
     updateUser(id, { maxWppPhones: limit });
+  } else if (action === "set_price_override") {
+    // priceOverride vazio/null/0 remove a exceção e volta a usar o preço padrão do plano
+    const value = priceOverride === "" || priceOverride === null || priceOverride === undefined ? undefined : Number(priceOverride);
+    updateUser(id, { priceOverride: value !== undefined && !isNaN(value) && value > 0 ? value : undefined });
   } else {
     return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
   }

@@ -52,6 +52,10 @@ export type Intent =
   | "employee_list"
   | "employee_update"
   | "employee_deactivate"
+  | "customer_create"
+  | "customer_list"
+  | "customer_update"
+  | "customer_deactivate"
   | "how_to"
   | "help"
   | "unknown";
@@ -175,6 +179,14 @@ export type EmployeeData = {
   email?: string;
 };
 
+export type CustomerData = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  company?: string;
+  notes?: string;
+};
+
 export type AIResult = {
   intent: Intent;
   finance?: FinanceData;
@@ -188,10 +200,11 @@ export type AIResult = {
   meetData?: MeetData;
   grocery?: GroceryData;
   employee?: EmployeeData;
+  customer?: CustomerData;
   mode?: UserMode;
   financeType?: "income" | "expense"; // para finance_detail/finance_query: qual tipo mostrar (padrão "expense")
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
-  personName?: string; // nome de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou")
+  personName?: string; // nome OU vínculo (ex: "esposa", "filho") de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou", "quanto minha esposa gastou")
   category?: string; // categoria específica perguntada em finance_query/balance_query (ex: "quanto gastei com comida" → "Alimentação")
   newDescription?: string; // finance_edit: novo texto da descrição, quando o usuário quer RENOMEAR o lançamento. Distinto de finance.description, que ecoa o lançamento encontrado e serve de busca.
   period?: { from?: string; to?: string }; // intervalo de datas (YYYY-MM-DD) para finance_query/balance_query/finance_detail/finance_analysis quando o período não é o mês atual (ex: "mês passado", "semana passada")
@@ -295,7 +308,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular)
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
-- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria") — isso é usado em contas compartilhadas por várias pessoas da família, cada uma com seu próprio número de WhatsApp vinculado, para filtrar só os gastos registrados por aquela pessoa.
+- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
   ⚠️ DISTINÇÃO IMPORTANTE — categoria genérica vs comerciante/app específico:
   • CATEGORIA/ASSUNTO amplo (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"): inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA (no início da mensagem) (ex: "comida"/"mercado"/"restaurante" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte").
   • COMERCIANTE/APP/MARCA específico (ex: "quanto gastei com ifood", "gastos no aiqfome", "quanto gastei no 99", "gasto com uber eats", "quanto gastei na farmácia X"): inclua "keyword" com o nome do comerciante (NÃO use "category" nesse caso — a descrição do lançamento pode estar abreviada, ex: "IFD" em vez de "iFood", e o sistema já sabe expandir essas variantes a partir do "keyword").
@@ -347,6 +360,10 @@ INTENÇÕES POSSÍVEIS:
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
 - employee_deactivate: desativar/demitir um funcionário ("demite o João", "desativa a Ana", "o João não trabalha mais aqui"). Use "keyword" com o nome.
+- customer_create: cadastrar um novo CLIENTE da empresa (quem COMPRA/contrata, não quem trabalha lá) ("cadastra o cliente Pedro", "adiciona a empresa XPTO como cliente", "novo cliente: Maria, telefone 11999999999"). Use "customer.name" (obrigatório), e opcionalmente "customer.phone", "customer.email", "customer.company", "customer.notes". ⚠️ DIFERENTE de employee_create (funcionário TRABALHA na empresa) e de recurring_create/finance_register (lançar um valor não é cadastrar um cliente).
+- customer_list: ver clientes cadastrados ("meus clientes", "lista de clientes", "quais clientes eu tenho")
+- customer_update: alterar dados de um cliente existente ("muda o telefone do Pedro", "atualiza o email da Maria"). Use "keyword" com o nome e "customer" com os campos novos.
+- customer_deactivate: desativar/remover um cliente ("remove o cliente Pedro", "esse cliente não compra mais comigo"). Use "keyword" com o nome.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos"). Nesse caso, escreva uma explicação clara e amigável no campo "response".
 - help: pedir lista de comandos ("ajuda", "help", "o que você faz")
@@ -430,6 +447,13 @@ Exemplo finance_query com nome de pessoa ("quanto a Ana gastou esse mês?"):
   "intent": "finance_query",
   "confidence": 0.9,
   "personName": "Ana"
+}
+
+Exemplo finance_query com vínculo em vez de nome ("quanto minha esposa gastou esse mês?" — "esposa" é o vínculo, não um nome inventado):
+{
+  "intent": "finance_query",
+  "confidence": 0.9,
+  "personName": "esposa"
 }
 
 Exemplo finance_query com categoria e período — "quanto gastei com comida mes passado" (⚠️ os valores de "period" aqui são só ilustrativos; SEMPRE use os valores reais da lista de períodos pré-calculados no início de cada mensagem):
@@ -835,6 +859,37 @@ OU para desativar funcionário ("demite o João"):
   "intent": "employee_deactivate",
   "confidence": 0.9,
   "keyword": "João"
+}
+
+OU para cadastrar cliente ("cadastra o cliente Pedro, telefone 11999999999" — Pedro COMPRA da empresa, não trabalha nela):
+{
+  "intent": "customer_create",
+  "confidence": 0.9,
+  "customer": {
+    "name": "Pedro",
+    "phone": "11999999999"
+  }
+}
+
+OU para listar clientes ("meus clientes", "lista de clientes"):
+{
+  "intent": "customer_list",
+  "confidence": 0.9
+}
+
+OU para editar cliente ("muda o telefone do Pedro para 11988887777"):
+{
+  "intent": "customer_update",
+  "confidence": 0.9,
+  "keyword": "Pedro",
+  "customer": { "phone": "11988887777" }
+}
+
+OU para remover cliente ("remove o cliente Pedro"):
+{
+  "intent": "customer_deactivate",
+  "confidence": 0.9,
+  "keyword": "Pedro"
 }
 
 OU para parcelamento ("comprei geladeira 5000 em 10x de 500 todo dia 10"):

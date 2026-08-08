@@ -20,11 +20,16 @@ export type User = {
   wppPhone?: string;         // legado — migrado para wppPhones automaticamente
   wppPhones?: string[];      // lista de números vinculados
   wppPhoneNames?: Record<string, string>; // nome de quem usa cada número vinculado (para identificar quem registrou cada gasto)
+  wppPhoneRelations?: Record<string, string>; // vínculo com a conta (ex: "Esposa", "Sócio") — usado em perguntas como "quanto minha esposa gastou"
+  wppPhoneAccess?: Record<string, "personal" | "business" | "both">; // modo que a pessoa pode acessar por esse número; ausente = "both" (retrocompatível)
   maxWppPhones?: number;     // limite de números permitidos (default 1)
   wppVerifyCode?: string;    // código temporário de vinculação
   wppVerifyExpires?: string; // expiração do código
   customCategoriesExpense?: string[];
   customCategoriesIncome?: string[];
+  priceOverride?: number;    // R$/mês negociado pra esse cliente; ausente = usa o preço padrão do plano (billing.ts)
+  activatedAt?: string;      // ISO — quando o status virou "active" pela primeira vez
+  deactivatedAt?: string;    // ISO — quando o status virou "inactive" pela última vez
   trialEndsAt: string;
   createdAt: string;
 };
@@ -183,6 +188,45 @@ export function getWppPhoneByName(user: User, name: string): string | undefined 
   const entries = Object.entries(user.wppPhoneNames ?? {});
   const match = entries.find(([, n]) => normalizeName(n) === target);
   return match?.[0];
+}
+
+/** Define o vínculo de quem usa um número vinculado (ex: "Esposa", "Sócio") */
+export function setWppPhoneRelation(userId: string, phone: string, relation: string): User | null {
+  const users = load();
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx < 0) return null;
+  const relations = { ...(users[idx].wppPhoneRelations ?? {}), [phone]: relation.trim() };
+  users[idx] = { ...users[idx], wppPhoneRelations: relations };
+  save(users);
+  return users[idx];
+}
+
+/** Acha o número vinculado cujo vínculo cadastrado combina com o termo
+ *  informado (ex: "esposa" -> o número cujo wppPhoneRelations[phone] === "Esposa") —
+ *  usado quando a pergunta cita um vínculo familiar/social em vez de um nome
+ *  próprio (ex: "quanto minha esposa gastou"). */
+export function getWppPhoneByRelation(user: User, relation: string): string | undefined {
+  const target = normalizeName(relation);
+  const entries = Object.entries(user.wppPhoneRelations ?? {});
+  const match = entries.find(([, r]) => normalizeName(r) === target);
+  return match?.[0];
+}
+
+/** Define o modo que a pessoa desse número pode acessar */
+export function setWppPhoneAccess(userId: string, phone: string, access: "personal" | "business" | "both"): User | null {
+  const users = load();
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx < 0) return null;
+  const accessMap = { ...(users[idx].wppPhoneAccess ?? {}), [phone]: access };
+  users[idx] = { ...users[idx], wppPhoneAccess: accessMap };
+  save(users);
+  return users[idx];
+}
+
+/** Modo que a pessoa desse número pode acessar — "both" se nunca foi definido
+ *  (retrocompatível: números vinculados antes dessa feature não ficam travados). */
+export function getWppPhoneAccess(user: User, phone: string): "personal" | "business" | "both" {
+  return user.wppPhoneAccess?.[phone] ?? "both";
 }
 
 const DIACRITICS_REGEX = /[̀-ͯ]/g;

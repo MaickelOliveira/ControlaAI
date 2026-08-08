@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getUserById, generateWppVerifyCode, getWppPhones, getMaxWppPhones, removeWppPhone, setWppPhoneName } from "@/lib/users";
+import { getUserById, generateWppVerifyCode, getWppPhones, getMaxWppPhones, removeWppPhone, setWppPhoneName, setWppPhoneRelation, setWppPhoneAccess } from "@/lib/users";
 
 export async function POST() {
   const session = await getSession();
@@ -39,15 +39,29 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const phone = body.phone as string | undefined;
   const name = (body.name as string | undefined)?.trim().slice(0, 40);
+  const relation = (body.relation as string | undefined)?.trim().slice(0, 30);
+  const access = body.access as "personal" | "business" | "both" | undefined;
 
   if (!phone) return NextResponse.json({ error: "Número não informado" }, { status: 400 });
-  if (!name) return NextResponse.json({ error: "Nome não informado" }, { status: 400 });
+  if (!name && !relation && !access) return NextResponse.json({ error: "Nada para atualizar" }, { status: 400 });
+  if (access && !["personal", "business", "both"].includes(access)) {
+    return NextResponse.json({ error: "Acesso inválido" }, { status: 400 });
+  }
 
   const user = getUserById(session.sub);
   if (!user || !getWppPhones(user).includes(phone)) {
     return NextResponse.json({ error: "Número não vinculado a essa conta" }, { status: 400 });
   }
 
-  const updated = setWppPhoneName(session.sub, phone, name);
-  return NextResponse.json({ ok: true, wppPhoneNames: updated?.wppPhoneNames ?? {} });
+  let updated = user;
+  if (name) updated = setWppPhoneName(session.sub, phone, name) ?? updated;
+  if (relation) updated = setWppPhoneRelation(session.sub, phone, relation) ?? updated;
+  if (access) updated = setWppPhoneAccess(session.sub, phone, access) ?? updated;
+
+  return NextResponse.json({
+    ok: true,
+    wppPhoneNames: updated.wppPhoneNames ?? {},
+    wppPhoneRelations: updated.wppPhoneRelations ?? {},
+    wppPhoneAccess: updated.wppPhoneAccess ?? {},
+  });
 }

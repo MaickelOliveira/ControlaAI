@@ -10,6 +10,7 @@ import type { UserMode } from "./users";
 import { formatDateBR, formatDateTimeBR } from "./date-br";
 import type { ShoppingListItem, GroceryPurchase } from "./grocery";
 import type { Employee } from "./employees";
+import type { Customer } from "./customers";
 
 const TZ = "America/Sao_Paulo";
 
@@ -41,10 +42,6 @@ export function replyBalance(personal: { income: number; expense: number; balanc
 
 export function replyPersonNotFound(name: string): string {
   return `Não encontrei ninguém chamado *${name}* entre os números vinculados à sua conta.\n\nPara eu identificar quem registrou cada gasto, cada pessoa precisa vincular o próprio WhatsApp em *Configurações* e me dizer o nome quando eu perguntar.`;
-}
-
-export function replyAskWppName(): string {
-  return `Antes de começarmos, como posso te chamar?\n\nAssim eu sei identificar quem registrou cada gasto quando mais de uma pessoa da família ou da equipe usar essa conta.`;
 }
 
 export function replyWppNameSaved(name: string): string {
@@ -500,4 +497,26 @@ export function replyEmployeeUpdated(e: Employee): string {
 
 export function replyEmployeeDeactivated(e: Employee): string {
   return `🗑️ *${e.name}* foi desativado(a).`;
+}
+
+// ── Clientes (CRM) ────────────────────────
+
+export function replyCustomerCreated(c: Customer): string {
+  const line = [c.phone, c.email, c.company].filter(Boolean).join(" · ");
+  return `Cadastrado. 🧾\n\n*${c.name}*${line ? `\n${line}` : ""}\n\n🏢 Veja em Clientes no dashboard.`;
+}
+
+export function replyCustomerList(customers: Customer[]): string {
+  if (!customers.length) return `🧾 Nenhum cliente ativo cadastrado.`;
+  let msg = `🧾 *Clientes ativos (${customers.length}):*\n\n`;
+  customers.forEach(c => { msg += `• ${c.name}${c.phone ? ` — ${c.phone}` : ""}\n`; });
+  return msg.trim();
+}
+
+export function replyCustomerUpdated(c: Customer): string {
+  return `✏️ Atualizado.\n\n*${c.name}*`;
+}
+
+export function replyCustomerDeactivated(c: Customer): string {
+  return `🗑️ *${c.name}* foi removido(a) dos clientes ativos.`;
 }

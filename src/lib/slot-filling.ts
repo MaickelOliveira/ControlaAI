@@ -13,8 +13,9 @@ import { createAppointment } from "./agenda";
 import { todayStrBR, spToUTC } from "./date-br";
 import { findOrCreateStore, addPurchase, type GroceryPurchaseItem } from "./grocery";
 import { createEmployee } from "./employees";
+import { createCustomer } from "./customers";
 import {
-  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyEmployeeCreated,
+  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyEmployeeCreated, replyCustomerCreated,
 } from "./bot-replies";
 import { formatCurrency } from "./finances";
 
@@ -647,5 +648,47 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
     },
 
     giveUp: () => `❌ Não consegui cadastrar — faltou o nome ou o salário. Tente de novo, ex: _"cadastra a Ana como vendedora, 2000"_.`,
+  },
+
+  customer_create: {
+    seed(ai) {
+      const c = ai.customer;
+      return {
+        name: c?.name ? cap(c.name.trim()) : "",
+        phone: c?.phone,
+        email: c?.email,
+        company: c?.company,
+        notes: c?.notes,
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      return draft.name ? [] : ["name"];
+    },
+
+    slots: {
+      name: {
+        key: "name",
+        label: "nome",
+        parse: slotText(2),
+        ask: () => `🧾 Qual o nome do cliente?`,
+        // sem fallback — slot duro
+      },
+    },
+
+    finalize(draft, ctx) {
+      const customer = createCustomer({
+        userId: ctx.userId,
+        name: draft.name as string,
+        phone: draft.phone as string | undefined,
+        email: draft.email as string | undefined,
+        company: draft.company as string | undefined,
+        notes: draft.notes as string | undefined,
+        status: "active",
+      });
+      return replyCustomerCreated(customer);
+    },
+
+    giveUp: () => `❌ Não consegui cadastrar — faltou o nome. Tente de novo, ex: _"cadastra o cliente Pedro"_.`,
   },
 };

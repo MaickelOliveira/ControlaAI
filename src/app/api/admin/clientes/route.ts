@@ -33,6 +33,7 @@ export async function GET() {
       company: u.company,
       trialEndsAt: u.trialEndsAt,
       createdAt: u.createdAt,
+      priceOverride: u.priceOverride,
       financesCount: finances.length,
       tasksCount: tasks.length,
       lastActivity,
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
   if (maxWppPhones && Number(maxWppPhones) > 1) extraPatch.maxWppPhones = Number(maxWppPhones);
 
   if (!isTrial) {
-    updateUser(user.id, { status: "active", ...extraPatch });
+    updateUser(user.id, { status: "active", activatedAt: new Date().toISOString(), ...extraPatch });
   } else if (trialDays && trialDays !== 14) {
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + Number(trialDays));
