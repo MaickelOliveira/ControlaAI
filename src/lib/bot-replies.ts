@@ -18,9 +18,9 @@ export function replyFinanceRegistered(f: Finance, balance: number): string {
   return `Anotado. ${emoji} *${formatCurrency(f.amount)}* — ${f.category} (${tipo})\n📝 ${f.description}\n📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\nSaldo ${modeLabel}: *${formatCurrency(balance)}*`;
 }
 
-export function replyBalance(personal: { income: number; expense: number; balance: number }, business?: { income: number; expense: number; balance: number }, personName?: string): string {
-  const month = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  let msg = personName ? `Aqui está o resumo de ${month}, ${personName}:\n\n` : `Aqui está o resumo de ${month}:\n\n`;
+export function replyBalance(personal: { income: number; expense: number; balance: number }, business?: { income: number; expense: number; balance: number }, personName?: string, periodLabel?: string): string {
+  const period = periodLabel || new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  let msg = personName ? `Aqui está o resumo de ${period}, ${personName}:\n\n` : `Aqui está o resumo de ${period}:\n\n`;
 
   msg += `👤 *Pessoal*\n`;
   msg += `  Receitas: ${formatCurrency(personal.income)}\n`;

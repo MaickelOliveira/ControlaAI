@@ -131,9 +131,11 @@ export type AIResult = {
   agendaData?: AgendaData;
   meetData?: MeetData;
   mode?: UserMode;
-  financeType?: "income" | "expense"; // para finance_detail: qual tipo mostrar
+  financeType?: "income" | "expense"; // para finance_detail/finance_query: qual tipo mostrar (padrão "expense")
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
   personName?: string; // nome de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou")
+  category?: string; // categoria específica perguntada em finance_query/balance_query (ex: "quanto gastei com comida" → "Alimentação")
+  period?: { from?: string; to?: string }; // intervalo de datas (YYYY-MM-DD) para finance_query/balance_query/finance_detail/finance_analysis quando o período não é o mês atual (ex: "mês passado", "semana passada")
   response?: string; // resposta direta para how_to
   confidence: number;
 };
@@ -154,6 +156,42 @@ function buildSystemPrompt() {
     nextDays.push(`  ${dow}: ${ymd}${label}`);
   }
 
+  // Pré-calcula intervalos de datas para os períodos relativos mais comuns em
+  // perguntas financeiras ("mês passado", "semana passada" etc.) — a IA deve
+  // copiar esses valores prontos em vez de calcular datas por conta própria,
+  // que é uma fonte recorrente de erro.
+  const toYMD = (d: Date) => d.toISOString().slice(0, 10);
+  const todayAnchor = new Date(hoje + "T12:00:00-03:00");
+  const ty = todayAnchor.getFullYear();
+  const tm = todayAnchor.getMonth(); // 0-indexed
+  const mkNoon = (yy: number, mm: number, dd: number) => new Date(yy, mm, dd, 12, 0, 0);
+  const monthLabel = (yy: number, mm: number) => mkNoon(yy, mm, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+
+  const curMonthFrom = mkNoon(ty, tm, 1);
+  const curMonthTo = mkNoon(ty, tm + 1, 0);
+  const lastMonthFrom = mkNoon(ty, tm - 1, 1);
+  const lastMonthTo = mkNoon(ty, tm, 0);
+
+  const todayDow = todayAnchor.getDay(); // 0=domingo..6=sábado
+  const diffToMonday = todayDow === 0 ? -6 : 1 - todayDow;
+  const thisWeekMon = new Date(todayAnchor); thisWeekMon.setDate(todayAnchor.getDate() + diffToMonday);
+  const thisWeekSun = new Date(thisWeekMon); thisWeekSun.setDate(thisWeekMon.getDate() + 6);
+  const lastWeekMon = new Date(thisWeekMon); lastWeekMon.setDate(thisWeekMon.getDate() - 7);
+  const lastWeekSun = new Date(thisWeekMon); lastWeekSun.setDate(thisWeekMon.getDate() - 1);
+
+  const firstWeekFrom = mkNoon(ty, tm, 1);
+  const firstWeekTo = mkNoon(ty, tm, 7);
+  const yearFrom = mkNoon(ty, 0, 1);
+
+  const periodsRef = [
+    `- Este mês / mês atual (${monthLabel(ty, tm)}): from "${toYMD(curMonthFrom)}" to "${toYMD(curMonthTo)}"`,
+    `- Mês passado (${monthLabel(ty, tm - 1)}): from "${toYMD(lastMonthFrom)}" to "${toYMD(lastMonthTo)}"`,
+    `- Esta semana: from "${toYMD(thisWeekMon)}" to "${toYMD(thisWeekSun)}"`,
+    `- Semana passada: from "${toYMD(lastWeekMon)}" to "${toYMD(lastWeekSun)}"`,
+    `- Primeira semana deste mês: from "${toYMD(firstWeekFrom)}" to "${toYMD(firstWeekTo)}"`,
+    `- Este ano: from "${toYMD(yearFrom)}" to "${hoje}"`,
+  ].join("\n");
+
   return `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
 Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
 
@@ -163,14 +201,17 @@ Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:S
 Calendário dos próximos dias (use para resolver dias da semana sem errar):
 ${nextDays.join("\n")}
 
+⚠️ Períodos relativos JÁ CALCULADOS — use EXATAMENTE esses valores no campo "period" quando a mensagem mencionar o período correspondente (finance_query, balance_query, finance_detail, finance_analysis). NUNCA calcule essas datas por conta própria:
+${periodsRef}
+
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular)
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y")
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
-- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria") — isso é usado em contas compartilhadas por várias pessoas da família, cada uma com seu próprio número de WhatsApp vinculado, para filtrar só os gastos registrados por aquela pessoa.
-- finance_detail: extrato DETALHADO do mês atual, listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal".
-- balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName" do finance_query quando a pergunta cita o nome de outra pessoa (ex: "qual o saldo da Ana").
-- finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais")
+- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria") — isso é usado em contas compartilhadas por várias pessoas da família, cada uma com seu próprio número de WhatsApp vinculado, para filtrar só os gastos registrados por aquela pessoa. ⚠️ Se a pergunta mencionar uma CATEGORIA/ASSUNTO específico (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"), inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA abaixo, mapeando termos coloquiais (ex: "comida"/"mercado"/"restaurante"/"ifood" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte"), e "financeType" com "expense" ou "income" conforme o verbo da REGRA CRÍTICA abaixo (padrão "expense"). ⚠️ Se a pergunta mencionar um PERÍODO diferente do mês atual (ex: "mês passado", "semana passada", "essa semana", "primeira semana do mês", "esse ano"), inclua "period" usando EXATAMENTE os valores da lista de períodos pré-calculados no topo deste prompt — NUNCA calcule essas datas você mesmo. Sem período mencionado, não inclua "period" (o sistema usa o mês atual por padrão).
+- finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
+- balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
+- finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
 - task_create: criar uma tarefa
 - task_update: atualizar/concluir uma tarefa
 - task_query: listar tarefas
@@ -277,6 +318,23 @@ Exemplo finance_query com nome de pessoa ("quanto a Ana gastou esse mês?"):
   "intent": "finance_query",
   "confidence": 0.9,
   "personName": "Ana"
+}
+
+Exemplo finance_query com categoria e período — "quanto gastei com comida mes passado" (⚠️ os valores de "period" aqui são só ilustrativos; SEMPRE use os valores reais da lista de períodos pré-calculados no topo deste prompt):
+{
+  "intent": "finance_query",
+  "confidence": 0.9,
+  "category": "Alimentação",
+  "financeType": "expense",
+  "period": { "from": "2026-07-01", "to": "2026-07-31" }
+}
+
+Exemplo finance_query com período de semana, sem categoria ("quanto gastei essa semana"):
+{
+  "intent": "finance_query",
+  "confidence": 0.9,
+  "financeType": "expense",
+  "period": { "from": "2026-08-04", "to": "2026-08-10" }
 }
 
 Exemplo how_to ("como faço para registrar uma despesa?"):

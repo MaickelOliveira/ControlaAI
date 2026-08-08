@@ -375,7 +375,7 @@ function Feature({
             {details.map(d => <DetailCard key={d.title} {...d} dark={dark} />)}
           </div>
         </div>
-        <div>{visual}</div>
+        <div className="min-w-0">{visual}</div>
       </div>
     </section>
   );
@@ -602,7 +602,7 @@ function TransactionsPhoneScreen() {
  *  print de referência. ── */
 function DualPhoneDashboard() {
   return (
-    <div className="relative mx-auto" style={{ width: 400, height: 540 }}>
+    <div className="relative mx-auto w-full max-w-[400px]" style={{ height: 540 }}>
       <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/25 blur-3xl -z-10" />
       <div className="absolute right-2 top-0 z-0">
         <PhoneShell width={205} rotateY={18} rotateZ={5} className="opacity-90">

@@ -80,7 +80,7 @@ export default function FuncionariosPage() {
       </div>
 
       {/* Resumo */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-blue-600 rounded-2xl p-5 text-white shadow-sm">
           <p className="text-xs text-blue-100 uppercase tracking-wide">Ativos</p>
           <p className="text-2xl font-bold mt-1">{employees.filter(e => e.status === "active").length}</p>
@@ -114,8 +114,8 @@ export default function FuncionariosPage() {
             <p className="font-semibold text-slate-700">Nenhum funcionário cadastrado</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <table className="w-full">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+            <table className="w-full min-w-[640px]">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
                   {["Funcionário", "Cargo", "Salário", "Início", "Status", ""].map(h => (
@@ -128,7 +128,7 @@ export default function FuncionariosPage() {
                   <tr key={emp.id} className="hover:bg-slate-50 transition">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600">
+                        <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600 shrink-0">
                           {emp.name.charAt(0).toUpperCase()}
                         </div>
                         <div>

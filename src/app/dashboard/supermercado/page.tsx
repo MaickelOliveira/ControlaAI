@@ -420,15 +420,15 @@ export default function SupermercadoPage() {
                 {purchaseForm.items.map((item, i) => (
                   <div key={i} className="grid grid-cols-12 gap-2 items-start">
                     <input value={item.productName} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], productName: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
-                      placeholder="Produto" className="col-span-4 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" />
+                      placeholder="Produto" className="col-span-12 sm:col-span-4 w-full border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" />
                     <select value={item.category} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], category: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
-                      className="col-span-3 border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none bg-white">
+                      className="col-span-6 sm:col-span-3 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none bg-white">
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <input type="number" step="0.01" value={item.price} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], price: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
-                      placeholder="R$" className="col-span-2 border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />
+                      placeholder="R$" className="col-span-3 sm:col-span-2 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />
                     <input type="number" value={item.quantity} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], quantity: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
-                      placeholder="Qtd" className="col-span-2 border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />
+                      placeholder="Qtd" className="col-span-2 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />
                     <button type="button" onClick={() => setPurchaseForm(f => ({ ...f, items: f.items.filter((_, j) => j !== i) }))}
                       className="col-span-1 text-red-400 hover:text-red-600 text-sm py-2">✕</button>
                   </div>
