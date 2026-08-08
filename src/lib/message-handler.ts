@@ -1,5 +1,5 @@
 import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, getWppPhones, setWppPhoneName, getWppPhoneByName } from "@/lib/users";
-import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
@@ -9,7 +9,7 @@ import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, ge
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
 import { addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
@@ -379,6 +379,26 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         return;
       } else {
         // não é uma resposta de veículo — limpa pendência e processa normalmente
+        clearPendingAction(from);
+      }
+    }
+
+    // ── Verifica seleção de funcionário pendente (pagamento recorrente) ──
+    if (pending?.type === "employee_payment_select" && pending.userId === user.id) {
+      const choiceIdx = choiceIndexByLabels(messageText, pending.employees, e => [e.name]);
+      if (choiceIdx >= 0) {
+        clearPendingAction(from);
+        const chosen = pending.employees[choiceIdx];
+        const resumedAi: AIResult = {
+          intent: "recurring_create",
+          confidence: 1,
+          recurring: { ...pending.recurringData, description: `Salário - ${chosen.name}`, employeePayment: false, employeeName: undefined },
+        };
+        const { reply } = await beginSlotFill("recurring_create", resumedAi, { user, userId: user.id, phone: from, mode: pending.mode as "personal" | "business" }, pending.originalText);
+        await wppSend(from, reply);
+        return;
+      } else {
+        // não reconheceu — limpa pendência e processa normalmente
         clearPendingAction(from);
       }
     }
@@ -1249,6 +1269,34 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "recurring_create": {
         if (!ai.recurring) { await wppSend(from, replyUnknown(messageText)); break; }
+
+        // Pagamento de funcionário: precisa saber QUAL antes de criar o
+        // recorrente, pra não ficar com descrição genérica "Funcionário".
+        if (ai.recurring.employeePayment) {
+          const activeEmployees = getEmployeesByUser(user.id, "active");
+          if (activeEmployees.length === 0) {
+            await wppSend(from, `👥 Você ainda não tem funcionários cadastrados.\n\nPara registrar esse pagamento, primeiro cadastre o funcionário — me diga o nome, cargo e salário. Ex:\n_"cadastra a Ana como vendedora, salário 2000"_`);
+            break;
+          }
+          let targetEmployee = ai.recurring.employeeName ? findEmployeeByName(user.id, ai.recurring.employeeName) : null;
+          if (!targetEmployee && activeEmployees.length === 1) targetEmployee = activeEmployees[0];
+
+          if (!targetEmployee) {
+            setPendingAction(from, {
+              type: "employee_payment_select", userId: user.id, mode,
+              recurringData: ai.recurring, originalText: messageText,
+              employees: activeEmployees.map(e => ({ id: e.id, name: e.name, role: e.role })),
+            });
+            let msg = `👥 Para qual funcionário é esse pagamento?\n\n`;
+            activeEmployees.forEach((e, i) => { msg += `*${i + 1}.* ${e.name} — ${e.role}\n`; });
+            msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
+            await wppSend(from, msg);
+            break;
+          }
+
+          ai.recurring = { ...ai.recurring, description: `Salário - ${targetEmployee.name}`, employeePayment: false, employeeName: undefined };
+        }
+
         const { reply } = await beginSlotFill("recurring_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, reply);
         break;

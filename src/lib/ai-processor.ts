@@ -138,6 +138,13 @@ export type RecurringData = {
   startDate?: string;
   category?: string;
   mode?: "personal" | "business"; // detectado automaticamente
+  /** true quando a mensagem é sobre PAGAR um funcionário já existente (não
+   *  cadastrar um novo — isso é employee_create). O sistema pergunta qual
+   *  funcionário antes de criar o recorrente, pra vincular o lançamento a
+   *  ele em vez de ficar com descrição genérica "Funcionário". */
+  employeePayment?: boolean;
+  /** nome do funcionário, se a mensagem já disser (ex: "pago a Ana 2000") */
+  employeeName?: string;
 };
 
 export type GroceryItemData = {
@@ -336,7 +343,7 @@ INTENÇÕES POSSÍVEIS:
 - grocery_list_check: marcar item(ns) da lista como já comprado(s) ("comprei o arroz", "já peguei leite e ovos", "risca o detergente da lista"). Use "grocery.itemNames" com os nomes mencionados.
 - grocery_purchase: registrar uma compra de mercado COMPLETA, com itens e valores ("comprei no Assaí: arroz 25, feijão 8, leite 6"). Use "grocery.storeName" e "grocery.items" (productName, price, quantity). ⚠️ DIFERENTE de finance_register: se a mensagem só disser um valor total sem listar os itens ("gastei 350 no mercado"), é finance_register (categoria Alimentação), NÃO grocery_purchase — só use grocery_purchase quando os itens individuais forem listados.
 - grocery_spend_query: perguntar sobre gastos/preços de mercado especificamente ("quanto gastei no mercado esse mês", "onde o leite tá mais barato", "qual mercado eu gasto mais")
-- employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create).
+- employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
 - employee_deactivate: desativar/demitir um funcionário ("demite o João", "desativa a Ana", "o João não trabalha mais aqui"). Use "keyword" com o nome.
@@ -907,7 +914,7 @@ OU para recorrente mensal receita ("recebo salário todo dia 10, 3000"):
   }
 }
 
-Exemplo recorrente da empresa ("pago o funcionário 2000 todo dia 5" — funcionário indica modo empresa):
+Exemplo pagamento de funcionário sem nome citado ("pago o funcionário 2000 todo dia 5" — funcionário indica modo empresa; "employeePayment":true porque é PAGAMENTO, não cadastro; o sistema pergunta qual funcionário):
 {
   "intent": "recurring_create",
   "confidence": 0.9,
@@ -919,7 +926,25 @@ Exemplo recorrente da empresa ("pago o funcionário 2000 todo dia 5" — funcion
     "repeatUnit": "monthly",
     "dayOfMonth": 5,
     "category": "Funcionários",
-    "mode": "business"
+    "mode": "business",
+    "employeePayment": true
+  }
+}
+
+Exemplo pagamento de funcionário COM nome citado ("pago a Ana 2000 todo mês" — inclua "employeeName" além de "employeePayment"):
+{
+  "intent": "recurring_create",
+  "confidence": 0.9,
+  "recurring": {
+    "type": "expense",
+    "description": "Funcionário",
+    "amount": 2000,
+    "recurrenceType": "recurring",
+    "repeatUnit": "monthly",
+    "category": "Funcionários",
+    "mode": "business",
+    "employeePayment": true,
+    "employeeName": "Ana"
   }
 }
 
