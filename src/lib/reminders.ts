@@ -95,6 +95,13 @@ export function updateReminder(id: string, userId: string, patch: Partial<Pick<R
   return items[idx];
 }
 
+/** Busca um lembrete ainda não disparado por palavra-chave na mensagem —
+ *  usado por reminder_update/reminder_delete pra identificar qual. */
+export function findReminderByKeyword(userId: string, keyword: string): Reminder | null {
+  const lower = keyword.toLowerCase();
+  return getRemindersByUser(userId).find(r => r.message.toLowerCase().includes(lower)) ?? null;
+}
+
 export function deleteReminder(id: string, userId: string): boolean {
   const items = load();
   const filtered = items.filter(r => !(r.id === id && r.userId === userId));

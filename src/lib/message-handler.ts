@@ -2,10 +2,10 @@ import { getUsers, updateUser, isTrialExpired, getUserByWppCode, addWppPhone, ge
 import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases } from "@/lib/finances";
-import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle } from "@/lib/tasks";
-import { createReminder } from "@/lib/reminders";
-import { createGoal, getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
+import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
+import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
+import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
@@ -19,11 +19,11 @@ import { addMessage, getAiPaused } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
-  replyTaskUpdated, replyReminderSet, replyModeSwitch, replyHelp,
+  replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
   replyTrialExpired, replyUnknown, replyLowConfidence,
   replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
-  replyAgendaCreated, replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
+  replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
   replyMeetCreated, replyMeetInvite, replyMeetAtaRequest, replyMeetAtaGenerated,
   replyPersonNotFound, replyAskWppName, replyWppNameSaved,
 } from "@/lib/bot-replies";
@@ -802,6 +802,24 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "finance_confirm_pending": {
+        const pendKeyword = ai.keyword || "";
+        if (!pendKeyword) { await wppSend(from, "❓ Qual lançamento agendado deseja confirmar?"); break; }
+        const lower = pendKeyword.toLowerCase();
+        const pendingItems = getPendingFinances(user.id).filter(f => f.description.toLowerCase().includes(lower));
+        if (!pendingItems.length) {
+          await wppSend(from, `❓ Não encontrei nenhum lançamento agendado com *"${pendKeyword}"*.`);
+          break;
+        }
+        const target = pendingItems[0];
+        const confirmed = updateFinance(target.id, user.id, { status: "posted" });
+        if (confirmed) {
+          const bal = getBalance(user.id, confirmed.mode, year, month);
+          await wppSend(from, `✅ Confirmado antes da data.\n\n📝 ${confirmed.description}\n💰 ${formatCurrency(confirmed.amount)}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+        }
+        break;
+      }
+
       case "finance_detail": {
         try {
           const detailMode = (ai.mode as "personal" | "business" | undefined) || mode;
@@ -928,27 +946,59 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "task_delete": {
+        let taskToDelete = null;
+        if (ai.task?.taskNumber) taskToDelete = findTaskByNumber(user.id, ai.task.taskNumber, mode);
+        else if (ai.task?.title) taskToDelete = findTaskByTitle(user.id, ai.task.title, mode);
+        const delNumMatch = messageText.match(/(\d+)/);
+        if (!taskToDelete && delNumMatch) taskToDelete = findTaskByNumber(user.id, parseInt(delNumMatch[1]), mode);
+        if (taskToDelete && deleteTask(taskToDelete.id, user.id)) {
+          await wppSend(from, `🗑️ Tarefa excluída.\n\n📌 ${taskToDelete.title}`);
+        } else {
+          await wppSend(from, "❓ Tarefa não encontrada. Digite *minhas tarefas* para ver a lista.");
+        }
+        break;
+      }
+
       case "reminder_set": {
-        if (!ai.reminder) { await wppSend(from, replyUnknown(messageText)); break; }
+        if (!ai.reminder?.message || !ai.reminder?.scheduledAt) { await wppSend(from, replyUnknown(messageText)); break; }
         // Converte horário SP (gerado pela IA) para UTC antes de salvar
         const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
         createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none" });
-        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat));
+        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat || "none"));
+        break;
+      }
+
+      case "reminder_list": {
+        const reminders = getRemindersByUser(user.id);
+        await wppSend(from, replyReminderList(reminders));
+        break;
+      }
+
+      case "reminder_update": {
+        const keyword = ai.keyword || "";
+        const target = keyword ? findReminderByKeyword(user.id, keyword) : null;
+        if (!target) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
+        const patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat">> = {};
+        if (ai.reminder?.message) patch.message = cap(ai.reminder.message);
+        if (ai.reminder?.scheduledAt) patch.scheduledAt = spToUTC(ai.reminder.scheduledAt);
+        if (ai.reminder?.repeat) patch.repeat = ai.reminder.repeat;
+        const updated = updateReminder(target.id, user.id, patch);
+        if (updated) await wppSend(from, replyReminderUpdated(updated));
+        break;
+      }
+
+      case "reminder_delete": {
+        const delKeyword = ai.keyword || "";
+        const delTarget = delKeyword ? findReminderByKeyword(user.id, delKeyword) : null;
+        if (!delTarget) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
+        if (deleteReminder(delTarget.id, user.id)) await wppSend(from, replyReminderDeleted(delTarget.message));
         break;
       }
 
       case "goal_create": {
-        if (!ai.goal?.targetAmount) {
-          await wppSend(from, `🎯 Para criar uma meta, me diga o nome e o valor!\n\nExemplo:\n_"Quero guardar R$3.000 para viagem até dezembro"_\n_"Meta: juntar 500 reais de emergência"_`);
-          break;
-        }
-        const goalTitle = cap((ai.goal.title || "").trim() || messageText.slice(0, 60));
-        const goalCurrentAmount = Number(ai.goal.currentAmount) || 0;
-        const goalMode = ai.goal.mode || mode;
-        const goal = createGoal({ userId: user.id, title: goalTitle, targetAmount: ai.goal.targetAmount, currentAmount: goalCurrentAmount, deadline: ai.goal.deadline, category: ai.goal.category || "Geral", mode: goalMode, status: "active" });
-        const pct = getGoalProgress(goal);
-        const currentLine = goalCurrentAmount > 0 ? `\n💵 Já guardado: ${formatCurrency(goalCurrentAmount)}` : "";
-        await wppSend(from, `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoria: ${goal.category}${goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : ""}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`);
+        const { reply: goalReply } = await beginSlotFill("goal_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, goalReply);
         break;
       }
 
@@ -1018,6 +1068,18 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           await wppSend(from, `🏆 *Meta concluída!*\n\n🎯 ${goal.title}\n\nParabéns! Você atingiu seu objetivo! 🎉`);
         } else {
           await wppSend(from, "❓ Meta não encontrada.");
+        }
+        break;
+      }
+
+      case "goal_cancel": {
+        const cancelTitle = ai.keyword || ai.goal?.title || messageText;
+        const cancelGoal = findGoalByTitle(user.id, cancelTitle, mode);
+        if (cancelGoal) {
+          updateGoalStatus(cancelGoal.id, user.id, "cancelled");
+          await wppSend(from, `🗑️ Meta cancelada.\n\n🎯 ${cancelGoal.title}`);
+        } else {
+          await wppSend(from, "❓ Meta não encontrada. Digite *minhas metas* para ver a lista.");
         }
         break;
       }
@@ -1129,7 +1191,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.recurring?.category) patch.category = cap(ai.recurring.category);
         if (ai.recurring?.dayOfMonth) patch.dayOfMonth = ai.recurring.dayOfMonth;
         if (ai.recurring?.repeatUnit) patch.repeatUnit = ai.recurring.repeatUnit;
-        if (Object.keys(patch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o netflix para 65 reais\"_"); break; }
+        if (ai.recurring?.totalInstallments) patch.totalInstallments = ai.recurring.totalInstallments;
+        if (Object.keys(patch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o netflix para 65 reais\"_ ou _\"a academia é só até dezembro, 5 meses\"_"); break; }
         const editUpdated = updateRecurring(editFound.id, user.id, patch);
         if (editUpdated) {
           await wppSend(from, `✏️ *${editUpdated.description}* atualizado!\n\n💰 Novo valor: ${formatCurrency(editUpdated.amount)}`);
@@ -1175,27 +1238,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "agenda_create": {
-        const d = ai.agendaData;
-        if (!d?.title || !d?.startDate) {
-          await wppSend(from, `🗓️ Para agendar, me diga o título e a data/hora!\n\nEx: _"Agendar reunião amanhã às 14h"_\nEx: _"Consulta médica sexta às 10h no Pronto Socorro"_`);
-          break;
-        }
-        const startSP = `${d.startDate}T${d.startTime || "00:00"}:00`;
-        const startAt = spToUTC(startSP);
-        const endAt = d.endDate ? spToUTC(`${d.endDate}T${d.endTime || "00:00"}:00`) : undefined;
-        const apt = createAppointment({
-          userId: user.id,
-          title: cap(d.title),
-          description: d.description,
-          location: d.location,
-          startAt,
-          endAt,
-          allDay: d.allDay ?? false,
-          repeat: d.repeat ?? "none",
-          status: "scheduled",
-          source: "whatsapp",
-        });
-        await wppSend(from, replyAgendaCreated(apt));
+        const { reply: agendaReply } = await beginSlotFill("agenda_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, agendaReply);
         break;
       }
 
@@ -1235,6 +1279,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         deleteAppointment(found.id, user.id);
         await wppSend(from, replyAgendaDeleted(found.title));
+        break;
+      }
+
+      case "agenda_done": {
+        const doneKeyword = ai.keyword || "";
+        if (!doneKeyword) { await wppSend(from, "❓ Qual compromisso deseja marcar como feito?"); break; }
+        const doneTarget = findAppointmentByKeyword(user.id, doneKeyword);
+        if (!doneTarget) {
+          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${doneKeyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
+          break;
+        }
+        updateAppointment(doneTarget.id, user.id, { status: "done" });
+        await wppSend(from, `✅ Marquei como realizado.\n\n📅 ${doneTarget.title}`);
         break;
       }
 

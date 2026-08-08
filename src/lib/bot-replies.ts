@@ -1,5 +1,6 @@
 import type { Finance } from "./finances";
 import type { Task } from "./tasks";
+import type { Reminder } from "./reminders";
 import { type RecurringTransaction, recurringRemaining } from "./recurring";
 import type { Appointment } from "./agenda";
 import type { Meet } from "./meets";
@@ -89,6 +90,28 @@ export function replyReminderSet(message: string, scheduledAt: string, repeat: s
     monthly: "Todo mês",
   };
   return `Pode deixar, eu te aviso. 🔔\n\n💬 ${message}\n📅 ${dateStr} às ${timeStr}\n🔁 ${repeatLabel[repeat] ?? "Uma vez"}`;
+}
+
+export function replyReminderList(reminders: Reminder[]): string {
+  if (!reminders.length) return "🔔 Nenhum lembrete ativo no momento.";
+  const repeatLabel: Record<string, string> = { none: "uma vez", daily: "todo dia", weekly: "toda semana", monthly: "todo mês" };
+  let msg = `🔔 *Seus lembretes ativos (${reminders.length}):*\n\n`;
+  reminders.slice(0, 10).forEach((r, i) => {
+    const dateStr = formatDateBR(r.scheduledAt);
+    const timeStr = new Date(r.scheduledAt).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+    msg += `${i + 1}. 💬 ${r.message} — ${dateStr} às ${timeStr} _(${repeatLabel[r.repeat] ?? "uma vez"})_\n`;
+  });
+  return msg.trim();
+}
+
+export function replyReminderUpdated(r: Reminder): string {
+  const dateStr = formatDateBR(r.scheduledAt);
+  const timeStr = new Date(r.scheduledAt).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+  return `Combinado, atualizei. 🔔\n\n💬 ${r.message}\n📅 ${dateStr} às ${timeStr}`;
+}
+
+export function replyReminderDeleted(message: string): string {
+  return `🗑️ Lembrete cancelado.\n\n💬 ${message}`;
 }
 
 export function replyModeSwitch(mode: UserMode): string {
