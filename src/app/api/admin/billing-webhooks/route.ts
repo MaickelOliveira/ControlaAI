@@ -8,7 +8,7 @@ export async function GET() {
   const session = await getAdminSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const configs = getBillingWebhooks().map(c => ({ ...c, secretValue: c.secretValue ? "••••••••" : "" }));
+  const configs = (await getBillingWebhooks()).map(c => ({ ...c, secretValue: c.secretValue ? "••••••••" : "" }));
   return NextResponse.json({ configs, presets: BILLING_WEBHOOK_PRESETS });
 }
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const { label, secretBodyField, secretHeader, secretValue, emailPath, statusPath, activateValues, deactivateValues, planPath, planMap } = body;
   if (!label || !emailPath || !statusPath) return NextResponse.json({ error: "label, emailPath e statusPath são obrigatórios" }, { status: 400 });
 
-  const cfg = createBillingWebhook({
+  const cfg = await createBillingWebhook({
     label,
     active: false, // começa desativado — o admin liga depois de testar o mapeamento
     secretBodyField: secretBodyField || undefined,

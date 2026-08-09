@@ -1208,7 +1208,7 @@ OU genérico:
 }
 
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
 
   if (!apiKey) {
@@ -1256,7 +1256,7 @@ export async function generateAnalysisResponse(
     month: string;
   }
 ): Promise<string> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return "❌ IA não configurada.";
 
@@ -1304,7 +1304,7 @@ Instruções:
 }
 
 export async function categorizeDriveFile(filename: string, defaultFolders: string[]): Promise<{ folder: string; keywords: string[] }> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return { folder: "Outros", keywords: [] };
 
@@ -1335,7 +1335,7 @@ export async function findDriveFileByAI(
   files: Array<{ id: string; originalName: string; description?: string; aiKeywords?: string[] }>
 ): Promise<string | null> {
   if (!files.length) return null;
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
 
@@ -1358,7 +1358,7 @@ export async function generateMeetAta(
   meetTitle: string,
   attendeeNames: string[]
 ): Promise<{ summary: string; decisions: string[]; tasks: string[] }> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return { summary: notes, decisions: [], tasks: [] };
 
@@ -1405,7 +1405,7 @@ export async function extractFinanceFromDocument(
   mimeType: string,
   caption?: string
 ): Promise<{ type: "income" | "expense"; amount: number; description: string; category: string; date: string; mode?: "personal" | "business" } | null> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
 
@@ -1490,7 +1490,7 @@ export async function extractInvoiceTransactions(
   mimeType: string,
   caption?: string
 ): Promise<{ transactions: InvoiceTransaction[] } | null> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
 
@@ -1561,7 +1561,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`,
 }
 
 export async function transcribeAudio(audioBuffer: Buffer, mimeType: string): Promise<string | null> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
 

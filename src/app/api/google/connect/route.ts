@@ -6,6 +6,6 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const url = getAuthUrl(session.sub);
+  const url = await getAuthUrl(session.sub);
   return NextResponse.redirect(url);
 }

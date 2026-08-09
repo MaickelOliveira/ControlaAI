@@ -27,18 +27,18 @@ async function runCron() {
   // Mesma trava do tick em-processo (src/instrumentation.ts) — evita que
   // esse endpoint e o tick disparem o mesmo lembrete duas vezes se
   // rodarem no mesmo instante.
-  if (!acquireCronLock()) {
+  if (!(await acquireCronLock())) {
     return NextResponse.json({ ok: true, fired: 0, results: [], skipped: "outra execução já em andamento" });
   }
   try {
-    const due = getDueReminders();
+    const due = await getDueReminders();
     console.log(`[cron/reminders] ${due.length} lembrete(s) a disparar`);
     const results = [];
     for (const r of due) {
       console.log(`[cron/reminders] Enviando para ${r.phone}: "${r.message}"`);
       const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", `🔔 *Lembrete:* ${r.message}`, { lembrete: r.message });
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
-      if (ok) markReminderSent(r.id, r.repeat);
+      if (ok) await markReminderSent(r.id, r.repeat);
       results.push({ id: r.id, message: r.message, sent: ok });
     }
     return NextResponse.json({ ok: true, fired: results.length, results, now: new Date().toISOString() });
@@ -46,6 +46,6 @@ async function runCron() {
     console.error("[cron/reminders] Erro:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   } finally {
-    releaseCronLock();
+    await releaseCronLock();
   }
 }

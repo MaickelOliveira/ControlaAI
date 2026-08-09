@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
-  const file = getFileById(id, session.sub);
+  const file = await getFileById(id, session.sub);
   if (!file) return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
 
   const filePath = getFilePath(file);

@@ -7,8 +7,8 @@ export async function GET() {
   const session = await getAdminSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const prices = getPlanPrices();
-  const users = getUsers();
+  const prices = await getPlanPrices();
+  const users = await getUsers();
 
   const activeUsers = users.filter(u => u.status === "active");
   const clientes = users.map(u => ({
@@ -64,6 +64,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Preços inválidos" }, { status: 400 });
   }
 
-  setPlanPrices({ personal, business });
+  await setPlanPrices({ personal, business });
   return NextResponse.json({ ok: true });
 }

@@ -16,21 +16,21 @@ export async function GET(req: NextRequest) {
   const view = searchParams.get("view") || "overview";
   const category = searchParams.get("category") as GroceryCategory | undefined;
 
-  if (view === "stores") return NextResponse.json(getStoresByUser(session.sub));
-  if (view === "purchases") return NextResponse.json(getPurchasesByUser(session.sub).slice(0, 30));
-  if (view === "spend") return NextResponse.json(getSpendByStore(session.sub));
-  if (view === "prices") return NextResponse.json(getPriceComparison(session.sub));
-  if (view === "list") return NextResponse.json(getShoppingList(session.sub, category));
+  if (view === "stores") return NextResponse.json(await getStoresByUser(session.sub));
+  if (view === "purchases") return NextResponse.json((await getPurchasesByUser(session.sub)).slice(0, 30));
+  if (view === "spend") return NextResponse.json(await getSpendByStore(session.sub));
+  if (view === "prices") return NextResponse.json(await getPriceComparison(session.sub));
+  if (view === "list") return NextResponse.json(await getShoppingList(session.sub, category));
   if (view === "templates") return NextResponse.json(LIST_TEMPLATES);
 
   // overview
-  const purchases = getPurchasesByUser(session.sub);
-  const spend = getSpendByStore(session.sub);
-  const list = getShoppingList(session.sub);
+  const purchases = await getPurchasesByUser(session.sub);
+  const spend = await getSpendByStore(session.sub);
+  const list = await getShoppingList(session.sub);
   return NextResponse.json({
     totalSpent: purchases.reduce((s, p) => s + p.total, 0),
     purchasesCount: purchases.length,
-    storesCount: getStoresByUser(session.sub).length,
+    storesCount: (await getStoresByUser(session.sub)).length,
     topStore: spend[0] ?? null,
     recentPurchases: purchases.slice(0, 5),
     shoppingListCount: list.filter(i => !i.checked).length,
@@ -46,35 +46,35 @@ export async function POST(req: NextRequest) {
   if (action === "purchase") {
     const { storeName, items, date } = body;
     if (!storeName || !items?.length) return NextResponse.json({ error: "storeName e items obrigatórios" }, { status: 400 });
-    const store = findOrCreateStore(session.sub, storeName);
+    const store = await findOrCreateStore(session.sub, storeName);
     const total = items.reduce((s: number, i: { price: number; quantity: number }) => s + i.price * i.quantity, 0);
-    const purchase = addPurchase({ userId: session.sub, storeId: store.id, storeName: store.name, date: date || new Date().toISOString().slice(0, 10), items, total });
+    const purchase = await addPurchase({ userId: session.sub, storeId: store.id, storeName: store.name, date: date || new Date().toISOString().slice(0, 10), items, total });
     return NextResponse.json(purchase, { status: 201 });
   }
 
   if (action === "list_add") {
     const { name, category, quantity } = body;
-    const item = addToShoppingList(session.sub, name, category, quantity);
+    const item = await addToShoppingList(session.sub, name, category, quantity);
     return NextResponse.json(item, { status: 201 });
   }
 
   if (action === "list_toggle") {
-    toggleShoppingItem(body.id, session.sub);
+    await toggleShoppingItem(body.id, session.sub);
     return NextResponse.json({ ok: true });
   }
 
   if (action === "list_remove") {
-    removeShoppingItem(body.id, session.sub);
+    await removeShoppingItem(body.id, session.sub);
     return NextResponse.json({ ok: true });
   }
 
   if (action === "list_clear_checked") {
-    clearCheckedItems(session.sub);
+    await clearCheckedItems(session.sub);
     return NextResponse.json({ ok: true });
   }
 
   if (action === "list_from_template") {
-    const added = addFromTemplate(session.sub, body.template);
+    const added = await addFromTemplate(session.sub, body.template);
     return NextResponse.json({ ok: true, added });
   }
 

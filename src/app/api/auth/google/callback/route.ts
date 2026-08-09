@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const userId = resolveState(searchParams.get("state"));
   const error = searchParams.get("error");
 
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const base = (cfg.appBaseUrl || process.env.APP_URL || origin).replace(/\/$/, "");
 
   if (error || !code || !userId) {

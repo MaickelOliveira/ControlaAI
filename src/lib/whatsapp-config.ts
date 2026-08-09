@@ -1,8 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import path from "path";
+import { getSupabase } from "./supabase";
 import { encryptField, decryptField } from "./crypto-store";
-
-const CONFIG_FILE = path.join(process.cwd(), "data", "whatsapp-config.json");
 
 export type EvolutionCredentials = {
   server?: string;
@@ -76,16 +73,13 @@ function encryptSensitive(cfg: WhatsAppConfig): WhatsAppConfig {
   };
 }
 
-export function getConfig(): WhatsAppConfig {
-  try {
-    if (!existsSync(CONFIG_FILE)) return { ...DEFAULT_CONFIG };
-    const parsed = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
-    return decryptSensitive({ ...DEFAULT_CONFIG, ...parsed });
-  } catch {
-    return { ...DEFAULT_CONFIG };
-  }
+export async function getConfig(): Promise<WhatsAppConfig> {
+  const { data, error } = await getSupabase().from("whatsapp_config").select("data").eq("id", 1).maybeSingle();
+  if (error || !data) return { ...DEFAULT_CONFIG };
+  const parsed = (data as { data: WhatsAppConfig }).data;
+  return decryptSensitive({ ...DEFAULT_CONFIG, ...parsed });
 }
 
-export function saveConfig(config: WhatsAppConfig) {
-  writeFileSync(CONFIG_FILE, JSON.stringify(encryptSensitive(config), null, 2));
+export async function saveConfig(config: WhatsAppConfig): Promise<void> {
+  await getSupabase().from("whatsapp_config").upsert({ id: 1, data: encryptSensitive(config) });
 }

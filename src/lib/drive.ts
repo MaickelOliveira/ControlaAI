@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
+import { writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { getSupabase } from "./supabase";
 
 export type DriveFile = {
   id: string;
@@ -25,80 +25,73 @@ export type DriveFolder = {
   createdAt: string;
 };
 
-const META_FILE = path.join(process.cwd(), "data", "drive-meta.json");
-const FOLDERS_FILE = path.join(process.cwd(), "data", "drive-folders.json");
+// Os BYTES do arquivo em si continuam em disco local (nunca estiveram no
+// JSON — só a metadata estava) — fora do escopo desta migração pra
+// Postgres. Se um dia isso precisar ir pro Supabase Storage, é uma
+// migração separada.
 const DRIVE_DIR = path.join(process.cwd(), "data", "drive");
 
 const DEFAULT_FOLDERS = ["Documentos", "Comprovantes", "Contratos", "Fotos", "Outros"];
 
-function loadMeta(): DriveFile[] {
-  try {
-    if (!existsSync(META_FILE)) return [];
-    return JSON.parse(readFileSync(META_FILE, "utf-8"));
-  } catch { return []; }
+type FileRow = {
+  id: string; user_id: string; folder_id: string | null; original_name: string; stored_name: string;
+  mime_type: string; size: number; description: string | null; ai_keywords: string[]; source: "whatsapp" | "web"; created_at: string;
+};
+
+function fileFromRow(r: FileRow): DriveFile {
+  return {
+    id: r.id, userId: r.user_id, folderId: r.folder_id, originalName: r.original_name,
+    storedName: r.stored_name, mimeType: r.mime_type, size: r.size, description: r.description ?? undefined,
+    aiKeywords: r.ai_keywords, source: r.source, createdAt: r.created_at,
+  };
 }
 
-function saveMeta(files: DriveFile[]) {
-  writeJSONAtomic(META_FILE, files);
+type FolderRow = { id: string; user_id: string; name: string; parent_id: string | null; created_at: string };
+
+function folderFromRow(r: FolderRow): DriveFolder {
+  return { id: r.id, userId: r.user_id, name: r.name, parentId: r.parent_id, createdAt: r.created_at };
 }
 
-function loadFolders(): DriveFolder[] {
-  try {
-    if (!existsSync(FOLDERS_FILE)) return [];
-    return JSON.parse(readFileSync(FOLDERS_FILE, "utf-8"));
-  } catch { return []; }
-}
+export async function ensureDefaultFolders(userId: string): Promise<DriveFolder[]> {
+  const { data, error } = await getSupabase().from("drive_folders").select("*").eq("user_id", userId).is("parent_id", null);
+  const userRootFolders = error || !data ? [] : (data as FolderRow[]).map(folderFromRow);
 
-function saveFolders(folders: DriveFolder[]) {
-  writeJSONAtomic(FOLDERS_FILE, folders);
-}
-
-export function ensureDefaultFolders(userId: string): DriveFolder[] {
-  const folders = loadFolders();
-  const userRootFolders = folders.filter(f => f.userId === userId && f.parentId === null);
-  let changed = false;
-
-  for (const name of DEFAULT_FOLDERS) {
-    if (!userRootFolders.some(f => f.name === name)) {
-      folders.push({ id: randomUUID(), userId, name, parentId: null, createdAt: new Date().toISOString() });
-      changed = true;
-    }
+  const missing = DEFAULT_FOLDERS.filter(name => !userRootFolders.some(f => f.name === name));
+  if (missing.length > 0) {
+    const rows = missing.map(name => ({ id: randomUUID(), user_id: userId, name, parent_id: null }));
+    await getSupabase().from("drive_folders").insert(rows);
   }
 
-  if (changed) saveFolders(folders);
-  return loadFolders().filter(f => f.userId === userId);
+  const { data: all } = await getSupabase().from("drive_folders").select("*").eq("user_id", userId);
+  return (all as FolderRow[] | null)?.map(folderFromRow) ?? [];
 }
 
-export function getFolders(userId: string): DriveFolder[] {
-  ensureDefaultFolders(userId);
-  return loadFolders().filter(f => f.userId === userId);
+export async function getFolders(userId: string): Promise<DriveFolder[]> {
+  return ensureDefaultFolders(userId);
 }
 
-export function createFolder(userId: string, name: string, parentId: string | null = null): DriveFolder {
-  const folders = loadFolders();
-  const folder: DriveFolder = { id: randomUUID(), userId, name, parentId, createdAt: new Date().toISOString() };
-  folders.push(folder);
-  saveFolders(folders);
-  return folder;
+export async function createFolder(userId: string, name: string, parentId: string | null = null): Promise<DriveFolder> {
+  const row = { id: randomUUID(), user_id: userId, name, parent_id: parentId };
+  const { data, error } = await getSupabase().from("drive_folders").insert(row).select("*").single();
+  if (error) throw new Error(`[drive] createFolder falhou: ${error.message}`);
+  return folderFromRow(data as FolderRow);
 }
 
-export function deleteFolder(userId: string, id: string): boolean {
-  const folders = loadFolders();
-  const idx = folders.findIndex(f => f.id === id && f.userId === userId);
-  if (idx < 0) return false;
-  folders.splice(idx, 1);
-  saveFolders(folders);
-  return true;
+export async function deleteFolder(userId: string, id: string): Promise<boolean> {
+  const { error, count } = await getSupabase().from("drive_folders").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
+  return !error && !!count && count > 0;
 }
 
-export function getFiles(userId: string, folderId?: string): DriveFile[] {
-  const all = loadMeta().filter(f => f.userId === userId);
-  if (folderId === undefined) return all;
-  if (folderId === "root") return all.filter(f => f.folderId === null);
-  return all.filter(f => f.folderId === folderId);
+export async function getFiles(userId: string, folderId?: string): Promise<DriveFile[]> {
+  let query = getSupabase().from("drive_files").select("*").eq("user_id", userId);
+  if (folderId === "root") query = query.is("folder_id", null);
+  else if (folderId !== undefined) query = query.eq("folder_id", folderId);
+  const { data, error } = await query;
+  if (error) { console.error("[drive] getFiles erro:", error.message); return []; }
+  return (data as FileRow[]).map(fileFromRow);
 }
 
-export function saveFile(data: {
+export async function saveFile(data: {
   userId: string;
   folderId: string | null;
   originalName: string;
@@ -108,7 +101,7 @@ export function saveFile(data: {
   aiKeywords?: string[];
   source: "whatsapp" | "web";
   buffer: Buffer;
-}): DriveFile {
+}): Promise<DriveFile> {
   const id = randomUUID();
   const ext = path.extname(data.originalName) || "";
   const storedName = `${id}${ext}`;
@@ -118,52 +111,50 @@ export function saveFile(data: {
 
   writeFileSync(path.join(userDir, storedName), data.buffer);
 
-  const file: DriveFile = {
-    id, userId: data.userId, folderId: data.folderId,
-    originalName: data.originalName, storedName,
-    mimeType: data.mimeType, size: data.size,
-    description: data.description, aiKeywords: data.aiKeywords,
-    source: data.source, createdAt: new Date().toISOString(),
+  const row = {
+    id, user_id: data.userId, folder_id: data.folderId,
+    original_name: data.originalName, stored_name: storedName,
+    mime_type: data.mimeType, size: data.size,
+    description: data.description, ai_keywords: data.aiKeywords ?? [],
+    source: data.source,
   };
-
-  const files = loadMeta();
-  files.push(file);
-  saveMeta(files);
-  return file;
+  const { data: inserted, error } = await getSupabase().from("drive_files").insert(row).select("*").single();
+  if (error) throw new Error(`[drive] saveFile falhou: ${error.message}`);
+  return fileFromRow(inserted as FileRow);
 }
 
-export function getFileById(id: string, userId: string): DriveFile | null {
-  return loadMeta().find(f => f.id === id && f.userId === userId) ?? null;
+export async function getFileById(id: string, userId: string): Promise<DriveFile | null> {
+  const { data, error } = await getSupabase().from("drive_files").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
+  if (error || !data) return null;
+  return fileFromRow(data as FileRow);
 }
 
 export function getFilePath(file: DriveFile): string {
   return path.join(DRIVE_DIR, file.userId, file.storedName);
 }
 
-export function deleteFile(id: string, userId: string): boolean {
-  const files = loadMeta();
-  const idx = files.findIndex(f => f.id === id && f.userId === userId);
-  if (idx < 0) return false;
-  const file = files[idx];
+export async function deleteFile(id: string, userId: string): Promise<boolean> {
+  const file = await getFileById(id, userId);
+  if (!file) return false;
   try { if (existsSync(getFilePath(file))) unlinkSync(getFilePath(file)); } catch { /* ignore */ }
-  files.splice(idx, 1);
-  saveMeta(files);
-  return true;
+  const { error, count } = await getSupabase().from("drive_files").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
+  return !error && !!count && count > 0;
 }
 
-export function updateFile(id: string, userId: string, patch: Partial<Pick<DriveFile, "folderId" | "description" | "aiKeywords" | "originalName">>): DriveFile | null {
-  const files = loadMeta();
-  const idx = files.findIndex(f => f.id === id && f.userId === userId);
-  if (idx < 0) return null;
-  files[idx] = { ...files[idx], ...patch };
-  saveMeta(files);
-  return files[idx];
+export async function updateFile(id: string, userId: string, patch: Partial<Pick<DriveFile, "folderId" | "description" | "aiKeywords" | "originalName">>): Promise<DriveFile | null> {
+  const rowPatch: Record<string, unknown> = {};
+  if (patch.folderId !== undefined) rowPatch.folder_id = patch.folderId;
+  if (patch.description !== undefined) rowPatch.description = patch.description;
+  if (patch.aiKeywords !== undefined) rowPatch.ai_keywords = patch.aiKeywords;
+  if (patch.originalName !== undefined) rowPatch.original_name = patch.originalName;
+  const { data, error } = await getSupabase().from("drive_files").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  if (error || !data) return null;
+  return fileFromRow(data as FileRow);
 }
 
-export function searchFiles(userId: string, keyword: string): DriveFile[] {
+export async function searchFiles(userId: string, keyword: string): Promise<DriveFile[]> {
   const lower = keyword.toLowerCase();
-  return loadMeta().filter(f => {
-    if (f.userId !== userId) return false;
+  return (await getFiles(userId, undefined)).filter(f => {
     if (f.originalName.toLowerCase().includes(lower)) return true;
     if (f.description?.toLowerCase().includes(lower)) return true;
     if (f.aiKeywords?.some(k => k.toLowerCase().includes(lower))) return true;
@@ -171,16 +162,18 @@ export function searchFiles(userId: string, keyword: string): DriveFile[] {
   });
 }
 
-export function getFolderByName(userId: string, name: string): DriveFolder | null {
-  return loadFolders().find(f => f.userId === userId && f.name.toLowerCase() === name.toLowerCase()) ?? null;
+export async function getFolderByName(userId: string, name: string): Promise<DriveFolder | null> {
+  const { data, error } = await getSupabase().from("drive_folders").select("*").eq("user_id", userId).ilike("name", name).maybeSingle();
+  if (error || !data) return null;
+  return folderFromRow(data as FolderRow);
 }
 
-export function getRecentFile(userId: string): DriveFile | null {
-  const files = loadMeta().filter(f => f.userId === userId);
+export async function getRecentFile(userId: string): Promise<DriveFile | null> {
+  const files = await getFiles(userId, undefined);
   if (!files.length) return null;
   return files.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 }
 
-export function getTotalSize(userId: string): number {
-  return loadMeta().filter(f => f.userId === userId).reduce((sum, f) => sum + f.size, 0);
+export async function getTotalSize(userId: string): Promise<number> {
+  return (await getFiles(userId, undefined)).reduce((sum, f) => sum + f.size, 0);
 }

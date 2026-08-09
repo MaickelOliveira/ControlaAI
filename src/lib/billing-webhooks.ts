@@ -1,7 +1,5 @@
-import { readFileSync, existsSync } from "fs";
-import path from "path";
 import { randomUUID } from "crypto";
-import { writeJSONAtomic } from "./json-store";
+import { getSupabase } from "./supabase";
 import { encryptField, decryptField } from "./crypto-store";
 import { getUserByEmail, activateUser, deactivateUser, updateUser, type UserPlan } from "./users";
 
@@ -39,47 +37,93 @@ export type BillingWebhookConfig = {
   createdAt: string;
 };
 
-const FILE = path.join(process.cwd(), "data", "billing-webhooks.json");
+type Row = {
+  id: string;
+  label: string;
+  active: boolean;
+  secret_body_field: string | null;
+  secret_header: string | null;
+  secret_value: string | null;
+  email_path: string;
+  status_path: string;
+  activate_values: string[];
+  deactivate_values: string[];
+  plan_path: string | null;
+  plan_map: Record<string, UserPlan> | null;
+  created_at: string;
+};
 
-function load(): BillingWebhookConfig[] {
-  try {
-    if (!existsSync(FILE)) return [];
-    const raw = JSON.parse(readFileSync(FILE, "utf-8")) as BillingWebhookConfig[];
-    return raw.map(c => ({ ...c, secretValue: decryptField(c.secretValue) }));
-  } catch { return []; }
+function fromRow(r: Row): BillingWebhookConfig {
+  return {
+    id: r.id,
+    label: r.label,
+    active: r.active,
+    secretBodyField: r.secret_body_field ?? undefined,
+    secretHeader: r.secret_header ?? undefined,
+    secretValue: decryptField(r.secret_value ?? undefined),
+    emailPath: r.email_path,
+    statusPath: r.status_path,
+    activateValues: r.activate_values ?? [],
+    deactivateValues: r.deactivate_values ?? [],
+    planPath: r.plan_path ?? undefined,
+    planMap: r.plan_map ?? undefined,
+    createdAt: r.created_at,
+  };
 }
 
-function save(configs: BillingWebhookConfig[]) {
-  writeJSONAtomic(FILE, configs.map(c => ({ ...c, secretValue: encryptField(c.secretValue) })));
+function toRowPatch(patch: Partial<Omit<BillingWebhookConfig, "id" | "createdAt">>): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (patch.label !== undefined) row.label = patch.label;
+  if (patch.active !== undefined) row.active = patch.active;
+  if (patch.secretBodyField !== undefined) row.secret_body_field = patch.secretBodyField;
+  if (patch.secretHeader !== undefined) row.secret_header = patch.secretHeader;
+  if (patch.secretValue !== undefined) row.secret_value = encryptField(patch.secretValue);
+  if (patch.emailPath !== undefined) row.email_path = patch.emailPath;
+  if (patch.statusPath !== undefined) row.status_path = patch.statusPath;
+  if (patch.activateValues !== undefined) row.activate_values = patch.activateValues;
+  if (patch.deactivateValues !== undefined) row.deactivate_values = patch.deactivateValues;
+  if (patch.planPath !== undefined) row.plan_path = patch.planPath;
+  if (patch.planMap !== undefined) row.plan_map = patch.planMap;
+  return row;
 }
 
-export function getBillingWebhooks(): BillingWebhookConfig[] {
-  return load();
+export async function getBillingWebhooks(): Promise<BillingWebhookConfig[]> {
+  const { data } = await getSupabase().from("billing_webhooks").select("*").order("created_at", { ascending: true });
+  return (data as Row[] ?? []).map(fromRow);
 }
 
-export function getBillingWebhookById(id: string): BillingWebhookConfig | null {
-  return load().find(c => c.id === id) ?? null;
+export async function getBillingWebhookById(id: string): Promise<BillingWebhookConfig | null> {
+  const { data } = await getSupabase().from("billing_webhooks").select("*").eq("id", id).maybeSingle();
+  return data ? fromRow(data as Row) : null;
 }
 
-export function createBillingWebhook(data: Omit<BillingWebhookConfig, "id" | "createdAt">): BillingWebhookConfig {
-  const configs = load();
+export async function createBillingWebhook(data: Omit<BillingWebhookConfig, "id" | "createdAt">): Promise<BillingWebhookConfig> {
   const cfg: BillingWebhookConfig = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
-  configs.push(cfg);
-  save(configs);
+  await getSupabase().from("billing_webhooks").insert({
+    id: cfg.id,
+    label: cfg.label,
+    active: cfg.active,
+    secret_body_field: cfg.secretBodyField ?? null,
+    secret_header: cfg.secretHeader ?? null,
+    secret_value: encryptField(cfg.secretValue),
+    email_path: cfg.emailPath,
+    status_path: cfg.statusPath,
+    activate_values: cfg.activateValues,
+    deactivate_values: cfg.deactivateValues,
+    plan_path: cfg.planPath ?? null,
+    plan_map: cfg.planMap ?? null,
+    created_at: cfg.createdAt,
+  });
   return cfg;
 }
 
-export function updateBillingWebhook(id: string, patch: Partial<Omit<BillingWebhookConfig, "id" | "createdAt">>): BillingWebhookConfig | null {
-  const configs = load();
-  const idx = configs.findIndex(c => c.id === id);
-  if (idx < 0) return null;
-  configs[idx] = { ...configs[idx], ...patch };
-  save(configs);
-  return configs[idx];
+export async function updateBillingWebhook(id: string, patch: Partial<Omit<BillingWebhookConfig, "id" | "createdAt">>): Promise<BillingWebhookConfig | null> {
+  const { data } = await getSupabase().from("billing_webhooks").update(toRowPatch(patch)).eq("id", id).select().maybeSingle();
+  return data ? fromRow(data as Row) : null;
 }
 
-export function deleteBillingWebhook(id: string): void {
-  save(load().filter(c => c.id !== id));
+export async function deleteBillingWebhook(id: string): Promise<void> {
+  await getSupabase().from("billing_webhooks").delete().eq("id", id);
 }
 
 /** Presets — ponto de partida, não fonte de verdade. O admin confere e
@@ -121,7 +165,7 @@ export type BillingWebhookResult =
 
 /** Processa um payload já autenticado — separado da checagem de auth pra
  *  poder ser usado também no "testar mapeamento" do admin (dry run). */
-export function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: unknown, dryRun = false): BillingWebhookResult {
+export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: unknown, dryRun = false): Promise<BillingWebhookResult> {
   const email = getByPath(body, cfg.emailPath);
   const status = getByPath(body, cfg.statusPath);
 
@@ -132,7 +176,7 @@ export function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: unknown,
     return { ok: false, error: `Não achei o status em "${cfg.statusPath}" — confira o caminho do campo.` };
   }
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user) return { ok: false, error: `Nenhum cliente do Zelo com o email "${email}".` };
 
   const isActivate = cfg.activateValues.includes(status);
@@ -145,15 +189,15 @@ export function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: unknown,
   if (cfg.planPath && cfg.planMap) {
     const planRaw = getByPath(body, cfg.planPath);
     const mappedPlan = typeof planRaw === "string" ? cfg.planMap[planRaw] : undefined;
-    if (mappedPlan && !dryRun) updateUser(user.id, { plan: mappedPlan });
+    if (mappedPlan && !dryRun) await updateUser(user.id, { plan: mappedPlan });
     if (mappedPlan && dryRun) return { ok: true, action: "plan_changed", email, detail: `plano seria trocado pra "${mappedPlan}"` };
   }
 
   if (isActivate) {
-    if (!dryRun) activateUser(user.id);
+    if (!dryRun) await activateUser(user.id);
     return { ok: true, action: "activated", email };
   }
-  if (!dryRun) deactivateUser(user.id);
+  if (!dryRun) await deactivateUser(user.id);
   return { ok: true, action: "deactivated", email };
 }
 

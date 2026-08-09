@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       // Filtro de período customizado (Dashboard/Finanças com filtros ativos)
       // — saldo calculado a partir do MESMO array retornado, pra cards,
       // gráfico de categoria e extrato nunca terem escopos de data diferentes.
-      const finances = getFinancesInRange(session.sub, mode || undefined, from, to)
+      const finances = (await getFinancesInRange(session.sub, mode || undefined, from, to))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       const posted = finances.filter(isPostedFinance);
       const income = posted.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Sem período — comportamento padrão (mês atual), mantido pra quem não filtra.
-    const finances = getFinancesByUser(session.sub, mode || undefined)
+    const finances = (await getFinancesByUser(session.sub, mode || undefined))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     const now = new Date();
-    const balance = getBalance(session.sub, mode || "personal", now.getFullYear(), now.getMonth() + 1);
+    const balance = await getBalance(session.sub, mode || "personal", now.getFullYear(), now.getMonth() + 1);
 
     return NextResponse.json({ finances, balance });
   } catch {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   if (!type || !amount || !category) return NextResponse.json({ error: "Campos obrigatórios" }, { status: 400 });
 
-  const finance = addFinance({
+  const finance = await addFinance({
     userId: session.sub,
     type, amount: parseFloat(amount), category,
     description: description || category,

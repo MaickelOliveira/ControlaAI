@@ -1,7 +1,5 @@
-import { readFileSync, existsSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
-import path from "path";
 import { randomUUID } from "crypto";
+import { getSupabase } from "./supabase";
 
 export type TaskStatus = "pending" | "in_progress" | "completed";
 export type TaskPriority = "low" | "medium" | "high";
@@ -14,37 +12,39 @@ export type Task = {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string;
-  projectId?: string;
   mode: TaskMode;
   createdAt: string;
 };
 
-const FILE = path.join(process.cwd(), "data", "tasks.json");
+type Row = {
+  id: string; user_id: string; title: string; status: TaskStatus; priority: TaskPriority;
+  due_date: string | null; mode: TaskMode; created_at: string;
+};
 
-function load(): Task[] {
-  try {
-    if (!existsSync(FILE)) return [];
-    return JSON.parse(readFileSync(FILE, "utf-8"));
-  } catch { return []; }
-}
-function save(items: Task[]) {
-  writeJSONAtomic(FILE, items);
-}
-
-export function createTask(data: Omit<Task, "id" | "createdAt">): Task {
-  const items = load();
-  const task: Task = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
-  items.push(task);
-  save(items);
-  return task;
+function fromRow(r: Row): Task {
+  return {
+    id: r.id, userId: r.user_id, title: r.title, status: r.status,
+    priority: r.priority, dueDate: r.due_date ?? undefined, mode: r.mode, createdAt: r.created_at,
+  };
 }
 
-export function getTasksByUser(userId: string, mode?: TaskMode): Task[] {
-  return load().filter(t => t.userId === userId && (!mode || t.mode === mode));
+export async function createTask(data: Omit<Task, "id" | "createdAt">): Promise<Task> {
+  const row = { id: randomUUID(), user_id: data.userId, title: data.title, status: data.status, priority: data.priority, due_date: data.dueDate, mode: data.mode };
+  const { data: inserted, error } = await getSupabase().from("tasks").insert(row).select("*").single();
+  if (error) throw new Error(`[tasks] createTask falhou: ${error.message}`);
+  return fromRow(inserted as Row);
 }
 
-export function getPendingTasks(userId: string, mode?: TaskMode): Task[] {
-  return getTasksByUser(userId, mode)
+export async function getTasksByUser(userId: string, mode?: TaskMode): Promise<Task[]> {
+  let query = getSupabase().from("tasks").select("*").eq("user_id", userId);
+  if (mode) query = query.eq("mode", mode);
+  const { data, error } = await query;
+  if (error) { console.error("[tasks] getTasksByUser erro:", error.message); return []; }
+  return (data as Row[]).map(fromRow);
+}
+
+export async function getPendingTasks(userId: string, mode?: TaskMode): Promise<Task[]> {
+  return (await getTasksByUser(userId, mode))
     .filter(t => t.status !== "completed")
     .sort((a, b) => {
       const p = { high: 0, medium: 1, low: 2 };
@@ -52,38 +52,32 @@ export function getPendingTasks(userId: string, mode?: TaskMode): Task[] {
     });
 }
 
-export function getOverdueTasks(userId: string, mode?: TaskMode): Task[] {
+export async function getOverdueTasks(userId: string, mode?: TaskMode): Promise<Task[]> {
   const today = new Date().toISOString().slice(0, 10);
-  return getPendingTasks(userId, mode)
+  return (await getPendingTasks(userId, mode))
     .filter(t => t.dueDate && t.dueDate < today);
 }
 
-export function updateTaskStatus(id: string, userId: string, status: TaskStatus): Task | null {
-  const items = load();
-  const idx = items.findIndex(t => t.id === id && t.userId === userId);
-  if (idx < 0) return null;
-  items[idx].status = status;
-  save(items);
-  return items[idx];
+export async function updateTaskStatus(id: string, userId: string, status: TaskStatus): Promise<Task | null> {
+  const { data, error } = await getSupabase().from("tasks").update({ status }).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  if (error || !data) return null;
+  return fromRow(data as Row);
 }
 
-export function findTaskByTitle(userId: string, title: string, mode?: TaskMode): Task | null {
+export async function findTaskByTitle(userId: string, title: string, mode?: TaskMode): Promise<Task | null> {
   const lower = title.toLowerCase();
-  return getTasksByUser(userId, mode)
+  return (await getTasksByUser(userId, mode))
     .find(t => t.title.toLowerCase().includes(lower)) ?? null;
 }
 
-export function findTaskByNumber(userId: string, num: number, mode?: TaskMode): Task | null {
-  const pending = getPendingTasks(userId, mode);
+export async function findTaskByNumber(userId: string, num: number, mode?: TaskMode): Promise<Task | null> {
+  const pending = await getPendingTasks(userId, mode);
   return pending[num - 1] ?? null;
 }
 
-export function deleteTask(id: string, userId: string): boolean {
-  const items = load();
-  const filtered = items.filter(t => !(t.id === id && t.userId === userId));
-  if (filtered.length === items.length) return false;
-  save(filtered);
-  return true;
+export async function deleteTask(id: string, userId: string): Promise<boolean> {
+  const { error, count } = await getSupabase().from("tasks").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
+  return !error && !!count && count > 0;
 }
 
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {

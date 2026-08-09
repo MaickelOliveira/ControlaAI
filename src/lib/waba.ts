@@ -3,14 +3,14 @@ import { getConfig } from "@/lib/whatsapp-config";
 
 const GRAPH_VERSION = "v19.0";
 
-function phoneNumberId(): string {
-  return getConfig().waba?.phoneNumberId || "";
+async function phoneNumberId(): Promise<string> {
+  return (await getConfig()).waba?.phoneNumberId || "";
 }
-function accessToken(): string {
-  return getConfig().waba?.accessToken || "";
+async function accessToken(): Promise<string> {
+  return (await getConfig()).waba?.accessToken || "";
 }
-export function verifyToken(): string {
-  return getConfig().waba?.verifyToken || "";
+export async function verifyToken(): Promise<string> {
+  return (await getConfig()).waba?.verifyToken || "";
 }
 
 /** Sem isso, qualquer um que descubra a URL do webhook consegue mandar
@@ -19,8 +19,8 @@ export function verifyToken(): string {
  *  A Meta assina cada requisição com HMAC-SHA256 do corpo cru usando o App
  *  Secret — comparação em tempo constante pra não vazar o segredo por
  *  timing attack. */
-export function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
-  const appSecret = getConfig().waba?.appSecret;
+export async function verifySignature(rawBody: string, signatureHeader: string | null): Promise<boolean> {
+  const appSecret = (await getConfig()).waba?.appSecret;
   if (!appSecret || !signatureHeader) return false;
   const expected = "sha256=" + createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
   const a = Buffer.from(expected);
@@ -29,8 +29,8 @@ export function verifySignature(rawBody: string, signatureHeader: string | null)
   return timingSafeEqual(a, b);
 }
 
-export function isWabaConfigured(): boolean {
-  return !!(phoneNumberId() && accessToken());
+export async function isWabaConfigured(): Promise<boolean> {
+  return !!(await phoneNumberId() && await accessToken());
 }
 
 function normalizePhone(to: string): string {
@@ -41,8 +41,8 @@ function normalizePhone(to: string): string {
 }
 
 export async function sendText(to: string, message: string): Promise<boolean> {
-  const pnid = phoneNumberId();
-  const token = accessToken();
+  const pnid = await phoneNumberId();
+  const token = await accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return false; }
   try {
     const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pnid}/messages`, {
@@ -73,8 +73,8 @@ export async function sendText(to: string, message: string): Promise<boolean> {
  *  usam parâmetros NOMEADOS (ex: {{compromisso}}), não posicionais ({{1}}),
  *  então cada parâmetro do body leva parameter_name além de type/text. */
 export async function sendTemplate(to: string, templateName: string, languageCode: string, params: Record<string, string>): Promise<{ ok: boolean; error?: string; messageId?: string }> {
-  const pnid = phoneNumberId();
-  const token = accessToken();
+  const pnid = await phoneNumberId();
+  const token = await accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return { ok: false, error: "WABA não configurado (Phone Number ID / Access Token)" }; }
   try {
     const parameters = Object.entries(params).map(([parameter_name, text]) => ({ type: "text", text, parameter_name }));
@@ -115,8 +115,8 @@ function wabaMediaType(mimeType: string): "image" | "video" | "audio" | "documen
  *  então precisa do fluxo de upload da Graph API: sobe o buffer, recebe um
  *  media_id, e só então manda a mensagem referenciando esse id. */
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
-  const pnid = phoneNumberId();
-  const token = accessToken();
+  const pnid = await phoneNumberId();
+  const token = await accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return false; }
   try {
     const form = new FormData();
@@ -164,7 +164,7 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
 /** Mensagens recebidas na Cloud API só trazem o media id — baixa a URL
  *  temporária e depois o arquivo em si (2 chamadas, ambas com Bearer). */
 export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  const token = accessToken();
+  const token = await accessToken();
   if (!token) return null;
   try {
     const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, {
@@ -190,8 +190,8 @@ export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; 
 /** WABA não tem "status de sessão" como Evolution — valida testando se o
  *  Phone Number ID + token conseguem consultar a própria conta. */
 export async function checkConnection(): Promise<"CONNECTED" | "DISCONNECTED" | "UNKNOWN"> {
-  const pnid = phoneNumberId();
-  const token = accessToken();
+  const pnid = await phoneNumberId();
+  const token = await accessToken();
   if (!pnid || !token) return "UNKNOWN";
   try {
     const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pnid}?fields=id`, {

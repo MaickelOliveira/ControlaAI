@@ -8,12 +8,12 @@ export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const users = getUsers();
+  const users = await getUsers();
   const now = new Date();
 
-  const clientes = users.map(u => {
-    const finances = getFinancesByUser(u.id);
-    const tasks = getTasksByUser(u.id);
+  const clientes = (await Promise.all(users.map(async u => {
+    const finances = await getFinancesByUser(u.id);
+    const tasks = await getTasksByUser(u.id);
     const lastFinance = finances.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
     const lastActivity = lastFinance?.createdAt ?? u.createdAt;
     const isToday = new Date(lastActivity).toDateString() === now.toDateString();
@@ -39,7 +39,7 @@ export async function GET() {
       lastActivity,
       activeToday: isToday,
     };
-  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }))).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const stats = {
     total: clientes.length,
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   const { name, email, password, phone, plan, company, isTrial, trialDays, maxWppPhones } = body;
 
   if (!name || !email || !password) return NextResponse.json({ error: "Nome, email e senha são obrigatórios" }, { status: 400 });
-  if (getUserByEmail(email)) return NextResponse.json({ error: "Email já cadastrado" }, { status: 400 });
+  if (await getUserByEmail(email)) return NextResponse.json({ error: "Email já cadastrado" }, { status: 400 });
 
   const user = await createUser({ name, email, password, phone: phone || "", plan: plan || "personal", company });
 
@@ -68,13 +68,13 @@ export async function POST(req: NextRequest) {
   if (maxWppPhones && Number(maxWppPhones) > 1) extraPatch.maxWppPhones = Number(maxWppPhones);
 
   if (!isTrial) {
-    updateUser(user.id, { status: "active", activatedAt: new Date().toISOString(), ...extraPatch });
+    await updateUser(user.id, { status: "active", activatedAt: new Date().toISOString(), ...extraPatch });
   } else if (trialDays && trialDays !== 14) {
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + Number(trialDays));
-    updateUser(user.id, { trialEndsAt: trialEnd.toISOString(), ...extraPatch });
+    await updateUser(user.id, { trialEndsAt: trialEnd.toISOString(), ...extraPatch });
   } else if (Object.keys(extraPatch).length > 0) {
-    updateUser(user.id, extraPatch as Partial<import("@/lib/users").User>);
+    await updateUser(user.id, extraPatch as Partial<import("@/lib/users").User>);
   }
 
   return NextResponse.json({ ok: true, id: user.id });

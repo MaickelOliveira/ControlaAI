@@ -1,11 +1,8 @@
-import { readFileSync, existsSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
-import path from "path";
+import { getSupabase } from "./supabase";
 import { VehicleExpenseType } from "./vehicles";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
 import type { RecurringData } from "./ai-processor";
 
-const FILE = path.join(process.cwd(), "data", "pending.json");
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
 const TTL_RECURRING_MS = 12 * 60 * 60 * 1000; // 12 horas
 const TTL_INVOICE_MS = 30 * 60 * 1000; // 30 minutos — fatura pode ter muitos lançamentos, dá mais tempo pra revisar
@@ -174,19 +171,8 @@ export type PendingEmployeePaymentSelect = {
 
 export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect;
 
-type Store = Record<string, PendingAction>;
-
-function load(): Store {
-  try {
-    if (!existsSync(FILE)) return {};
-    return JSON.parse(readFileSync(FILE, "utf-8"));
-  } catch (err) { console.error("[pending-actions] falha ao ler pending.json:", err); return {}; }
-}
-
-function save(store: Store) {
-  try { writeJSONAtomic(FILE, store); }
-  catch (err) { console.error("[pending-actions] falha ao gravar pending.json:", err); }
-}
+// Cada telefone é sua própria linha (chave primária) — sem precisar mais
+// varrer/limpar expirados de um blob único a cada escrita.
 
 const TTL_MEET_ATA_MS = 4 * 60 * 60 * 1000; // 4 horas
 // Perguntas de slot-filling podem levar mais de um turno — 10 min é um
@@ -215,36 +201,27 @@ const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   slot_fill: TTL_SLOT_FILL_MS,
 };
 
-export function setPendingAction(phone: string, action: PendingActionInput): void {
-  const store = load();
-  // remove expirados
+export async function setPendingAction(phone: string, action: PendingActionInput): Promise<void> {
   const now = Date.now();
-  for (const key of Object.keys(store)) {
-    if (new Date(store[key].expiresAt).getTime() < now) delete store[key];
-  }
   const ttl = TTL_BY_TYPE[action.type] ?? TTL_MS;
-  store[phone] = { ...action, phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
-  save(store);
+  const full = { ...action, phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
+  const { error } = await getSupabase().from("pending_actions").upsert({ phone, data: full, updated_at: new Date().toISOString() });
+  if (error) console.error("[pending-actions] falha ao gravar:", error.message);
 }
 
-export function getPendingAction(phone: string): PendingAction | null {
-  const store = load();
-  const action = store[phone];
-  if (!action) return null;
+export async function getPendingAction(phone: string): Promise<PendingAction | null> {
+  const { data, error } = await getSupabase().from("pending_actions").select("data").eq("phone", phone).maybeSingle();
+  if (error || !data) return null;
+  const action = (data as { data: PendingAction }).data;
   if (new Date(action.expiresAt).getTime() < Date.now()) {
-    delete store[phone];
-    save(store);
+    await clearPendingAction(phone);
     return null;
   }
   return action;
 }
 
-export function clearPendingAction(phone: string): void {
-  const store = load();
-  if (phone in store) {
-    delete store[phone];
-    save(store);
-  }
+export async function clearPendingAction(phone: string): Promise<void> {
+  await getSupabase().from("pending_actions").delete().eq("phone", phone);
 }
 
 /** Base compartilhada de todo "escolha da lista" por número ou por texto:

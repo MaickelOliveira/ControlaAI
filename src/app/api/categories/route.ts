@@ -7,7 +7,7 @@ export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const user = getUserById(session.sub);
+  const user = await getUserById(session.sub);
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   return NextResponse.json({
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!type || !name || !name.trim()) return NextResponse.json({ error: "type e name obrigatórios" }, { status: 400 });
   if (type !== "expense" && type !== "income") return NextResponse.json({ error: "type inválido" }, { status: 400 });
 
-  const user = getUserById(session.sub);
+  const user = await getUserById(session.sub);
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   const trimmed = name.trim();
@@ -39,9 +39,9 @@ export async function POST(req: NextRequest) {
 
   const updated = [...existing, trimmed];
   if (type === "expense") {
-    updateUser(session.sub, { customCategoriesExpense: updated });
+    await updateUser(session.sub, { customCategoriesExpense: updated });
   } else {
-    updateUser(session.sub, { customCategoriesIncome: updated });
+    await updateUser(session.sub, { customCategoriesIncome: updated });
   }
 
   return NextResponse.json({ ok: true, name: trimmed });
@@ -54,7 +54,7 @@ export async function DELETE(req: NextRequest) {
   const { type, name } = await req.json();
   if (!type || !name) return NextResponse.json({ error: "type e name obrigatórios" }, { status: 400 });
 
-  const user = getUserById(session.sub);
+  const user = await getUserById(session.sub);
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   const existing = type === "expense"
@@ -63,9 +63,9 @@ export async function DELETE(req: NextRequest) {
   const filtered = existing.filter(c => c !== name);
 
   if (type === "expense") {
-    updateUser(session.sub, { customCategoriesExpense: filtered });
+    await updateUser(session.sub, { customCategoriesExpense: filtered });
   } else {
-    updateUser(session.sub, { customCategoriesIncome: filtered });
+    await updateUser(session.sub, { customCategoriesIncome: filtered });
   }
 
   return NextResponse.json({ ok: true });

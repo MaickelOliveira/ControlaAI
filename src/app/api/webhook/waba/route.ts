@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const mode = req.nextUrl.searchParams.get("hub.mode");
   const token = req.nextUrl.searchParams.get("hub.verify_token");
   const challenge = req.nextUrl.searchParams.get("hub.challenge");
-  if (mode === "subscribe" && challenge && token === verifyToken()) {
+  if (mode === "subscribe" && challenge && token === await verifyToken()) {
     return new NextResponse(challenge, { status: 200 });
   }
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -46,18 +46,18 @@ export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
 
-    // Sem App Secret configurado, o webhook fica sem proteção — aceita mas
-    // avisa alto no log até ser configurado em Admin → WhatsApp. Com o
-    // secret configurado, requisição sem assinatura válida é rejeitada:
-    // sem isso, qualquer um que descubra essa URL consegue forjar
-    // "mensagens" em nome de qualquer número de telefone.
-    if (getConfig().waba?.appSecret) {
-      if (!verifySignature(rawBody, req.headers.get("x-hub-signature-256"))) {
-        console.error("[webhook/waba] assinatura inválida — requisição rejeitada");
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    } else {
-      console.warn("[webhook/waba] App Secret não configurado — webhook sem validação de assinatura. Configure em Admin → WhatsApp.");
+    // Sem App Secret configurado, bloqueia — quem descobre essa URL sem
+    // isso configurado conseguiria forjar "mensagens" em nome de qualquer
+    // número de telefone. Antes só avisava no log e deixava passar; agora
+    // falha fechado (nega por padrão) até o App Secret ser configurado em
+    // Admin → WhatsApp.
+    if (!(await getConfig()).waba?.appSecret) {
+      console.error("[webhook/waba] App Secret não configurado — requisição rejeitada. Configure em Admin → WhatsApp.");
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (!(await verifySignature(rawBody, req.headers.get("x-hub-signature-256")))) {
+      console.error("[webhook/waba] assinatura inválida — requisição rejeitada");
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
 
 async function processMessages(messages: WabaMessage[], contactName?: string) {
   for (const msg of messages) {
-    if (alreadyProcessed(msg.id)) { console.log(`[webhook/waba] msg=${msg.id} já processada, ignorando reentrega`); continue; }
+    if (await alreadyProcessed(msg.id)) { console.log(`[webhook/waba] msg=${msg.id} já processada, ignorando reentrega`); continue; }
 
     const from = (msg.from || "").replace(/\D/g, "");
     if (!from) continue;

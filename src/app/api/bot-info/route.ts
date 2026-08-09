@@ -4,7 +4,7 @@ import { getInstancePhone } from "@/lib/evolution";
 import { checkConnection } from "@/lib/whatsapp";
 
 export async function detectBotNumber(): Promise<string> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
 
   // WABA: não tem endpoint de "meu número" sem permissões extras — o admin
   // informa o Phone Number ID e o número diretamente na tela de config.
@@ -12,14 +12,14 @@ export async function detectBotNumber(): Promise<string> {
 
   const phone = await getInstancePhone();
   if (phone) {
-    saveConfig({ ...cfg, wppBotNumber: phone });
+    await saveConfig({ ...cfg, wppBotNumber: phone });
     return phone;
   }
   return "";
 }
 
 export async function GET() {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   let botNumber = cfg.wppBotNumber ?? "";
   if (!botNumber) botNumber = await detectBotNumber();
   const status = await checkConnection().catch(() => "UNKNOWN");

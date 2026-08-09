@@ -1,27 +1,21 @@
-import { readJSON, writeJSONAtomic } from "./json-store";
-import path from "path";
+import { getSupabase } from "./supabase";
 
-/** Guarda de deduplicação de mensagens de webhook (WABA) persistida em
- *  disco — a versão anterior usava um Set em memória, que reseta a cada
- *  restart do processo. Esse ambiente reinicia a cada deploy, e o backoff
- *  de reentrega da Meta pode ficar ativo por mais de um dia: uma reentrega
- *  que chegasse depois de qualquer restart não era reconhecida como
- *  duplicata e reprocessava a mensagem do zero. */
-const FILE = path.join(process.cwd(), "data", "webhook-message-ids.json");
+/** Guarda de deduplicação de mensagens de webhook (WABA) — antes um Set em
+ *  memória (resetava a cada restart) depois um arquivo local (não
+ *  coordenava entre múltiplas instâncias reais). Insert direto na tabela é
+ *  atômico por natureza (chave primária) — se já existir, o insert falha
+ *  com conflito e sabemos que já foi processado, sem precisar de
+ *  leitura+escrita separadas. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // folga confortável acima de qualquer janela de retentativa da Meta
 
-type Store = Record<string, number>; // messageId -> timestamp de quando foi processado
-
-export function alreadyProcessed(id: string | undefined): boolean {
+export async function alreadyProcessed(id: string | undefined): Promise<boolean> {
   if (!id) return false;
-  const store = readJSON<Store>(FILE, {});
-  if (store[id]) return true;
-
-  const now = Date.now();
-  const pruned: Store = { [id]: now };
-  for (const [key, ts] of Object.entries(store)) {
-    if (now - ts < MAX_AGE_MS) pruned[key] = ts;
+  const { error } = await getSupabase().from("webhook_message_ids").insert({ message_id: id });
+  if (!error) {
+    // limpeza oportunista de entradas velhas — não precisa ser exata nem bloquear o retorno
+    getSupabase().from("webhook_message_ids").delete().lt("processed_at", new Date(Date.now() - MAX_AGE_MS).toISOString()).then(() => {});
+    return false;
   }
-  writeJSONAtomic(FILE, pruned);
-  return false;
+  // código 23505 = violação de chave única (já existe) — qualquer outro erro trata como "não processado" pra não bloquear mensagem por falha transitória
+  return error.code === "23505";
 }

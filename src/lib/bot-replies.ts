@@ -250,6 +250,10 @@ export function replyTrialExpired(): string {
   return `Seu período de teste chegou ao fim.\n\nPara eu continuar cuidando das suas finanças e da sua agenda, é só assinar um plano no painel:\n🌐 controlaai.app/planos`;
 }
 
+export function replyAccountInactive(): string {
+  return `Sua conta está inativa no momento.\n\nPara voltar a usar o Zelo, regularize sua assinatura no painel:\n🌐 controlaai.app/planos`;
+}
+
 export function buildRecurringNotification(r: RecurringTransaction): string {
   const fmt = (v: number) => formatCurrency(v);
   const dueDateStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");

@@ -10,9 +10,9 @@ import { addMessage } from "@/lib/conversations";
  *  lugar, em vez de instrumentar cada call-site manualmente. */
 
 export async function sendText(to: string, message: string): Promise<boolean> {
-  const provider = getConfig().provider;
+  const provider = (await getConfig()).provider;
   const ok = provider === "waba" ? await waba.sendText(to, message) : await evolution.sendText(to, message);
-  if (ok) addMessage(to, { role: "assistant", content: message, ts: Date.now() });
+  if (ok) await addMessage(to, { role: "assistant", content: message, ts: Date.now() });
   return ok;
 }
 
@@ -21,7 +21,7 @@ export async function sendText(to: string, message: string): Promise<boolean> {
  *  precisam ir como template aprovado, não texto livre. Evolution (API não
  *  oficial) não tem essa restrição, então continua mandando texto normal. */
 export async function sendReminderTemplate(to: string, templateName: string, renderedText: string, params: Record<string, string>): Promise<boolean> {
-  const provider = getConfig().provider;
+  const provider = (await getConfig()).provider;
   let ok: boolean;
   if (provider === "waba") {
     const result = await waba.sendTemplate(to, templateName, "pt_BR", params);
@@ -32,35 +32,35 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
   } else {
     ok = await evolution.sendText(to, renderedText);
   }
-  if (ok) addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
+  if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
   return ok;
 }
 
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
-  const provider = getConfig().provider;
+  const provider = (await getConfig()).provider;
   const ok = provider === "waba"
     ? await waba.sendFile(to, fileBuffer, filename, mimeType, caption)
     : await evolution.sendFile(to, fileBuffer, filename, mimeType, caption);
   if (ok) {
     const label = mimeType.startsWith("image/") ? "📷 Imagem" : mimeType.startsWith("audio/") ? "🎵 Áudio" : `📎 ${filename}`;
-    addMessage(to, { role: "assistant", content: caption ? `${label}\n${caption}` : label, ts: Date.now() });
+    await addMessage(to, { role: "assistant", content: caption ? `${label}\n${caption}` : label, ts: Date.now() });
   }
   return ok;
 }
 
 export async function checkConnection(): Promise<"CONNECTED" | "DISCONNECTED" | "QRCODE" | "UNKNOWN"> {
-  const provider = getConfig().provider;
+  const provider = (await getConfig()).provider;
   return provider === "waba" ? await waba.checkConnection() : await evolution.checkConnectionStatus();
 }
 
 /** Só Evolution usa QR — WABA não tem sessão pra escanear. */
 export async function getQrCode(): Promise<string | null> {
-  const provider = getConfig().provider;
+  const provider = (await getConfig()).provider;
   if (provider === "waba") return null;
   return evolution.getQrCode();
 }
 
-export function isConfigured(): boolean {
-  const provider = getConfig().provider;
+export async function isConfigured(): Promise<boolean> {
+  const provider = (await getConfig()).provider;
   return provider === "waba" ? waba.isWabaConfigured() : evolution.isEvolutionConfigured();
 }

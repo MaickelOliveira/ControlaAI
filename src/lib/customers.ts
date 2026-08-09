@@ -1,7 +1,5 @@
-import { readFileSync, existsSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
-import path from "path";
 import { randomUUID } from "crypto";
+import { getSupabase } from "./supabase";
 
 export type CustomerStatus = "active" | "inactive";
 
@@ -18,40 +16,54 @@ export type Customer = {
   createdAt: string;
 };
 
-const FILE = path.join(process.cwd(), "data", "customers.json");
+type Row = {
+  id: string; user_id: string; name: string; phone: string | null; email: string | null;
+  company: string | null; address: string | null; notes: string | null; status: CustomerStatus; created_at: string;
+};
 
-function load(): Customer[] {
-  try {
-    if (!existsSync(FILE)) return [];
-    return JSON.parse(readFileSync(FILE, "utf-8"));
-  } catch { return []; }
-}
-function save(items: Customer[]) { writeJSONAtomic(FILE, items); }
-
-export function createCustomer(data: Omit<Customer, "id" | "createdAt">): Customer {
-  const items = load();
-  const c: Customer = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
-  items.push(c);
-  save(items);
-  return c;
+function fromRow(r: Row): Customer {
+  return {
+    id: r.id, userId: r.user_id, name: r.name, phone: r.phone ?? undefined, email: r.email ?? undefined,
+    company: r.company ?? undefined, address: r.address ?? undefined, notes: r.notes ?? undefined,
+    status: r.status, createdAt: r.created_at,
+  };
 }
 
-export function getCustomersByUser(userId: string, status?: CustomerStatus): Customer[] {
-  return load().filter(c => c.userId === userId && (!status || c.status === status));
+export async function createCustomer(data: Omit<Customer, "id" | "createdAt">): Promise<Customer> {
+  const row = {
+    id: randomUUID(), user_id: data.userId, name: data.name, phone: data.phone, email: data.email,
+    company: data.company, address: data.address, notes: data.notes, status: data.status,
+  };
+  const { data: inserted, error } = await getSupabase().from("customers").insert(row).select("*").single();
+  if (error) throw new Error(`[customers] createCustomer falhou: ${error.message}`);
+  return fromRow(inserted as Row);
 }
 
-export function updateCustomer(id: string, userId: string, patch: Partial<Customer>): Customer | null {
-  const items = load();
-  const idx = items.findIndex(c => c.id === id && c.userId === userId);
-  if (idx < 0) return null;
-  items[idx] = { ...items[idx], ...patch };
-  save(items);
-  return items[idx];
+export async function getCustomersByUser(userId: string, status?: CustomerStatus): Promise<Customer[]> {
+  let query = getSupabase().from("customers").select("*").eq("user_id", userId);
+  if (status) query = query.eq("status", status);
+  const { data, error } = await query;
+  if (error) { console.error("[customers] getCustomersByUser erro:", error.message); return []; }
+  return (data as Row[]).map(fromRow);
 }
 
-export function findCustomerByName(userId: string, name: string): Customer | null {
+export async function updateCustomer(id: string, userId: string, patch: Partial<Customer>): Promise<Customer | null> {
+  const rowPatch: Record<string, unknown> = {};
+  if (patch.name !== undefined) rowPatch.name = patch.name;
+  if (patch.phone !== undefined) rowPatch.phone = patch.phone;
+  if (patch.email !== undefined) rowPatch.email = patch.email;
+  if (patch.company !== undefined) rowPatch.company = patch.company;
+  if (patch.address !== undefined) rowPatch.address = patch.address;
+  if (patch.notes !== undefined) rowPatch.notes = patch.notes;
+  if (patch.status !== undefined) rowPatch.status = patch.status;
+  const { data, error } = await getSupabase().from("customers").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  if (error || !data) return null;
+  return fromRow(data as Row);
+}
+
+export async function findCustomerByName(userId: string, name: string): Promise<Customer | null> {
   const lower = name.toLowerCase();
-  return getCustomersByUser(userId).find(c => c.name.toLowerCase().includes(lower)) ?? null;
+  return (await getCustomersByUser(userId)).find(c => c.name.toLowerCase().includes(lower)) ?? null;
 }
 
 /** Todos os clientes ativos cujo nome bate com o termo — usado em consultas
@@ -60,7 +72,7 @@ export function findCustomerByName(userId: string, name: string): Customer | nul
  *  um só. Se o termo já incluir sobrenome/identificação mais específica
  *  (ex: "Bruno Ciola"), a busca por substring naturalmente restringe a um
  *  único resultado, sem lógica extra. */
-export function findCustomersByName(userId: string, name: string): Customer[] {
+export async function findCustomersByName(userId: string, name: string): Promise<Customer[]> {
   const lower = name.toLowerCase();
-  return getCustomersByUser(userId, "active").filter(c => c.name.toLowerCase().includes(lower));
+  return (await getCustomersByUser(userId, "active")).filter(c => c.name.toLowerCase().includes(lower));
 }

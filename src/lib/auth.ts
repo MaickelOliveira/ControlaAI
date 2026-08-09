@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { getUserById, isTrialExpired } from "./users";
+import { getUserById, hasAccess } from "./users";
 
 // Sem valor padrão de propósito: uma chave fixa no código público permitiria
 // qualquer um forjar um cookie de sessão válido (inclusive de admin). A
@@ -65,8 +65,8 @@ export async function getSession(): Promise<SessionPayload | null> {
   const payload = await verifyToken(token);
   if (!payload) return null;
 
-  const user = getUserById(payload.sub);
-  if (!user || user.status === "inactive" || isTrialExpired(user)) return null;
+  const user = await getUserById(payload.sub);
+  if (!user || !hasAccess(user)) return null;
 
   return payload;
 }

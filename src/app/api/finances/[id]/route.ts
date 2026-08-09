@@ -11,7 +11,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
   const { amount, category, description, date, status } = body;
 
-  const updated = updateFinance(id, session.sub, {
+  const updated = await updateFinance(id, session.sub, {
     ...(amount !== undefined ? { amount: parseFloat(amount) } : {}),
     ...(category ? { category } : {}),
     ...(description !== undefined ? { description } : {}),
@@ -29,9 +29,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
   // Apaga gasto de veículo vinculado, se existir
-  const linked = findExpenseByFinanceId(session.sub, id);
-  if (linked) deleteVehicleExpense(linked.vehicleId, session.sub, linked.expenseId);
-  const ok = deleteFinance(id, session.sub);
+  const linked = await findExpenseByFinanceId(session.sub, id);
+  if (linked) await deleteVehicleExpense(linked.vehicleId, session.sub, linked.expenseId);
+  const ok = await deleteFinance(id, session.sub);
   if (!ok) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

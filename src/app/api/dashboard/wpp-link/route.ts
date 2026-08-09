@@ -6,7 +6,7 @@ export async function POST() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const user = getUserById(session.sub);
+  const user = await getUserById(session.sub);
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   const phones = getWppPhones(user);
@@ -15,7 +15,7 @@ export async function POST() {
     return NextResponse.json({ error: `Limite de ${max} número(s) atingido. Desvincule um número antes de adicionar outro.` }, { status: 400 });
   }
 
-  const code = generateWppVerifyCode(session.sub);
+  const code = await generateWppVerifyCode(session.sub);
   return NextResponse.json({ code });
 }
 
@@ -28,7 +28,7 @@ export async function DELETE(req: NextRequest) {
 
   if (!phone) return NextResponse.json({ error: "Número não informado" }, { status: 400 });
 
-  removeWppPhone(session.sub, phone);
+  await removeWppPhone(session.sub, phone);
   return NextResponse.json({ ok: true });
 }
 
@@ -48,15 +48,15 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Acesso inválido" }, { status: 400 });
   }
 
-  const user = getUserById(session.sub);
+  const user = await getUserById(session.sub);
   if (!user || !getWppPhones(user).includes(phone)) {
     return NextResponse.json({ error: "Número não vinculado a essa conta" }, { status: 400 });
   }
 
   let updated = user;
-  if (name) updated = setWppPhoneName(session.sub, phone, name) ?? updated;
-  if (relation) updated = setWppPhoneRelation(session.sub, phone, relation) ?? updated;
-  if (access) updated = setWppPhoneAccess(session.sub, phone, access) ?? updated;
+  if (name) updated = (await setWppPhoneName(session.sub, phone, name)) ?? updated;
+  if (relation) updated = (await setWppPhoneRelation(session.sub, phone, relation)) ?? updated;
+  if (access) updated = (await setWppPhoneAccess(session.sub, phone, access)) ?? updated;
 
   return NextResponse.json({
     ok: true,

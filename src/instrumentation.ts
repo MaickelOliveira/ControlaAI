@@ -13,7 +13,7 @@ export async function register() {
 
   const tick = async () => {
     const { acquireCronLock, releaseCronLock } = await import("./lib/cron-lock");
-    if (!acquireCronLock()) return; // outra instância/tick já está processando agora
+    if (!(await acquireCronLock())) return; // outra instância/tick já está processando agora
 
     try {
       // ── Auto-posta lançamentos pendentes cuja data chegou ──
@@ -21,7 +21,7 @@ export async function register() {
         const financesModule = await import("./lib/finances").catch(() => null);
         const dateBrModule = await import("./lib/date-br").catch(() => null);
         if (financesModule && dateBrModule) {
-          const posted = financesModule.autoPostPendingFinances(dateBrModule.todayStrBR());
+          const posted = await financesModule.autoPostPendingFinances(dateBrModule.todayStrBR());
           if (posted.length > 0) console.log(`[cron] ${posted.length} lançamento(s) pendente(s) postados`);
         }
       } catch (e) {
@@ -34,14 +34,14 @@ export async function register() {
 
       const { getDueReminders, markReminderSent } = remindersModule;
       const { sendText, sendReminderTemplate } = wppModule;
-      const due = getDueReminders();
+      const due = await getDueReminders();
       if (due.length > 0) console.log(`[cron] ${due.length} lembrete(s) a disparar`);
       for (const r of due) {
         try {
           const texto = `🔔 *Lembrete:* ${r.message}`;
           const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
-          if (ok) markReminderSent(r.id, r.repeat);
+          if (ok) await markReminderSent(r.id, r.repeat);
         } catch (e) {
           console.error("[cron] Erro ao enviar lembrete:", e);
         }
@@ -64,12 +64,12 @@ export async function register() {
           const { buildRecurringNotification } = repliesModule;
           const { formatCurrency } = financesModule;
 
-          const dueToday = getRecurringDueToday();
+          const dueToday = await getRecurringDueToday();
           if (dueToday.length > 0) console.log(`[cron] ${dueToday.length} recorrente(s) a notificar`);
 
           for (const rec of dueToday) {
             try {
-              const user = getUserById(rec.userId);
+              const user = await getUserById(rec.userId);
               if (!user) continue;
               const phones = getWppPhones(user);
               const msg = buildRecurringNotification(rec);
@@ -78,8 +78,8 @@ export async function register() {
               for (const phone of phones) {
                 const ok = await sendReminderTemplate(phone, "cobranca_recorrente", msg, params);
                 if (ok) {
-                  markNotified(rec.id);
-                  setPendingAction(phone, {
+                  await markNotified(rec.id);
+                  await setPendingAction(phone, {
                     type: "recurring_confirmation",
                     userId: rec.userId,
                     recurringId: rec.id,
@@ -109,17 +109,17 @@ export async function register() {
           const { getUserById, getWppPhones } = usersModule;
           const { setPendingAction } = pendingModule;
           const { replyMeetAtaRequest } = repliesModule;
-          const ended = getAppointmentsWithEndedMeet();
+          const ended = await getAppointmentsWithEndedMeet();
           for (const apt of ended) {
             try {
-              const aptUser = getUserById(apt.userId);
+              const aptUser = await getUserById(apt.userId);
               if (!aptUser) continue;
               const phones = getWppPhones(aptUser);
               for (const phone of phones) {
                 const ok = await sendText(phone, replyMeetAtaRequest(apt.title));
                 if (ok) {
-                  updateAppointment(apt.id, apt.userId, { ataNotifiedAt: new Date().toISOString() });
-                  setPendingAction(phone, {
+                  await updateAppointment(apt.id, apt.userId, { ataNotifiedAt: new Date().toISOString() });
+                  await setPendingAction(phone, {
                     type: "meet_ata",
                     userId: apt.userId,
                     meetId: apt.id,
@@ -147,11 +147,11 @@ export async function register() {
           const { getUserById, getWppPhones } = usersModule;
           const { replyAppointmentReminder } = repliesModule;
           const { formatTimeBR } = dateBrModule;
-          const dueSoon = getAppointmentsNeedingReminder();
+          const dueSoon = await getAppointmentsNeedingReminder();
           if (dueSoon.length > 0) console.log(`[cron] ${dueSoon.length} compromisso(s) a lembrar`);
           for (const apt of dueSoon) {
             try {
-              const aptUser = getUserById(apt.userId);
+              const aptUser = await getUserById(apt.userId);
               if (!aptUser) continue;
               const phones = getWppPhones(aptUser);
               const msg = replyAppointmentReminder(apt);
@@ -161,7 +161,7 @@ export async function register() {
                 const ok = await sendReminderTemplate(phone, "lembrete_compromisso", msg, params);
                 if (ok) sentToAny = true;
               }
-              if (sentToAny) updateAppointment(apt.id, apt.userId, { reminderSentAt: new Date().toISOString() });
+              if (sentToAny) await updateAppointment(apt.id, apt.userId, { reminderSentAt: new Date().toISOString() });
             } catch (e) {
               console.error("[cron] Erro ao enviar lembrete de compromisso:", e);
             }
@@ -173,7 +173,7 @@ export async function register() {
     } catch (e) {
       console.error("[cron] Erro no tick:", e);
     } finally {
-      releaseCronLock();
+      await releaseCronLock();
     }
   };
 

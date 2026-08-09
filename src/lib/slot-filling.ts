@@ -383,7 +383,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         ? (draft.totalAmount as number | undefined) ?? amount * totalInstallments
         : (draft.totalAmount as number | undefined);
 
-      const rec = createRecurring({
+      const rec = await createRecurring({
         userId: ctx.userId,
         type,
         amount,
@@ -441,8 +441,8 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       },
     },
 
-    finalize(draft, ctx) {
-      const goal = createGoal({
+    async finalize(draft, ctx) {
+      const goal = await createGoal({
         userId: ctx.userId,
         title: draft.title as string,
         targetAmount: draft.targetAmount as number,
@@ -516,11 +516,11 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       },
     },
 
-    finalize(draft, ctx) {
+    async finalize(draft, ctx) {
       const startTime = draft.allDay ? "00:00" : (draft.startTime as string) || "00:00";
       const startAt = spToUTC(`${draft.startDate}T${startTime}:00`);
       const endAt = draft.endDate ? spToUTC(`${draft.endDate}T${(draft.endTime as string) || "00:00"}:00`) : undefined;
-      const apt = createAppointment({
+      const apt = await createAppointment({
         userId: ctx.userId,
         title: draft.title as string,
         description: draft.description as string | undefined,
@@ -578,11 +578,11 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       },
     },
 
-    finalize(draft, ctx) {
+    async finalize(draft, ctx) {
       const items = draft.items as GroceryPurchaseItem[];
-      const store = findOrCreateStore(ctx.userId, (draft.storeName as string) || "Não informado");
+      const store = await findOrCreateStore(ctx.userId, (draft.storeName as string) || "Não informado");
       const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-      const purchase = addPurchase({
+      const purchase = await addPurchase({
         userId: ctx.userId,
         storeId: store.id,
         storeName: store.name,
@@ -633,8 +633,8 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       },
     },
 
-    finalize(draft, ctx) {
-      const employee = createEmployee({
+    async finalize(draft, ctx) {
+      const employee = await createEmployee({
         userId: ctx.userId,
         name: draft.name as string,
         role: (draft.role as string) || "Funcionário",
@@ -676,8 +676,8 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       },
     },
 
-    finalize(draft, ctx) {
-      const customer = createCustomer({
+    async finalize(draft, ctx) {
+      const customer = await createCustomer({
         userId: ctx.userId,
         name: draft.name as string,
         phone: draft.phone as string | undefined,

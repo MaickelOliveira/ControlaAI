@@ -28,17 +28,16 @@ export async function POST(req: NextRequest) {
   try {
     // Evolution não assina requisições — o segredo embutido na URL (gerado
     // e registrado em admin/whatsapp "connect") é a única defesa contra
-    // alguém forjar mensagens chamando essa URL diretamente. Sem secret
-    // configurado ainda, aceita mas avisa (mesma postura transicional do
-    // webhook WABA).
-    const configuredSecret = getConfig().evolution?.webhookSecret;
-    if (configuredSecret) {
-      if (req.nextUrl.searchParams.get("secret") !== configuredSecret) {
-        console.error("[webhook/evolution] secret inválido — requisição rejeitada");
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    } else {
-      console.warn("[webhook/evolution] webhookSecret não configurado — reconecte em Admin → WhatsApp pra gerar um.");
+    // alguém forjar mensagens chamando essa URL diretamente. Falha fechado:
+    // sem secret configurado, rejeita (antes só avisava e deixava passar).
+    const configuredSecret = (await getConfig()).evolution?.webhookSecret;
+    if (!configuredSecret) {
+      console.error("[webhook/evolution] webhookSecret não configurado — requisição rejeitada. Reconecte em Admin → WhatsApp pra gerar um.");
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (req.nextUrl.searchParams.get("secret") !== configuredSecret) {
+      console.error("[webhook/evolution] secret inválido — requisição rejeitada");
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await req.json().catch(() => null);

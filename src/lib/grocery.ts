@@ -1,7 +1,5 @@
-import { readFileSync, existsSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
-import path from "path";
 import { randomUUID } from "crypto";
+import { getSupabase } from "./supabase";
 
 export const GROCERY_CATEGORIES = [
   "Mercearia",      // arroz, feijão, óleo, açúcar, macarrão...
@@ -53,55 +51,57 @@ type GroceryData = {
   shoppingList: ShoppingListItem[];
 };
 
-const FILE = path.join(process.cwd(), "data", "grocery.json");
-
-function load(): GroceryData {
-  try {
-    if (!existsSync(FILE)) return { stores: [], purchases: [], shoppingList: [] };
-    return JSON.parse(readFileSync(FILE, "utf-8"));
-  } catch { return { stores: [], purchases: [], shoppingList: [] }; }
+// grocery.json original era um blob ÚNICO com todos os usuários (cada item
+// carrega seu próprio userId) — mantém a mesma forma numa linha só da
+// tabela, evitando reescrever a lógica de filtro já existente.
+async function load(): Promise<GroceryData> {
+  const { data, error } = await getSupabase().from("grocery").select("data").eq("id", 1).maybeSingle();
+  if (error || !data) return { stores: [], purchases: [], shoppingList: [] };
+  return (data as { data: GroceryData }).data;
 }
-function save(d: GroceryData) { writeJSONAtomic(FILE, d); }
+async function save(d: GroceryData) {
+  await getSupabase().from("grocery").upsert({ id: 1, data: d });
+}
 
 // ── Stores ──────────────────────────────
-export function getStoresByUser(userId: string): GroceryStore[] {
-  return load().stores.filter(s => s.userId === userId);
+export async function getStoresByUser(userId: string): Promise<GroceryStore[]> {
+  return (await load()).stores.filter(s => s.userId === userId);
 }
 
-export function addStore(userId: string, name: string, location = ""): GroceryStore {
-  const d = load();
+export async function addStore(userId: string, name: string, location = ""): Promise<GroceryStore> {
+  const d = await load();
   // Evita duplicata por nome
   const existing = d.stores.find(s => s.userId === userId && s.name.toLowerCase() === name.toLowerCase());
   if (existing) return existing;
   const store: GroceryStore = { id: randomUUID(), userId, name, location };
   d.stores.push(store);
-  save(d);
+  await save(d);
   return store;
 }
 
-export function findOrCreateStore(userId: string, name: string): GroceryStore {
-  const d = load();
+export async function findOrCreateStore(userId: string, name: string): Promise<GroceryStore> {
+  const d = await load();
   const found = d.stores.find(s => s.userId === userId && s.name.toLowerCase().includes(name.toLowerCase()));
   if (found) return found;
   return addStore(userId, name);
 }
 
 // ── Purchases ────────────────────────────
-export function getPurchasesByUser(userId: string): GroceryPurchase[] {
-  return load().purchases.filter(p => p.userId === userId).sort((a, b) => b.date.localeCompare(a.date));
+export async function getPurchasesByUser(userId: string): Promise<GroceryPurchase[]> {
+  return (await load()).purchases.filter(p => p.userId === userId).sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export function addPurchase(data: Omit<GroceryPurchase, "id" | "createdAt">): GroceryPurchase {
-  const d = load();
+export async function addPurchase(data: Omit<GroceryPurchase, "id" | "createdAt">): Promise<GroceryPurchase> {
+  const d = await load();
   const p: GroceryPurchase = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
   d.purchases.push(p);
-  save(d);
+  await save(d);
   return p;
 }
 
 // ── Analytics ────────────────────────────
-export function getSpendByStore(userId: string): Array<{ storeId: string; storeName: string; total: number; visits: number }> {
-  const purchases = getPurchasesByUser(userId);
+export async function getSpendByStore(userId: string): Promise<Array<{ storeId: string; storeName: string; total: number; visits: number }>> {
+  const purchases = await getPurchasesByUser(userId);
   const map = new Map<string, { storeName: string; total: number; visits: number }>();
   for (const p of purchases) {
     const cur = map.get(p.storeId) ?? { storeName: p.storeName, total: 0, visits: 0 };
@@ -114,8 +114,8 @@ export function getSpendByStore(userId: string): Array<{ storeId: string; storeN
     .sort((a, b) => b.total - a.total);
 }
 
-export function getPriceComparison(userId: string): Array<{ productName: string; category: string; prices: Array<{ storeName: string; price: number; date: string }> }> {
-  const purchases = getPurchasesByUser(userId);
+export async function getPriceComparison(userId: string): Promise<Array<{ productName: string; category: string; prices: Array<{ storeName: string; price: number; date: string }> }>> {
+  const purchases = await getPurchasesByUser(userId);
   const map = new Map<string, { category: string; prices: Array<{ storeName: string; price: number; date: string }> }>();
   for (const p of purchases) {
     for (const item of p.items) {
@@ -137,46 +137,46 @@ export function getPriceComparison(userId: string): Array<{ productName: string;
 }
 
 // ── Shopping List ─────────────────────────
-export function getShoppingList(userId: string, category?: GroceryCategory): ShoppingListItem[] {
-  return load().shoppingList
+export async function getShoppingList(userId: string, category?: GroceryCategory): Promise<ShoppingListItem[]> {
+  return (await load()).shoppingList
     .filter(i => i.userId === userId && (!category || i.category === category))
     .sort((a, b) => a.category.localeCompare(b.category));
 }
 
-export function addToShoppingList(userId: string, name: string, category: GroceryCategory, quantity = "1"): ShoppingListItem {
-  const d = load();
+export async function addToShoppingList(userId: string, name: string, category: GroceryCategory, quantity = "1"): Promise<ShoppingListItem> {
+  const d = await load();
   const item: ShoppingListItem = { id: randomUUID(), userId, name, category, quantity, checked: false };
   d.shoppingList.push(item);
-  save(d);
+  await save(d);
   return item;
 }
 
-export function toggleShoppingItem(id: string, userId: string): boolean {
-  const d = load();
+export async function toggleShoppingItem(id: string, userId: string): Promise<boolean> {
+  const d = await load();
   const idx = d.shoppingList.findIndex(i => i.id === id && i.userId === userId);
   if (idx < 0) return false;
   d.shoppingList[idx].checked = !d.shoppingList[idx].checked;
-  save(d);
+  await save(d);
   return true;
 }
 
-export function clearCheckedItems(userId: string) {
-  const d = load();
+export async function clearCheckedItems(userId: string) {
+  const d = await load();
   d.shoppingList = d.shoppingList.filter(i => !(i.userId === userId && i.checked));
-  save(d);
+  await save(d);
 }
 
-export function removeShoppingItem(id: string, userId: string) {
-  const d = load();
+export async function removeShoppingItem(id: string, userId: string) {
+  const d = await load();
   d.shoppingList = d.shoppingList.filter(i => !(i.id === id && i.userId === userId));
-  save(d);
+  await save(d);
 }
 
 /** Popula a lista de compras a partir de um template pronto (ex: "mercearia")
  *  — usado pelo painel e pelo bot, pra não duplicar o loop nos dois lugares. */
-export function addFromTemplate(userId: string, templateKey: string): number {
+export async function addFromTemplate(userId: string, templateKey: string): Promise<number> {
   const items = LIST_TEMPLATES[templateKey] ?? [];
-  for (const item of items) addToShoppingList(userId, item.name, item.category, item.quantity);
+  for (const item of items) await addToShoppingList(userId, item.name, item.category, item.quantity);
   return items.length;
 }
 

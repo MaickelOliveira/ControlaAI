@@ -1,22 +1,19 @@
-import { readFileSync, existsSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
-import path from "path";
+import { getSupabase } from "./supabase";
 import type { User } from "./users";
 
 export type PlanPrices = { personal: number; business: number };
 
-const FILE = path.join(process.cwd(), "data", "billing-config.json");
 const DEFAULT_PRICES: PlanPrices = { personal: 0, business: 0 };
 
-export function getPlanPrices(): PlanPrices {
-  try {
-    if (!existsSync(FILE)) return DEFAULT_PRICES;
-    return { ...DEFAULT_PRICES, ...JSON.parse(readFileSync(FILE, "utf-8")) };
-  } catch { return DEFAULT_PRICES; }
+export async function getPlanPrices(): Promise<PlanPrices> {
+  const { data, error } = await getSupabase().from("billing_config").select("personal, business").eq("id", 1).maybeSingle();
+  if (error || !data) return DEFAULT_PRICES;
+  const row = data as { personal: number; business: number };
+  return { personal: Number(row.personal), business: Number(row.business) };
 }
 
-export function setPlanPrices(prices: PlanPrices): void {
-  writeJSONAtomic(FILE, prices);
+export async function setPlanPrices(prices: PlanPrices): Promise<void> {
+  await getSupabase().from("billing_config").upsert({ id: 1, personal: prices.personal, business: prices.business });
 }
 
 /** Preço mensal de um cliente: usa o valor negociado (priceOverride) se

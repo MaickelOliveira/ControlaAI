@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("mode") as "personal" | "business" | undefined;
-  return NextResponse.json(getVehiclesByUser(session.sub, mode || undefined));
+  return NextResponse.json(await getVehiclesByUser(session.sub, mode || undefined));
 }
 
 export async function POST(req: NextRequest) {
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (action === "create" || !action) {
     const { plate, brand, model, year, fuelType, currentKm, mode, notes } = body;
     if (!brand || !model) return NextResponse.json({ error: "brand e model obrigatórios" }, { status: 400 });
-    const v = createVehicle({ userId: session.sub, plate: plate || "", brand, model, year: year || 2020, fuelType: fuelType || "flex", currentKm: currentKm || 0, mode: mode || "personal", notes: notes || "" });
+    const v = await createVehicle({ userId: session.sub, plate: plate || "", brand, model, year: year || 2020, fuelType: fuelType || "flex", currentKm: currentKm || 0, mode: mode || "personal", notes: notes || "" });
     return NextResponse.json(v, { status: 201 });
   }
 
@@ -29,19 +29,19 @@ export async function POST(req: NextRequest) {
     const expDate = date || new Date().toISOString().slice(0, 10);
     const expType = type || "other";
     const expDesc = description || expType;
-    const v = addVehicleExpense(vehicleId, session.sub, { date: expDate, km, type: expType, amount, description: expDesc });
+    const v = await addVehicleExpense(vehicleId, session.sub, { date: expDate, km, type: expType, amount, description: expDesc });
     if (!v) return NextResponse.json({ error: "Veículo não encontrado" }, { status: 404 });
     // Espelha em finanças
     const newExpense = v.expenses[v.expenses.length - 1];
     const vCatMap: Record<string, string> = { fuel: "Transporte", maintenance: "Manutenção", insurance: "Seguros", tax: "Impostos", other: "Transporte" };
-    const f = addFinance({ userId: session.sub, type: "expense", amount, category: vCatMap[expType] || "Transporte", description: `${expDesc} — ${v.brand} ${v.model}`, date: expDate, mode: v.mode, source: "web" });
-    setExpenseFinanceId(vehicleId, newExpense.id, f.id);
+    const f = await addFinance({ userId: session.sub, type: "expense", amount, category: vCatMap[expType] || "Transporte", description: `${expDesc} — ${v.brand} ${v.model}`, date: expDate, mode: v.mode, source: "web" });
+    await setExpenseFinanceId(vehicleId, newExpense.id, f.id);
     return NextResponse.json(v);
   }
 
   if (action === "km") {
     const { vehicleId, km } = body;
-    const v = updateVehicleKm(vehicleId, session.sub, km);
+    const v = await updateVehicleKm(vehicleId, session.sub, km);
     return v ? NextResponse.json(v) : NextResponse.json({ error: "Veículo não encontrado" }, { status: 404 });
   }
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     if (description !== undefined) patch.description = description;
     if (km !== undefined) patch.km = km || undefined;
     if (date) patch.date = date;
-    const v = updateVehicleExpense(vehicleId, session.sub, expenseId, patch);
+    const v = await updateVehicleExpense(vehicleId, session.sub, expenseId, patch);
     if (!v) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
     // Espelha edição em finanças
     const updatedExp = v.expenses.find(e => e.id === expenseId);
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       if (amount !== undefined) financePatch.amount = amount;
       if (date) financePatch.date = date;
       if (description !== undefined || type) financePatch.description = `${description || updatedExp.description} — ${v.brand} ${v.model}`;
-      updateFinance(updatedExp.financeId, session.sub, financePatch as Parameters<typeof updateFinance>[2]);
+      await updateFinance(updatedExp.financeId, session.sub, financePatch as Parameters<typeof updateFinance>[2]);
     }
     return NextResponse.json(v);
   }
@@ -71,17 +71,17 @@ export async function POST(req: NextRequest) {
   if (action === "delete_expense") {
     const { vehicleId, expenseId } = body;
     if (!vehicleId || !expenseId) return NextResponse.json({ error: "vehicleId e expenseId obrigatórios" }, { status: 400 });
-    const result = deleteVehicleExpense(vehicleId, session.sub, expenseId);
+    const result = await deleteVehicleExpense(vehicleId, session.sub, expenseId);
     if (!result) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
     if (result.financeId) {
-      deleteFinance(result.financeId, session.sub);
+      await deleteFinance(result.financeId, session.sub);
     } else {
       // Fallback para gastos antigos sem financeId: busca por descrição
       const v = result.vehicle;
       const desc = `${result.expense.description} — ${v.brand} ${v.model}`;
-      const candidates = findFinanceByDescription(session.sub, null, desc);
+      const candidates = await findFinanceByDescription(session.sub, null, desc);
       const match = candidates.find(f => f.amount === result.expense.amount && f.date === result.expense.date);
-      if (match) deleteFinance(match.id, session.sub);
+      if (match) await deleteFinance(match.id, session.sub);
     }
     return NextResponse.json(result.vehicle);
   }

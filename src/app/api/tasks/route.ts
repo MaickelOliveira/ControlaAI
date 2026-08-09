@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("mode") as "personal" | "business" | undefined;
-  const tasks = getTasksByUser(session.sub, mode || undefined)
+  const tasks = (await getTasksByUser(session.sub, mode || undefined))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return NextResponse.json(tasks);
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const { title, priority, dueDate, mode } = body;
   if (!title) return NextResponse.json({ error: "Título obrigatório" }, { status: 400 });
 
-  const task = createTask({
+  const task = await createTask({
     userId: session.sub,
     title,
     priority: priority || "medium",
@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest) {
   const { id, status } = await req.json();
   if (!id || !status) return NextResponse.json({ error: "id e status obrigatórios" }, { status: 400 });
 
-  const task = updateTaskStatus(id, session.sub, status);
+  const task = await updateTaskStatus(id, session.sub, status);
   if (!task) return NextResponse.json({ error: "Tarefa não encontrada" }, { status: 404 });
 
   return NextResponse.json(task);

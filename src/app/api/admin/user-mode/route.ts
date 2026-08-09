@@ -11,7 +11,7 @@ export async function PATCH(req: NextRequest) {
   if (mode) patch.activeMode = mode;
   if (wppPhone !== undefined) patch.wppPhone = wppPhone?.replace(/\D/g, "") || null;
 
-  updateUser(session.sub, patch as Parameters<typeof updateUser>[1]);
-  const user = getUserById(session.sub);
+  await updateUser(session.sub, patch as Parameters<typeof updateUser>[1]);
+  const user = await getUserById(session.sub);
   return NextResponse.json({ ok: true, activeMode: user?.activeMode, wppPhone: (user as Record<string,unknown>)?.wppPhone });
 }

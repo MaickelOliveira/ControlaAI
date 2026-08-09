@@ -8,22 +8,22 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const user = getUserById(session.sub);
+  const user = await getUserById(session.sub);
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  const personalBalance = getBalance(user.id, "personal", year, month);
-  const businessBalance = getBalance(user.id, "business", year, month);
-  const personalDailyTotals = getDailyTotals(user.id, "personal", 30);
-  const businessDailyTotals = getDailyTotals(user.id, "business", 30);
-  const personalExpCategories = getByCategory(user.id, "personal", "expense", year, month);
-  const businessExpCategories = getByCategory(user.id, "business", "expense", year, month);
-  const pendingTasks = getPendingTasks(user.id, user.activeMode);
-  const overdueTasks = getOverdueTasks(user.id, user.activeMode);
-  const recentTransactions = getRecentTransactions(user.id, user.activeMode, 5);
+  const personalBalance = await getBalance(user.id, "personal", year, month);
+  const businessBalance = await getBalance(user.id, "business", year, month);
+  const personalDailyTotals = await getDailyTotals(user.id, "personal", 30);
+  const businessDailyTotals = await getDailyTotals(user.id, "business", 30);
+  const personalExpCategories = await getByCategory(user.id, "personal", "expense", year, month);
+  const businessExpCategories = await getByCategory(user.id, "business", "expense", year, month);
+  const pendingTasks = await getPendingTasks(user.id, user.activeMode);
+  const overdueTasks = await getOverdueTasks(user.id, user.activeMode);
+  const recentTransactions = await getRecentTransactions(user.id, user.activeMode, 5);
 
   return NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, plan: user.plan, status: user.status, activeMode: user.activeMode, trialEndsAt: user.trialEndsAt, wppPhone: user.wppPhone ?? null, wppPhones: getWppPhones(user), wppPhoneNames: user.wppPhoneNames ?? {}, wppPhoneRelations: user.wppPhoneRelations ?? {}, wppPhoneAccess: user.wppPhoneAccess ?? {}, maxWppPhones: getMaxWppPhones(user) },

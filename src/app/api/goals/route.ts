@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("mode") as "personal" | "business" | undefined;
-  return NextResponse.json(getGoalsByUser(session.sub, mode || undefined));
+  return NextResponse.json(await getGoalsByUser(session.sub, mode || undefined));
 }
 
 export async function POST(req: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { title, targetAmount, currentAmount, deadline, category, mode } = await req.json();
   if (!title || !targetAmount) return NextResponse.json({ error: "title e targetAmount obrigatórios" }, { status: 400 });
-  const goal = createGoal({
+  const goal = await createGoal({
     userId: session.sub, title, targetAmount, currentAmount: currentAmount || 0,
     deadline, category: category || "Geral", mode: mode || "personal", status: "active",
   });
@@ -28,11 +28,11 @@ export async function PATCH(req: NextRequest) {
   const { id, addAmount, status } = await req.json();
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   if (addAmount !== undefined) {
-    const goal = updateGoalAmount(id, session.sub, addAmount);
+    const goal = await updateGoalAmount(id, session.sub, addAmount);
     return goal ? NextResponse.json(goal) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   }
   if (status) {
-    const goal = updateGoalStatus(id, session.sub, status);
+    const goal = await updateGoalStatus(id, session.sub, status);
     return goal ? NextResponse.json(goal) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   }
   return NextResponse.json({ error: "Nenhuma atualização" }, { status: 400 });
@@ -44,6 +44,6 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
-  const goal = updateGoalStatus(id, session.sub, "cancelled");
+  const goal = await updateGoalStatus(id, session.sub, "cancelled");
   return goal ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 }

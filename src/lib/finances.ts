@@ -1,7 +1,5 @@
-import { readFileSync, existsSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
-import path from "path";
 import { randomUUID } from "crypto";
+import { getSupabase } from "./supabase";
 
 export type FinanceType = "income" | "expense";
 export type FinanceMode = "personal" | "business";
@@ -38,29 +36,48 @@ export function isPostedFinance(f: Finance): boolean {
   return !f.status || f.status === "posted";
 }
 
-const FILE = path.join(process.cwd(), "data", "finances.json");
+type Row = {
+  id: string; user_id: string; type: FinanceType; amount: number; category: string;
+  description: string; date: string; mode: FinanceMode; source: FinanceSource;
+  pending: boolean; created_at: string;
+};
 
-function load(): Finance[] {
-  try {
-    if (!existsSync(FILE)) return [];
-    return JSON.parse(readFileSync(FILE, "utf-8"));
-  } catch { return []; }
-}
-function save(items: Finance[]) {
-  writeJSONAtomic(FILE, items);
-}
-
-export function addFinance(data: Omit<Finance, "id" | "createdAt">): Finance {
-  const items = load();
-  const item: Finance = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
-  items.push(item);
-  save(items);
-  return item;
+function fromRow(r: Row): Finance {
+  return {
+    id: r.id, userId: r.user_id, type: r.type, amount: Number(r.amount), category: r.category,
+    description: r.description, date: r.date, mode: r.mode, source: r.source,
+    status: r.pending ? "pending" : "posted", createdAt: r.created_at,
+  };
 }
 
-export function getFinancesByUser(userId: string, mode?: FinanceMode, registeredBy?: string): Finance[] {
-  return load().filter(f =>
-    f.userId === userId &&
+// Todas as funções abaixo já filtravam por userId/mode/registeredBy em
+// memória depois de carregar o array inteiro do JSON — mantém exatamente
+// a mesma lógica de filtro/agregação em JS (evita reimplementar regra de
+// negócio em SQL e arriscar mudar comportamento sutil), só troca de onde
+// os dados vêm. Filtra por user_id direto na query quando possível, por
+// eficiência, já que esse filtro está presente em quase toda chamada.
+async function load(userId?: string): Promise<Finance[]> {
+  let query = getSupabase().from("finances").select("*");
+  if (userId) query = query.eq("user_id", userId);
+  const { data, error } = await query;
+  if (error) { console.error("[finances] load erro:", error.message); return []; }
+  return (data as Row[]).map(fromRow);
+}
+
+export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promise<Finance> {
+  const row = {
+    id: randomUUID(), user_id: data.userId, type: data.type, amount: data.amount,
+    category: data.category, description: data.description, date: data.date,
+    mode: data.mode, source: data.source, pending: data.status === "pending",
+    registered_by: data.registeredBy,
+  };
+  const { data: inserted, error } = await getSupabase().from("finances").insert(row).select("*").single();
+  if (error) throw new Error(`[finances] addFinance falhou: ${error.message}`);
+  return fromRow(inserted as Row);
+}
+
+export async function getFinancesByUser(userId: string, mode?: FinanceMode, registeredBy?: string): Promise<Finance[]> {
+  return (await load(userId)).filter(f =>
     (!mode || f.mode === mode) &&
     (!registeredBy || f.registeredBy === registeredBy)
   );
@@ -70,20 +87,20 @@ export function getFinancesByUser(userId: string, mode?: FinanceMode, registered
  *  vez do ano/mês fixo de getBalance — usado pelos filtros de período
  *  customizados em Finanças/Dashboard. Sem from/to, retorna tudo (mesmo
  *  comportamento de getFinancesByUser). */
-export function getFinancesInRange(userId: string, mode?: FinanceMode, from?: string, to?: string): Finance[] {
-  return getFinancesByUser(userId, mode).filter(f => {
+export async function getFinancesInRange(userId: string, mode?: FinanceMode, from?: string, to?: string): Promise<Finance[]> {
+  return (await getFinancesByUser(userId, mode)).filter(f => {
     if (from && f.date < from) return false;
     if (to && f.date > to) return false;
     return true;
   });
 }
 
-export function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): {
+export async function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): Promise<{
   income: number;
   expense: number;
   balance: number;
-} {
-  let items = getFinancesByUser(userId, mode, registeredBy).filter(isPostedFinance);
+}> {
+  let items = (await getFinancesByUser(userId, mode, registeredBy)).filter(isPostedFinance);
   if (year !== undefined && month !== undefined) {
     items = items.filter(f => {
       const d = new Date(f.date + "T12:00:00");
@@ -98,12 +115,12 @@ export function getBalance(userId: string, mode: FinanceMode, year?: number, mon
 /** Equivalente a getBalance, mas por intervalo de datas em vez de ano/mês fixo
  *  — usado quando a IA identifica um período relativo ("mês passado", "semana
  *  passada") em vez do mês atual. */
-export function getBalanceInRange(userId: string, mode: FinanceMode, from?: string, to?: string, registeredBy?: string): {
+export async function getBalanceInRange(userId: string, mode: FinanceMode, from?: string, to?: string, registeredBy?: string): Promise<{
   income: number;
   expense: number;
   balance: number;
-} {
-  const items = getFinancesInRange(userId, mode, from, to)
+}> {
+  const items = (await getFinancesInRange(userId, mode, from, to))
     .filter(isPostedFinance)
     .filter(f => !registeredBy || f.registeredBy === registeredBy);
   const income = items.filter(f => f.type === "income" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
@@ -113,9 +130,9 @@ export function getBalanceInRange(userId: string, mode: FinanceMode, from?: stri
 
 /** Soma os lançamentos de uma categoria específica dentro de um intervalo de
  *  datas — usado em perguntas como "quanto gastei com comida mês passado". */
-export function getCategoryTotal(userId: string, mode: FinanceMode, type: FinanceType, category: string, from?: string, to?: string, registeredBy?: string): number {
+export async function getCategoryTotal(userId: string, mode: FinanceMode, type: FinanceType, category: string, from?: string, to?: string, registeredBy?: string): Promise<number> {
   const lower = category.toLowerCase();
-  return getFinancesInRange(userId, mode, from, to)
+  return (await getFinancesInRange(userId, mode, from, to))
     .filter(f => isPostedFinance(f) && f.type === type && f.category.toLowerCase() === lower && (!registeredBy || f.registeredBy === registeredBy))
     .reduce((s, f) => s + f.amount, 0);
 }
@@ -147,8 +164,8 @@ export function expandMerchantAliases(term: string): string[] {
 /** Soma os lançamentos cuja descrição bate com algum dos termos (busca OR,
  *  case-insensitive) dentro de um intervalo de datas — usado em perguntas
  *  sobre um comerciante/app específico ("quanto gastei com ifood"). */
-export function getKeywordTotal(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string): number {
-  return getFinancesInRange(userId, mode, from, to)
+export async function getKeywordTotal(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string): Promise<number> {
+  return (await getFinancesInRange(userId, mode, from, to))
     .filter(f => isPostedFinance(f) && f.type === type && (!registeredBy || f.registeredBy === registeredBy))
     .filter(f => terms.some(t => f.description.toLowerCase().includes(t)))
     .reduce((s, f) => s + f.amount, 0);
@@ -156,14 +173,14 @@ export function getKeywordTotal(userId: string, mode: FinanceMode, type: Finance
 
 /** Lançamentos crus de um intervalo de datas, mais recente primeiro — usado
  *  por finance_detail quando o período pedido não é o mês atual. */
-export function getTransactionsInRange(userId: string, mode: FinanceMode, from?: string, to?: string): Finance[] {
-  return getFinancesInRange(userId, mode, from, to)
+export async function getTransactionsInRange(userId: string, mode: FinanceMode, from?: string, to?: string): Promise<Finance[]> {
+  return (await getFinancesInRange(userId, mode, from, to))
     .filter(f => isPostedFinance(f) && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? ""))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number, registeredBy?: string): Record<string, number> {
-  let items = getFinancesByUser(userId, mode, registeredBy).filter(f => f.type === type && isPostedFinance(f));
+export async function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number, registeredBy?: string): Promise<Record<string, number>> {
+  let items = (await getFinancesByUser(userId, mode, registeredBy)).filter(f => f.type === type && isPostedFinance(f));
   if (year && month) {
     items = items.filter(f => {
       const d = new Date(f.date + "T12:00:00");
@@ -178,8 +195,8 @@ export function getByCategory(userId: string, mode: FinanceMode, type: FinanceTy
 
 /** Equivalente a getByCategory, mas por intervalo de datas — usado por
  *  finance_analysis quando o período pedido não é o mês atual. */
-export function getByCategoryInRange(userId: string, mode: FinanceMode, type: FinanceType, from?: string, to?: string, registeredBy?: string): Record<string, number> {
-  const items = getFinancesInRange(userId, mode, from, to)
+export async function getByCategoryInRange(userId: string, mode: FinanceMode, type: FinanceType, from?: string, to?: string, registeredBy?: string): Promise<Record<string, number>> {
+  const items = (await getFinancesInRange(userId, mode, from, to))
     .filter(f => f.type === type && isPostedFinance(f) && (!registeredBy || f.registeredBy === registeredBy));
   return items.reduce((acc, f) => {
     acc[f.category] = (acc[f.category] ?? 0) + f.amount;
@@ -187,8 +204,8 @@ export function getByCategoryInRange(userId: string, mode: FinanceMode, type: Fi
   }, {} as Record<string, number>);
 }
 
-export function getDailyTotals(userId: string, mode: FinanceMode, days = 30): Array<{ date: string; income: number; expense: number }> {
-  const items = getFinancesByUser(userId, mode).filter(isPostedFinance);
+export async function getDailyTotals(userId: string, mode: FinanceMode, days = 30): Promise<Array<{ date: string; income: number; expense: number }>> {
+  const items = (await getFinancesByUser(userId, mode)).filter(isPostedFinance);
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
 
@@ -205,32 +222,31 @@ export function getDailyTotals(userId: string, mode: FinanceMode, days = 30): Ar
     .map(([date, vals]) => ({ date, ...vals }));
 }
 
-export function deleteFinance(id: string, userId: string): boolean {
-  const items = load();
-  const idx = items.findIndex(f => f.id === id && f.userId === userId);
-  if (idx < 0) return false;
-  items.splice(idx, 1);
-  save(items);
-  return true;
+export async function deleteFinance(id: string, userId: string): Promise<boolean> {
+  const { error, count } = await getSupabase().from("finances").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
+  return !error && !!count && count > 0;
 }
 
-export function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status">>): Finance | null {
-  const items = load();
-  const idx = items.findIndex(f => f.id === id && f.userId === userId);
-  if (idx < 0) return null;
-  items[idx] = { ...items[idx], ...patch };
-  save(items);
-  return items[idx];
+export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status">>): Promise<Finance | null> {
+  const rowPatch: Record<string, unknown> = {};
+  if (patch.amount !== undefined) rowPatch.amount = patch.amount;
+  if (patch.category !== undefined) rowPatch.category = patch.category;
+  if (patch.description !== undefined) rowPatch.description = patch.description;
+  if (patch.date !== undefined) rowPatch.date = patch.date;
+  if (patch.status !== undefined) rowPatch.pending = patch.status === "pending";
+  const { data, error } = await getSupabase().from("finances").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  if (error || !data) return null;
+  return fromRow(data as Row);
 }
 
 // Lançamentos crus (sem agregação) dos últimos N dias, mais recente primeiro —
 // usado para deixar o usuário escolher qual excluir quando não deu palavra-chave
 // (ou ela não achou nada), em vez de um beco sem saída.
-export function getFinancesLastDays(userId: string, mode: FinanceMode | null, days = 5): Finance[] {
+export async function getFinancesLastDays(userId: string, mode: FinanceMode | null, days = 5): Promise<Finance[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
-  return load()
-    .filter(f => f.userId === userId && (mode === null || f.mode === mode))
+  return (await load(userId))
+    .filter(f => mode === null || f.mode === mode)
     .filter(f => new Date(f.date + "T12:00:00") >= cutoff)
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 }
@@ -238,11 +254,10 @@ export function getFinancesLastDays(userId: string, mode: FinanceMode | null, da
 /** Verifica se já existe uma despesa com o mesmo valor (tolerância de 1 centavo) e data
  *  próxima (±3 dias) — usado ao importar fatura de cartão para não duplicar um lançamento
  *  que o usuário já tenha registrado manualmente (por foto/texto) quando a compra aconteceu. */
-export function isLikelyDuplicateExpense(userId: string, mode: FinanceMode, amount: number, date: string): boolean {
+export async function isLikelyDuplicateExpense(userId: string, mode: FinanceMode, amount: number, date: string): Promise<boolean> {
   const target = new Date(date + "T12:00:00").getTime();
   const THREE_DAYS_MS = 3 * 86_400_000;
-  return load().some(f =>
-    f.userId === userId &&
+  return (await load(userId)).some(f =>
     f.mode === mode &&
     f.type === "expense" &&
     Math.abs(f.amount - amount) < 0.01 &&
@@ -250,10 +265,10 @@ export function isLikelyDuplicateExpense(userId: string, mode: FinanceMode, amou
   );
 }
 
-export function findFinanceByDescription(userId: string, mode: FinanceMode | null, keyword: string, limit = 5): Finance[] {
+export async function findFinanceByDescription(userId: string, mode: FinanceMode | null, keyword: string, limit = 5): Promise<Finance[]> {
   const lower = keyword.toLowerCase();
-  return load()
-    .filter(f => f.userId === userId && (mode === null || f.mode === mode) && (
+  return (await load(userId))
+    .filter(f => (mode === null || f.mode === mode) && (
       f.description.toLowerCase().includes(lower) ||
       f.category.toLowerCase().includes(lower)
     ))
@@ -261,15 +276,15 @@ export function findFinanceByDescription(userId: string, mode: FinanceMode | nul
     .slice(0, limit);
 }
 
-export function getRecentTransactions(userId: string, mode: FinanceMode, limit = 10): Finance[] {
-  return getFinancesByUser(userId, mode)
+export async function getRecentTransactions(userId: string, mode: FinanceMode, limit = 10): Promise<Finance[]> {
+  return (await getFinancesByUser(userId, mode))
     .filter(isPostedFinance)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, limit);
 }
 
-export function getMonthlyTransactions(userId: string, mode: FinanceMode, year: number, month: number): Finance[] {
-  return getFinancesByUser(userId, mode)
+export async function getMonthlyTransactions(userId: string, mode: FinanceMode, year: number, month: number): Promise<Finance[]> {
+  return (await getFinancesByUser(userId, mode))
     .filter(f => isPostedFinance(f) && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? ""))
     .filter(f => {
       const d = new Date(f.date + "T12:00:00");
@@ -279,27 +294,23 @@ export function getMonthlyTransactions(userId: string, mode: FinanceMode, year: 
 }
 
 // Retorna lançamentos pendentes de um usuário ordenados por data
-export function getPendingFinances(userId: string, mode?: FinanceMode): Finance[] {
-  return load()
-    .filter(f => f.userId === userId && f.status === "pending" && (!mode || f.mode === mode))
+export async function getPendingFinances(userId: string, mode?: FinanceMode): Promise<Finance[]> {
+  return (await load(userId))
+    .filter(f => f.status === "pending" && (!mode || f.mode === mode))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // Posta automaticamente os lançamentos pendentes cuja data já chegou
 // Retorna os lançamentos que foram postados
-export function autoPostPendingFinances(todayStr: string): Finance[] {
-  const items = load();
-  const posted: Finance[] = [];
-  let changed = false;
-  for (const f of items) {
-    if (f.status === "pending" && f.date <= todayStr) {
-      f.status = "posted";
-      posted.push(f);
-      changed = true;
-    }
-  }
-  if (changed) save(items);
-  return posted;
+export async function autoPostPendingFinances(todayStr: string): Promise<Finance[]> {
+  const { data, error } = await getSupabase()
+    .from("finances")
+    .update({ pending: false })
+    .eq("pending", true)
+    .lte("date", todayStr)
+    .select("*");
+  if (error) { console.error("[finances] autoPostPendingFinances erro:", error.message); return []; }
+  return (data as Row[]).map(fromRow);
 }
 
 export function formatCurrency(v: number): string {

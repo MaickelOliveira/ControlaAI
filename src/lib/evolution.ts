@@ -1,47 +1,47 @@
 import { getConfig } from "@/lib/whatsapp-config";
 
-function base(): string {
-  return (getConfig().evolution?.server || "").replace(/\/$/, "");
+async function base(): Promise<string> {
+  return ((await getConfig()).evolution?.server || "").replace(/\/$/, "");
 }
-function adminKey(): string {
-  return getConfig().evolution?.adminKey || "";
+async function adminKey(): Promise<string> {
+  return (await getConfig()).evolution?.adminKey || "";
 }
-function instanceName(): string {
-  return getConfig().evolution?.instanceName || "zelo";
+async function instanceName(): Promise<string> {
+  return (await getConfig()).evolution?.instanceName || "zelo";
 }
 /** apikey da instância tem prioridade sobre a admin key quando disponível
  *  (mesmo padrão do trafegopagoplataforma) — mas a admin key funciona em
  *  qualquer instância, então serve de fallback. */
-function apiKey(): string {
-  return getConfig().evolution?.instanceApiKey || adminKey();
+async function apiKey(): Promise<string> {
+  return (await getConfig()).evolution?.instanceApiKey || await adminKey();
 }
 
-export function isEvolutionConfigured(): boolean {
-  return !!(base() && adminKey());
+export async function isEvolutionConfigured(): Promise<boolean> {
+  return !!(await base() && await adminKey());
 }
 
-function authHeader(): Record<string, string> {
-  return { apikey: apiKey() };
+async function authHeader(): Promise<Record<string, string>> {
+  return { apikey: await apiKey() };
 }
 
 /** Cria a instância (QR já vem na própria resposta). Se já existir, cai em
  *  restartInstance() automaticamente (Evolution retorna não-2xx em create
  *  duplicado). */
 export async function createOrRestartInstance(webhookUrl: string): Promise<{ apiKey: string; qrBase64: string | null } | null> {
-  const b = base();
-  if (!b || !adminKey()) return null;
-  const name = instanceName();
+  const b = await base();
+  if (!b || !(await adminKey())) return null;
+  const name = await instanceName();
   try {
     const res = await fetch(`${b}/instance/create`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: adminKey() },
+      headers: { "Content-Type": "application/json", apikey: await adminKey() },
       body: JSON.stringify({ instanceName: name, qrcode: true, integration: "WHATSAPP-BAILEYS" }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {
       const restarted = await restartInstance();
       if (!restarted) return null;
-      return { apiKey: apiKey(), qrBase64: await getQrCode() };
+      return { apiKey: await apiKey(), qrBase64: await getQrCode() };
     }
     const data = await res.json() as Record<string, unknown>;
     const hash = (data?.hash as Record<string, unknown> | undefined)?.apikey as string | undefined
@@ -57,12 +57,12 @@ export async function createOrRestartInstance(webhookUrl: string): Promise<{ api
 }
 
 export async function restartInstance(): Promise<boolean> {
-  const b = base();
+  const b = await base();
   if (!b) return false;
   try {
-    const res = await fetch(`${b}/instance/restart/${instanceName()}`, {
+    const res = await fetch(`${b}/instance/restart/${await instanceName()}`, {
       method: "POST",
-      headers: authHeader(),
+      headers: await authHeader(),
       signal: AbortSignal.timeout(20_000),
     });
     return res.ok;
@@ -70,12 +70,12 @@ export async function restartInstance(): Promise<boolean> {
 }
 
 export async function setWebhook(instanceApiKey: string | undefined, webhookUrl: string): Promise<boolean> {
-  const b = base();
+  const b = await base();
   if (!b) return false;
   try {
-    const res = await fetch(`${b}/webhook/set/${instanceName()}`, {
+    const res = await fetch(`${b}/webhook/set/${await instanceName()}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: instanceApiKey || apiKey() },
+      headers: { "Content-Type": "application/json", apikey: instanceApiKey || await apiKey() },
       body: JSON.stringify({
         webhook: {
           url: webhookUrl,
@@ -95,11 +95,11 @@ export async function setWebhook(instanceApiKey: string | undefined, webhookUrl:
 }
 
 export async function getQrCode(): Promise<string | null> {
-  const b = base();
+  const b = await base();
   if (!b) return null;
   try {
-    const res = await fetch(`${b}/instance/connect/${instanceName()}`, {
-      headers: authHeader(),
+    const res = await fetch(`${b}/instance/connect/${await instanceName()}`, {
+      headers: await authHeader(),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -112,11 +112,11 @@ export async function getQrCode(): Promise<string | null> {
 }
 
 export async function checkConnectionStatus(): Promise<"CONNECTED" | "DISCONNECTED" | "QRCODE" | "UNKNOWN"> {
-  const b = base();
+  const b = await base();
   if (!b) return "UNKNOWN";
   try {
-    const res = await fetch(`${b}/instance/connectionState/${instanceName()}`, {
-      headers: authHeader(),
+    const res = await fetch(`${b}/instance/connectionState/${await instanceName()}`, {
+      headers: await authHeader(),
       cache: "no-store",
       signal: AbortSignal.timeout(8_000),
     });
@@ -132,11 +132,11 @@ export async function checkConnectionStatus(): Promise<"CONNECTED" | "DISCONNECT
 
 /** Descobre o número conectado à instância (usado por detectBotNumber). */
 export async function getInstancePhone(): Promise<string | null> {
-  const b = base();
+  const b = await base();
   if (!b) return null;
   try {
-    const res = await fetch(`${b}/instance/fetchInstances?instanceName=${encodeURIComponent(instanceName())}`, {
-      headers: authHeader(),
+    const res = await fetch(`${b}/instance/fetchInstances?instanceName=${encodeURIComponent(await instanceName())}`, {
+      headers: await authHeader(),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -161,12 +161,12 @@ function normalizePhone(to: string): string {
 }
 
 export async function sendText(to: string, message: string): Promise<boolean> {
-  const b = base();
+  const b = await base();
   if (!b) { console.warn("[evolution] não configurado"); return false; }
   try {
-    const res = await fetch(`${b}/message/sendText/${instanceName()}`, {
+    const res = await fetch(`${b}/message/sendText/${await instanceName()}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: apiKey() },
+      headers: { "Content-Type": "application/json", apikey: await apiKey() },
       body: JSON.stringify({ number: normalizePhone(to), text: message }),
       signal: AbortSignal.timeout(15_000),
     });
@@ -188,22 +188,22 @@ function mediaTypeFor(mimeType: string): "image" | "video" | "document" {
 }
 
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
-  const b = base();
+  const b = await base();
   if (!b) { console.warn("[evolution] não configurado"); return false; }
   try {
     const number = normalizePhone(to);
     if (mimeType.startsWith("audio/")) {
-      const res = await fetch(`${b}/message/sendWhatsAppAudio/${instanceName()}`, {
+      const res = await fetch(`${b}/message/sendWhatsAppAudio/${await instanceName()}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: apiKey() },
+        headers: { "Content-Type": "application/json", apikey: await apiKey() },
         body: JSON.stringify({ number, audio: fileBuffer.toString("base64") }),
         signal: AbortSignal.timeout(30_000),
       });
       return res.ok;
     }
-    const res = await fetch(`${b}/message/sendMedia/${instanceName()}`, {
+    const res = await fetch(`${b}/message/sendMedia/${await instanceName()}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: apiKey() },
+      headers: { "Content-Type": "application/json", apikey: await apiKey() },
       body: JSON.stringify({
         number,
         mediatype: mediaTypeFor(mimeType),
@@ -227,12 +227,12 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
 /** Busca a mídia recebida decodificada quando o webhook não traz base64
  *  inline (webhookBase64:true configurado, mas nem sempre confiável). */
 export async function getBase64FromMediaMessage(messageId: string): Promise<{ base64: string; mimetype: string } | null> {
-  const b = base();
+  const b = await base();
   if (!b) return null;
   try {
-    const res = await fetch(`${b}/chat/getBase64FromMediaMessage/${instanceName()}`, {
+    const res = await fetch(`${b}/chat/getBase64FromMediaMessage/${await instanceName()}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: apiKey() },
+      headers: { "Content-Type": "application/json", apikey: await apiKey() },
       body: JSON.stringify({ message: { key: { id: messageId } }, convertToMp4: false }),
       signal: AbortSignal.timeout(20_000),
     });

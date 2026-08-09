@@ -13,7 +13,7 @@ export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const cfg = getConfig();
+  const cfg = await getConfig();
   const status = await checkConnection().catch(() => "UNKNOWN");
 
   return NextResponse.json({
@@ -46,7 +46,7 @@ export async function PUT(req: NextRequest) {
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const current = getConfig();
+  const current = await getConfig();
   const updated: WhatsAppConfig = {
     ...current,
     provider: body.provider === "waba" ? "waba" : "evolution",
@@ -68,7 +68,7 @@ export async function PUT(req: NextRequest) {
     googleClientId: body.googleClientId !== undefined ? (body.googleClientId || undefined) : current.googleClientId,
     googleClientSecret: !isMasked(body.googleClientSecret) && body.googleClientSecret ? body.googleClientSecret : current.googleClientSecret,
   };
-  saveConfig(updated);
+  await saveConfig(updated);
   return NextResponse.json({ ok: true });
 }
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { action } = body;
-  const cfg = getConfig();
+  const cfg = await getConfig();
 
   if (action === "connect") {
     // Evolution não assina as requisições que manda pro nosso webhook (ao
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const webhookUrl = `${cfg.appBaseUrl?.replace(/\/$/, "") || ""}/api/webhook/evolution?secret=${webhookSecret}`;
     const result = await createOrRestartInstance(webhookUrl);
     if (!result) return NextResponse.json({ error: "Falha ao conectar. Verifique servidor e admin key." }, { status: 500 });
-    saveConfig({
+    await saveConfig({
       ...cfg,
       evolution: { ...cfg.evolution, webhookSecret, ...(result.apiKey ? { instanceApiKey: result.apiKey } : {}) },
     });

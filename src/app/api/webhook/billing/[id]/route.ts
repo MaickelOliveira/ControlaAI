@@ -5,7 +5,7 @@ type Params = Promise<{ id: string }>;
 
 export async function POST(req: NextRequest, { params }: { params: Params }) {
   const { id } = await params;
-  const cfg = getBillingWebhookById(id);
+  const cfg = await getBillingWebhookById(id);
   if (!cfg || !cfg.active) return NextResponse.json({ ok: true }); // 200 sempre — não dar pista de config inválida pra fora
 
   let body: unknown = null;
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
     return NextResponse.json({ ok: true }); // 200 mesmo assim — não ajuda um atacante a descobrir por tentativa e erro
   }
 
-  const result = evaluateBillingWebhook(cfg, body);
+  const result = await evaluateBillingWebhook(cfg, body);
   if (!result.ok) {
     console.error(`[webhook/billing/${cfg.label}] ${result.error}`);
   } else {

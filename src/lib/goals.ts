@@ -1,7 +1,5 @@
-import { readFileSync, existsSync } from "fs";
-import { writeJSONAtomic } from "./json-store";
-import path from "path";
 import { randomUUID } from "crypto";
+import { getSupabase } from "./supabase";
 
 export type GoalStatus = "active" | "completed" | "cancelled";
 export type GoalMode = "personal" | "business";
@@ -19,57 +17,63 @@ export type Goal = {
   createdAt: string;
 };
 
-const FILE = path.join(process.cwd(), "data", "goals.json");
+type Row = {
+  id: string; user_id: string; title: string; target_amount: number; current_amount: number;
+  deadline: string | null; category: string; mode: GoalMode; status: GoalStatus; created_at: string;
+};
 
-function load(): Goal[] {
-  try {
-    if (!existsSync(FILE)) return [];
-    return JSON.parse(readFileSync(FILE, "utf-8"));
-  } catch { return []; }
-}
-function save(items: Goal[]) { writeJSONAtomic(FILE, items); }
-
-export function createGoal(data: Omit<Goal, "id" | "createdAt">): Goal {
-  const items = load();
-  const goal: Goal = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
-  items.push(goal);
-  save(items);
-  return goal;
+function fromRow(r: Row): Goal {
+  return {
+    id: r.id, userId: r.user_id, title: r.title, targetAmount: Number(r.target_amount),
+    currentAmount: Number(r.current_amount), deadline: r.deadline ?? undefined, category: r.category,
+    mode: r.mode, status: r.status, createdAt: r.created_at,
+  };
 }
 
-export function getGoalsByUser(userId: string, mode?: GoalMode): Goal[] {
-  return load().filter(g => g.userId === userId && (!mode || g.mode === mode));
+export async function createGoal(data: Omit<Goal, "id" | "createdAt">): Promise<Goal> {
+  const row = {
+    id: randomUUID(), user_id: data.userId, title: data.title, target_amount: data.targetAmount,
+    current_amount: data.currentAmount, deadline: data.deadline, category: data.category,
+    mode: data.mode, status: data.status,
+  };
+  const { data: inserted, error } = await getSupabase().from("goals").insert(row).select("*").single();
+  if (error) throw new Error(`[goals] createGoal falhou: ${error.message}`);
+  return fromRow(inserted as Row);
 }
 
-export function getActiveGoals(userId: string, mode?: GoalMode): Goal[] {
-  return getGoalsByUser(userId, mode).filter(g => g.status === "active");
+export async function getGoalsByUser(userId: string, mode?: GoalMode): Promise<Goal[]> {
+  let query = getSupabase().from("goals").select("*").eq("user_id", userId);
+  if (mode) query = query.eq("mode", mode);
+  const { data, error } = await query;
+  if (error) { console.error("[goals] getGoalsByUser erro:", error.message); return []; }
+  return (data as Row[]).map(fromRow);
 }
 
-export function updateGoalAmount(id: string, userId: string, amount: number): Goal | null {
-  const items = load();
-  const idx = items.findIndex(g => g.id === id && g.userId === userId);
-  if (idx < 0) return null;
-  items[idx].currentAmount = Math.min(items[idx].currentAmount + amount, items[idx].targetAmount);
-  if (items[idx].currentAmount >= items[idx].targetAmount) {
-    items[idx].status = "completed";
-  }
-  save(items);
-  return items[idx];
+export async function getActiveGoals(userId: string, mode?: GoalMode): Promise<Goal[]> {
+  return (await getGoalsByUser(userId, mode)).filter(g => g.status === "active");
 }
 
-export function updateGoalStatus(id: string, userId: string, status: GoalStatus): Goal | null {
-  const items = load();
-  const idx = items.findIndex(g => g.id === id && g.userId === userId);
-  if (idx < 0) return null;
-  items[idx].status = status;
-  save(items);
-  return items[idx];
+export async function updateGoalAmount(id: string, userId: string, amount: number): Promise<Goal | null> {
+  const { data: current, error: readError } = await getSupabase().from("goals").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
+  if (readError || !current) return null;
+  const row = current as Row;
+  const newAmount = Math.min(Number(row.current_amount) + amount, Number(row.target_amount));
+  const newStatus = newAmount >= Number(row.target_amount) ? "completed" : row.status;
+  const { data, error } = await getSupabase().from("goals").update({ current_amount: newAmount, status: newStatus }).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  if (error || !data) return null;
+  return fromRow(data as Row);
 }
 
-export function findGoalByTitle(userId: string, title: string, mode?: GoalMode): Goal | null {
+export async function updateGoalStatus(id: string, userId: string, status: GoalStatus): Promise<Goal | null> {
+  const { data, error } = await getSupabase().from("goals").update({ status }).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  if (error || !data) return null;
+  return fromRow(data as Row);
+}
+
+export async function findGoalByTitle(userId: string, title: string, mode?: GoalMode): Promise<Goal | null> {
   if (!title) return null;
   const lower = title.toLowerCase();
-  return getGoalsByUser(userId, mode).find(g => g.title?.toLowerCase().includes(lower)) ?? null;
+  return (await getGoalsByUser(userId, mode)).find(g => g.title?.toLowerCase().includes(lower)) ?? null;
 }
 
 export function getGoalProgress(goal: Goal): number {

@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const { message, scheduledAt, repeat, mode } = await req.json();
   if (!message || !scheduledAt) return NextResponse.json({ error: "message e scheduledAt obrigatórios" }, { status: 400 });
 
-  const user = getUserById(session.sub);
+  const user = await getUserById(session.sub);
   const phone = user?.wppPhone || user?.phone || "";
 
   const r = createReminder({ userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none", mode: mode || "personal" });
