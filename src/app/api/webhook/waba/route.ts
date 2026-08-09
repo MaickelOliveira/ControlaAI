@@ -27,6 +27,18 @@ type WabaMessage = {
   button?: { text: string; payload: string };
 };
 
+/** A Graph API aceitar o envio (HTTP 2xx, sem erro no corpo) não garante
+ *  entrega — falhas de entrega (número inválido, template pausado, etc.)
+ *  chegam depois, de forma assíncrona, como um evento de status aqui no
+ *  webhook. Sem logar isso, um "sendTemplate" que retornou ok:true pode
+ *  ainda assim nunca ter chegado no aparelho, sem nenhum rastro no log. */
+type WabaStatus = {
+  id: string;
+  status: string;
+  recipient_id?: string;
+  errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>;
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -34,7 +46,19 @@ export async function POST(req: NextRequest) {
 
     const value = body?.entry?.[0]?.changes?.[0]?.value;
     const messages = value?.messages as WabaMessage[] | undefined;
-    if (!messages?.length) return NextResponse.json({ ok: true }); // status update, não mensagem
+
+    if (!messages?.length) {
+      const statuses = value?.statuses as WabaStatus[] | undefined;
+      for (const st of statuses || []) {
+        if (st.status === "failed") {
+          const err = st.errors?.[0];
+          console.error(`[webhook/waba] entrega falhou — msg=${st.id} para=${st.recipient_id}: ${err?.title || ""} ${err?.message || ""} ${err?.error_data?.details || ""}`.trim());
+        } else {
+          console.log(`[webhook/waba] status msg=${st.id} → ${st.status}`);
+        }
+      }
+      return NextResponse.json({ ok: true }); // status update, não mensagem
+    }
 
     const contact = value?.contacts?.[0];
     const contactName = contact?.profile?.name as string | undefined;
