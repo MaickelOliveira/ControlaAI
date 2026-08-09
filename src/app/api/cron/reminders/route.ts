@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDueReminders, markReminderSent } from "@/lib/reminders";
-import { sendText } from "@/lib/whatsapp";
+import { sendReminderTemplate } from "@/lib/whatsapp";
 
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");
@@ -20,7 +20,7 @@ async function runCron() {
     const results = [];
     for (const r of due) {
       console.log(`[cron/reminders] Enviando para ${r.phone}: "${r.message}"`);
-      const ok = await sendText(r.phone, `🔔 *Lembrete:* ${r.message}`);
+      const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", `🔔 *Lembrete:* ${r.message}`, { lembrete: r.message });
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
       if (ok) markReminderSent(r.id, r.repeat);
       results.push({ id: r.id, message: r.message, sent: ok });

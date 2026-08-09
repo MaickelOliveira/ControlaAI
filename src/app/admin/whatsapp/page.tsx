@@ -32,6 +32,10 @@ export default function AdminWhatsappPage() {
   const [polling, setPolling] = useState(false);
   const [testingWaba, setTestingWaba] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [testTemplate, setTestTemplate] = useState<"lembrete_pessoal" | "lembrete_compromisso" | "cobranca_recorrente">("lembrete_pessoal");
+  const [testingTemplate, setTestingTemplate] = useState(false);
+  const [testTemplateMsg, setTestTemplateMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/admin/whatsapp");
@@ -80,6 +84,14 @@ export default function AdminWhatsappPage() {
     setCfg(c => ({ ...c, connectionStatus: d.status }));
     setConnMsg(d.status === "CONNECTED" ? { type: "ok", text: "✓ Conexão com a API Oficial validada!" } : { type: "err", text: "Não foi possível validar — confira Phone Number ID e Access Token." });
     setTestingWaba(false);
+  }
+
+  async function testTemplateSend() {
+    setTestingTemplate(true); setTestTemplateMsg(null);
+    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "testTemplate", template: testTemplate, phone: testPhone }) });
+    const d = await r.json();
+    setTestTemplateMsg(d.ok ? { type: "ok", text: "✓ Enviado! Confira o WhatsApp do número informado." } : { type: "err", text: d.error || "Falha ao enviar" });
+    setTestingTemplate(false);
   }
 
   async function detectNumber() {
@@ -214,6 +226,31 @@ export default function AdminWhatsappPage() {
               className="w-full flex items-center justify-center gap-2 bg-slate-200 hover:bg-amber-600 text-slate-900 rounded-xl py-2.5 text-sm font-medium transition disabled:opacity-40">
               {testingWaba ? "Testando..." : "🔌 Testar conexão"}
             </button>
+
+            <div className="border-t border-slate-200 pt-3 mt-1">
+              <p className="text-[11px] text-slate-400 mb-2">Disparar um template real de teste (lembrete_pessoal, lembrete_compromisso, cobranca_recorrente) pra um número, pra confirmar que está disparando.</p>
+              <div className="flex gap-2 mb-2">
+                <select value={testTemplate} onChange={e => setTestTemplate(e.target.value as typeof testTemplate)}
+                  className="bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-amber-500 transition">
+                  <option value="lembrete_pessoal">lembrete_pessoal</option>
+                  <option value="lembrete_compromisso">lembrete_compromisso</option>
+                  <option value="cobranca_recorrente">cobranca_recorrente</option>
+                </select>
+                <input value={testPhone} onChange={e => setTestPhone(e.target.value.replace(/\D/g, ""))}
+                  placeholder="5544999999999"
+                  className="flex-1 bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
+              </div>
+              {testTemplateMsg && (
+                <p className={clsx("text-xs rounded-lg px-3 py-2 border mb-2", testTemplateMsg.type === "ok" ? "text-amber-400 bg-amber-900/20 border-amber-800" : "text-red-400 bg-red-900/20 border-red-800")}>
+                  {testTemplateMsg.text}
+                </p>
+              )}
+              <button type="button" disabled={testingTemplate || !testPhone}
+                onClick={testTemplateSend}
+                className="w-full flex items-center justify-center gap-2 bg-slate-200 hover:bg-amber-600 text-slate-900 rounded-xl py-2.5 text-sm font-medium transition disabled:opacity-40">
+                {testingTemplate ? "Enviando..." : "🧪 Enviar template de teste"}
+              </button>
+            </div>
           </div>
         )}
 

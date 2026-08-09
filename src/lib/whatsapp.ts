@@ -16,6 +16,19 @@ export async function sendText(to: string, message: string): Promise<boolean> {
   return ok;
 }
 
+/** Lembretes são sempre proativos (nunca respondem a uma mensagem do
+ *  usuário), então quase sempre caem fora da janela de 24h — no WABA
+ *  precisam ir como template aprovado, não texto livre. Evolution (API não
+ *  oficial) não tem essa restrição, então continua mandando texto normal. */
+export async function sendReminderTemplate(to: string, templateName: string, renderedText: string, params: Record<string, string>): Promise<boolean> {
+  const provider = getConfig().provider;
+  const ok = provider === "waba"
+    ? (await waba.sendTemplate(to, templateName, "pt_BR", params)).ok
+    : await evolution.sendText(to, renderedText);
+  if (ok) addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
+  return ok;
+}
+
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
   const provider = getConfig().provider;
   const ok = provider === "waba"

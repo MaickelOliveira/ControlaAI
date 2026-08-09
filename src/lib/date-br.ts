@@ -52,6 +52,11 @@ export function formatDateTimeBR(utcISO: string): string {
   });
 }
 
+/** Formata UTC ISO como hora SP: "14:00" */
+export function formatTimeBR(utcISO: string): string {
+  return new Date(utcISO).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+}
+
 /** Label do mês atual em SP */
 export function monthLabelBR(): string {
   return new Date().toLocaleDateString("pt-BR", { timeZone: TZ, month: "long", year: "numeric" });

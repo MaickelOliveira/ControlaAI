@@ -24,6 +24,7 @@ type WabaMessage = {
   video?: { id: string; caption?: string };
   audio?: { id: string };
   document?: { id: string; caption?: string; filename?: string };
+  button?: { text: string; payload: string };
 };
 
 export async function POST(req: NextRequest) {
@@ -46,6 +47,11 @@ export async function POST(req: NextRequest) {
         const text = msg.text?.body?.trim();
         if (!text) continue;
         await handleIncomingMessage({ from, text, contactName });
+        continue;
+      }
+
+      if (msg.type === "button" && msg.button?.text) {
+        await handleIncomingMessage({ from, text: msg.button.text, contactName });
         continue;
       }
 

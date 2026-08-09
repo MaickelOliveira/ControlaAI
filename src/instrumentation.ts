@@ -30,12 +30,13 @@ export async function register() {
       if (!remindersModule || !wppModule) return;
 
       const { getDueReminders, markReminderSent } = remindersModule;
-      const { sendText } = wppModule;
+      const { sendText, sendReminderTemplate } = wppModule;
       const due = getDueReminders();
       if (due.length > 0) console.log(`[cron] ${due.length} lembrete(s) a disparar`);
       for (const r of due) {
         try {
-          const ok = await sendText(r.phone, `🔔 *Lembrete:* ${r.message}`);
+          const texto = `🔔 *Lembrete:* ${r.message}`;
+          const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) markReminderSent(r.id, r.repeat);
         } catch (e) {
@@ -51,12 +52,14 @@ export async function register() {
           const usersModule = await import("./lib/users").catch(() => null);
           const pendingModule = await import("./lib/pending-actions").catch(() => null);
           const repliesModule = await import("./lib/bot-replies").catch(() => null);
-          if (!recurringModule || !usersModule || !pendingModule || !repliesModule) return;
+          const financesModule = await import("./lib/finances").catch(() => null);
+          if (!recurringModule || !usersModule || !pendingModule || !repliesModule || !financesModule) return;
 
           const { getRecurringDueToday, markNotified } = recurringModule;
           const { getUserById, getWppPhones } = usersModule;
           const { setPendingAction } = pendingModule;
           const { buildRecurringNotification } = repliesModule;
+          const { formatCurrency } = financesModule;
 
           const dueToday = getRecurringDueToday();
           if (dueToday.length > 0) console.log(`[cron] ${dueToday.length} recorrente(s) a notificar`);
@@ -67,8 +70,10 @@ export async function register() {
               if (!user) continue;
               const phones = getWppPhones(user);
               const msg = buildRecurringNotification(rec);
+              const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
+              const params = { descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
               for (const phone of phones) {
-                const ok = await sendText(phone, msg);
+                const ok = await sendReminderTemplate(phone, "cobranca_recorrente", msg, params);
                 if (ok) {
                   markNotified(rec.id);
                   setPendingAction(phone, {
@@ -133,10 +138,12 @@ export async function register() {
         const agendaModule = await import("./lib/agenda").catch(() => null);
         const usersModule = await import("./lib/users").catch(() => null);
         const repliesModule = await import("./lib/bot-replies").catch(() => null);
-        if (agendaModule && usersModule && repliesModule) {
+        const dateBrModule = await import("./lib/date-br").catch(() => null);
+        if (agendaModule && usersModule && repliesModule && dateBrModule) {
           const { getAppointmentsNeedingReminder, updateAppointment } = agendaModule;
           const { getUserById, getWppPhones } = usersModule;
           const { replyAppointmentReminder } = repliesModule;
+          const { formatTimeBR } = dateBrModule;
           const dueSoon = getAppointmentsNeedingReminder();
           if (dueSoon.length > 0) console.log(`[cron] ${dueSoon.length} compromisso(s) a lembrar`);
           for (const apt of dueSoon) {
@@ -145,9 +152,10 @@ export async function register() {
               if (!aptUser) continue;
               const phones = getWppPhones(aptUser);
               const msg = replyAppointmentReminder(apt);
+              const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;
               for (const phone of phones) {
-                const ok = await sendText(phone, msg);
+                const ok = await sendReminderTemplate(phone, "lembrete_compromisso", msg, params);
                 if (ok) sentToAny = true;
               }
               if (sentToAny) updateAppointment(apt.id, apt.userId, { reminderSentAt: new Date().toISOString() });

@@ -51,6 +51,41 @@ export async function sendText(to: string, message: string): Promise<boolean> {
   }
 }
 
+/** Mensagens iniciadas pela empresa fora da janela de 24h exigem um template
+ *  aprovado — sendText silenciosamente falha nesse caso. Os templates atuais
+ *  usam parâmetros NOMEADOS (ex: {{compromisso}}), não posicionais ({{1}}),
+ *  então cada parâmetro do body leva parameter_name além de type/text. */
+export async function sendTemplate(to: string, templateName: string, languageCode: string, params: Record<string, string>): Promise<{ ok: boolean; error?: string }> {
+  const pnid = phoneNumberId();
+  const token = accessToken();
+  if (!pnid || !token) { console.warn("[waba] não configurado"); return { ok: false, error: "WABA não configurado (Phone Number ID / Access Token)" }; }
+  try {
+    const parameters = Object.entries(params).map(([parameter_name, text]) => ({ type: "text", text, parameter_name }));
+    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pnid}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: normalizePhone(to),
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: languageCode },
+          components: parameters.length ? [{ type: "body", parameters }] : [],
+        },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = await res.json().catch(() => null) as { error?: { message?: string } } | null;
+    const ok = res.ok && !data?.error;
+    if (!ok) console.error(`[waba] sendTemplate(${templateName}) falhou: ${data?.error?.message || res.status}`);
+    return { ok, error: ok ? undefined : (data?.error?.message || `HTTP ${res.status}`) };
+  } catch (e) {
+    console.error("[waba] sendTemplate erro:", e);
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 function wabaMediaType(mimeType: string): "image" | "video" | "audio" | "document" {
   if (mimeType.startsWith("image/")) return "image";
   if (mimeType.startsWith("video/")) return "video";
