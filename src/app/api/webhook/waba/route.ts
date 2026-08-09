@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleIncomingMessage } from "@/lib/message-handler";
-import { downloadMedia, verifyToken } from "@/lib/waba";
+import { downloadMedia, verifyToken, verifySignature } from "@/lib/waba";
 import { transcribeAudio } from "@/lib/ai-processor";
+import { getConfig } from "@/lib/whatsapp-config";
+import { alreadyProcessed } from "@/lib/webhook-dedup";
 
 /** Verificação do webhook exigida pela Meta ao cadastrar a URL no Business
  *  Manager — responde o hub.challenge em texto puro (não JSON) quando o
@@ -28,26 +30,6 @@ type WabaMessage = {
   button?: { text: string; payload: string };
 };
 
-/** A Meta espera um ACK rápido (~poucos segundos) e reenvia o mesmo webhook
- *  se não receber a tempo. Analisar uma fatura em PDF pela IA pode levar
- *  dezenas de segundos, então processar tudo antes de responder fazia a
- *  Meta reenviar o mesmo arquivo mais tarde, reprocessando-o de novo do
- *  zero — daí a mensagem "já parece estar registrado" aparecendo sozinha
- *  de vez em quando. Guarda de IDs recentes como segunda camada, caso
- *  aconteça reentrega por qualquer outro motivo. */
-const recentMessageIds = new Set<string>();
-const MAX_TRACKED_IDS = 500;
-function alreadyProcessed(id: string | undefined): boolean {
-  if (!id) return false;
-  if (recentMessageIds.has(id)) return true;
-  recentMessageIds.add(id);
-  if (recentMessageIds.size > MAX_TRACKED_IDS) {
-    const oldest = recentMessageIds.values().next().value;
-    if (oldest) recentMessageIds.delete(oldest);
-  }
-  return false;
-}
-
 /** A Graph API aceitar o envio (HTTP 2xx, sem erro no corpo) não garante
  *  entrega — falhas de entrega (número inválido, template pausado, etc.)
  *  chegam depois, de forma assíncrona, como um evento de status aqui no
@@ -62,7 +44,25 @@ type WabaStatus = {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null);
+    const rawBody = await req.text();
+
+    // Sem App Secret configurado, o webhook fica sem proteção — aceita mas
+    // avisa alto no log até ser configurado em Admin → WhatsApp. Com o
+    // secret configurado, requisição sem assinatura válida é rejeitada:
+    // sem isso, qualquer um que descubra essa URL consegue forjar
+    // "mensagens" em nome de qualquer número de telefone.
+    if (getConfig().waba?.appSecret) {
+      if (!verifySignature(rawBody, req.headers.get("x-hub-signature-256"))) {
+        console.error("[webhook/waba] assinatura inválida — requisição rejeitada");
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else {
+      console.warn("[webhook/waba] App Secret não configurado — webhook sem validação de assinatura. Configure em Admin → WhatsApp.");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let body: any = null;
+    try { body = rawBody ? JSON.parse(rawBody) : null; } catch { body = null; }
     if (!body) return NextResponse.json({ ok: true });
 
     const value = body?.entry?.[0]?.changes?.[0]?.value;
