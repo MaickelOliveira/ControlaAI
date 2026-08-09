@@ -14,15 +14,18 @@
  */
 import { readFileSync, existsSync } from "fs";
 import path from "path";
-import { createClient } from "@supabase/supabase-js";
 
+// Chama a API REST (PostgREST) do Supabase direto via fetch nativo do Node —
+// sem depender do pacote @supabase/supabase-js, que não fica disponível no
+// container de produção (build "standalone" do Next.js só empacota o que as
+// rotas do app usam, não scripts avulsos).
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) {
   console.error("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY não configurados no ambiente.");
   process.exit(1);
 }
-const supabase = createClient(url, key, { auth: { persistSession: false } });
+const REST_URL = `${url.replace(/\/$/, "")}/rest/v1`;
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
@@ -37,14 +40,29 @@ function loadJSON<T>(file: string, fallback: T): T {
   }
 }
 
-async function upsert(table: string, rows: Record<string, unknown>[], conflictKey = "id") {
+async function restUpsert(table: string, rows: Record<string, unknown>[]): Promise<string | null> {
+  const res = await fetch(`${REST_URL}/${table}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: key!,
+      Authorization: `Bearer ${key}`,
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) return `${res.status} ${await res.text()}`;
+  return null;
+}
+
+async function upsert(table: string, rows: Record<string, unknown>[]) {
   if (rows.length === 0) {
     console.log(`  ${table}: nada para migrar`);
     return;
   }
-  const { error } = await supabase.from(table).upsert(rows, { onConflict: conflictKey });
+  const error = await restUpsert(table, rows);
   if (error) {
-    console.error(`  ✗ ${table}: ${error.message}`);
+    console.error(`  ✗ ${table}: ${error}`);
   } else {
     console.log(`  ✓ ${table}: ${rows.length} linha(s)`);
   }
@@ -177,11 +195,10 @@ async function main() {
   // ── grocery (blob único) ──
   const groceryOld = loadJSON<{ stores?: unknown[]; purchases?: unknown[]; shoppingList?: unknown[] } | null>("grocery.json", null);
   if (groceryOld) {
-    const { error } = await supabase.from("grocery").upsert({
+    await upsert("grocery", [{
       id: 1,
       data: { stores: groceryOld.stores ?? [], purchases: groceryOld.purchases ?? [], shoppingList: groceryOld.shoppingList ?? [] },
-    }, { onConflict: "id" });
-    console.log(error ? `  ✗ grocery: ${error.message}` : "  ✓ grocery: 1 linha (blob)");
+    }]);
   } else {
     console.log("  grocery: nada para migrar");
   }
@@ -222,20 +239,19 @@ async function main() {
   // ── conversations ──
   const conversationsOld = loadJSON<Record<string, { messages: unknown[]; contactName?: string; lastActivity: number; unread?: boolean; aiPaused?: boolean }>>("conversations.json", {});
   const convRows = Object.entries(conversationsOld).map(([phone, data]) => ({ phone, data }));
-  await upsert("conversations", convRows, "phone");
+  await upsert("conversations", convRows);
 
   // ── pending actions ──
   const pendingOld = loadJSON<Record<string, unknown>>("pending.json", {});
   const pendingRows = Object.entries(pendingOld).map(([phone, data]) => ({ phone, data, updated_at: new Date().toISOString() }));
-  await upsert("pending_actions", pendingRows, "phone");
+  await upsert("pending_actions", pendingRows);
 
   // ── admin config ──
   const adminOld = loadJSON<{ adminEmail?: string; adminPasswordHash?: string } | null>("admin.json", null);
   if (adminOld && (adminOld.adminEmail || adminOld.adminPasswordHash)) {
-    const { error } = await supabase.from("admin_config").upsert({
+    await upsert("admin_config", [{
       id: 1, admin_email: adminOld.adminEmail ?? null, admin_password_hash: adminOld.adminPasswordHash ?? null,
-    }, { onConflict: "id" });
-    console.log(error ? `  ✗ admin_config: ${error.message}` : "  ✓ admin_config: 1 linha");
+    }]);
   } else {
     console.log("  admin_config: nada para migrar");
   }
@@ -243,10 +259,9 @@ async function main() {
   // ── billing config (preços) ──
   const billingOld = loadJSON<{ personal?: number; business?: number } | null>("billing-config.json", null);
   if (billingOld) {
-    const { error } = await supabase.from("billing_config").upsert({
+    await upsert("billing_config", [{
       id: 1, personal: billingOld.personal ?? 0, business: billingOld.business ?? 0,
-    }, { onConflict: "id" });
-    console.log(error ? `  ✗ billing_config: ${error.message}` : "  ✓ billing_config: 1 linha");
+    }]);
   } else {
     console.log("  billing_config: nada para migrar");
   }
@@ -254,8 +269,7 @@ async function main() {
   // ── whatsapp config ──
   const wppConfigOld = loadJSON<Record<string, unknown> | null>("whatsapp-config.json", null);
   if (wppConfigOld) {
-    const { error } = await supabase.from("whatsapp_config").upsert({ id: 1, data: wppConfigOld }, { onConflict: "id" });
-    console.log(error ? `  ✗ whatsapp_config: ${error.message}` : "  ✓ whatsapp_config: 1 linha");
+    await upsert("whatsapp_config", [{ id: 1, data: wppConfigOld }]);
   } else {
     console.log("  whatsapp_config: nada para migrar");
   }
@@ -265,7 +279,7 @@ async function main() {
   const googleTokens = loadJSON<Record<string, OldGoogleToken>>("google-tokens.json", {});
   await upsert("google_tokens", Object.entries(googleTokens).map(([userId, t]) => ({
     user_id: userId, access_token: t.accessToken, refresh_token: t.refreshToken, expires_at: t.expiresAt,
-  })), "user_id");
+  })));
 
   // ── billing webhooks (config de ativação automática) ──
   type OldBillingWebhook = {
