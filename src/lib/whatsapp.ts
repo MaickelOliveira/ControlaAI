@@ -22,9 +22,16 @@ export async function sendText(to: string, message: string): Promise<boolean> {
  *  oficial) não tem essa restrição, então continua mandando texto normal. */
 export async function sendReminderTemplate(to: string, templateName: string, renderedText: string, params: Record<string, string>): Promise<boolean> {
   const provider = getConfig().provider;
-  const ok = provider === "waba"
-    ? (await waba.sendTemplate(to, templateName, "pt_BR", params)).ok
-    : await evolution.sendText(to, renderedText);
+  let ok: boolean;
+  if (provider === "waba") {
+    const result = await waba.sendTemplate(to, templateName, "pt_BR", params);
+    ok = result.ok;
+    // wamid aqui é o único jeito de casar esse envio com o evento de status
+    // (sent/delivered/read/failed) que chega depois, assíncrono, no webhook.
+    if (ok) console.log(`[whatsapp] template ${templateName} → ${to} aceito, msg=${result.messageId}`);
+  } else {
+    ok = await evolution.sendText(to, renderedText);
+  }
   if (ok) addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
   return ok;
 }

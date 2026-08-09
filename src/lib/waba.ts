@@ -55,7 +55,7 @@ export async function sendText(to: string, message: string): Promise<boolean> {
  *  aprovado — sendText silenciosamente falha nesse caso. Os templates atuais
  *  usam parâmetros NOMEADOS (ex: {{compromisso}}), não posicionais ({{1}}),
  *  então cada parâmetro do body leva parameter_name além de type/text. */
-export async function sendTemplate(to: string, templateName: string, languageCode: string, params: Record<string, string>): Promise<{ ok: boolean; error?: string }> {
+export async function sendTemplate(to: string, templateName: string, languageCode: string, params: Record<string, string>): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   const pnid = phoneNumberId();
   const token = accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return { ok: false, error: "WABA não configurado (Phone Number ID / Access Token)" }; }
@@ -76,10 +76,10 @@ export async function sendTemplate(to: string, templateName: string, languageCod
       }),
       signal: AbortSignal.timeout(15_000),
     });
-    const data = await res.json().catch(() => null) as { error?: { message?: string } } | null;
+    const data = await res.json().catch(() => null) as { error?: { message?: string }; messages?: Array<{ id?: string }> } | null;
     const ok = res.ok && !data?.error;
     if (!ok) console.error(`[waba] sendTemplate(${templateName}) falhou: ${data?.error?.message || res.status}`);
-    return { ok, error: ok ? undefined : (data?.error?.message || `HTTP ${res.status}`) };
+    return { ok, error: ok ? undefined : (data?.error?.message || `HTTP ${res.status}`), messageId: data?.messages?.[0]?.id };
   } catch (e) {
     console.error("[waba] sendTemplate erro:", e);
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

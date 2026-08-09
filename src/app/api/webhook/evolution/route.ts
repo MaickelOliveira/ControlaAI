@@ -5,7 +5,7 @@ import { getBase64FromMediaMessage } from "@/lib/evolution";
 import { transcribeAudio } from "@/lib/ai-processor";
 
 type EvolutionMessageData = {
-  key?: { remoteJid?: string; remoteJidAlt?: string; fromMe?: boolean; id?: string };
+  key?: { remoteJid?: string; remoteJidAlt?: string; senderPn?: string; fromMe?: boolean; id?: string };
   pushName?: string;
   message?: Record<string, unknown>;
   messageType?: string;
@@ -36,9 +36,18 @@ export async function POST(req: NextRequest) {
     if (data.key.fromMe) return NextResponse.json({ ok: true });
 
     let remoteJid = data.key.remoteJid || "";
-    // Se vier como @lid mas existir remoteJidAlt sem @lid, o telefone real está lá
-    if (remoteJid.endsWith("@lid") && data.key.remoteJidAlt && !data.key.remoteJidAlt.endsWith("@lid")) {
-      remoteJid = data.key.remoteJidAlt;
+    // Se vier como @lid, o WhatsApp escondeu o número real atrás de um ID
+    // interno — o Baileys (biblioteca por trás do Evolution) só consegue
+    // resolver isso pro número de telefone se já tiver visto esse contato
+    // antes; quando resolve, manda em remoteJidAlt ou senderPn (nomes
+    // diferentes pra mesma coisa, dependendo da versão). Se nenhum dos dois
+    // vier, o número real simplesmente não está disponível nesse evento —
+    // limitação do próprio WhatsApp, não dá pra contornar sempre (só na API
+    // Oficial isso nunca acontece, o "from" já vem sempre como número real).
+    if (remoteJid.endsWith("@lid")) {
+      const real = [data.key.remoteJidAlt, data.key.senderPn].find(j => j && !j.endsWith("@lid"));
+      if (real) remoteJid = real;
+      else console.warn(`[webhook/evolution] contato chegou como @lid sem número real disponível (${remoteJid}) — vai processar mesmo assim, mas qualquer telefone salvo a partir daqui fica incorreto`);
     }
     if (remoteJid.endsWith("@g.us")) return NextResponse.json({ ok: true }); // ignora grupos
 

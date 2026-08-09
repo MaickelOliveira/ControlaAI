@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
 }
 
 type WabaMessage = {
+  id?: string;
   from: string;
   type: string;
   text?: { body: string };
@@ -26,6 +27,26 @@ type WabaMessage = {
   document?: { id: string; caption?: string; filename?: string };
   button?: { text: string; payload: string };
 };
+
+/** A Meta espera um ACK rápido (~poucos segundos) e reenvia o mesmo webhook
+ *  se não receber a tempo. Analisar uma fatura em PDF pela IA pode levar
+ *  dezenas de segundos, então processar tudo antes de responder fazia a
+ *  Meta reenviar o mesmo arquivo mais tarde, reprocessando-o de novo do
+ *  zero — daí a mensagem "já parece estar registrado" aparecendo sozinha
+ *  de vez em quando. Guarda de IDs recentes como segunda camada, caso
+ *  aconteça reentrega por qualquer outro motivo. */
+const recentMessageIds = new Set<string>();
+const MAX_TRACKED_IDS = 500;
+function alreadyProcessed(id: string | undefined): boolean {
+  if (!id) return false;
+  if (recentMessageIds.has(id)) return true;
+  recentMessageIds.add(id);
+  if (recentMessageIds.size > MAX_TRACKED_IDS) {
+    const oldest = recentMessageIds.values().next().value;
+    if (oldest) recentMessageIds.delete(oldest);
+  }
+  return false;
+}
 
 /** A Graph API aceitar o envio (HTTP 2xx, sem erro no corpo) não garante
  *  entrega — falhas de entrega (número inválido, template pausado, etc.)
@@ -63,52 +84,60 @@ export async function POST(req: NextRequest) {
     const contact = value?.contacts?.[0];
     const contactName = contact?.profile?.name as string | undefined;
 
-    for (const msg of messages) {
-      const from = (msg.from || "").replace(/\D/g, "");
-      if (!from) continue;
-
-      if (msg.type === "text") {
-        const text = msg.text?.body?.trim();
-        if (!text) continue;
-        await handleIncomingMessage({ from, text, contactName });
-        continue;
-      }
-
-      if (msg.type === "button" && msg.button?.text) {
-        await handleIncomingMessage({ from, text: msg.button.text, contactName });
-        continue;
-      }
-
-      if (msg.type === "audio" && msg.audio?.id) {
-        const media = await downloadMedia(msg.audio.id);
-        if (!media) continue;
-        const transcript = await transcribeAudio(media.buffer, media.mimeType).catch(() => null);
-        if (!transcript) continue;
-        await handleIncomingMessage({ from, text: transcript, contactName });
-        continue;
-      }
-
-      if (["image", "video", "document"].includes(msg.type)) {
-        const mediaField = msg[msg.type as "image" | "video" | "document"] as { id: string; caption?: string; filename?: string } | undefined;
-        if (!mediaField?.id) continue;
-        const media = await downloadMedia(mediaField.id);
-        if (!media) continue;
-        await handleIncomingMessage({
-          from,
-          text: "",
-          contactName,
-          isFileMessage: true,
-          fileBuffer: media.buffer,
-          fileMimeType: media.mimeType,
-          fileCaption: mediaField.caption,
-          fileName: mediaField.filename || `arquivo_${Date.now()}`,
-        });
-      }
-    }
+    // Responde a Meta já — o processamento roda em background, sem bloquear
+    // o ACK (ver comentário de alreadyProcessed acima).
+    processMessages(messages, contactName).catch(e => console.error("[webhook/waba] erro no processamento em background:", e));
 
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("[webhook/waba]", e);
     return NextResponse.json({ ok: true });
+  }
+}
+
+async function processMessages(messages: WabaMessage[], contactName?: string) {
+  for (const msg of messages) {
+    if (alreadyProcessed(msg.id)) { console.log(`[webhook/waba] msg=${msg.id} já processada, ignorando reentrega`); continue; }
+
+    const from = (msg.from || "").replace(/\D/g, "");
+    if (!from) continue;
+
+    if (msg.type === "text") {
+      const text = msg.text?.body?.trim();
+      if (!text) continue;
+      await handleIncomingMessage({ from, text, contactName });
+      continue;
+    }
+
+    if (msg.type === "button" && msg.button?.text) {
+      await handleIncomingMessage({ from, text: msg.button.text, contactName });
+      continue;
+    }
+
+    if (msg.type === "audio" && msg.audio?.id) {
+      const media = await downloadMedia(msg.audio.id);
+      if (!media) continue;
+      const transcript = await transcribeAudio(media.buffer, media.mimeType).catch(() => null);
+      if (!transcript) continue;
+      await handleIncomingMessage({ from, text: transcript, contactName });
+      continue;
+    }
+
+    if (["image", "video", "document"].includes(msg.type)) {
+      const mediaField = msg[msg.type as "image" | "video" | "document"] as { id: string; caption?: string; filename?: string } | undefined;
+      if (!mediaField?.id) continue;
+      const media = await downloadMedia(mediaField.id);
+      if (!media) continue;
+      await handleIncomingMessage({
+        from,
+        text: "",
+        contactName,
+        isFileMessage: true,
+        fileBuffer: media.buffer,
+        fileMimeType: media.mimeType,
+        fileCaption: mediaField.caption,
+        fileName: mediaField.filename || `arquivo_${Date.now()}`,
+      });
+    }
   }
 }
