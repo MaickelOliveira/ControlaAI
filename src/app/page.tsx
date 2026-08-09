@@ -296,6 +296,11 @@ const MODULE_ICONS = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 4h12M9 19.5a.5.5 0 11-1 0 .5.5 0 011 0zm7 0a.5.5 0 11-1 0 .5.5 0 011 0z" />
     </svg>
   ),
+  bell: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.16V11a6 6 0 00-4-5.66V5a2 2 0 10-4 0v.34C7.67 6.17 6 8.39 6 11v3.16c0 .54-.21 1.06-.6 1.44L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+    </svg>
+  ),
 };
 
 /* ── Ícones de linha usados nos cards de função (em vez de emoji) — mesmo
@@ -978,8 +983,9 @@ export default function LandingPage() {
             <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>Muito mais que finanças.</h2>
             <p className="text-slate-400 mt-3 text-sm">Tudo o que organiza sua rotina — pessoal ou da empresa — em um só assistente.</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-5">
             {[
+              { icon: MODULE_ICONS.bell, title: "Lembretes", desc: "Avisos únicos, diários, semanais ou mensais — o Zelo te chama na hora certa." },
               { icon: MODULE_ICONS.target, title: "Metas", desc: "Defina objetivos com valor alvo e prazo, e acompanhe quanto já falta pra chegar lá." },
               { icon: MODULE_ICONS.car, title: "Veículos", desc: "Combustível, manutenção, seguro e quilometragem de cada veículo, tudo num lugar." },
               { icon: MODULE_ICONS.users, title: "Funcionários", desc: "Cargo, salário e status de cada funcionário da sua empresa, sempre à mão." },
