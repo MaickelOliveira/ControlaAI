@@ -3,11 +3,13 @@ import { getSession } from "@/lib/auth";
 import { getAllRemindersByUser, createReminder, deleteReminder, updateReminder } from "@/lib/reminders";
 import { getUserById } from "@/lib/users";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    return NextResponse.json(getAllRemindersByUser(session.sub));
+    const { searchParams } = new URL(req.url);
+    const mode = searchParams.get("mode") as "personal" | "business" | undefined;
+    return NextResponse.json(getAllRemindersByUser(session.sub, mode || undefined));
   } catch {
     return NextResponse.json([], { status: 200 });
   }
@@ -17,13 +19,13 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const { message, scheduledAt, repeat } = await req.json();
+  const { message, scheduledAt, repeat, mode } = await req.json();
   if (!message || !scheduledAt) return NextResponse.json({ error: "message e scheduledAt obrigatórios" }, { status: 400 });
 
   const user = getUserById(session.sub);
   const phone = user?.wppPhone || user?.phone || "";
 
-  const r = createReminder({ userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none" });
+  const r = createReminder({ userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none", mode: mode || "personal" });
   return NextResponse.json(r, { status: 201 });
 }
 

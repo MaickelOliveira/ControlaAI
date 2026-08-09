@@ -1036,20 +1036,20 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (!ai.reminder?.message || !ai.reminder?.scheduledAt) { await wppSend(from, replyUnknown(messageText)); break; }
         // Converte horário SP (gerado pela IA) para UTC antes de salvar
         const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
-        createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none" });
+        createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none", mode: ai.reminder.mode || mode });
         await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat || "none"));
         break;
       }
 
       case "reminder_list": {
-        const reminders = getRemindersByUser(user.id);
+        const reminders = getRemindersByUser(user.id, mode);
         await wppSend(from, replyReminderList(reminders));
         break;
       }
 
       case "reminder_update": {
         const keyword = ai.keyword || "";
-        const target = keyword ? findReminderByKeyword(user.id, keyword) : null;
+        const target = keyword ? findReminderByKeyword(user.id, keyword, mode) : null;
         if (!target) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         const patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat">> = {};
         if (ai.reminder?.message) patch.message = cap(ai.reminder.message);
@@ -1062,7 +1062,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "reminder_delete": {
         const delKeyword = ai.keyword || "";
-        const delTarget = delKeyword ? findReminderByKeyword(user.id, delKeyword) : null;
+        const delTarget = delKeyword ? findReminderByKeyword(user.id, delKeyword, mode) : null;
         if (!delTarget) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         if (deleteReminder(delTarget.id, user.id)) await wppSend(from, replyReminderDeleted(delTarget.message));
         break;

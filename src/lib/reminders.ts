@@ -12,6 +12,7 @@ export type Reminder = {
   phone: string;
   scheduledAt: string;
   repeat: ReminderRepeat;
+  mode: "personal" | "business";
   sent: boolean;
   createdAt: string;
 };
@@ -76,13 +77,15 @@ export function markReminderSent(id: string, repeat: ReminderRepeat): void {
   save(items);
 }
 
-export function getRemindersByUser(userId: string): Reminder[] {
-  return load().filter(r => r.userId === userId && !r.sent);
+/** Registros antigos, de antes do campo mode existir, tratam como "personal"
+ *  por padrão — evita que lembretes já criados somem da lista de ninguém. */
+export function getRemindersByUser(userId: string, mode?: "personal" | "business"): Reminder[] {
+  return load().filter(r => r.userId === userId && !r.sent && (!mode || (r.mode || "personal") === mode));
 }
 
-export function getAllRemindersByUser(userId: string): Reminder[] {
+export function getAllRemindersByUser(userId: string, mode?: "personal" | "business"): Reminder[] {
   return load()
-    .filter(r => r.userId === userId)
+    .filter(r => r.userId === userId && (!mode || (r.mode || "personal") === mode))
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 
@@ -97,9 +100,9 @@ export function updateReminder(id: string, userId: string, patch: Partial<Pick<R
 
 /** Busca um lembrete ainda não disparado por palavra-chave na mensagem —
  *  usado por reminder_update/reminder_delete pra identificar qual. */
-export function findReminderByKeyword(userId: string, keyword: string): Reminder | null {
+export function findReminderByKeyword(userId: string, keyword: string, mode?: "personal" | "business"): Reminder | null {
   const lower = keyword.toLowerCase();
-  return getRemindersByUser(userId).find(r => r.message.toLowerCase().includes(lower)) ?? null;
+  return getRemindersByUser(userId, mode).find(r => r.message.toLowerCase().includes(lower)) ?? null;
 }
 
 export function deleteReminder(id: string, userId: string): boolean {

@@ -36,6 +36,7 @@ function isOverdue(iso: string) {
 }
 
 export default function LembretesPage() {
+  const [mode, setMode] = useState<string>("personal");
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -43,9 +44,9 @@ export default function LembretesPage() {
   const [form, setForm] = useState({ message: "", date: "", time: "", repeat: "none" });
   const [filter, setFilter] = useState<"all" | "active" | "sent">("active");
 
-  function load() {
+  function load(m: string) {
     setLoading(true);
-    fetch("/api/admin/reminders")
+    fetch(`/api/admin/reminders?mode=${m}`)
       .then(r => r.json())
       .then(d => {
         setReminders(Array.isArray(d) ? d : []);
@@ -57,7 +58,16 @@ export default function LembretesPage() {
       });
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then(r => r.json())
+      .then(d => {
+        const m = d.user?.activeMode || "personal";
+        setMode(m);
+        load(m);
+      })
+      .catch(() => load("personal"));
+  }, []);
 
   function openNew() {
     const now = new Date();
@@ -98,12 +108,12 @@ export default function LembretesPage() {
       await fetch("/api/admin/reminders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: form.message, scheduledAt, repeat: form.repeat }),
+        body: JSON.stringify({ message: form.message, scheduledAt, repeat: form.repeat, mode }),
       });
     }
     setShowForm(false);
     setEditingId(null);
-    load();
+    load(mode);
   }
 
   async function deleteReminder(id: string) {
@@ -112,7 +122,7 @@ export default function LembretesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    load();
+    load(mode);
   }
 
   const filtered = reminders.filter(r => {
@@ -140,7 +150,7 @@ export default function LembretesPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">🔔 Lembretes</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            {activeCount} ativo{activeCount !== 1 ? "s" : ""}
+            {mode === "business" ? "🏢 Empresa" : "👤 Pessoal"} · {activeCount} ativo{activeCount !== 1 ? "s" : ""}
             {overdueCount > 0 && <span className="text-red-500 ml-2">· {overdueCount} atrasado{overdueCount !== 1 ? "s" : ""}</span>}
           </p>
         </div>
