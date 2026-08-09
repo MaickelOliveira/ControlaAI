@@ -7,7 +7,7 @@ type Provider = "evolution" | "waba";
 type Cfg = {
   provider: Provider;
   evolution: { server: string; adminKey: string; instanceName: string; hasApiKey: boolean };
-  waba: { phoneNumberId: string; accessToken: string; verifyToken: string };
+  waba: { phoneNumberId: string; accessToken: string; verifyToken: string; appSecret: string };
   geminiApiKey: string; hasGemini: boolean;
   appBaseUrl: string; wppBotNumber: string; connectionStatus: string;
   googleClientId: string; googleClientSecret: string; hasGoogleOAuth: boolean;
@@ -16,7 +16,7 @@ type Cfg = {
 const EMPTY_CFG: Cfg = {
   provider: "evolution",
   evolution: { server: "", adminKey: "", instanceName: "zelo", hasApiKey: false },
-  waba: { phoneNumberId: "", accessToken: "", verifyToken: "" },
+  waba: { phoneNumberId: "", accessToken: "", verifyToken: "", appSecret: "" },
   geminiApiKey: "", hasGemini: false,
   appBaseUrl: "", wppBotNumber: "", connectionStatus: "UNKNOWN",
   googleClientId: "", googleClientSecret: "", hasGoogleOAuth: false,
@@ -215,6 +215,13 @@ export default function AdminWhatsappPage() {
                 placeholder="zelo-webhook-verify"
                 className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
               <p className="text-[11px] text-slate-400 mt-1">Escolha um valor qualquer e use o mesmo ao cadastrar o webhook no Meta Business</p>
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">App Secret</label>
+              <input type="password" value={cfg.waba.appSecret} onChange={e => setCfg(c => ({ ...c, waba: { ...c.waba, appSecret: e.target.value } }))}
+                placeholder="••••••••"
+                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+              <p className="text-[11px] text-slate-400 mt-1">Meta App Dashboard → Configurações do app → Básico → Chave secreta do app. Sem isso, o webhook aceita qualquer requisição sem checar se veio mesmo da Meta.</p>
             </div>
             {connMsg && (
               <p className={clsx("text-xs rounded-lg px-3 py-2 border", connMsg.type === "ok" ? "text-amber-400 bg-amber-900/20 border-amber-800" : "text-red-400 bg-red-900/20 border-red-800")}>

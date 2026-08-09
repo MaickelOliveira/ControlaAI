@@ -1,17 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "controlaai-secret-2026-change-in-prod"
-);
+// Cópia própria da verificação de JWT (não dá pra importar auth.ts aqui —
+// esse arquivo roda no Edge Runtime, que não tem acesso a fs, e auth.ts
+// agora importa users.ts). Mesma regra de segurança: sem JWT_SECRET
+// configurado, trata como deslogado (nega acesso) em vez de aceitar
+// qualquer token assinado com uma chave pública conhecida.
+function getSecret(): Uint8Array | null {
+  if (!process.env.JWT_SECRET) return null;
+  return new TextEncoder().encode(process.env.JWT_SECRET);
+}
 
 const CLIENT_COOKIE = "ca_session";
 const ADMIN_COOKIE  = "ca_admin";
 
 async function getRole(token?: string): Promise<string | null> {
   if (!token) return null;
+  const secret = getSecret();
+  if (!secret) return null;
   try {
-    const { payload } = await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, secret);
     return (payload as Record<string, unknown>).role as string ?? "client";
   } catch { return null; }
 }

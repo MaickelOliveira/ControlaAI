@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 // nowBR não é mais necessário — comparações usam UTC real (new Date())
@@ -26,7 +27,7 @@ function load(): Reminder[] {
   } catch { return []; }
 }
 function save(items: Reminder[]) {
-  writeFileSync(FILE, JSON.stringify(items, null, 2));
+  writeJSONAtomic(FILE, items);
 }
 
 export function createReminder(data: Omit<Reminder, "id" | "sent" | "createdAt">): Reminder {

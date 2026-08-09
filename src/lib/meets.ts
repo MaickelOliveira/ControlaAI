@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -34,7 +35,7 @@ function load(): Meet[] {
 }
 
 function save(items: Meet[]) {
-  writeFileSync(DATA_FILE, JSON.stringify(items, null, 2));
+  writeJSONAtomic(DATA_FILE, items);
 }
 
 export function createMeet(data: Omit<Meet, "id" | "createdAt">): Meet {

@@ -1,9 +1,19 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { getUserById, isTrialExpired } from "./users";
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "controlaai-secret-2026-change-in-prod"
-);
+// Sem valor padrão de propósito: uma chave fixa no código público permitiria
+// qualquer um forjar um cookie de sessão válido (inclusive de admin). A
+// checagem é preguiçosa (só na hora de assinar/verificar, não no import do
+// módulo) porque o `next build` importa essas rotas pra coletar dados de
+// página mesmo sem nenhuma requisição real acontecer — falhar no import
+// quebraria o build inteiro em vez de só o runtime sem a env configurada.
+function getSecret(): Uint8Array {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET não configurado — defina essa variável de ambiente antes de iniciar o servidor.");
+  }
+  return new TextEncoder().encode(process.env.JWT_SECRET);
+}
 
 // Cookies separados para cliente e admin — evita conflito no mesmo navegador
 const CLIENT_COOKIE = "ca_session";
@@ -30,22 +40,35 @@ export async function signToken(payload: SessionPayload): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(SECRET);
+    .sign(getSecret());
 }
 
 export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, getSecret());
     return payload as unknown as SessionPayload;
   } catch { return null; }
 }
 
 // ── Cliente ──────────────────────────────────
+/** O JWT em si continua válido por até 7 dias mesmo que o admin desative o
+ *  cliente ou o trial vença nesse meio-tempo — sem checar o status real do
+ *  usuário aqui, o cookie sozinho bastava pra continuar usando o painel
+ *  inteiro (todas as rotas client-side dependem só disso pra autorizar).
+ *  Como getSession() já é chamado por praticamente toda API do dashboard,
+ *  essa checagem central cobre tudo de uma vez, sem precisar mexer rota
+ *  por rota. */
 export async function getSession(): Promise<SessionPayload | null> {
   const jar = await cookies();
   const token = jar.get(CLIENT_COOKIE)?.value;
   if (!token) return null;
-  return verifyToken(token);
+  const payload = await verifyToken(token);
+  if (!payload) return null;
+
+  const user = getUserById(payload.sub);
+  if (!user || user.status === "inactive" || isTrialExpired(user)) return null;
+
+  return payload;
 }
 
 export async function setSessionCookie(token: string) {

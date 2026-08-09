@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -27,7 +28,7 @@ function load(): Task[] {
   } catch { return []; }
 }
 function save(items: Task[]) {
-  writeFileSync(FILE, JSON.stringify(items, null, 2));
+  writeJSONAtomic(FILE, items);
 }
 
 export function createTask(data: Omit<Task, "id" | "createdAt">): Task {

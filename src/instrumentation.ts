@@ -12,6 +12,9 @@ export async function register() {
   console.log("[instrumentation] Iniciando cron de lembretes...");
 
   const tick = async () => {
+    const { acquireCronLock, releaseCronLock } = await import("./lib/cron-lock");
+    if (!acquireCronLock()) return; // outra instância/tick já está processando agora
+
     try {
       // ── Auto-posta lançamentos pendentes cuja data chegou ──
       try {
@@ -169,6 +172,8 @@ export async function register() {
       }
     } catch (e) {
       console.error("[cron] Erro no tick:", e);
+    } finally {
+      releaseCronLock();
     }
   };
 

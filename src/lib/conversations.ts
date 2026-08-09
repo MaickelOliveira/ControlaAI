@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
+import { readFileSync, existsSync, statSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string };
@@ -36,7 +37,7 @@ function load(): ConversationStore {
 }
 
 function save(data: ConversationStore) {
-  writeFileSync(FILE, JSON.stringify(data, null, 2));
+  writeJSONAtomic(FILE, data);
   _cache = data;
   try { _cacheMtime = statSync(FILE).mtimeMs; } catch { /* ignore */ }
 }

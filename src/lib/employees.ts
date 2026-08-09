@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -26,7 +27,7 @@ function load(): Employee[] {
     return JSON.parse(readFileSync(FILE, "utf-8"));
   } catch { return []; }
 }
-function save(items: Employee[]) { writeFileSync(FILE, JSON.stringify(items, null, 2)); }
+function save(items: Employee[]) { writeJSONAtomic(FILE, items); }
 
 export function createEmployee(data: Omit<Employee, "id" | "createdAt">): Employee {
   const items = load();

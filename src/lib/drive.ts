@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -38,7 +39,7 @@ function loadMeta(): DriveFile[] {
 }
 
 function saveMeta(files: DriveFile[]) {
-  writeFileSync(META_FILE, JSON.stringify(files, null, 2));
+  writeJSONAtomic(META_FILE, files);
 }
 
 function loadFolders(): DriveFolder[] {
@@ -49,7 +50,7 @@ function loadFolders(): DriveFolder[] {
 }
 
 function saveFolders(folders: DriveFolder[]) {
-  writeFileSync(FOLDERS_FILE, JSON.stringify(folders, null, 2));
+  writeJSONAtomic(FOLDERS_FILE, folders);
 }
 
 export function ensureDefaultFolders(userId: string): DriveFolder[] {

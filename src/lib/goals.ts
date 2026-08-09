@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -26,7 +27,7 @@ function load(): Goal[] {
     return JSON.parse(readFileSync(FILE, "utf-8"));
   } catch { return []; }
 }
-function save(items: Goal[]) { writeFileSync(FILE, JSON.stringify(items, null, 2)); }
+function save(items: Goal[]) { writeJSONAtomic(FILE, items); }
 
 export function createGoal(data: Omit<Goal, "id" | "createdAt">): Goal {
   const items = load();

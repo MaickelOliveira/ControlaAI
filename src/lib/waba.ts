@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "crypto";
 import { getConfig } from "@/lib/whatsapp-config";
 
 const GRAPH_VERSION = "v19.0";
@@ -10,6 +11,22 @@ function accessToken(): string {
 }
 export function verifyToken(): string {
   return getConfig().waba?.verifyToken || "";
+}
+
+/** Sem isso, qualquer um que descubra a URL do webhook consegue mandar
+ *  payloads forjados (ex: marcar mensagens como lidas, ou pior, injetar
+ *  "mensagens" que acionam intents do bot em nome de qualquer usuário).
+ *  A Meta assina cada requisição com HMAC-SHA256 do corpo cru usando o App
+ *  Secret — comparação em tempo constante pra não vazar o segredo por
+ *  timing attack. */
+export function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
+  const appSecret = getConfig().waba?.appSecret;
+  if (!appSecret || !signatureHeader) return false;
+  const expected = "sha256=" + createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signatureHeader);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 export function isWabaConfigured(): boolean {

@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -39,7 +40,7 @@ function load(): Vehicle[] {
     return JSON.parse(readFileSync(FILE, "utf-8"));
   } catch { return []; }
 }
-function save(items: Vehicle[]) { writeFileSync(FILE, JSON.stringify(items, null, 2)); }
+function save(items: Vehicle[]) { writeJSONAtomic(FILE, items); }
 
 export function createVehicle(data: Omit<Vehicle, "id" | "expenses" | "createdAt">): Vehicle {
   const items = load();

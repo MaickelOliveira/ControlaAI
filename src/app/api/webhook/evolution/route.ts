@@ -3,6 +3,7 @@ import { handleIncomingMessage } from "@/lib/message-handler";
 import { sendText as wppSend } from "@/lib/whatsapp";
 import { getBase64FromMediaMessage } from "@/lib/evolution";
 import { transcribeAudio } from "@/lib/ai-processor";
+import { getConfig } from "@/lib/whatsapp-config";
 
 type EvolutionMessageData = {
   key?: { remoteJid?: string; remoteJidAlt?: string; senderPn?: string; fromMe?: boolean; id?: string };
@@ -25,6 +26,21 @@ function findMessageTypeObject(message: Record<string, unknown> | undefined): { 
 
 export async function POST(req: NextRequest) {
   try {
+    // Evolution não assina requisições — o segredo embutido na URL (gerado
+    // e registrado em admin/whatsapp "connect") é a única defesa contra
+    // alguém forjar mensagens chamando essa URL diretamente. Sem secret
+    // configurado ainda, aceita mas avisa (mesma postura transicional do
+    // webhook WABA).
+    const configuredSecret = getConfig().evolution?.webhookSecret;
+    if (configuredSecret) {
+      if (req.nextUrl.searchParams.get("secret") !== configuredSecret) {
+        console.error("[webhook/evolution] secret inválido — requisição rejeitada");
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else {
+      console.warn("[webhook/evolution] webhookSecret não configurado — reconecte em Admin → WhatsApp pra gerar um.");
+    }
+
     const body = await req.json().catch(() => null);
     if (!body) return NextResponse.json({ ok: true });
 

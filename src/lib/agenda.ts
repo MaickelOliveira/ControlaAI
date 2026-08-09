@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 import { todayStrBR } from "./date-br";
@@ -38,7 +39,7 @@ function load(): Appointment[] {
 }
 
 function save(items: Appointment[]) {
-  writeFileSync(DATA_FILE, JSON.stringify(items, null, 2));
+  writeJSONAtomic(DATA_FILE, items);
 }
 
 export function createAppointment(data: Omit<Appointment, "id" | "createdAt">): Appointment {

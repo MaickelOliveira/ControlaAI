@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { VehicleExpenseType } from "./vehicles";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
@@ -183,7 +184,7 @@ function load(): Store {
 }
 
 function save(store: Store) {
-  try { writeFileSync(FILE, JSON.stringify(store, null, 2)); }
+  try { writeJSONAtomic(FILE, store); }
   catch (err) { console.error("[pending-actions] falha ao gravar pending.json:", err); }
 }
 

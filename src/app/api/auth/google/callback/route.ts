@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCode } from "@/lib/google-oauth";
+import { exchangeCode, resolveState } from "@/lib/google-oauth";
 import { getConfig } from "@/lib/whatsapp-config";
 
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
   const code = searchParams.get("code");
-  const userId = searchParams.get("state");
+  const userId = resolveState(searchParams.get("state"));
   const error = searchParams.get("error");
 
   const cfg = getConfig();

@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -44,7 +45,7 @@ function load(): User[] {
 }
 
 function save(users: User[]) {
-  writeFileSync(FILE, JSON.stringify(users, null, 2));
+  writeJSONAtomic(FILE, users);
 }
 
 export function getUsers(): User[] { return load(); }
@@ -106,6 +107,24 @@ export function updateUser(id: string, patch: Partial<Omit<User, "id" | "created
   users[idx] = { ...users[idx], ...patch };
   save(users);
   return users[idx];
+}
+
+/** activatedAt só é setado na PRIMEIRA vez que o cliente vira "active" —
+ *  mesma regra já usada em admin/clientes/[id], reaproveitada aqui pro
+ *  webhook de plataforma de venda (Hotmart/Kiwify/etc.) usar a mesma
+ *  lógica em vez de duplicar. */
+export function activateUser(id: string): User | null {
+  const user = getUserById(id);
+  if (!user) return null;
+  return updateUser(id, { status: "active", ...(user.activatedAt ? {} : { activatedAt: new Date().toISOString() }) });
+}
+
+export function deactivateUser(id: string): User | null {
+  return updateUser(id, { status: "inactive", deactivatedAt: new Date().toISOString() });
+}
+
+export function deleteUser(id: string): void {
+  save(load().filter(u => u.id !== id));
 }
 
 export function createUserByPhone(phone: string, name: string, plan: UserPlan = "personal"): User {

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
-import { getUserById, updateUser, getUsers } from "@/lib/users";
-import { writeFileSync } from "fs";
-import path from "path";
+import { getUserById, updateUser, deleteUser, activateUser, deactivateUser } from "@/lib/users";
 
 type Params = Promise<{ id: string }>;
 
@@ -18,11 +16,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
   if (!user) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
 
   if (action === "activate") {
-    // activatedAt só é setado na PRIMEIRA vez que o cliente vira "active" —
-    // reativações depois de um período inativo não reescrevem o marco original.
-    updateUser(id, { status: "active", ...(user.activatedAt ? {} : { activatedAt: new Date().toISOString() }) });
+    activateUser(id);
   } else if (action === "deactivate") {
-    updateUser(id, { status: "inactive", deactivatedAt: new Date().toISOString() });
+    deactivateUser(id);
   } else if (action === "extend_trial") {
     const days = Number(trialDays) || 14;
     const trialEnd = new Date();
@@ -47,9 +43,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Params }) 
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
-  const users = getUsers().filter(u => u.id !== id);
-  const FILE = path.join(process.cwd(), "data", "users.json");
-  writeFileSync(FILE, JSON.stringify(users, null, 2));
+  deleteUser(id);
 
   return NextResponse.json({ ok: true });
 }

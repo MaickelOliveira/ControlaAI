@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# dados de runtime (usuários reais, senhas com hash, tokens OAuth,
+# credenciais de integração) — nunca deve ir pro controle de versão
+/data/

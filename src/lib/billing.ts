@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import type { User } from "./users";
 
@@ -15,7 +16,7 @@ export function getPlanPrices(): PlanPrices {
 }
 
 export function setPlanPrices(prices: PlanPrices): void {
-  writeFileSync(FILE, JSON.stringify(prices, null, 2));
+  writeJSONAtomic(FILE, prices);
 }
 
 /** Preço mensal de um cliente: usa o valor negociado (priceOverride) se

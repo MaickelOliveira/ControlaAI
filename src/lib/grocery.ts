@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -60,7 +61,7 @@ function load(): GroceryData {
     return JSON.parse(readFileSync(FILE, "utf-8"));
   } catch { return { stores: [], purchases: [], shoppingList: [] }; }
 }
-function save(d: GroceryData) { writeFileSync(FILE, JSON.stringify(d, null, 2)); }
+function save(d: GroceryData) { writeJSONAtomic(FILE, d); }
 
 // ── Stores ──────────────────────────────
 export function getStoresByUser(userId: string): GroceryStore[] {

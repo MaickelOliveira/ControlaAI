@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { writeJSONAtomic } from "./json-store";
 import path from "path";
 import { randomUUID } from "crypto";
 import { addFinance } from "./finances";
@@ -43,7 +44,7 @@ function load(): RecurringTransaction[] {
 }
 
 function save(data: RecurringTransaction[]) {
-  try { writeFileSync(FILE, JSON.stringify(data, null, 2)); } catch {}
+  try { writeJSONAtomic(FILE, data); } catch {}
 }
 
 function todaySP(): string {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { getAdminSession as getSession } from "@/lib/auth";
 import { getConfig, saveConfig, type WhatsAppConfig } from "@/lib/whatsapp-config";
 import { checkConnection, getQrCode } from "@/lib/whatsapp";
@@ -27,6 +28,7 @@ export async function GET() {
       phoneNumberId: cfg.waba?.phoneNumberId ?? "",
       accessToken: cfg.waba?.accessToken ? "••••••••" : "",
       verifyToken: cfg.waba?.verifyToken ?? "",
+      appSecret: cfg.waba?.appSecret ? "••••••••" : "",
     },
     geminiApiKey: cfg.geminiApiKey ? "••••••••" : "",
     hasGemini: !!cfg.geminiApiKey,
@@ -58,6 +60,7 @@ export async function PUT(req: NextRequest) {
       phoneNumberId: body.waba?.phoneNumberId ?? current.waba?.phoneNumberId,
       accessToken: !isMasked(body.waba?.accessToken) && body.waba?.accessToken ? body.waba.accessToken : current.waba?.accessToken,
       verifyToken: body.waba?.verifyToken ?? current.waba?.verifyToken,
+      appSecret: !isMasked(body.waba?.appSecret) && body.waba?.appSecret ? body.waba.appSecret : current.waba?.appSecret,
     },
     geminiApiKey: !isMasked(body.geminiApiKey) && body.geminiApiKey ? body.geminiApiKey : current.geminiApiKey,
     appBaseUrl: body.appBaseUrl ?? current.appBaseUrl,
@@ -78,13 +81,18 @@ export async function POST(req: NextRequest) {
   const cfg = getConfig();
 
   if (action === "connect") {
-    // Evolution: cria/reinicia a instância e devolve o QR pra escanear.
-    const webhookUrl = `${cfg.appBaseUrl?.replace(/\/$/, "") || ""}/api/webhook/evolution`;
+    // Evolution não assina as requisições que manda pro nosso webhook (ao
+    // contrário da Meta) — a única forma de validar que a chamada realmente
+    // veio da nossa instância é embutir um segredo próprio na URL que a
+    // gente mesmo registra aqui, e conferir esse segredo no webhook.
+    const webhookSecret = cfg.evolution?.webhookSecret || randomBytes(24).toString("hex");
+    const webhookUrl = `${cfg.appBaseUrl?.replace(/\/$/, "") || ""}/api/webhook/evolution?secret=${webhookSecret}`;
     const result = await createOrRestartInstance(webhookUrl);
     if (!result) return NextResponse.json({ error: "Falha ao conectar. Verifique servidor e admin key." }, { status: 500 });
-    if (result.apiKey) {
-      saveConfig({ ...cfg, evolution: { ...cfg.evolution, instanceApiKey: result.apiKey } });
-    }
+    saveConfig({
+      ...cfg,
+      evolution: { ...cfg.evolution, webhookSecret, ...(result.apiKey ? { instanceApiKey: result.apiKey } : {}) },
+    });
     return NextResponse.json({ ok: true, qr: result.qrBase64 });
   }
 

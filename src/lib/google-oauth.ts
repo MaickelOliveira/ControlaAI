@@ -1,7 +1,10 @@
 import { google } from "googleapis";
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { randomUUID } from "crypto";
 import path from "path";
 import { getConfig } from "./whatsapp-config";
+import { encryptField, decryptField } from "./crypto-store";
+import { writeJSONAtomic } from "./json-store";
 
 const TOKEN_FILE = path.join(process.cwd(), "data", "google-tokens.json");
 
@@ -18,12 +21,41 @@ type TokenStore = Record<string, TokenEntry>;
 function loadStore(): TokenStore {
   try {
     if (!existsSync(TOKEN_FILE)) return {};
-    return JSON.parse(readFileSync(TOKEN_FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync(TOKEN_FILE, "utf-8")) as TokenStore;
+    const out: TokenStore = {};
+    for (const userId of Object.keys(raw)) {
+      out[userId] = { ...raw[userId], accessToken: decryptField(raw[userId].accessToken)!, refreshToken: decryptField(raw[userId].refreshToken)! };
+    }
+    return out;
   } catch { return {}; }
 }
 
 function saveStore(store: TokenStore) {
-  writeFileSync(TOKEN_FILE, JSON.stringify(store, null, 2));
+  const out: TokenStore = {};
+  for (const userId of Object.keys(store)) {
+    out[userId] = { ...store[userId], accessToken: encryptField(store[userId].accessToken)!, refreshToken: encryptField(store[userId].refreshToken)! };
+  }
+  writeJSONAtomic(TOKEN_FILE, out);
+}
+
+/** state=userId direto (sem nonce) deixava o callback confiar em qualquer
+ *  valor que chegasse por query string — um atacante podia forjar uma
+ *  chamada ao callback com state=<userId de outra pessoa> e o próprio code
+ *  de autorização dele, linkando a AGENDA DELE à conta da vítima (CSRF de
+ *  vinculação de conta). O state agora é um nonce aleatório de uso único,
+ *  emitido só quando getAuthUrl roda pra uma sessão já autenticada
+ *  (api/google/connect), e resolvido de volta pro userId no callback —
+ *  nunca aceita um userId vindo direto da query string. */
+type PendingState = { userId: string; expiresAt: number };
+const pendingStates = new Map<string, PendingState>();
+const STATE_TTL_MS = 10 * 60_000;
+
+export function resolveState(state: string | null): string | null {
+  if (!state) return null;
+  const entry = pendingStates.get(state);
+  pendingStates.delete(state); // uso único, vale mesmo se expirado
+  if (!entry || Date.now() > entry.expiresAt) return null;
+  return entry.userId;
 }
 
 export function getAuthClient() {
@@ -40,11 +72,13 @@ export function getAuthClient() {
 
 export function getAuthUrl(userId: string): string {
   const client = getAuthClient();
+  const state = randomUUID();
+  pendingStates.set(state, { userId, expiresAt: Date.now() + STATE_TTL_MS });
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: SCOPES,
-    state: userId,
+    state,
   });
 }
 

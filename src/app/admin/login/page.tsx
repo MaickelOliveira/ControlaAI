@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@controlaai.app");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -56,9 +56,6 @@ export default function AdminLoginPage() {
               {loading ? "Entrando..." : "Acessar painel"}
             </button>
           </form>
-          <p className="text-xs text-slate-600 text-center mt-4">
-            Acesso padrão: admin@controlaai.app / admin123
-          </p>
         </div>
       </div>
     </div>

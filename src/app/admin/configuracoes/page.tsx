@@ -4,13 +4,28 @@ import { useState } from "react";
 export default function AdminConfigPage() {
   const [form, setForm] = useState({ email: "", currentPassword: "", newPassword: "", confirmPassword: "" });
   const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function saveAdmin(e: React.FormEvent) {
     e.preventDefault();
     if (form.newPassword !== form.confirmPassword) { setMsg("Senhas não conferem"); return; }
-    // TODO: endpoint para alterar credenciais admin
-    setMsg("Configurações salvas! (em breve)");
-    setTimeout(() => setMsg(""), 3000);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email, currentPassword: form.currentPassword, newPassword: form.newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMsg(data.error || "Erro ao salvar"); return; }
+      setMsg("Senha alterada com sucesso!");
+      setForm({ email: "", currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch {
+      setMsg("Erro de conexão");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setMsg(""), 4000);
+    }
   }
 
   return (
@@ -37,21 +52,11 @@ export default function AdminConfigPage() {
                 className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
             </div>
           ))}
-          {msg && <p className="text-amber-400 text-sm">{msg}</p>}
-          <button type="submit" className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl py-2.5 text-sm transition">
-            Salvar
+          {msg && <p className="text-amber-600 text-sm">{msg}</p>}
+          <button type="submit" disabled={saving} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
+            {saving ? "Salvando..." : "Salvar"}
           </button>
         </form>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-2">ℹ️ Acesso Padrão</h2>
-        <p className="text-slate-400 text-sm">Enquanto não alterar, use:</p>
-        <div className="mt-2 bg-slate-100 rounded-xl p-3 font-mono text-xs text-slate-600">
-          <p>Email: admin@controlaai.app</p>
-          <p>Senha: admin123</p>
-        </div>
-        <p className="text-amber-400 text-xs mt-2">⚠️ Altere antes de ir para produção!</p>
       </div>
     </div>
   );
