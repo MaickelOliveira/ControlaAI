@@ -1,25 +1,25 @@
 import { getSupabase } from "./supabase";
+import { createHash } from "crypto";
 
-/** Limitador de tentativas por janela de tempo (login, cadastro, código de
- *  vinculação de WhatsApp) — sem isso, nada impede força bruta contra uma
- *  conta específica ou criação abusiva de contas trial. Read-then-write
- *  (não uma única UPDATE atômica): sob concorrência muito alta na MESMA
- *  chave, duas requisições podem ler a mesma contagem e ambas passarem —
- *  aceitável aqui porque o objetivo é dificultar automação, não ser um
- *  torniquete perfeito (mesmo trade-off já usado em markReminderFailed). */
+/** O banco só recebe o hash da chave, evitando persistir e-mails/IPs em texto
+ *  claro na tabela operacional de rate limit. */
+function hashKey(key: string): string {
+  return `sha256:${createHash("sha256").update(key).digest("hex")}`;
+}
+
+/** Incremento e decisão acontecem atomicamente no Postgres. Em caso de erro,
+ *  falha fechado: autenticação/ações sensíveis não ficam sem proteção porque
+ *  o limitador está indisponível. */
 export async function checkRateLimit(key: string, max: number, windowMs: number): Promise<boolean> {
   const supabase = getSupabase();
-  const now = Date.now();
-  const { data } = await supabase.from("rate_limits").select("count, window_start").eq("key", key).maybeSingle();
-  const row = data as { count: number; window_start: string } | null;
-
-  if (!row || now - new Date(row.window_start).getTime() > windowMs) {
-    await supabase.from("rate_limits").upsert({ key, count: 1, window_start: new Date(now).toISOString() });
-    return true;
+  const { data, error } = await supabase.rpc("check_rate_limit", {
+    p_key: hashKey(key),
+    p_max: max,
+    p_window_ms: windowMs,
+  });
+  if (error) {
+    console.error("Rate limit indisponível:", error.message);
+    return false;
   }
-
-  if (row.count >= max) return false;
-
-  await supabase.from("rate_limits").update({ count: row.count + 1 }).eq("key", key);
-  return true;
+  return data === true;
 }

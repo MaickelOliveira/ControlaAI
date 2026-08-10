@@ -42,7 +42,7 @@ export default function CadastroPage() {
           {[
             { label: "Nome completo", key: "name", type: "text", placeholder: "João Silva" },
             { label: "Email", key: "email", type: "email", placeholder: "joao@email.com" },
-            { label: "Senha", key: "password", type: "password", placeholder: "Mínimo 6 caracteres" },
+            { label: "Senha", key: "password", type: "password", placeholder: "Mínimo 10 caracteres" },
             { label: "WhatsApp (com DDD)", key: "phone", type: "tel", placeholder: "44999999999" },
           ].map(f => (
             <div key={f.key}>
@@ -50,6 +50,7 @@ export default function CadastroPage() {
               <input
                 type={f.type} value={(form as Record<string,string>)[f.key]}
                 onChange={set(f.key)} required
+                minLength={f.key === "password" ? 10 : undefined}
                 placeholder={f.placeholder}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />

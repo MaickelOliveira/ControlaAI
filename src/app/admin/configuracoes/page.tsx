@@ -48,6 +48,7 @@ export default function AdminConfigPage() {
               <label className="block text-xs text-slate-400 mb-1">{f.label}</label>
               <input type={f.type} value={(form as Record<string,string>)[f.key]}
                 onChange={e => setForm(fr => ({ ...fr, [f.key]: e.target.value }))}
+                required minLength={f.key === "newPassword" || f.key === "confirmPassword" ? 12 : undefined}
                 placeholder={f.placeholder}
                 className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
             </div>
