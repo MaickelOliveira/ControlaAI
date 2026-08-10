@@ -56,13 +56,15 @@ export async function register() {
         try {
           const recurringModule = await import("./lib/recurring").catch(() => null);
           const usersModule = await import("./lib/users").catch(() => null);
+          const phoneLinksModule = await import("./lib/wpp-phone-links").catch(() => null);
           const pendingModule = await import("./lib/pending-actions").catch(() => null);
           const repliesModule = await import("./lib/bot-replies").catch(() => null);
           const financesModule = await import("./lib/finances").catch(() => null);
-          if (!recurringModule || !usersModule || !pendingModule || !repliesModule || !financesModule) return;
+          if (!recurringModule || !usersModule || !phoneLinksModule || !pendingModule || !repliesModule || !financesModule) return;
 
           const { getRecurringDueToday, markNotified } = recurringModule;
-          const { getUserById, getWppPhones } = usersModule;
+          const { getUserById } = usersModule;
+          const { getPhonesForUser } = phoneLinksModule;
           const { setPendingAction } = pendingModule;
           const { buildRecurringNotification } = repliesModule;
           const { formatCurrency } = financesModule;
@@ -74,7 +76,7 @@ export async function register() {
             try {
               const user = await getUserById(rec.userId);
               if (!user) continue;
-              const phones = getWppPhones(user);
+              const phones = (await getPhonesForUser(user.id)).map(link => link.phone);
               const msg = buildRecurringNotification(rec);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
               const params = { descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
@@ -105,11 +107,13 @@ export async function register() {
       try {
         const agendaModule = await import("./lib/agenda").catch(() => null);
         const usersModule = await import("./lib/users").catch(() => null);
+        const phoneLinksModule = await import("./lib/wpp-phone-links").catch(() => null);
         const pendingModule = await import("./lib/pending-actions").catch(() => null);
         const repliesModule = await import("./lib/bot-replies").catch(() => null);
-        if (agendaModule && usersModule && pendingModule && repliesModule) {
+        if (agendaModule && usersModule && phoneLinksModule && pendingModule && repliesModule) {
           const { getAppointmentsWithEndedMeet, updateAppointment } = agendaModule;
-          const { getUserById, getWppPhones } = usersModule;
+          const { getUserById } = usersModule;
+          const { getPhonesForUser } = phoneLinksModule;
           const { setPendingAction } = pendingModule;
           const { replyMeetAtaRequest } = repliesModule;
           const ended = await getAppointmentsWithEndedMeet();
@@ -117,7 +121,7 @@ export async function register() {
             try {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser) continue;
-              const phones = getWppPhones(aptUser);
+              const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
               for (const phone of phones) {
                 const ok = await sendText(phone, replyMeetAtaRequest(apt.title));
                 if (ok) {
@@ -143,11 +147,13 @@ export async function register() {
       try {
         const agendaModule = await import("./lib/agenda").catch(() => null);
         const usersModule = await import("./lib/users").catch(() => null);
+        const phoneLinksModule = await import("./lib/wpp-phone-links").catch(() => null);
         const repliesModule = await import("./lib/bot-replies").catch(() => null);
         const dateBrModule = await import("./lib/date-br").catch(() => null);
-        if (agendaModule && usersModule && repliesModule && dateBrModule) {
+        if (agendaModule && usersModule && phoneLinksModule && repliesModule && dateBrModule) {
           const { getAppointmentsNeedingReminder, updateAppointment } = agendaModule;
-          const { getUserById, getWppPhones } = usersModule;
+          const { getUserById } = usersModule;
+          const { getPhonesForUser } = phoneLinksModule;
           const { replyAppointmentReminder } = repliesModule;
           const { formatTimeBR } = dateBrModule;
           const dueSoon = await getAppointmentsNeedingReminder();
@@ -156,7 +162,7 @@ export async function register() {
             try {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser) continue;
-              const phones = getWppPhones(aptUser);
+              const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
               const msg = replyAppointmentReminder(apt);
               const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;

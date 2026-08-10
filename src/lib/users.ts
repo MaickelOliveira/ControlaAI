@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID, randomInt } from "crypto";
 import bcrypt from "bcryptjs";
 import { getSupabase } from "./supabase";
 
@@ -16,11 +16,9 @@ export type User = {
   status: UserStatus;
   activeMode: UserMode;
   company?: string;
-  wppPhone?: string;         // legado — migrado para wppPhones automaticamente
-  wppPhones?: string[];      // lista de números vinculados
-  wppPhoneNames?: Record<string, string>; // nome de quem usa cada número vinculado (para identificar quem registrou cada gasto)
-  wppPhoneRelations?: Record<string, string>; // vínculo com a conta (ex: "Esposa", "Sócio") — usado em perguntas como "quanto minha esposa gastou"
-  wppPhoneAccess?: Record<string, "personal" | "business" | "both">; // modo que a pessoa pode acessar por esse número; ausente = "both" (retrocompatível)
+  // Telefones vinculados: ver wpp-phone-links.ts (tabela própria, com
+  // UNIQUE(phone) — antes eram campos array/objeto aqui, sem garantia de
+  // unicidade global entre contas).
   maxWppPhones?: number;     // limite de números permitidos (default 1)
   wppVerifyCode?: string;    // código temporário de vinculação
   wppVerifyExpires?: string; // expiração do código
@@ -39,8 +37,6 @@ export type User = {
 type Row = {
   id: string; phone: string; name: string; email: string; password_hash: string;
   plan: UserPlan; status: UserStatus; active_mode: UserMode; company: string | null;
-  wpp_phone: string | null; wpp_phones: string[]; wpp_phone_names: Record<string, string>;
-  wpp_phone_relations: Record<string, string>; wpp_phone_access: Record<string, "personal" | "business" | "both">;
   max_wpp_phones: number | null; wpp_verify_code: string | null; wpp_verify_expires: string | null;
   custom_categories_expense: string[]; custom_categories_income: string[];
   price_override: number | null; activated_at: string | null; deactivated_at: string | null;
@@ -51,8 +47,6 @@ function fromRow(r: Row): User {
   return {
     id: r.id, phone: r.phone, name: r.name, email: r.email, passwordHash: r.password_hash,
     plan: r.plan, status: r.status, activeMode: r.active_mode, company: r.company ?? undefined,
-    wppPhone: r.wpp_phone ?? undefined, wppPhones: r.wpp_phones, wppPhoneNames: r.wpp_phone_names,
-    wppPhoneRelations: r.wpp_phone_relations, wppPhoneAccess: r.wpp_phone_access,
     maxWppPhones: r.max_wpp_phones ?? undefined, wppVerifyCode: r.wpp_verify_code ?? undefined,
     wppVerifyExpires: r.wpp_verify_expires ?? undefined, customCategoriesExpense: r.custom_categories_expense,
     customCategoriesIncome: r.custom_categories_income, priceOverride: r.price_override ?? undefined,
@@ -67,8 +61,6 @@ function toRowPatch(patch: Partial<Omit<User, "id" | "createdAt">>): Record<stri
   const map: Record<string, string> = {
     phone: "phone", name: "name", email: "email", passwordHash: "password_hash",
     plan: "plan", status: "status", activeMode: "active_mode", company: "company",
-    wppPhone: "wpp_phone", wppPhones: "wpp_phones", wppPhoneNames: "wpp_phone_names",
-    wppPhoneRelations: "wpp_phone_relations", wppPhoneAccess: "wpp_phone_access",
     maxWppPhones: "max_wpp_phones", wppVerifyCode: "wpp_verify_code", wppVerifyExpires: "wpp_verify_expires",
     customCategoriesExpense: "custom_categories_expense", customCategoriesIncome: "custom_categories_income",
     priceOverride: "price_override", activatedAt: "activated_at", deactivatedAt: "deactivated_at",
@@ -187,97 +179,8 @@ export async function createUserByPhone(phone: string, name: string, plan: UserP
   return fromRow(inserted as Row);
 }
 
-/** Retorna os números vinculados, migrando do campo legado wppPhone se necessário */
-export function getWppPhones(user: User): string[] {
-  if (user.wppPhones && user.wppPhones.length > 0) return user.wppPhones;
-  if (user.wppPhone) return [user.wppPhone];
-  return [];
-}
-
 export function getMaxWppPhones(user: User): number {
   return user.maxWppPhones ?? 1;
-}
-
-export async function addWppPhone(userId: string, phone: string): Promise<User | null> {
-  const user = await getUserById(userId);
-  if (!user) return null;
-  const current = getWppPhones(user);
-  if (!current.includes(phone)) current.push(phone);
-  return updateUser(userId, { wppPhones: current, wppPhone: undefined });
-}
-
-export async function removeWppPhone(userId: string, phone: string): Promise<User | null> {
-  const user = await getUserById(userId);
-  if (!user) return null;
-  const current = getWppPhones(user).filter(p => p !== phone);
-  const names = { ...(user.wppPhoneNames ?? {}) };
-  delete names[phone];
-  return updateUser(userId, { wppPhones: current, wppPhone: undefined, wppPhoneNames: names });
-}
-
-/** Define o nome de quem usa um número vinculado (ex: "Ana", "Gabriel") */
-export async function setWppPhoneName(userId: string, phone: string, name: string): Promise<User | null> {
-  const user = await getUserById(userId);
-  if (!user) return null;
-  const names = { ...(user.wppPhoneNames ?? {}), [phone]: name.trim() };
-  return updateUser(userId, { wppPhoneNames: names });
-}
-
-/** Retorna o nome cadastrado para o número, se houver */
-export function getWppPhoneName(user: User, phone: string): string | undefined {
-  return user.wppPhoneNames?.[phone];
-}
-
-/** Acha o número vinculado cujo nome cadastrado combina com o nome informado
- *  (ex: "Ana" -> o número cujo wppPhoneNames[phone] === "Ana") */
-export function getWppPhoneByName(user: User, name: string): string | undefined {
-  const target = normalizeName(name);
-  const entries = Object.entries(user.wppPhoneNames ?? {});
-  const match = entries.find(([, n]) => normalizeName(n) === target);
-  return match?.[0];
-}
-
-/** Define o vínculo de quem usa um número vinculado (ex: "Esposa", "Sócio") */
-export async function setWppPhoneRelation(userId: string, phone: string, relation: string): Promise<User | null> {
-  const user = await getUserById(userId);
-  if (!user) return null;
-  const relations = { ...(user.wppPhoneRelations ?? {}), [phone]: relation.trim() };
-  return updateUser(userId, { wppPhoneRelations: relations });
-}
-
-/** Acha o número vinculado cujo vínculo cadastrado combina com o termo
- *  informado (ex: "esposa" -> o número cujo wppPhoneRelations[phone] === "Esposa") —
- *  usado quando a pergunta cita um vínculo familiar/social em vez de um nome
- *  próprio (ex: "quanto minha esposa gastou"). */
-export function getWppPhoneByRelation(user: User, relation: string): string | undefined {
-  const target = normalizeName(relation);
-  const entries = Object.entries(user.wppPhoneRelations ?? {});
-  const match = entries.find(([, r]) => normalizeName(r) === target);
-  return match?.[0];
-}
-
-/** Define o modo que a pessoa desse número pode acessar */
-export async function setWppPhoneAccess(userId: string, phone: string, access: "personal" | "business" | "both"): Promise<User | null> {
-  const user = await getUserById(userId);
-  if (!user) return null;
-  const accessMap = { ...(user.wppPhoneAccess ?? {}), [phone]: access };
-  return updateUser(userId, { wppPhoneAccess: accessMap });
-}
-
-/** Modo que a pessoa desse número pode acessar — "both" se nunca foi definido
- *  (retrocompatível: números vinculados antes dessa feature não ficam travados). */
-export function getWppPhoneAccess(user: User, phone: string): "personal" | "business" | "both" {
-  return user.wppPhoneAccess?.[phone] ?? "both";
-}
-
-const DIACRITICS_REGEX = /[̀-ͯ]/g;
-
-function normalizeName(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(DIACRITICS_REGEX, "")
-    .trim()
-    .toLowerCase();
 }
 
 export async function generateWppVerifyCode(userId: string): Promise<string> {
@@ -285,8 +188,11 @@ export async function generateWppVerifyCode(userId: string): Promise<string> {
   // Sorteia até achar um código sem dono com vinculação ainda válida — sem
   // isso, dois clientes pedindo código na mesma janela de 10min podiam
   // colidir e travar a busca por código (mais de uma linha bate).
+  // crypto.randomInt (não Math.random) — o código de vinculação é
+  // efetivamente uma senha temporária de posse da conta; Math.random não é
+  // adequado pra nada com implicação de segurança.
   for (let attempt = 0; attempt < 20; attempt++) {
-    const code = String(Math.floor(1000 + Math.random() * 9000)); // 4 dígitos
+    const code = String(randomInt(1000, 10000)); // 4 dígitos
     const holder = await getUserByWppCode(code);
     if (holder && holder.id !== userId) continue;
     await updateUser(userId, { wppVerifyCode: code, wppVerifyExpires: expires });

@@ -85,7 +85,7 @@ export type PendingWppName = {
 };
 
 /** Coleta nome, vínculo e modo permitido ANTES de vincular o número de fato
- *  (addWppPhone só roda depois que os 3 passos terminam) — substitui o fluxo
+ *  (linkPhone só roda depois que os 3 passos terminam) — substitui o fluxo
  *  antigo de vincular na hora e perguntar o nome depois. */
 export type PendingWppLinkInfo = {
   type: "awaiting_wpp_link_info";

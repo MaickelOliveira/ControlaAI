@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isTrialExpired, hasAccess, getWppPhones, getMaxWppPhones, type User } from "./users";
+import { isTrialExpired, hasAccess, getMaxWppPhones, type User } from "./users";
 
 function makeUser(overrides: Partial<User> = {}): User {
   return {
@@ -47,23 +47,6 @@ describe("hasAccess", () => {
   it("grants access to a user still mid-trial", () => {
     const user = makeUser({ status: "trial", trialEndsAt: new Date(Date.now() + 86_400_000).toISOString() });
     expect(hasAccess(user)).toBe(true);
-  });
-});
-
-describe("getWppPhones", () => {
-  it("returns wppPhones when present", () => {
-    const user = makeUser({ wppPhones: ["5511987654321", "5511912345678"] });
-    expect(getWppPhones(user)).toEqual(["5511987654321", "5511912345678"]);
-  });
-
-  it("falls back to the legacy wppPhone field", () => {
-    const user = makeUser({ wppPhones: undefined, wppPhone: "5511987654321" });
-    expect(getWppPhones(user)).toEqual(["5511987654321"]);
-  });
-
-  it("returns an empty array when no phone is linked", () => {
-    const user = makeUser({ wppPhones: undefined, wppPhone: undefined });
-    expect(getWppPhones(user)).toEqual([]);
   });
 });
 

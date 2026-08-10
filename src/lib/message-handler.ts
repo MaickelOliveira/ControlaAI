@@ -1,4 +1,6 @@
-import { getUsers, updateUser, hasAccess, getUserByWppCode, addWppPhone, getWppPhones, setWppPhoneName, getWppPhoneByName, setWppPhoneRelation, getWppPhoneByRelation, setWppPhoneAccess, getWppPhoneAccess } from "@/lib/users";
+import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones } from "@/lib/users";
+import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser } from "@/lib/wpp-phone-links";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
@@ -45,8 +47,8 @@ export function phoneMatches(stored: string, incoming: string): boolean {
 }
 
 async function getUserByWppPhone(phone: string) {
-  const users = await getUsers();
-  return users.find(u => getWppPhones(u).some(p => phoneMatches(p, phone))) ?? null;
+  const userId = await getUserIdByPhone(phone);
+  return userId ? getUserById(userId) : null;
 }
 
 function cap(s: string): string {
@@ -244,12 +246,22 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // ── Verifica se é um código de vinculação (4 dígitos) ──
     // Não vincula na hora — primeiro coleta nome, vínculo com a conta e o
     // modo que a pessoa pode acessar (awaiting_wpp_link_info), só então
-    // chama addWppPhone. Precisa ficar ANTES de identificar o usuário pelo
+    // chama linkPhone. Precisa ficar ANTES de identificar o usuário pelo
     // telefone (abaixo), porque o número ainda não está vinculado aqui.
     const codeMatch = messageText.trim().match(/^(\d{4})$/);
     if (codeMatch) {
+      const allowed = await checkRateLimit(`wpp-code:${from}`, 10, 10 * 60_000);
+      if (!allowed) {
+        await wppSend(from, "⏳ Muitas tentativas de código. Aguarde 10 minutos e tente novamente.");
+        return;
+      }
       const codeUser = await getUserByWppCode(codeMatch[1]);
       if (codeUser) {
+        const linkedCount = await countPhonesForUser(codeUser.id);
+        if (linkedCount >= getMaxWppPhones(codeUser)) {
+          await wppSend(from, `❌ Esta conta já atingiu o limite de ${getMaxWppPhones(codeUser)} número(s) vinculado(s).`);
+          return;
+        }
         await updateUser(codeUser.id, { wppVerifyCode: undefined, wppVerifyExpires: undefined });
         await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: codeUser.id, step: "name" });
         await wppSend(from, `✅ Código confirmado!\n\nAntes de vincular, preciso saber quem vai usar esse número.\n\nComo posso te chamar?`);
@@ -286,10 +298,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         await clearPendingAction(from);
         const linkName = linkPending.name || "Sem nome";
         const linkRelation = linkPending.relation || "Outro";
-        await addWppPhone(linkPending.userId, from);
-        await setWppPhoneName(linkPending.userId, from, linkName);
-        await setWppPhoneRelation(linkPending.userId, from, linkRelation);
-        await setWppPhoneAccess(linkPending.userId, from, access);
+        const linkResult = await linkPhone(linkPending.userId, from);
+        if (linkResult === "already_linked_elsewhere") {
+          await wppSend(from, "❌ Este número já está vinculado a outra conta. Desvincule-o antes de tentar novamente.");
+          return;
+        }
+        await setPhoneName(linkPending.userId, from, linkName);
+        await setPhoneRelation(linkPending.userId, from, linkRelation);
+        await setPhoneAccess(linkPending.userId, from, access);
         const accessLabel = access === "personal" ? "modo pessoal" : access === "business" ? "modo empresarial" : "os dois modos";
         await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*\n\n${linkName} (${linkRelation}) já pode usar o Zelo por aqui, com acesso a ${accessLabel}.`);
         return;
@@ -314,7 +330,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // independente do toggle global da conta. Quem tem acesso aos dois ("both",
     // ou números vinculados antes dessa feature) continua usando o toggle
     // compartilhado de sempre.
-    const phoneAccess = getWppPhoneAccess(user, from);
+    const phoneAccess = await getPhoneAccess(user.id, from);
     const mode: "personal" | "business" = phoneAccess === "both" ? user.activeMode : phoneAccess;
     const now = nowBR(); // horário de Brasília/São Paulo
     const year = now.getFullYear();
@@ -324,7 +340,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const nameCmdMatch = messageText.trim().match(/^(?:meu nome (?:é|e)|me chamo)\s+(.{2,40})$/i);
     if (nameCmdMatch) {
       const name = cap(nameCmdMatch[1].trim());
-      await setWppPhoneName(user.id, from, name);
+      await setPhoneName(user.id, from, name);
       await wppSend(from, replyWppNameSaved(name));
       return;
     }
@@ -335,7 +351,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const relationCmdMatch = messageText.trim().match(/^meu v[íi]nculo (?:é|e)\s+(.{2,30})$/i);
     if (relationCmdMatch) {
       const relation = cap(relationCmdMatch[1].trim());
-      await setWppPhoneRelation(user.id, from, relation);
+      await setPhoneRelation(user.id, from, relation);
       await wppSend(from, `Combinado, você é *${relation}* nessa conta. 👍`);
       return;
     }
@@ -973,7 +989,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
 
         if (ai.personName) {
-          const personPhone = getWppPhoneByName(user, ai.personName) ?? getWppPhoneByRelation(user, ai.personName);
+          const personPhone = (await findPhoneByName(user.id, ai.personName)) ?? (await findPhoneByRelation(user.id, ai.personName));
           if (!personPhone) {
             await wppSend(from, replyPersonNotFound(ai.personName));
             break;
