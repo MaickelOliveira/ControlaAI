@@ -51,6 +51,7 @@ export type Intent =
   | "grocery_list_generate"
   | "grocery_price_compare"
   | "grocery_store_ranking"
+  | "grocery_history_query"
   | "grocery_spend_query"
   | "employee_create"
   | "employee_list"
@@ -180,6 +181,13 @@ export type GroceryData = {
   total?: number;
   /** grocery_price_compare: produto específico perguntado (ex: "detergente") */
   productName?: string;
+  /** grocery_history_query: categoria perguntada (ex: "quais carnes comprei")
+   *  — nome de categoria de verdade (uma de GROCERY_CATEGORIES), diferente
+   *  de "categories" acima (que são chaves de template) */
+  category?: string;
+  /** grocery_history_query: período perguntado, mesmo padrão de FinanceData.period
+   *  — SEMPRE usar os valores pré-calculados do início da mensagem, nunca calcular */
+  period?: { from?: string; to?: string };
 };
 
 export type EmployeeData = {
@@ -372,7 +380,8 @@ INTENÇÕES POSSÍVEIS:
 - grocery_list_generate: gerar/sugerir uma lista de compras básica ("gera uma lista de carnes e verduras pro dia a dia", "monta uma lista básica de mercearia pra mim", "sugere o que comprar"). Use "grocery.categories" com as chaves mencionadas (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) — se nenhuma categoria for citada, deixe vazio (gera de todas).
 - grocery_price_compare: perguntar o preço de UM produto específico entre os mercados que a pessoa já comprou ("quanto pago no detergente", "onde o leite tá mais barato", "qual o preço do arroz nos mercados que comprei"). Use "grocery.productName" com o nome do produto perguntado. ⚠️ DIFERENTE de grocery_spend_query: aqui é sobre o PREÇO de um item específico comparado entre lojas, não sobre gasto total/mercado favorito.
 - grocery_store_ranking: perguntar qual mercado é mais barato NO GERAL, considerando os itens comprados em comum entre eles ("qual mercado é mais barato pra mim", "onde compensa mais eu comprar", "ranking dos mercados que eu compro")
-- grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito de mercado ("quanto gastei no mercado esse mês", "qual mercado eu gasto mais", "quantas vezes fui no Assaí")
+- grocery_history_query: listar as COMPRAS de mercado de fato (itens + valor), opcionalmente filtrado por categoria e/ou período ("o que comprei no mercado esse mês", "qual carne comprei semana passada", "minhas compras de mercado", "resumo das compras do mês", "o que comprei de limpeza esse mês"). ⚠️ DIFERENTE de grocery_spend_query (que só dá o total por mercado, sem listar item) e de grocery_price_compare (preço de 1 item específico entre lojas) — aqui é "o que eu comprei", com os itens de verdade. Se mencionar uma categoria (carne, limpeza, bebida, etc.), inclua "grocery.category" com uma das categorias válidas (Carnes, Mercearia, Hortifruti, Laticínios, Padaria, Bebidas, Limpeza, Higiene, Outros). Se mencionar um período diferente do mês atual ("semana passada", "mês passado"), inclua "grocery.period" com os valores pré-calculados do início da mensagem (mesma regra de finance_query — NUNCA calcule a data por conta própria).
+- grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito de mercado, SEM listar os itens comprados ("quanto gastei no mercado esse mês", "qual mercado eu gasto mais", "quantas vezes fui no Assaí")
 - employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
@@ -881,6 +890,20 @@ OU para ranking de mercado mais barato ("qual mercado é mais barato pra mim"):
 {
   "intent": "grocery_store_ranking",
   "confidence": 0.85
+}
+
+OU para listar compras por categoria ("qual carne comprei semana passada" — valores de "period" ilustrativos, sempre usar os pré-calculados de verdade):
+{
+  "intent": "grocery_history_query",
+  "confidence": 0.9,
+  "grocery": { "category": "Carnes", "period": { "from": "2026-08-04", "to": "2026-08-10" } }
+}
+
+OU para listar todas as compras do mês, sem filtro ("o que comprei no mercado esse mês"):
+{
+  "intent": "grocery_history_query",
+  "confidence": 0.9,
+  "grocery": {}
 }
 
 OU para cadastrar funcionário ("cadastra a Ana como vendedora, salário 2000"):

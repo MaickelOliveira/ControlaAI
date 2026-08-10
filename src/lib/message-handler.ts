@@ -12,7 +12,7 @@ import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTota
 import {
   addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore,
   findOrCreateStore, addPurchase, setPurchaseFinanceId, getPriceComparison, getStorePriceRanking,
-  getSuggestedListItems, categoryForTemplateKey,
+  getSuggestedListItems, categoryForTemplateKey, getPurchasesInRange,
   type GroceryPurchaseItem, type GroceryCategory,
 } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
@@ -1517,6 +1517,42 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           });
           await wppSend(from, msg.trim());
         }
+        break;
+      }
+
+      case "grocery_history_query": {
+        const categoryFilter = ai.grocery?.category as GroceryCategory | undefined;
+        const [defFrom, defTo] = monthBounds(year, month);
+        const histFrom = ai.grocery?.period?.from || defFrom;
+        const histTo = ai.grocery?.period?.to || defTo;
+        const histPurchases = await getPurchasesInRange(user.id, histFrom, histTo, categoryFilter);
+
+        if (!histPurchases.length) {
+          await wppSend(from, categoryFilter
+            ? `❓ Não achei compras de *${categoryFilter}* nesse período.`
+            : `❓ Nenhuma compra de mercado registrada nesse período.`);
+          break;
+        }
+
+        const byStore = new Map<string, { total: number; items: typeof histPurchases[0]["items"] }>();
+        for (const p of histPurchases) {
+          const cur = byStore.get(p.storeName) ?? { total: 0, items: [] };
+          cur.total += p.total;
+          cur.items.push(...p.items);
+          byStore.set(p.storeName, cur);
+        }
+        const stores = Array.from(byStore.entries()).sort((a, b) => b[1].total - a[1].total);
+        const grandTotal = stores.reduce((s, [, v]) => s + v.total, 0);
+
+        let msg = `📋 *Suas compras${categoryFilter ? ` de ${categoryFilter}` : ""} — ${periodLabelFor(ai.grocery?.period, now)}:*\n\n`;
+        for (const [storeName, v] of stores) {
+          msg += `🏪 *${storeName}* — ${formatCurrency(v.total)}\n`;
+          v.items.forEach(i => { msg += `   • ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity}\n`; });
+          msg += "\n";
+        }
+        msg += `💰 *Total geral: ${formatCurrency(grandTotal)}*`;
+        if (stores.length > 1) msg += `\n🏆 Mercado que mais comprou: ${stores[0][0]}`;
+        await wppSend(from, msg.trim());
         break;
       }
 

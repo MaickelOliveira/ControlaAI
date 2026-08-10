@@ -194,6 +194,27 @@ export async function getPurchasesByUser(userId: string, limit = 100): Promise<G
   }));
 }
 
+/** Compras num período (opcional) e/ou categoria (opcional) — base de
+ *  "o que comprei esse mês", "qual carne comprei semana passada". Filtra em
+ *  memória sobre getPurchasesByUser (histórico por usuário é pequeno, não
+ *  compensa query SQL dedicada). Quando `category` é passado, cada compra
+ *  retorna só os itens daquela categoria e o `total` vira a soma SÓ desses
+ *  itens (não o total da compra inteira) — deixa claro que é um subtotal
+ *  filtrado, não o valor pago de fato naquela compra. */
+export async function getPurchasesInRange(
+  userId: string, from?: string, to?: string, category?: GroceryCategory
+): Promise<GroceryPurchase[]> {
+  const all = await getPurchasesByUser(userId, 500);
+  return all
+    .filter(p => (!from || p.date >= from) && (!to || p.date <= to))
+    .map(p => {
+      if (!category) return p;
+      const items = p.items.filter(i => i.category === category);
+      return { ...p, items, total: items.reduce((s, i) => s + i.price * i.quantity, 0) };
+    })
+    .filter(p => !category || p.items.length > 0);
+}
+
 /** Único ponto de gravação de itens de compra — cada item passa por
  *  findOrCreateProduct antes de inserir, então tanto o fluxo de foto quanto
  *  o de texto (slot-filling) ganham cadastro automático de catálogo sem
@@ -360,7 +381,17 @@ export async function getCheckedShoppingItems(userId: string): Promise<ShoppingL
   return (data as ListRow[]).map(listItemFromRow);
 }
 
+/** Se o item (mesmo nome, ignorando maiúsculas/acentos não tratados aqui —
+ *  só case-insensitive mesmo) já está na lista SEM estar marcado, não
+ *  duplica — só devolve o que já existe. Marcado não conta (a pessoa já
+ *  comprou aquele e quer comprar de novo, faz sentido ter um novo). Sem
+ *  isso, pedir a mesma lista sugerida ou o mesmo template duas vezes
+ *  duplicava cada item. */
 export async function addToShoppingList(userId: string, name: string, category: GroceryCategory, quantity = "1"): Promise<ShoppingListItem> {
+  const { data: existing } = await getSupabase().from("grocery_shopping_list_items")
+    .select("*").eq("user_id", userId).eq("checked", false).ilike("name", name).maybeSingle();
+  if (existing) return listItemFromRow(existing as ListRow);
+
   const { data, error } = await getSupabase().from("grocery_shopping_list_items")
     .insert({ id: randomUUID(), user_id: userId, name, category, quantity, checked: false }).select("*").single();
   if (error) throw new Error(`[grocery] addToShoppingList falhou: ${error.message}`);
