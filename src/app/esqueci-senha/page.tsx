@@ -1,13 +1,26 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<"email" | "code" | "done">("email");
   const [email, setEmail] = useState(""); const [requestId, setRequestId] = useState("");
   const [code, setCode] = useState(""); const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState(""); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const rid = params.get("rid") || "";
+    if (!/^[0-9a-f-]{36}$/i.test(rid)) return;
+    const timer = window.setTimeout(() => {
+      setRequestId(rid);
+      setEmail(params.get("email") || "");
+      setMessage("Digite o código recebido por e-mail e crie sua senha.");
+      setStep("code");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function requestCode(event: React.FormEvent) {
     event.preventDefault(); setError(""); setLoading(true);
