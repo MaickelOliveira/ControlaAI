@@ -70,9 +70,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "finish_from_checked") {
-    const { storeName, total, date } = body;
-    if (!storeName || !total) return NextResponse.json({ error: "storeName e total obrigatórios" }, { status: 400 });
-    const result = await finalizePurchaseFromChecked(session.sub, "personal", storeName, Number(total), session.sub, date || undefined);
+    const { storeName, total, date, itemPrices } = body;
+    if (!storeName || (!total && !itemPrices)) return NextResponse.json({ error: "storeName e total (ou preço por item) obrigatórios" }, { status: 400 });
+    const result = await finalizePurchaseFromChecked(
+      session.sub, "personal", storeName, Number(total) || 0, session.sub, date || undefined, itemPrices || undefined, "web",
+    );
     if (!result) return NextResponse.json({ error: "Nenhum item marcado na lista" }, { status: 400 });
     return NextResponse.json(result.purchase, { status: 201 });
   }

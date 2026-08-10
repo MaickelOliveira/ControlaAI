@@ -399,26 +399,34 @@ export async function addFromTemplate(userId: string, templateKey: string): Prom
   return items.length;
 }
 
-/** Marca os itens já comprados (checked) como uma compra de fato: rateia o
- *  total entre eles (price_estimated: true, já que não veio preço por
- *  item), grava a compra + itens, lança a despesa correspondente em
- *  Finanças, linka os dois e limpa a lista marcada. Resolve a "vagueza"
- *  original — marcar itens na lista sem nunca virar uma compra registrada. */
+/** Marca os itens já comprados (checked) como uma compra de fato: grava a
+ *  compra + itens, lança a despesa correspondente em Finanças, linka os
+ *  dois e limpa a lista marcada. Resolve a "vagueza" original — marcar
+ *  itens na lista sem nunca virar uma compra registrada.
+ *
+ *  Preço: se itemPrices vier (painel, onde dá pra digitar item a item),
+ *  usa o preço real de cada um (price_estimated: false — entra nas
+ *  comparações de preço). Sem itemPrices (WhatsApp, onde só o total é
+ *  perguntado por praticidade), rateia o total entre os itens
+ *  (price_estimated: true — fica de fora das comparações de preço, já que
+ *  não é o valor real de cada produto). */
 export async function finalizePurchaseFromChecked(
-  userId: string, mode: "personal" | "business", storeName: string, total: number, registeredBy: string, date?: string
+  userId: string, mode: "personal" | "business", storeName: string, total: number, registeredBy: string,
+  date?: string, itemPrices?: Record<string, number>, source = "whatsapp_quick"
 ): Promise<{ purchase: GroceryPurchase; financeId: string } | null> {
   const checked = await getCheckedShoppingItems(userId);
   if (!checked.length) return null;
 
   const store = await findOrCreateStore(userId, storeName);
-  const perItem = total / checked.length;
-  const items: GroceryPurchaseItem[] = checked.map(i => ({
-    productName: i.name, category: i.category, price: perItem, quantity: 1, unit: i.quantity, priceEstimated: true,
-  }));
+  const hasRealPrices = !!itemPrices && checked.every(i => typeof itemPrices[i.id] === "number");
+  const items: GroceryPurchaseItem[] = hasRealPrices
+    ? checked.map(i => ({ productName: i.name, category: i.category, price: itemPrices![i.id], quantity: 1, unit: i.quantity, priceEstimated: false }))
+    : checked.map(i => ({ productName: i.name, category: i.category, price: total / checked.length, quantity: 1, unit: i.quantity, priceEstimated: true }));
+  const purchaseTotal = hasRealPrices ? items.reduce((s, i) => s + i.price, 0) : total;
   const purchaseDate = date || new Date().toISOString().slice(0, 10);
 
   const purchase = await addPurchase({
-    userId, storeId: store.id, storeName: store.name, date: purchaseDate, items, total, source: "whatsapp_quick",
+    userId, storeId: store.id, storeName: store.name, date: purchaseDate, items, total: purchaseTotal, source,
   });
 
   const finance = await addFinance({

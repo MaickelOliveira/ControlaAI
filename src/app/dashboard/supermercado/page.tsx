@@ -53,7 +53,8 @@ export default function SupermercadoPage() {
   const [showAddPurchase, setShowAddPurchase] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
   const [showFinish, setShowFinish] = useState(false);
-  const [finishForm, setFinishForm] = useState({ storeName: "", date: "", total: "" });
+  const [finishForm, setFinishForm] = useState({ storeName: "", date: "" });
+  const [finishPrices, setFinishPrices] = useState<Record<string, string>>({});
   const [finishing, setFinishing] = useState(false);
 
   const loadList = (cat?: string) => {
@@ -108,17 +109,30 @@ export default function SupermercadoPage() {
     if (tab === "gastos") { fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend); fetch("/api/admin/grocery?view=purchases").then(r => r.json()).then(setPurchases); }
   }
 
+  function openFinish() {
+    const prices: Record<string, string> = {};
+    for (const item of list.filter(i => i.checked)) prices[item.id] = "";
+    setFinishPrices(prices);
+    setShowFinish(true);
+  }
+
+  const finishTotal = Object.values(finishPrices).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const finishAllFilled = Object.values(finishPrices).length > 0 && Object.values(finishPrices).every(v => parseFloat(v) > 0);
+
   async function finishFromChecked(e: React.FormEvent) {
     e.preventDefault();
     setFinishing(true);
+    const itemPrices: Record<string, number> = {};
+    for (const [id, v] of Object.entries(finishPrices)) itemPrices[id] = parseFloat(v) || 0;
     const r = await fetch("/api/admin/grocery", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "finish_from_checked", storeName: finishForm.storeName, total: parseFloat(finishForm.total), date: finishForm.date || undefined }),
+      body: JSON.stringify({ action: "finish_from_checked", storeName: finishForm.storeName, itemPrices, date: finishForm.date || undefined }),
     });
     setFinishing(false);
     if (r.ok) {
       setShowFinish(false);
-      setFinishForm({ storeName: "", date: "", total: "" });
+      setFinishForm({ storeName: "", date: "" });
+      setFinishPrices({});
       loadList(listFilter);
       fetch("/api/admin/grocery?view=overview").then(r2 => r2.json()).then(setOverview);
     }
@@ -148,7 +162,7 @@ export default function SupermercadoPage() {
         </div>
         <div className="flex gap-2">
           {checkedCount > 0 && (
-            <button onClick={() => setShowFinish(true)}
+            <button onClick={openFinish}
               className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition">
               ✅ Finalizar compra ({checkedCount})
             </button>
@@ -249,10 +263,16 @@ export default function SupermercadoPage() {
                 + Item
               </button>
               {checkedCount > 0 && (
-                <button onClick={clearChecked}
-                  className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-semibold hover:bg-red-100 transition">
-                  🗑 Remover marcados ({checkedCount})
-                </button>
+                <>
+                  <button onClick={openFinish}
+                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition">
+                    ✅ Finalizar compra ({checkedCount})
+                  </button>
+                  <button onClick={clearChecked}
+                    className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-semibold hover:bg-red-100 transition">
+                    🗑 Remover marcados ({checkedCount})
+                  </button>
+                </>
               )}
             </div>
             <p className="text-xs text-slate-400">{list.filter(i => !i.checked).length} pendentes · {checkedCount} marcados</p>
@@ -461,19 +481,37 @@ export default function SupermercadoPage() {
       {/* Modal: finalizar compra a partir da lista marcada */}
       {showFinish && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-slate-900 mb-1">✅ Finalizar compra</h3>
-            <p className="text-xs text-slate-400 mb-4">Fecha os {checkedCount} itens marcados como uma compra, lança em Finanças e limpa a lista.</p>
+            <p className="text-xs text-slate-400 mb-4">Fecha os {checkedCount} itens marcados como uma compra, lança em Finanças e limpa a lista. Coloque o preço de cada item pra entrar certinho na comparação de preços.</p>
             <form onSubmit={finishFromChecked} className="space-y-3">
-              <input value={finishForm.storeName} onChange={e => setFinishForm(f => ({ ...f, storeName: e.target.value }))} required
-                placeholder="Nome do mercado" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
-              <input type="date" value={finishForm.date} onChange={e => setFinishForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
-              <input type="number" step="0.01" value={finishForm.total} onChange={e => setFinishForm(f => ({ ...f, total: e.target.value }))} required
-                placeholder="Total pago (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              <div className="grid grid-cols-2 gap-3">
+                <input value={finishForm.storeName} onChange={e => setFinishForm(f => ({ ...f, storeName: e.target.value }))} required
+                  placeholder="Nome do mercado" className="border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                <input type="date" value={finishForm.date} onChange={e => setFinishForm(f => ({ ...f, date: e.target.value }))}
+                  className="border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Preço de cada item</p>
+                {list.filter(i => i.checked).map(item => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <span className="text-sm text-slate-700 flex-1 truncate">{item.name} <span className="text-slate-400">({item.quantity})</span></span>
+                    <input type="number" step="0.01" min="0" required
+                      value={finishPrices[item.id] ?? ""}
+                      onChange={e => setFinishPrices(p => ({ ...p, [item.id]: e.target.value }))}
+                      placeholder="R$" className="w-24 border border-slate-200 rounded-xl px-3 py-1.5 text-sm outline-none" />
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-right text-sm font-semibold text-slate-800 pt-1 border-t border-slate-100">
+                Total: {fmt(finishTotal)}
+              </div>
+
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowFinish(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" disabled={finishing} className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">{finishing ? "..." : "Finalizar"}</button>
+                <button type="submit" disabled={finishing || !finishAllFilled} className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">{finishing ? "..." : "Finalizar"}</button>
               </div>
             </form>
           </div>
