@@ -94,13 +94,16 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
 
 export function formatDueDate(dateStr?: string): string {
   if (!dateStr) return "Sem prazo";
+  // "YYYY-MM-DD" sem hora é interpretado pelo Date como meia-noite UTC — em
+  // fuso atrás de UTC (Brasil) isso volta pro dia anterior ao converter pra
+  // hora local, fazendo "amanhã" ser exibido como "hoje". Ancorar ao meio-dia
+  // evita cruzar a virada de dia em qualquer fuso razoável.
   const date = new Date(dateStr + "T12:00:00");
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
-  const d = new Date(dateStr);
-  if (d.toDateString() === today.toDateString()) return "hoje";
-  if (d.toDateString() === tomorrow.toDateString()) return "amanhã";
+  if (date.toDateString() === today.toDateString()) return "hoje";
+  if (date.toDateString() === tomorrow.toDateString()) return "amanhã";
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }

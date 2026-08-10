@@ -7,21 +7,21 @@ import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
-import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalByTitle, getGoalProgress } from "@/lib/goals";
+import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
 import { addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseAppointmentChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
-import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentByKeyword } from "@/lib/agenda";
+import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
 import { createMeetEvent } from "@/lib/google-meet";
 import { isConnected } from "@/lib/google-oauth";
 import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { addMessage, getAiPaused } from "@/lib/conversations";
-import { nowBR, spToUTC, todayStrBR } from "@/lib/date-br";
+import { nowBR, spToUTC, todayStrBR, formatDateTimeBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
@@ -54,6 +54,54 @@ async function getUserByWppPhone(phone: string) {
 function cap(s: string): string {
   if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Pergunta qual compromisso o usuário quis dizer quando a busca por
+ *  palavra-chave bate em mais de um (ex: duas "reunião" na mesma semana) —
+ *  mesmo padrão usado para lançamentos financeiros e metas ambíguas: nunca
+ *  agir na primeira opção que aparecer, sempre listar e deixar o usuário
+ *  escolher por número ou nome. */
+async function askWhichAppointment(
+  from: string, userId: string,
+  matches: Appointment[], action: "update" | "delete" | "done" | "add_meet",
+  actionLabel: string, patch?: Record<string, unknown>,
+): Promise<void> {
+  const list = matches.map(a => ({ id: a.id, title: a.title, startAt: a.startAt, location: a.location }));
+  await setPendingAction(from, { type: "appointment_selection", userId, action, patch, appointments: list });
+  let msg = `🗓️ Encontrei ${matches.length} compromissos. Qual deseja ${actionLabel}?\n\n`;
+  matches.forEach((a, i) => { msg += `*${i + 1}.* ${a.title} — ${formatDateTimeBR(a.startAt)}\n`; });
+  msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
+  await wppSend(from, msg);
+}
+
+/** Cria o link do Google Meet pra um compromisso já existente — extraído
+ *  pra ser reaproveitado tanto no caminho direto (1 compromisso encontrado)
+ *  quanto na resolução da desambiguação (usuário escolheu entre vários). */
+async function performAddMeet(appt: Appointment, userId: string, from: string): Promise<void> {
+  if (appt.meetLink) {
+    await wppSend(from, `ℹ️ *${appt.title}* já tem um link do Meet:\n🔗 ${appt.meetLink}`);
+    return;
+  }
+  if (!appt.endAt) {
+    await wppSend(from, `⚠️ O compromisso *${appt.title}* não tem horário de fim definido. Edite-o pela agenda para adicionar a hora de término e tente novamente.`);
+    return;
+  }
+  if (!await isConnected(userId)) {
+    await wppSend(from, `🔗 Sua conta Google não está conectada.\n\nAcesse *Configurações → Integrações* para conectar e criar links do Meet.`);
+    return;
+  }
+  await wppSend(from, `⏳ Criando link do Google Meet para *${appt.title}*...`);
+  try {
+    const meetResult = await createMeetEvent({
+      userId, title: appt.title, description: appt.description,
+      startAt: appt.startAt, endAt: appt.endAt, attendees: [],
+    });
+    await updateAppointment(appt.id, userId, { meetLink: meetResult.meetLink, calendarEventId: meetResult.calendarEventId });
+    await wppSend(from, `✅ *Meet adicionado!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${meetResult.meetLink}`);
+  } catch (e) {
+    console.error("[agenda_add_meet]", e);
+    await wppSend(from, `❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.`);
+  }
 }
 
 // Label do modo (pessoal/empresa) pra deixar claro em listas e confirmações
@@ -215,12 +263,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         try {
           const folders = await getFolders(fileUser.id);
           const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
-          const { folder: suggestedFolder, keywords } = await categorizeDriveFile(originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
+          // "salva"/"guarda" é comando, não descrição — só passa a legenda como
+          // dica de conteúdo quando ela traz informação de verdade além do comando.
+          const contentHint = hasSaveIntent ? undefined : caption;
+          const { folder: suggestedFolder, keywords, suggestedName } = await categorizeDriveFile(buffer, mimeType, originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"], contentHint);
           const targetFolder = await getFolderByName(fileUser.id, suggestedFolder);
           const savedFile = await saveFile({
             userId: fileUser.id,
             folderId: targetFolder?.id ?? null,
-            originalName,
+            originalName: suggestedName,
             mimeType,
             size: buffer.length,
             description: caption,
@@ -228,8 +279,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             source: "whatsapp",
             buffer,
           });
-          console.log(`[drive] arquivo salvo: ${savedFile.id} | ${originalName} | pasta=${suggestedFolder}`);
-          await wppSend(from, replyFileSaved(originalName, suggestedFolder));
+          console.log(`[drive] arquivo salvo: ${savedFile.id} | ${suggestedName} | pasta=${suggestedFolder}`);
+          await wppSend(from, replyFileSaved(suggestedName, suggestedFolder));
           // Só repassa à IA se a legenda tem conteúdo além do comando de salvar
           if (caption && !hasSaveIntent) messageText = caption;
         } catch (e) {
@@ -369,7 +420,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const buffer = Buffer.from(pending.fileBase64, "base64");
             const folders = await getFolders(user.id);
             const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
-            const { folder: suggestedFolder, keywords } = await categorizeDriveFile(pending.suggestedName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
+            // Aqui o nome já é bom (montado a partir dos dados financeiros extraídos:
+            // "Categoria - Descrição - Data"), então só reaproveita a IA pra pasta/keywords.
+            const { folder: suggestedFolder, keywords } = await categorizeDriveFile(buffer, pending.mimeType, pending.suggestedName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
             const targetFolder = await getFolderByName(user.id, suggestedFolder);
             const savedFile = await saveFile({
               userId: user.id,
@@ -473,11 +526,44 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       if (choiceIdx >= 0) {
         await clearPendingAction(from);
         const chosen = pending.goals[choiceIdx];
-        const updated = await updateGoalAmount(chosen.id, user.id, pending.amount);
-        if (updated) {
-          const p = getGoalProgress(updated);
-          const emoji = p >= 100 ? "🎉" : p >= 75 ? "🚀" : "📈";
-          await wppSend(from, `${emoji} *${formatCurrency(pending.amount)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${p}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
+        if (pending.action === "add") {
+          const updated = await updateGoalAmount(chosen.id, user.id, pending.amount || 0);
+          if (updated) {
+            const p = getGoalProgress(updated);
+            const emoji = p >= 100 ? "🎉" : p >= 75 ? "🚀" : "📈";
+            await wppSend(from, `${emoji} *${formatCurrency(pending.amount || 0)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${p}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
+          }
+        } else if (pending.action === "complete") {
+          const updated = await updateGoalStatus(chosen.id, user.id, "completed");
+          if (updated) await wppSend(from, `🏆 *Meta concluída!*\n\n🎯 ${updated.title}\n\nParabéns! Você atingiu seu objetivo! 🎉`);
+        } else if (pending.action === "cancel") {
+          const updated = await updateGoalStatus(chosen.id, user.id, "cancelled");
+          if (updated) await wppSend(from, `🗑️ Meta cancelada.\n\n🎯 ${updated.title}`);
+        }
+        return;
+      } else {
+        await clearPendingAction(from);
+      }
+    }
+
+    // ── Verifica seleção de compromisso pendente (reagendar/cancelar/concluir/add_meet com múltiplos resultados) ──
+    if (pending?.type === "appointment_selection" && pending.userId === user.id) {
+      const apptChoiceIdx = parseAppointmentChoice(messageText, pending.appointments);
+      if (apptChoiceIdx >= 0) {
+        await clearPendingAction(from);
+        const chosenAppt = pending.appointments[apptChoiceIdx];
+        if (pending.action === "update") {
+          const updated = await updateAppointment(chosenAppt.id, user.id, (pending.patch || {}) as Parameters<typeof updateAppointment>[2]);
+          if (updated) await wppSend(from, replyAgendaUpdated(updated));
+        } else if (pending.action === "delete") {
+          await deleteAppointment(chosenAppt.id, user.id);
+          await wppSend(from, replyAgendaDeleted(chosenAppt.title));
+        } else if (pending.action === "done") {
+          await updateAppointment(chosenAppt.id, user.id, { status: "done" });
+          await wppSend(from, `✅ Marquei como realizado.\n\n📅 ${chosenAppt.title}`);
+        } else if (pending.action === "add_meet") {
+          const full = await getAppointmentById(chosenAppt.id, user.id);
+          if (full) await performAddMeet(full, user.id, from);
         }
         return;
       } else {
@@ -1100,13 +1186,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           break;
         }
 
-        // Tenta encontrar pelo título
-        let addGoal = addTitle ? await findGoalByTitle(user.id, addTitle, mode) : null;
-
-        // Título não bateu — só pega direto se tiver 1 meta
-        if (!addGoal && activeGoals.length === 1) {
-          addGoal = activeGoals[0];
-        }
+        // Tenta encontrar pelo título — pode bater em mais de uma (ex: duas
+        // metas "viagem"), nesse caso não dá pra escolher sozinho.
+        const titleMatches = addTitle ? await findGoalsByTitle(user.id, addTitle, mode) : [];
+        const addGoal = titleMatches.length === 1 ? titleMatches[0]
+          : titleMatches.length === 0 && activeGoals.length === 1 ? activeGoals[0]
+          : null;
+        const candidates = titleMatches.length > 1 ? titleMatches : activeGoals;
 
         if (addGoal) {
           const updated = await updateGoalAmount(addGoal.id, user.id, addAmt);
@@ -1115,14 +1201,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const emoji = p >= 100 ? "🎉" : p >= 75 ? "🚀" : "📈";
             await wppSend(from, `${emoji} *${formatCurrency(addAmt)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${p}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
           }
-        } else if (activeGoals.length === 0) {
+        } else if (candidates.length === 0) {
           await wppSend(from, "❓ Você não tem metas ativas. Crie uma primeiro!\n\nEx: _\"Meta: guardar 3000 para viagem\"_");
         } else {
-          // Múltiplas metas — pergunta qual
-          const goalList = activeGoals.map(g => ({ id: g.id, title: g.title, currentAmount: g.currentAmount, targetAmount: g.targetAmount }));
-          await setPendingAction(from, { type: "goal_selection", userId: user.id, mode, amount: addAmt, goals: goalList });
-          let msg = `🎯 Você tem ${activeGoals.length} metas ativas. Em qual deseja adicionar *${formatCurrency(addAmt)}*?\n\n`;
-          activeGoals.forEach((g, i) => {
+          // Múltiplas metas (candidatas pelo título, ou todas se o título não
+          // ajudou a filtrar) — pergunta qual.
+          const goalList = candidates.map(g => ({ id: g.id, title: g.title, currentAmount: g.currentAmount, targetAmount: g.targetAmount }));
+          await setPendingAction(from, { type: "goal_selection", userId: user.id, mode, action: "add", amount: addAmt, goals: goalList });
+          let msg = `🎯 Você tem ${candidates.length} metas ${titleMatches.length > 1 ? `com "${addTitle}"` : "ativas"}. Em qual deseja adicionar *${formatCurrency(addAmt)}*?\n\n`;
+          candidates.forEach((g, i) => {
             const p = getGoalProgress(g);
             msg += `*${i + 1}.* ${g.title} (${p}%)\n`;
           });
@@ -1150,24 +1237,38 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "goal_complete": {
         const titleStr = ai.goal?.title || messageText;
-        const goal = await findGoalByTitle(user.id, titleStr, mode);
-        if (goal) {
-          await updateGoalStatus(goal.id, user.id, "completed");
-          await wppSend(from, `🏆 *Meta concluída!*\n\n🎯 ${goal.title}\n\nParabéns! Você atingiu seu objetivo! 🎉`);
-        } else {
+        const matches = await findGoalsByTitle(user.id, titleStr, mode);
+        if (matches.length === 1) {
+          await updateGoalStatus(matches[0].id, user.id, "completed");
+          await wppSend(from, `🏆 *Meta concluída!*\n\n🎯 ${matches[0].title}\n\nParabéns! Você atingiu seu objetivo! 🎉`);
+        } else if (matches.length === 0) {
           await wppSend(from, "❓ Meta não encontrada.");
+        } else {
+          const goalList = matches.map(g => ({ id: g.id, title: g.title, currentAmount: g.currentAmount, targetAmount: g.targetAmount }));
+          await setPendingAction(from, { type: "goal_selection", userId: user.id, mode, action: "complete", goals: goalList });
+          let msg = `🎯 Encontrei ${matches.length} metas com "${titleStr}". Qual concluir?\n\n`;
+          matches.forEach((g, i) => { msg += `*${i + 1}.* ${g.title} (${getGoalProgress(g)}%)\n`; });
+          msg += `\nResponda com o número ou nome da meta. ⏱ _Válido por 5 min._`;
+          await wppSend(from, msg);
         }
         break;
       }
 
       case "goal_cancel": {
         const cancelTitle = ai.keyword || ai.goal?.title || messageText;
-        const cancelGoal = await findGoalByTitle(user.id, cancelTitle, mode);
-        if (cancelGoal) {
-          await updateGoalStatus(cancelGoal.id, user.id, "cancelled");
-          await wppSend(from, `🗑️ Meta cancelada.\n\n🎯 ${cancelGoal.title}`);
-        } else {
+        const cancelMatches = await findGoalsByTitle(user.id, cancelTitle, mode);
+        if (cancelMatches.length === 1) {
+          await updateGoalStatus(cancelMatches[0].id, user.id, "cancelled");
+          await wppSend(from, `🗑️ Meta cancelada.\n\n🎯 ${cancelMatches[0].title}`);
+        } else if (cancelMatches.length === 0) {
           await wppSend(from, "❓ Meta não encontrada. Digite *minhas metas* para ver a lista.");
+        } else {
+          const goalList = cancelMatches.map(g => ({ id: g.id, title: g.title, currentAmount: g.currentAmount, targetAmount: g.targetAmount }));
+          await setPendingAction(from, { type: "goal_selection", userId: user.id, mode, action: "cancel", goals: goalList });
+          let msg = `🎯 Encontrei ${cancelMatches.length} metas com "${cancelTitle}". Qual cancelar?\n\n`;
+          cancelMatches.forEach((g, i) => { msg += `*${i + 1}.* ${g.title} (${getGoalProgress(g)}%)\n`; });
+          msg += `\nResponda com o número ou nome da meta. ⏱ _Válido por 5 min._`;
+          await wppSend(from, msg);
         }
         break;
       }
@@ -1498,11 +1599,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "agenda_update": {
         const keyword = ai.keyword || "";
         if (!keyword) { await wppSend(from, "❓ Qual compromisso deseja alterar?"); break; }
-        const found = await findAppointmentByKeyword(user.id, keyword);
-        if (!found) {
-          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
-          break;
-        }
         const d2 = ai.agendaData ?? {};
         const patch: Parameters<typeof updateAppointment>[2] = {};
         if (d2.startDate) patch.startAt = spToUTC(`${d2.startDate}T${d2.startTime || "00:00"}:00`);
@@ -1510,71 +1606,61 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (d2.title) patch.title = cap(d2.title);
         if (d2.location) patch.location = d2.location;
         if (d2.description) patch.description = d2.description;
-        const updated = await updateAppointment(found.id, user.id, patch);
-        if (updated) await wppSend(from, replyAgendaUpdated(updated));
+
+        const matches = await findAppointmentsByKeyword(user.id, keyword);
+        if (matches.length === 0) {
+          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
+        } else if (matches.length === 1) {
+          const updated = await updateAppointment(matches[0].id, user.id, patch);
+          if (updated) await wppSend(from, replyAgendaUpdated(updated));
+        } else {
+          await askWhichAppointment(from, user.id, matches, "update", `reagendar/alterar`, patch);
+        }
         break;
       }
 
       case "agenda_delete": {
         const keyword = ai.keyword || "";
         if (!keyword) { await wppSend(from, "❓ Qual compromisso deseja cancelar?"); break; }
-        const found = await findAppointmentByKeyword(user.id, keyword);
-        if (!found) {
+        const matches = await findAppointmentsByKeyword(user.id, keyword);
+        if (matches.length === 0) {
           await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
-          break;
+        } else if (matches.length === 1) {
+          await deleteAppointment(matches[0].id, user.id);
+          await wppSend(from, replyAgendaDeleted(matches[0].title));
+        } else {
+          await askWhichAppointment(from, user.id, matches, "delete", "cancelar");
         }
-        await deleteAppointment(found.id, user.id);
-        await wppSend(from, replyAgendaDeleted(found.title));
         break;
       }
 
       case "agenda_done": {
         const doneKeyword = ai.keyword || "";
         if (!doneKeyword) { await wppSend(from, "❓ Qual compromisso deseja marcar como feito?"); break; }
-        const doneTarget = await findAppointmentByKeyword(user.id, doneKeyword);
-        if (!doneTarget) {
+        const matches = await findAppointmentsByKeyword(user.id, doneKeyword);
+        if (matches.length === 0) {
           await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${doneKeyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
-          break;
+        } else if (matches.length === 1) {
+          await updateAppointment(matches[0].id, user.id, { status: "done" });
+          await wppSend(from, `✅ Marquei como realizado.\n\n📅 ${matches[0].title}`);
+        } else {
+          await askWhichAppointment(from, user.id, matches, "done", "marcar como feito");
         }
-        await updateAppointment(doneTarget.id, user.id, { status: "done" });
-        await wppSend(from, `✅ Marquei como realizado.\n\n📅 ${doneTarget.title}`);
         break;
       }
 
       case "agenda_add_meet": {
         // Adiciona Google Meet a compromisso existente sem alterar data/hora
         const addMeetKeyword = ai.keyword || "";
-        const addMeetFound = addMeetKeyword
-          ? await findAppointmentByKeyword(user.id, addMeetKeyword)
-          : (await getUpcomingAppointments(user.id, 1))[0] || null;
-        if (!addMeetFound) {
+        const addMeetMatches = addMeetKeyword
+          ? await findAppointmentsByKeyword(user.id, addMeetKeyword)
+          : (await getUpcomingAppointments(user.id, 1));
+        if (addMeetMatches.length === 0) {
           await wppSend(from, `❓ Não encontrei o compromisso${addMeetKeyword ? ` com *"${addMeetKeyword}"*` : ""}.\n\nDigite *meus compromissos* para ver a lista.`);
-          break;
-        }
-        if (addMeetFound.meetLink) {
-          await wppSend(from, `ℹ️ *${addMeetFound.title}* já tem um link do Meet:\n🔗 ${addMeetFound.meetLink}`);
-          break;
-        }
-        if (!addMeetFound.endAt) {
-          await wppSend(from, `⚠️ O compromisso *${addMeetFound.title}* não tem horário de fim definido. Edite-o pela agenda para adicionar a hora de término e tente novamente.`);
-          break;
-        }
-        if (!await isConnected(user.id)) {
-          await wppSend(from, `🔗 Sua conta Google não está conectada.\n\nAcesse *Configurações → Integrações* para conectar e criar links do Meet.`);
-          break;
-        }
-        await wppSend(from, `⏳ Criando link do Google Meet para *${addMeetFound.title}*...`);
-        try {
-          const meetResult = await createMeetEvent({
-            userId: user.id, title: addMeetFound.title, description: addMeetFound.description,
-            startAt: addMeetFound.startAt, endAt: addMeetFound.endAt, attendees: [],
-          });
-          await updateAppointment(addMeetFound.id, user.id, { meetLink: meetResult.meetLink, calendarEventId: meetResult.calendarEventId });
-          const { formatDateTimeBR } = await import("@/lib/date-br");
-          await wppSend(from, `✅ *Meet adicionado!*\n\n📅 *${addMeetFound.title}*\n🕒 ${formatDateTimeBR(addMeetFound.startAt)}\n🔗 ${meetResult.meetLink}`);
-        } catch (e) {
-          console.error("[agenda_add_meet]", e);
-          await wppSend(from, `❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.`);
+        } else if (addMeetMatches.length === 1) {
+          await performAddMeet(addMeetMatches[0], user.id, from);
+        } else {
+          await askWhichAppointment(from, user.id, addMeetMatches, "add_meet", "adicionar o Meet");
         }
         break;
       }

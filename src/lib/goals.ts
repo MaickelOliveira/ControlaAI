@@ -70,10 +70,20 @@ export async function updateGoalStatus(id: string, userId: string, status: GoalS
   return fromRow(data as Row);
 }
 
-export async function findGoalByTitle(userId: string, title: string, mode?: GoalMode): Promise<Goal | null> {
-  if (!title) return null;
+/** Retorna TODAS as metas ativas cujo título bate — call-sites (add/complete/
+ *  cancel) precisam saber quando há mais de uma candidata (ex: duas metas
+ *  "viagem") pra desambiguar com o usuário em vez de aplicar a ação na
+ *  primeira que aparecer (bug real: silenciosamente somava valor na meta
+ *  errada quando havia duas com título parecido). Só metas ativas — não faz
+ *  sentido adicionar valor ou concluir de novo uma já concluída/cancelada. */
+export async function findGoalsByTitle(userId: string, title: string, mode?: GoalMode): Promise<Goal[]> {
+  if (!title) return [];
   const lower = title.toLowerCase();
-  return (await getGoalsByUser(userId, mode)).find(g => g.title?.toLowerCase().includes(lower)) ?? null;
+  return (await getActiveGoals(userId, mode)).filter(g => g.title?.toLowerCase().includes(lower));
+}
+
+export async function findGoalByTitle(userId: string, title: string, mode?: GoalMode): Promise<Goal | null> {
+  return (await findGoalsByTitle(userId, title, mode))[0] ?? null;
 }
 
 export function getGoalProgress(goal: Goal): number {

@@ -28,7 +28,8 @@ export type PendingGoalSelection = {
   phone: string;
   userId: string;
   mode: string;
-  amount: number;
+  action: "add" | "complete" | "cancel";
+  amount?: number; // só usado quando action === "add"
   goals: Array<{ id: string; title: string; currentAmount: number; targetAmount: number }>;
   expiresAt: string;
 };
@@ -64,6 +65,16 @@ export type PendingMeetConfirm = {
   endAt: string;
   attendees: Array<{ name: string; phone?: string; email?: string }>;
   mode: string;
+  expiresAt: string;
+};
+
+export type PendingAppointmentSelection = {
+  type: "appointment_selection";
+  phone: string;
+  userId: string;
+  action: "update" | "delete" | "done" | "add_meet";
+  patch?: Record<string, unknown>; // usado só em "update"
+  appointments: Array<{ id: string; title: string; startAt: string; location?: string }>;
   expiresAt: string;
 };
 
@@ -169,7 +180,7 @@ export type PendingEmployeePaymentSelect = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -183,6 +194,7 @@ const TTL_SLOT_FILL_MS = 10 * 60 * 1000;
 type PendingActionInput =
   | Omit<PendingVehicleSelection, "phone" | "expiresAt">
   | Omit<PendingGoalSelection, "phone" | "expiresAt">
+  | Omit<PendingAppointmentSelection, "phone" | "expiresAt">
   | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">
   | Omit<PendingMeetAta, "phone" | "expiresAt">
   | Omit<PendingMeetConfirm, "phone" | "expiresAt">
@@ -248,6 +260,15 @@ export function parseGoalChoice(
   goals: Array<{ id: string; title: string; currentAmount: number; targetAmount: number }>
 ): number {
   return choiceIndexByLabels(text, goals, g => [g.title]);
+}
+
+/** Interpreta a resposta do usuário como escolha de compromisso da agenda.
+ *  Aceita: "1", "2", parte do título. Retorna índice (0-based) ou -1. */
+export function parseAppointmentChoice(
+  text: string,
+  appointments: Array<{ id: string; title: string; startAt: string; location?: string }>
+): number {
+  return choiceIndexByLabels(text, appointments, a => [a.title]);
 }
 
 /** Interpreta a resposta do usuário como escolha de lançamento financeiro.

@@ -331,7 +331,7 @@ INTENÇÕES POSSÍVEIS:
 - goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para", "quero juntar X para Y", "quero guardar X para Z"). SEMPRE inclua "title" com o nome da meta e "targetAmount" com o valor alvo. Se o usuário mencionar "já tenho X", "ja tenho X", "tenho X guardado", inclua "currentAmount" com esse valor. Se o valor alvo não for especificado, use targetAmount: 0 (o sistema pedirá ao usuário).
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
 - goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
-- goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo")
+- goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo", "meta viagem concluída"). SEMPRE inclua "title" com o nome da meta.
 - goal_cancel: cancelar/desistir de uma meta ("cancela a meta da viagem", "desisti de juntar pra isso", "apaga essa meta"). Use "keyword" com o nome da meta.
 - recurring_create: cadastrar despesa ou receita parcelada ou recorrente ("comprei geladeira em 10x", "pago netflix todo mês", "recebo salário todo dia 10", "parcela do carro", "assinatura mensal"). Use recurrenceType: "installment" para parcelamentos (compra dividida em N vezes, tem totalInstallments) e "recurring" para recorrentes contínuos (assinatura, mensalidade, conta fixa). Campos que ajudam MUITO se a mensagem trouxer (extraia sempre que possível, mas não invente se não tiver pista):
   • "dayOfMonth": o dia do mês em que vence, se mencionado (ex: "todo dia 10" → dayOfMonth: 10). Sem isso o sistema pergunta ao usuário, porque o dia do vencimento muda quando o cron avisa.
@@ -347,10 +347,10 @@ INTENÇÕES POSSÍVEIS:
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
 - agenda_create: agendar um compromisso, reunião, consulta ou evento com data e hora ("agendar reunião amanhã às 14h", "consulta médica sexta às 10h", "evento no sábado às 9h"). Use "agendaData" com título, startDate, startTime e opcionalmente location, description, endDate, endTime, repeat, allDay (true se for um evento de dia inteiro, sem horário específico, ex: "aniversário dia 15" sem hora).
 - agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
-- agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com o termo de busca. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
-- agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com o termo de busca e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
-- agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com o termo de busca.
-- agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com o nome/descrição do compromisso. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
+- agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: "reunião", "consulta") — NUNCA inclua dia/data/hora no keyword, já que a busca compara com o título salvo (que não tem essas palavras) e um keyword mais longo que o título nunca bate. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
+- agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "reagendar a reunião para segunda às 10h" extraia keyword: "reunião", NÃO "reunião para segunda") e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
+- agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "apaga o compromisso de sexta" extraia keyword: "compromisso", NÃO "compromisso de sexta"; de "cancelar a reunião de amanhã" extraia "reunião", NÃO "reunião de amanhã").
+- agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com APENAS o nome/assunto do compromisso, sem dia/data/hora. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
 - meet_create: criar uma reunião do Google Meet ("criar meet amanhã às 14h", "meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). Diferente de agenda_create — esse cria um link real do Google Meet.
 - vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
@@ -723,6 +723,15 @@ OU para adicionar valor em meta existente (goal_add) — "title" é o nome da me
   "goal": {
     "title": "viagem",
     "targetAmount": 900.00
+  }
+}
+
+OU para concluir meta ("meta viagem concluída", "atingi a meta do computador") — "title" é o nome da meta para busca:
+{
+  "intent": "goal_complete",
+  "confidence": 0.9,
+  "goal": {
+    "title": "viagem"
   }
 }
 
@@ -1302,30 +1311,55 @@ Instruções:
   }
 }
 
-export async function categorizeDriveFile(filename: string, defaultFolders: string[]): Promise<{ folder: string; keywords: string[] }> {
+/** Categoriza um arquivo do Drive E sugere um nome legível baseado no
+ *  CONTEÚDO real (buffer), não no nome que o WhatsApp manda — que quase
+ *  sempre é genérico tipo "arquivo_1723300000000.png", sem nenhuma pista do
+ *  que é. Categorizar só pelo nome garantia pasta "Outros" e keywords
+ *  inventadas, e o arquivo ficava salvo com esse nome sem sentido para
+ *  sempre — depois ninguém acha de novo com "ache o contrato do João" etc.
+ *  Quando dá pra ver o conteúdo (imagem/PDF), a IA descreve o que é de
+ *  verdade; heuristicName é o fallback só quando a IA falha ou não há chave
+ *  configurada, pra nunca cair de volta no nome genérico do WhatsApp. */
+export async function categorizeDriveFile(
+  buffer: Buffer,
+  mimeType: string,
+  originalName: string,
+  defaultFolders: string[],
+  captionHint?: string,
+): Promise<{ folder: string; keywords: string[]; suggestedName: string }> {
+  const ext = (originalName.match(/\.[a-z0-9]+$/i) || [""])[0];
+  const heuristicName = `${captionHint?.trim() || "Arquivo"} ${todayStrBR()}${ext}`;
+
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return { folder: "Outros", keywords: [] };
+  if (!apiKey) return { folder: "Outros", keywords: [], suggestedName: heuristicName };
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent(
-      `Analise o nome do arquivo: "${filename}".
+    const result = await model.generateContent([
+      `Analise o CONTEÚDO deste arquivo (imagem ou documento) — o nome original ("${originalName}") normalmente é genérico e não ajuda, ignore-o.
+${captionHint ? `Legenda enviada pelo usuário: "${captionHint}"` : ""}
 Pastas disponíveis: ${defaultFolders.join(", ")}.
-Retorne APENAS JSON válido no formato: {"folder": "NomeDaPasta", "keywords": ["palavra1","palavra2","palavra3"]}
+
+Retorne APENAS JSON válido no formato:
+{"folder": "NomeDaPasta", "keywords": ["palavra1","palavra2","palavra3"], "suggestedName": "Nome curto e descritivo"}
 - folder: a pasta mais adequada para este arquivo
-- keywords: 3-5 palavras-chave em português que descrevem o conteúdo do arquivo (úteis para busca futura)
-Não use markdown.`
-    );
+- keywords: 3-5 palavras-chave em português que descrevem o conteúdo (úteis para busca futura)
+- suggestedName: nome curto (até 6 palavras) e descritivo do que É o arquivo, em português, baseado no que você vê (ex: "Contrato de aluguel assinado", "Foto da fachada da loja", "Comprovante de transferência"). NUNCA use nomes genéricos como "Arquivo" ou "Imagem" — descreva o conteúdo real. Se a imagem for ilegível/genérica demais pra descrever, use a legenda do usuário como base.
+Não use markdown.`,
+      { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
+    ]);
     const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
+    const aiName = String(parsed.suggestedName || "").trim();
     return {
       folder: defaultFolders.includes(parsed.folder) ? parsed.folder : "Outros",
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+      suggestedName: aiName ? `${aiName}${ext}` : heuristicName,
     };
   } catch {
-    return { folder: "Outros", keywords: [] };
+    return { folder: "Outros", keywords: [], suggestedName: heuristicName };
   }
 }
 

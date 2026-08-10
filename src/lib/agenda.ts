@@ -101,18 +101,26 @@ export async function deleteAppointment(id: string, userId: string): Promise<boo
   return !error && !!count && count > 0;
 }
 
-export async function findAppointmentByKeyword(userId: string, keyword: string): Promise<Appointment | null> {
+/** Retorna TODOS os compromissos agendados cujo título/descrição/local bate
+ *  com a palavra-chave — call-sites (reagendar/cancelar/concluir/add_meet)
+ *  precisam saber quando há mais de um candidato (ex: duas "reunião" na
+ *  mesma semana) pra desambiguar com o usuário, em vez de agir na primeira
+ *  que aparecer (mesma classe de bug corrigida em findGoalsByTitle). */
+export async function findAppointmentsByKeyword(userId: string, keyword: string): Promise<Appointment[]> {
   const lower = keyword.toLowerCase();
   const { data, error } = await getSupabase().from("appointments").select("*").eq("user_id", userId).eq("status", "scheduled");
-  if (error || !data) return null;
-  const all = (data as Row[]).map(fromRow).sort((a, b) => a.startAt.localeCompare(b.startAt));
-  return (
-    all.find(a =>
+  if (error || !data) return [];
+  return (data as Row[]).map(fromRow)
+    .filter(a =>
       a.title.toLowerCase().includes(lower) ||
       a.description?.toLowerCase().includes(lower) ||
       a.location?.toLowerCase().includes(lower)
-    ) ?? null
-  );
+    )
+    .sort((a, b) => a.startAt.localeCompare(b.startAt));
+}
+
+export async function findAppointmentByKeyword(userId: string, keyword: string): Promise<Appointment | null> {
+  return (await findAppointmentsByKeyword(userId, keyword))[0] ?? null;
 }
 
 /** Compromissos com Google Meet encerrados há 5-60 min sem ata ainda gerada
