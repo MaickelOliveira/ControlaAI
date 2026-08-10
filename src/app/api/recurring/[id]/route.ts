@@ -10,7 +10,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
   const { amount, description, category, dayOfMonth, repeatUnit, totalInstallments } = body;
 
-  const updated = updateRecurring(id, session.sub, {
+  const updated = await updateRecurring(id, session.sub, {
     ...(amount !== undefined ? { amount: parseFloat(amount) } : {}),
     ...(description ? { description } : {}),
     ...(category ? { category } : {}),
@@ -32,7 +32,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
-  const cancelled = cancelRecurring(id, session.sub);
+  const cancelled = await cancelRecurring(id, session.sub);
   if (!cancelled) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

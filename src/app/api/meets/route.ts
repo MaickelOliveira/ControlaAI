@@ -11,7 +11,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const meets = getMeetsByUser(session.sub);
+  const meets = await getMeetsByUser(session.sub);
   return NextResponse.json(meets);
 }
 
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     ? spToUTC(`${endDate}T${endTime || "00:00"}:00`)
     : new Date(new Date(startAt).getTime() + durationMs).toISOString();
 
-  if (!isConnected(session.sub)) {
+  if (!(await isConnected(session.sub))) {
     return NextResponse.json({ error: "Google não conectado" }, { status: 400 });
   }
 
@@ -40,12 +40,12 @@ export async function POST(req: NextRequest) {
     const { meetLink, calendarEventId } = await createMeetEvent({
       userId: session.sub, title, description, startAt, endAt, attendees: attendees || [],
     });
-    const meet = createMeet({
+    const meet = await createMeet({
       userId: session.sub, title, description, startAt, endAt,
       meetLink, calendarEventId, attendees: attendees || [],
       ataGenerated: false, status: "scheduled", source: "web",
     });
-    createAppointment({
+    await createAppointment({
       userId: session.sub,
       title: `🎥 ${title}`,
       description: `${description ? description + "\n" : ""}Meet: ${meetLink}`,

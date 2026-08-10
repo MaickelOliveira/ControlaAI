@@ -17,6 +17,6 @@ export async function POST(req: NextRequest) {
 
   // Resposta manual pelo Inbox pausa a IA — evita que ela responda por cima
   // do que o atendente acabou de mandar.
-  setAiPaused(phone, true);
+  await setAiPaused(phone, true);
   return NextResponse.json({ ok: true });
 }

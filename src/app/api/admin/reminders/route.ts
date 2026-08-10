@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get("mode") as "personal" | "business" | undefined;
-    return NextResponse.json(getAllRemindersByUser(session.sub, mode || undefined));
+    return NextResponse.json(await getAllRemindersByUser(session.sub, mode || undefined));
   } catch {
     return NextResponse.json([], { status: 200 });
   }
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const user = await getUserById(session.sub);
   const phone = user?.wppPhone || user?.phone || "";
 
-  const r = createReminder({ userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none", mode: mode || "personal" });
+  const r = await createReminder({ userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none", mode: mode || "personal" });
   return NextResponse.json(r, { status: 201 });
 }
 
@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest) {
   const { id, ...patch } = await req.json();
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
 
-  const r = updateReminder(id, session.sub, patch);
+  const r = await updateReminder(id, session.sub, patch);
   return r ? NextResponse.json(r) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 }
 
@@ -47,6 +47,6 @@ export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
 
-  deleteReminder(id, session.sub);
+  await deleteReminder(id, session.sub);
   return NextResponse.json({ ok: true });
 }

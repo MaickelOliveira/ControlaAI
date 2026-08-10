@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("mode") || undefined;
   const status = searchParams.get("status") || undefined;
-  const items = getRecurringByUser(session.sub, mode, status);
+  const items = await getRecurringByUser(session.sub, mode, status);
   return NextResponse.json(items);
 }
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Campos obrigatórios ausentes" }, { status: 400 });
   }
 
-  const rec = createRecurring({
+  const rec = await createRecurring({
     userId: session.sub,
     type,
     amount: parseFloat(amount),

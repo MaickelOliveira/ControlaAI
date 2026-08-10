@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (valid.length === 0) return NextResponse.json({ error: "Nenhum lançamento válido para importar" }, { status: 400 });
 
   for (const item of valid) {
-    addFinance({
+    await addFinance({
       userId: session.sub,
       type: "expense",
       amount: item.amount,
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
-  const balance = getBalance(session.sub, mode, now.getFullYear(), now.getMonth() + 1);
+  const balance = await getBalance(session.sub, mode, now.getFullYear(), now.getMonth() + 1);
 
   return NextResponse.json({ imported: valid.length, balance });
 }

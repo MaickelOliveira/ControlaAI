@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const phone = req.nextUrl.searchParams.get("phone");
   if (!phone) return NextResponse.json({ error: "Telefone não informado" }, { status: 400 });
 
-  const messages = getHistory(phone);
-  markAsRead(phone);
+  const messages = await getHistory(phone);
+  await markAsRead(phone);
   return NextResponse.json({ messages });
 }

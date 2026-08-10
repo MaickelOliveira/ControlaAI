@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const folderId = searchParams.get("folderId") ?? undefined;
 
-  const files = getFiles(session.sub, folderId);
-  const folders = getFolders(session.sub);
+  const files = await getFiles(session.sub, folderId);
+  const folders = await getFolders(session.sub);
 
   return NextResponse.json({ files, folders });
 }
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const description = (formData.get("description") as string) || undefined;
 
   const buffer = Buffer.from(await fileObj.arrayBuffer());
-  const file = saveFile({
+  const file = await saveFile({
     userId: session.sub,
     folderId,
     originalName: fileObj.name,

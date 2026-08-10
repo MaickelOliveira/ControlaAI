@@ -9,7 +9,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const appointments = getAppointments(session.sub);
+  const appointments = await getAppointments(session.sub);
   return NextResponse.json(appointments);
 }
 
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   let calendarEventId: string | undefined;
 
   if (withMeet && endAt) {
-    if (!isConnected(session.sub)) {
+    if (!(await isConnected(session.sub))) {
       return NextResponse.json({ error: "Google não conectado. Acesse Configurações → Integrações." }, { status: 400 });
     }
     try {
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const appointment = createAppointment({
+  const appointment = await createAppointment({
     userId: session.sub,
     title,
     description: description || undefined,

@@ -7,8 +7,8 @@ export async function GET(req: NextRequest) {
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") as "active" | "inactive" | undefined;
-  const employees = getEmployeesByUser(session.sub, status || undefined);
-  const totalPayroll = getTotalPayroll(session.sub);
+  const employees = await getEmployeesByUser(session.sub, status || undefined);
+  const totalPayroll = await getTotalPayroll(session.sub);
   return NextResponse.json({ employees, totalPayroll });
 }
 
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { name, role, salary, startDate, phone, email, notes } = await req.json();
   if (!name || !role) return NextResponse.json({ error: "Nome e cargo obrigatórios" }, { status: 400 });
-  const employee = createEmployee({
+  const employee = await createEmployee({
     userId: session.sub, name, role,
     salary: parseFloat(salary) || 0,
     startDate: startDate || new Date().toISOString().slice(0, 10),
@@ -32,6 +32,6 @@ export async function PATCH(req: NextRequest) {
   const { id, ...patch } = await req.json();
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   if (patch.salary) patch.salary = parseFloat(patch.salary);
-  const e = updateEmployee(id, session.sub, patch);
+  const e = await updateEmployee(id, session.sub, patch);
   return e ? NextResponse.json(e) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 }

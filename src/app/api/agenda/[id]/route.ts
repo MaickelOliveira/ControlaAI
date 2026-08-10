@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
 
-  const updated = updateAppointment(id, session.sub, body);
+  const updated = await updateAppointment(id, session.sub, body);
   if (!updated) return NextResponse.json({ error: "Compromisso não encontrado" }, { status: 404 });
 
   return NextResponse.json(updated);
@@ -20,7 +20,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
-  const ok = deleteAppointment(id, session.sub);
+  const ok = await deleteAppointment(id, session.sub);
   if (!ok) return NextResponse.json({ error: "Compromisso não encontrado" }, { status: 404 });
 
   return NextResponse.json({ ok: true });

@@ -32,7 +32,7 @@ export async function register() {
       const wppModule = await import("./lib/whatsapp").catch(() => null);
       if (!remindersModule || !wppModule) return;
 
-      const { getDueReminders, markReminderSent } = remindersModule;
+      const { getDueReminders, markReminderSent, markReminderFailed } = remindersModule;
       const { sendText, sendReminderTemplate } = wppModule;
       const due = await getDueReminders();
       if (due.length > 0) console.log(`[cron] ${due.length} lembrete(s) a disparar`);
@@ -42,8 +42,10 @@ export async function register() {
           const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) await markReminderSent(r.id, r.repeat);
+          else await markReminderFailed(r.id);
         } catch (e) {
           console.error("[cron] Erro ao enviar lembrete:", e);
+          await markReminderFailed(r.id);
         }
       }
 

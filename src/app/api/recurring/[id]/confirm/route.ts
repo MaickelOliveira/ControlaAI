@@ -7,7 +7,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
-  const result = confirmRecurring(id, session.sub);
+  const result = await confirmRecurring(id, session.sub);
   if (!result) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   return NextResponse.json(result);
 }

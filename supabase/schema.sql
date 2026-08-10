@@ -73,6 +73,7 @@ create table if not exists reminders (
   repeat text not null default 'none',
   mode text not null default 'personal',
   sent boolean not null default false,
+  failed_attempts int not null default 0,
   created_at timestamptz not null default now()
 );
 create index if not exists reminders_user_idx on reminders(user_id);

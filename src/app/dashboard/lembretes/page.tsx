@@ -8,8 +8,13 @@ type Reminder = {
   scheduledAt: string;
   repeat: string;
   sent: boolean;
+  failedAttempts: number;
   phone: string;
 };
+
+// Precisa bater com MAX_FAILED_ATTEMPTS em src/lib/reminders.ts — não
+// importa direto porque esse arquivo roda no navegador (cliente).
+const MAX_FAILED_ATTEMPTS = 5;
 
 const REPEAT_LABEL: Record<string, string> = {
   none: "Uma vez",
@@ -246,6 +251,17 @@ export default function LembretesPage() {
                     </span>
                     {r.phone && (
                       <span className="text-xs text-slate-300">📱 {r.phone}</span>
+                    )}
+                    {!r.sent && r.failedAttempts > 0 && (
+                      <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium border",
+                        r.failedAttempts >= MAX_FAILED_ATTEMPTS
+                          ? "bg-red-50 text-red-600 border-red-200"
+                          : "bg-amber-50 text-amber-600 border-amber-200"
+                      )}>
+                        {r.failedAttempts >= MAX_FAILED_ATTEMPTS
+                          ? "⚠ desistiu após várias tentativas"
+                          : `⚠ falhou ${r.failedAttempts}x`}
+                      </span>
                     )}
                   </div>
                 </div>

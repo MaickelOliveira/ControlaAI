@@ -6,7 +6,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const connected = isConnected(session.sub);
+  const connected = await isConnected(session.sub);
   if (!connected) return NextResponse.json({ connected: false });
 
   const email = await getConnectedEmail(session.sub);

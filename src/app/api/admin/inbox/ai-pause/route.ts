@@ -11,6 +11,6 @@ export async function POST(req: NextRequest) {
   const paused = !!body?.paused;
   if (!phone) return NextResponse.json({ error: "phone é obrigatório" }, { status: 400 });
 
-  setAiPaused(phone, paused);
+  await setAiPaused(phone, paused);
   return NextResponse.json({ ok: true });
 }

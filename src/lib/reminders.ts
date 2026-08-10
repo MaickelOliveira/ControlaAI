@@ -3,6 +3,12 @@ import { getSupabase } from "./supabase";
 
 export type ReminderRepeat = "none" | "daily" | "weekly" | "monthly";
 
+// Depois de MAX_FAILED_ATTEMPTS tentativas seguidas sem sucesso (ex: número
+// inválido, WhatsApp fora do ar por horas), getDueReminders() para de
+// devolver o lembrete — sem isso, ele ficava tentando de novo a cada tick
+// do cron pra sempre, indefinidamente.
+export const MAX_FAILED_ATTEMPTS = 5;
+
 export type Reminder = {
   id: string;
   userId: string;
@@ -12,22 +18,23 @@ export type Reminder = {
   repeat: ReminderRepeat;
   mode: "personal" | "business";
   sent: boolean;
+  failedAttempts: number;
   createdAt: string;
 };
 
 type Row = {
   id: string; user_id: string; message: string; phone: string; scheduled_at: string;
-  repeat: ReminderRepeat; mode: "personal" | "business"; sent: boolean; created_at: string;
+  repeat: ReminderRepeat; mode: "personal" | "business"; sent: boolean; failed_attempts: number; created_at: string;
 };
 
 function fromRow(r: Row): Reminder {
   return {
     id: r.id, userId: r.user_id, message: r.message, phone: r.phone, scheduledAt: r.scheduled_at,
-    repeat: r.repeat, mode: r.mode, sent: r.sent, createdAt: r.created_at,
+    repeat: r.repeat, mode: r.mode, sent: r.sent, failedAttempts: r.failed_attempts ?? 0, createdAt: r.created_at,
   };
 }
 
-export async function createReminder(data: Omit<Reminder, "id" | "sent" | "createdAt">): Promise<Reminder> {
+export async function createReminder(data: Omit<Reminder, "id" | "sent" | "failedAttempts" | "createdAt">): Promise<Reminder> {
   let scheduledAt = data.scheduledAt;
 
   // Se o horário já passou, avança para o próximo futuro
@@ -53,14 +60,15 @@ export async function createReminder(data: Omit<Reminder, "id" | "sent" | "creat
 
 export async function getDueReminders(): Promise<Reminder[]> {
   const now = new Date().toISOString();
-  const { data, error } = await getSupabase().from("reminders").select("*").eq("sent", false).lte("scheduled_at", now);
+  const { data, error } = await getSupabase().from("reminders").select("*")
+    .eq("sent", false).lte("scheduled_at", now).lt("failed_attempts", MAX_FAILED_ATTEMPTS);
   if (error) { console.error("[reminders] getDueReminders erro:", error.message); return []; }
   return (data as Row[]).map(fromRow);
 }
 
 export async function markReminderSent(id: string, repeat: ReminderRepeat): Promise<void> {
   if (repeat === "none") {
-    await getSupabase().from("reminders").update({ sent: true }).eq("id", id);
+    await getSupabase().from("reminders").update({ sent: true, failed_attempts: 0 }).eq("id", id);
     return;
   }
   const { data, error } = await getSupabase().from("reminders").select("scheduled_at").eq("id", id).maybeSingle();
@@ -69,7 +77,16 @@ export async function markReminderSent(id: string, repeat: ReminderRepeat): Prom
   if (repeat === "daily") next.setDate(next.getDate() + 1);
   else if (repeat === "weekly") next.setDate(next.getDate() + 7);
   else if (repeat === "monthly") next.setMonth(next.getMonth() + 1);
-  await getSupabase().from("reminders").update({ scheduled_at: next.toISOString(), sent: false }).eq("id", id);
+  await getSupabase().from("reminders").update({ scheduled_at: next.toISOString(), sent: false, failed_attempts: 0 }).eq("id", id);
+}
+
+/** Chamado quando o envio falha (WhatsApp indisponível, número inválido,
+ *  etc.) — o lembrete continua "não enviado" e será tentado de novo no
+ *  próximo tick do cron, até bater em MAX_FAILED_ATTEMPTS. */
+export async function markReminderFailed(id: string): Promise<void> {
+  const { data } = await getSupabase().from("reminders").select("failed_attempts").eq("id", id).maybeSingle();
+  const current = (data as { failed_attempts: number } | null)?.failed_attempts ?? 0;
+  await getSupabase().from("reminders").update({ failed_attempts: current + 1 }).eq("id", id);
 }
 
 /** Registros antigos, de antes do campo mode existir, tratam como "personal"

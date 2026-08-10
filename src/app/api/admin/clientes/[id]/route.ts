@@ -12,25 +12,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
   const body = await req.json();
   const { action, trialDays, maxWppPhones, priceOverride } = body;
 
-  const user = getUserById(id);
+  const user = await getUserById(id);
   if (!user) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
 
   if (action === "activate") {
-    activateUser(id);
+    await activateUser(id);
   } else if (action === "deactivate") {
-    deactivateUser(id);
+    await deactivateUser(id);
   } else if (action === "extend_trial") {
     const days = Number(trialDays) || 14;
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + days);
-    updateUser(id, { status: "trial", trialEndsAt: trialEnd.toISOString() });
+    await updateUser(id, { status: "trial", trialEndsAt: trialEnd.toISOString() });
   } else if (action === "set_wpp_limit") {
     const limit = Math.max(1, Number(maxWppPhones) || 1);
-    updateUser(id, { maxWppPhones: limit });
+    await updateUser(id, { maxWppPhones: limit });
   } else if (action === "set_price_override") {
     // priceOverride vazio/null/0 remove a exceção e volta a usar o preço padrão do plano
     const value = priceOverride === "" || priceOverride === null || priceOverride === undefined ? undefined : Number(priceOverride);
-    updateUser(id, { priceOverride: value !== undefined && !isNaN(value) && value > 0 ? value : undefined });
+    await updateUser(id, { priceOverride: value !== undefined && !isNaN(value) && value > 0 ? value : undefined });
   } else {
     return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
   }
@@ -43,7 +43,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Params }) 
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
-  deleteUser(id);
+  await deleteUser(id);
 
   return NextResponse.json({ ok: true });
 }

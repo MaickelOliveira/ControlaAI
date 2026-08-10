@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDueReminders, markReminderSent } from "@/lib/reminders";
+import { getDueReminders, markReminderSent, markReminderFailed } from "@/lib/reminders";
 import { sendReminderTemplate } from "@/lib/whatsapp";
 import { acquireCronLock, releaseCronLock } from "@/lib/cron-lock";
 
@@ -39,7 +39,8 @@ async function runCron() {
       const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", `🔔 *Lembrete:* ${r.message}`, { lembrete: r.message });
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
       if (ok) await markReminderSent(r.id, r.repeat);
-      results.push({ id: r.id, message: r.message, sent: ok });
+      else await markReminderFailed(r.id);
+      results.push({ id: r.id, sent: ok });
     }
     return NextResponse.json({ ok: true, fired: results.length, results, now: new Date().toISOString() });
   } catch (e) {
