@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Employee = { id: string; name: string; role: string; salary: number; startDate: string; status: string; phone?: string; email?: string; notes?: string };
 
@@ -27,7 +28,7 @@ export default function FuncionariosPage() {
   }
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => { setMode(d.user?.activeMode || "personal"); });
+    fetchDashboardMe().then(d => { setMode(d.user?.activeMode || "personal"); });
     load();
   }, []);
 

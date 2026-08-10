@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
 
@@ -170,7 +171,7 @@ export default function FinancasPage() {
   }, [mode, filters.from, filters.to]);
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => {
+    fetchDashboardMe().then(d => {
       const m = d.user?.activeMode || "personal";
       setMode(m);
       loadCategories();

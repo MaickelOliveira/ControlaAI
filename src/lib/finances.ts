@@ -39,14 +39,14 @@ export function isPostedFinance(f: Finance): boolean {
 type Row = {
   id: string; user_id: string; type: FinanceType; amount: number; category: string;
   description: string; date: string; mode: FinanceMode; source: FinanceSource;
-  pending: boolean; created_at: string;
+  pending: boolean; registered_by: string | null; created_at: string;
 };
 
 function fromRow(r: Row): Finance {
   return {
     id: r.id, userId: r.user_id, type: r.type, amount: Number(r.amount), category: r.category,
     description: r.description, date: r.date, mode: r.mode, source: r.source,
-    status: r.pending ? "pending" : "posted", createdAt: r.created_at,
+    status: r.pending ? "pending" : "posted", registeredBy: r.registered_by ?? undefined, createdAt: r.created_at,
   };
 }
 
@@ -56,9 +56,13 @@ function fromRow(r: Row): Finance {
 // negócio em SQL e arriscar mudar comportamento sutil), só troca de onde
 // os dados vêm. Filtra por user_id direto na query quando possível, por
 // eficiência, já que esse filtro está presente em quase toda chamada.
-async function load(userId?: string): Promise<Finance[]> {
+async function load(userId?: string, filters: { mode?: FinanceMode; registeredBy?: string; from?: string; to?: string } = {}): Promise<Finance[]> {
   let query = getSupabase().from("finances").select("*");
   if (userId) query = query.eq("user_id", userId);
+  if (filters.mode) query = query.eq("mode", filters.mode);
+  if (filters.registeredBy) query = query.eq("registered_by", filters.registeredBy);
+  if (filters.from) query = query.gte("date", filters.from);
+  if (filters.to) query = query.lte("date", filters.to);
   const { data, error } = await query;
   if (error) { console.error("[finances] load erro:", error.message); return []; }
   return (data as Row[]).map(fromRow);
@@ -77,10 +81,7 @@ export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promi
 }
 
 export async function getFinancesByUser(userId: string, mode?: FinanceMode, registeredBy?: string): Promise<Finance[]> {
-  return (await load(userId)).filter(f =>
-    (!mode || f.mode === mode) &&
-    (!registeredBy || f.registeredBy === registeredBy)
-  );
+  return load(userId, { mode, registeredBy });
 }
 
 /** Filtra por intervalo de datas (YYYY-MM-DD, inclusive nas duas pontas) em
@@ -88,11 +89,7 @@ export async function getFinancesByUser(userId: string, mode?: FinanceMode, regi
  *  customizados em Finanças/Dashboard. Sem from/to, retorna tudo (mesmo
  *  comportamento de getFinancesByUser). */
 export async function getFinancesInRange(userId: string, mode?: FinanceMode, from?: string, to?: string): Promise<Finance[]> {
-  return (await getFinancesByUser(userId, mode)).filter(f => {
-    if (from && f.date < from) return false;
-    if (to && f.date > to) return false;
-    return true;
-  });
+  return load(userId, { mode, from, to });
 }
 
 export async function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): Promise<{

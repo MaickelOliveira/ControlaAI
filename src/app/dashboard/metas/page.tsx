@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Goal = { id: string; title: string; targetAmount: number; currentAmount: number; deadline?: string; category: string; mode: string; status: string };
 
@@ -47,8 +48,7 @@ export default function MetasPage() {
   }
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
+    fetchDashboardMe()
       .then(d => {
         const m = d.user?.activeMode || "personal";
         setMode(m);

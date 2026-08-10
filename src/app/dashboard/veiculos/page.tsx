@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type VehicleExpense = { id: string; date: string; km?: number; type: string; amount: number; description: string; financeId?: string };
 type Vehicle = { id: string; plate: string; brand: string; model: string; year: number; fuelType: string; currentKm: number; mode: string; expenses: VehicleExpense[] };
@@ -37,8 +38,7 @@ export default function VeiculosPage() {
   }
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
+    fetchDashboardMe()
       .then(d => {
         const m = d.user?.activeMode || "personal";
         setMode(m);

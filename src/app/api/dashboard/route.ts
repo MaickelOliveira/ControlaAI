@@ -1,38 +1,64 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { getUserById, getMaxWppPhones } from "@/lib/users";
+import { getSessionWithUser } from "@/lib/auth";
+import { getMaxWppPhones } from "@/lib/users";
 import { getPhonesForUser } from "@/lib/wpp-phone-links";
-import { getBalance, getDailyTotals, getByCategory, getRecentTransactions } from "@/lib/finances";
-import { getPendingTasks, getOverdueTasks } from "@/lib/tasks";
+import { getFinancesByUser, isPostedFinance, type Finance, type FinanceMode } from "@/lib/finances";
+import { getTasksByUser } from "@/lib/tasks";
 
 export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const user = await getUserById(session.sub);
-  if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+  const auth = await getSessionWithUser();
+  if (!auth) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const { user } = auth;
 
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  const [
-    personalBalance, businessBalance,
-    personalDailyTotals, businessDailyTotals,
-    personalExpCategories, businessExpCategories,
-    pendingTasks, overdueTasks, recentTransactions, phoneLinks,
-  ] = await Promise.all([
-    getBalance(user.id, "personal", year, month),
-    getBalance(user.id, "business", year, month),
-    getDailyTotals(user.id, "personal", 30),
-    getDailyTotals(user.id, "business", 30),
-    getByCategory(user.id, "personal", "expense", year, month),
-    getByCategory(user.id, "business", "expense", year, month),
-    getPendingTasks(user.id, user.activeMode),
-    getOverdueTasks(user.id, user.activeMode),
-    getRecentTransactions(user.id, user.activeMode, 5),
+  const [finances, tasks, phoneLinks] = await Promise.all([
+    getFinancesByUser(user.id),
+    getTasksByUser(user.id, user.activeMode),
     getPhonesForUser(user.id),
   ]);
+
+  const posted = finances.filter(isPostedFinance);
+  const inMonth = (finance: Finance) => {
+    const date = new Date(finance.date + "T12:00:00");
+    return date.getFullYear() === year && date.getMonth() + 1 === month;
+  };
+  const balanceFor = (mode: FinanceMode) => {
+    const items = posted.filter(finance => finance.mode === mode && inMonth(finance));
+    const income = items.filter(finance => finance.type === "income").reduce((sum, finance) => sum + finance.amount, 0);
+    const expense = items.filter(finance => finance.type === "expense").reduce((sum, finance) => sum + finance.amount, 0);
+    return { income, expense, balance: income - expense };
+  };
+  const dailyFor = (mode: FinanceMode) => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const totals = new Map<string, { income: number; expense: number }>();
+    for (const finance of posted.filter(item => item.mode === mode && new Date(item.date + "T12:00:00") >= cutoff)) {
+      const current = totals.get(finance.date) ?? { income: 0, expense: 0 };
+      current[finance.type] += finance.amount;
+      totals.set(finance.date, current);
+    }
+    return [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, totals]) => ({ date, ...totals }));
+  };
+  const categoriesFor = (mode: FinanceMode) => posted
+    .filter(finance => finance.mode === mode && finance.type === "expense" && inMonth(finance))
+    .reduce<Record<string, number>>((totals, finance) => {
+      totals[finance.category] = (totals[finance.category] ?? 0) + finance.amount;
+      return totals;
+    }, {});
+
+  const personalBalance = balanceFor("personal");
+  const businessBalance = balanceFor("business");
+  const personalDailyTotals = dailyFor("personal");
+  const businessDailyTotals = dailyFor("business");
+  const personalExpCategories = categoriesFor("personal");
+  const businessExpCategories = categoriesFor("business");
+  const pendingTasks = tasks.filter(task => task.status !== "completed").sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority] - { high: 0, medium: 1, low: 2 }[b.priority]));
+  const today = new Date().toISOString().slice(0, 10);
+  const overdueTasks = pendingTasks.filter(task => task.dueDate && task.dueDate < today);
+  const recentTransactions = posted.filter(finance => finance.mode === user.activeMode).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
 
   const wppPhones = phoneLinks.map(link => link.phone);
   const wppPhoneNames = Object.fromEntries(phoneLinks.filter(link => link.name).map(link => [link.phone, link.name]));

@@ -68,6 +68,7 @@ create table if not exists finances (
   created_at timestamptz not null default now()
 );
 create index if not exists finances_user_idx on finances(user_id);
+create index if not exists finances_user_mode_date_idx on finances(user_id, mode, date);
 
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
@@ -80,6 +81,7 @@ create table if not exists tasks (
   created_at timestamptz not null default now()
 );
 create index if not exists tasks_user_idx on tasks(user_id);
+create index if not exists tasks_user_mode_status_idx on tasks(user_id, mode, status);
 
 create table if not exists reminders (
   id uuid primary key default gen_random_uuid(),
