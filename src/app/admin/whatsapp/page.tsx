@@ -37,9 +37,8 @@ export default function AdminWhatsappPage() {
   const [testingTemplate, setTestingTemplate] = useState(false);
   const [testTemplateMsg, setTestTemplateMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const load = useCallback(async () => {
-    const r = await fetch("/api/admin/whatsapp");
-    if (r.ok) setCfg(await r.json());
+  const load = useCallback(() => {
+    fetch("/api/admin/whatsapp").then(r => (r.ok ? r.json() : null)).then(d => { if (d) setCfg(d); });
   }, []);
 
   useEffect(() => { load(); }, [load]);

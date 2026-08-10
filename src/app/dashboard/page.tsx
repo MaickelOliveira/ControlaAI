@@ -132,6 +132,7 @@ function TrendBadge({ pct, goodWhenUp }: { pct: number | null; goodWhenUp: boole
 }
 
 export default function DashboardPage() {
+  const [now] = useState(() => Date.now());
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<string>("personal");
@@ -211,8 +212,8 @@ export default function DashboardPage() {
 
   const { user, tasks, recentTransactions } = data;
   const isPersonal = user.activeMode !== "business";
-  const monthLabel = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const trialDays = Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / 86400000));
+  const monthLabel = new Date(now).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const trialDays = Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now) / 86400000));
 
   const kpis = [
     { label: "Receitas", value: fmt(activeBalance.income), icon: "↑", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", trend: <TrendBadge pct={trendPct(activeBalance.income, prevBalance.income)} goodWhenUp /> },

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -67,7 +67,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => { setSidebarOpen(false); }, [pathname]);
+  // Fecha a sidebar ao trocar de rota (mobile) — ajusta o estado durante o
+  // render em vez de um efeito, seguindo o padrão recomendado pelo React
+  // pra "resetar estado quando uma prop muda" (evita o round-trip extra de
+  // render → efeito → novo render).
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setSidebarOpen(false);
+  }
 
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });

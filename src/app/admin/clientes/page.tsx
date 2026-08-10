@@ -25,10 +25,11 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function load() {
-    const d = await fetch("/api/admin/clientes").then(r => r.json());
-    setClientes(d.clientes || []);
-    setLoading(false);
+  function load() {
+    fetch("/api/admin/clientes").then(r => r.json()).then(d => {
+      setClientes(d.clientes || []);
+      setLoading(false);
+    });
   }
 
   useEffect(() => { load(); }, []);

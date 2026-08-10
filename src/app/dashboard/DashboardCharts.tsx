@@ -1,5 +1,4 @@
 "use client";
-import { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell, AreaChart, Area,
@@ -18,10 +17,6 @@ function fmtK(v: number) {
 }
 
 export function BarChartComponent({ data }: { data: BarEntry[] }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="h-[220px]" />;
-
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} barCategoryGap="30%" barGap={4}>
@@ -42,10 +37,6 @@ export function BarChartComponent({ data }: { data: BarEntry[] }) {
 }
 
 export function AreaChartComponent({ data }: { data: AreaEntry[] }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="h-[200px]" />;
-
   const hasNegative = data.some(d => d.saldo < 0);
 
   return (
@@ -71,10 +62,6 @@ export function AreaChartComponent({ data }: { data: AreaEntry[] }) {
 }
 
 export function PieChartComponent({ data, totalExpense }: { data: PieEntry[]; totalExpense: number }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="h-[170px]" />;
-
   return (
     <div className="flex flex-col items-center">
       <ResponsiveContainer width="100%" height={170}>

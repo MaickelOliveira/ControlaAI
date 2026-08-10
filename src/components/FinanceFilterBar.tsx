@@ -59,7 +59,12 @@ export default function FinanceFilterBar({
   const [searchInput, setSearchInput] = useState(value.search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const valueRef = useRef(value);
-  valueRef.current = value;
+
+  // Mantém a ref sincronizada com o valor mais recente pra o callback do
+  // debounce (abaixo) não precisar de "value" nas deps — mutação de ref
+  // fica num efeito, não durante o render, que pode ser reexecutado/
+  // descartado em modo concorrente.
+  useEffect(() => { valueRef.current = value; });
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

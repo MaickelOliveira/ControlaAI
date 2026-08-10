@@ -39,17 +39,13 @@ export default function DrivePage() {
   const [savingFolder, setSavingFolder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function load(folderId?: string) {
-    setLoading(true);
-    try {
-      const url = folderId ? `/api/drive?folderId=${folderId}` : "/api/drive";
-      const res = await fetch(url);
-      const data = await res.json();
+  function load(folderId?: string) {
+    Promise.resolve().then(() => setLoading(true));
+    const url = folderId ? `/api/drive?folderId=${folderId}` : "/api/drive";
+    fetch(url).then(r => r.json()).then(data => {
       setFolders(data.folders || []);
       setFiles(data.files || []);
-    } finally {
-      setLoading(false);
-    }
+    }).finally(() => setLoading(false));
   }
 
   useEffect(() => { load(currentFolder?.id); }, [currentFolder]);
@@ -63,7 +59,7 @@ export default function DrivePage() {
     if (currentFolder) form.append("folderId", currentFolder.id);
     try {
       const res = await fetch("/api/drive", { method: "POST", body: form });
-      if (res.ok) await load(currentFolder?.id);
+      if (res.ok) load(currentFolder?.id);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -88,7 +84,7 @@ export default function DrivePage() {
       if (res.ok) {
         setShowNewFolder(false);
         setNewFolderName("");
-        await load(currentFolder?.id);
+        load(currentFolder?.id);
       }
     } finally {
       setSavingFolder(false);
@@ -103,7 +99,7 @@ export default function DrivePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: folderId }),
     });
-    await load(currentFolder?.id);
+    load(currentFolder?.id);
   }
 
   const rootFolders = folders.filter(f => f.parentId === null);

@@ -138,15 +138,10 @@ export default function AgendaPage() {
   const [saving, setSaving] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/agenda");
-      const data = await res.json();
+  function load() {
+    fetch("/api/agenda").then(r => r.json()).then(data => {
       setAppointments(Array.isArray(data) ? data : []);
-    } finally {
-      setLoading(false);
-    }
+    }).finally(() => setLoading(false));
   }
 
   useEffect(() => {

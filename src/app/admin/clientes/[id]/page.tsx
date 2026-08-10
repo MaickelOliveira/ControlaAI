@@ -14,6 +14,7 @@ function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", 
 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [now] = useState(() => Date.now());
   const [cliente, setCliente] = useState<ClienteDetail | null>(null);
   const [priceInput, setPriceInput] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
@@ -39,7 +40,7 @@ export default function ClienteDetailPage() {
 
   if (!cliente) return <div className="text-slate-400 p-4">Carregando...</div>;
 
-  const trialDays = Math.max(0, Math.ceil((new Date(cliente.trialEndsAt).getTime() - Date.now()) / 86400000));
+  const trialDays = Math.max(0, Math.ceil((new Date(cliente.trialEndsAt).getTime() - now) / 86400000));
 
   return (
     <div className="space-y-5 max-w-3xl">

@@ -52,21 +52,21 @@ export default function AdminInboxPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const fetchConversations = useCallback(async () => {
-    const r = await fetch("/api/admin/inbox/conversations");
-    if (r.ok) {
-      const d = await r.json();
-      setConversations(d.conversations ?? []);
-    }
+  const fetchConversations = useCallback(() => {
+    fetch("/api/admin/inbox/conversations")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setConversations(d.conversations ?? []); });
   }, []);
 
-  const fetchMessages = useCallback(async (phone: string) => {
-    const r = await fetch(`/api/admin/inbox/messages?phone=${encodeURIComponent(phone)}`);
-    if (r.ok && selectedRef.current === phone) {
-      const d = await r.json();
-      setMessages(d.messages ?? []);
-      setConversations(cs => cs.map(c => c.phone === phone ? { ...c, unread: false } : c));
-    }
+  const fetchMessages = useCallback((phone: string) => {
+    fetch(`/api/admin/inbox/messages?phone=${encodeURIComponent(phone)}`)
+      .then(r => (r.ok && selectedRef.current === phone ? r.json() : null))
+      .then(d => {
+        if (d) {
+          setMessages(d.messages ?? []);
+          setConversations(cs => cs.map(c => c.phone === phone ? { ...c, unread: false } : c));
+        }
+      });
   }, []);
 
   useEffect(() => {

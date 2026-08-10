@@ -83,7 +83,10 @@ function WhatsAppMock({ messages, chips, tilt = 0 }: { messages: Msg[]; chips?: 
   }, [shown, typing]);
 
   useEffect(() => {
-    if (!inView) { setShown(0); setTyping(false); return; }
+    if (!inView) {
+      Promise.resolve().then(() => { setShown(0); setTyping(false); });
+      return;
+    }
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const at = (fn: () => void, ms: number) => { const t = setTimeout(() => { if (!cancelled) fn(); }, ms); timers.push(t); };
@@ -172,7 +175,10 @@ function ScreenChatDemo({ messages }: { messages: Msg[] }) {
   const [typingInput, setTypingInput] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!inView) { setShown(0); setTypingInput(null); return; }
+    if (!inView) {
+      Promise.resolve().then(() => { setShown(0); setTypingInput(null); });
+      return;
+    }
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const at = (fn: () => void, ms: number) => { const t = setTimeout(() => { if (!cancelled) fn(); }, ms); timers.push(t); };

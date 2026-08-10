@@ -150,6 +150,7 @@ function SidebarContent({
   logout: () => void;
   onNavClick: () => void;
 }) {
+  const [now] = useState(() => Date.now());
   const navItems = [
     ...BASE_NAV,
     ...(user?.activeMode === "business" ? BUSINESS_NAV : PERSONAL_NAV),
@@ -175,7 +176,7 @@ function SidebarContent({
               <p className="text-slate-800 text-xs font-semibold truncate">{user.name}</p>
               <p className="text-slate-400 text-[10px]">
                 {user.status === "trial"
-                  ? `Trial · ${Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / 86400000))} dias`
+                  ? `Trial · ${Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now) / 86400000))} dias`
                   : "Plano Ativo"}
               </p>
             </div>
@@ -239,8 +240,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     fetch("/api/dashboard").then(r => r.json()).then(d => d.user && setUser(d.user)).catch(() => {});
   }, []);
 
-  // fechar sidebar ao trocar de rota no mobile
-  useEffect(() => { setSidebarOpen(false); }, [pathname]);
+  // Fecha a sidebar ao trocar de rota (mobile) — ajusta o estado durante o
+  // render em vez de um efeito, seguindo o padrão recomendado pelo React
+  // pra "resetar estado quando uma prop muda".
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setSidebarOpen(false);
+  }
 
   async function toggleMode() {
     if (!user || modeChanging) return;
