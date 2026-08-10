@@ -203,15 +203,85 @@ create table if not exists customers (
 );
 create index if not exists customers_user_idx on customers(user_id);
 
--- grocery.json original é um blob ÚNICO (não por usuário) com
--- { stores, purchases, shoppingList }, cada item já carregando seu próprio
--- userId — mantém a mesma forma aqui, 1 linha só, pra não reescrever a
--- lógica de filtro que já existe no código.
+-- grocery (blob antigo, id=1) — substituído pelas tabelas relacionais
+-- abaixo (migration 20260810080000). Mantido só como quarentena/backup até
+-- o corte em produção ser validado; não é mais lido/escrito pelo código.
 create table if not exists grocery (
   id int primary key default 1,
   data jsonb not null default '{"stores":[],"purchases":[],"shoppingList":[]}',
   constraint single_row check (id = 1)
 );
+
+create table if not exists grocery_stores (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  name text not null,
+  location text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists grocery_stores_user_idx on grocery_stores(user_id);
+create unique index if not exists grocery_stores_user_name_uidx on grocery_stores(user_id, lower(name));
+
+-- Catálogo de produtos do usuário — não existia antes; alimentado
+-- automaticamente por findOrCreateProduct() sempre que uma compra é
+-- registrada (foto de cupom ou texto), pra permitir comparação de preço
+-- por item entre mercados e sugestão de lista baseada em histórico.
+create table if not exists grocery_products (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  name text not null,
+  normalized_name text not null,
+  category text not null default 'Outros',
+  default_unit text not null default 'un',
+  created_at timestamptz not null default now()
+);
+create index if not exists grocery_products_user_idx on grocery_products(user_id);
+create index if not exists grocery_products_user_normalized_idx on grocery_products(user_id, normalized_name);
+
+create table if not exists grocery_purchases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  store_id uuid not null references grocery_stores(id) on delete cascade,
+  date date not null,
+  total numeric not null default 0,
+  source text not null default 'manual', -- 'manual' | 'whatsapp_text' | 'whatsapp_receipt' | 'whatsapp_quick'
+  finance_id uuid references finances(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists grocery_purchases_user_idx on grocery_purchases(user_id);
+create index if not exists grocery_purchases_user_date_idx on grocery_purchases(user_id, date desc);
+create index if not exists grocery_purchases_store_idx on grocery_purchases(store_id);
+
+create table if not exists grocery_purchase_items (
+  id uuid primary key default gen_random_uuid(),
+  purchase_id uuid not null references grocery_purchases(id) on delete cascade,
+  product_id uuid references grocery_products(id) on delete set null,
+  product_name text not null,
+  category text not null default 'Outros',
+  price numeric not null default 0, -- preço UNITÁRIO
+  quantity numeric not null default 1,
+  unit text not null default 'un',
+  -- true quando o preço veio de rateio (finalizar compra só com total, sem
+  -- preço por item) em vez de extração real — excluído das comparações de
+  -- preço "por item" pra não poluir com valor inventado.
+  price_estimated boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists grocery_purchase_items_purchase_idx on grocery_purchase_items(purchase_id);
+create index if not exists grocery_purchase_items_product_idx on grocery_purchase_items(product_id);
+
+create table if not exists grocery_shopping_list_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  product_id uuid references grocery_products(id) on delete set null,
+  name text not null,
+  category text not null default 'Outros',
+  quantity text not null default '1',
+  checked boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists grocery_shopping_list_items_user_idx on grocery_shopping_list_items(user_id);
+create index if not exists grocery_shopping_list_items_user_checked_idx on grocery_shopping_list_items(user_id, checked);
 
 create table if not exists meets (
   id uuid primary key default gen_random_uuid(),

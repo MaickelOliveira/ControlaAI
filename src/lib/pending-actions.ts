@@ -144,7 +144,8 @@ export type SlotFillIntent =
   | "vehicle_create"
   | "employee_create"
   | "customer_create"
-  | "grocery_purchase";
+  | "grocery_purchase"
+  | "grocery_purchase_finish";
 
 export type PendingSlotFill = {
   type: "slot_fill";

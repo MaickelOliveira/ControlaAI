@@ -11,11 +11,11 @@ import { createRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
 import { createAppointment } from "./agenda";
 import { todayStrBR, spToUTC } from "./date-br";
-import { findOrCreateStore, addPurchase, type GroceryPurchaseItem } from "./grocery";
+import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, type GroceryPurchaseItem } from "./grocery";
 import { createEmployee } from "./employees";
 import { createCustomer } from "./customers";
 import {
-  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyEmployeeCreated, replyCustomerCreated,
+  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated,
 } from "./bot-replies";
 import { formatCurrency } from "./finances";
 
@@ -594,6 +594,48 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
     },
 
     giveUp: () => `❌ Não consegui registrar a compra — faltaram os itens. Tente de novo, ex: _"comprei no Assaí: arroz 25, feijão 8"_.`,
+  },
+
+  grocery_purchase_finish: {
+    seed(ai) {
+      const g = ai.grocery;
+      return { storeName: g?.storeName, total: g?.total } satisfies Draft;
+    },
+
+    missing(draft) {
+      const q: string[] = [];
+      if (!draft.storeName) q.push("storeName");
+      if (!draft.total) q.push("total");
+      return q;
+    },
+
+    slots: {
+      storeName: {
+        key: "storeName",
+        label: "mercado",
+        parse: slotText(1),
+        ask: () => `🏪 Em qual mercado foi a compra?`,
+      },
+      total: {
+        key: "total",
+        label: "total",
+        parse: (text) => {
+          const amount = parseAmountBR(text);
+          return amount !== null ? { ok: true, value: amount } : { ok: false };
+        },
+        ask: () => `💰 Quanto você pagou no total?`,
+      },
+    },
+
+    async finalize(draft, ctx) {
+      const result = await finalizePurchaseFromChecked(
+        ctx.userId, ctx.mode, draft.storeName as string, draft.total as number, ctx.phone,
+      );
+      if (!result) return `❓ Sua lista de compras não tem nenhum item marcado. Marca o que você já comprou (ex: _"comprei o arroz"_) e chama de novo.`;
+      return replyGroceryPurchaseFinished(result.purchase);
+    },
+
+    giveUp: () => `❌ Não consegui fechar a compra — faltou o mercado ou o valor. Tente de novo, ex: _"finalizei a compra no Assaí, foi 120 reais"_.`,
   },
 
   employee_create: {

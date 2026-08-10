@@ -1,7 +1,7 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, type AIResult } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
@@ -9,7 +9,12 @@ import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTa
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
-import { addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore } from "@/lib/grocery";
+import {
+  addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore,
+  findOrCreateStore, addPurchase, setPurchaseFinanceId, getPriceComparison, getStorePriceRanking,
+  getSuggestedListItems, categoryForTemplateKey,
+  type GroceryPurchaseItem, type GroceryCategory,
+} from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseAppointmentChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
@@ -213,6 +218,51 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             }
           } catch (e) {
             console.error("[webhook] erro ao extrair fatura:", e);
+          }
+        }
+
+        // Cupom fiscal de mercado (produtos individuais) — tenta ANTES do
+        // caminho de "documento financeiro simples" (1 valor só), senão um
+        // cupom de mercado cairia lá como um gasto único sem os itens.
+        // Só imagem (cupom de mercado não vem em PDF na prática) e sem
+        // intenção explícita de só salvar.
+        if (!hasSaveIntent && mimeType.includes("image")) {
+          try {
+            const receipt = await extractGroceryReceiptItems(buffer, mimeType, caption);
+            if (receipt) {
+              const gMode = fileUser.activeMode;
+              const isDup = await isLikelyDuplicateExpense(fileUser.id, gMode, receipt.total, receipt.date);
+              if (isDup) {
+                await wppSend(from, `📑 Analisei o cupom do *${receipt.storeName}* (${formatCurrency(receipt.total)}), mas já parece estar registrado (mesmo valor e data próxima). Não registrei de novo.`);
+                return;
+              }
+              const store = await findOrCreateStore(fileUser.id, receipt.storeName);
+              const items: GroceryPurchaseItem[] = receipt.items.map(i => ({
+                productName: cap(i.productName), category: i.category, price: i.unitPrice, quantity: i.quantity, unit: i.unit,
+              }));
+              const purchase = await addPurchase({
+                userId: fileUser.id, storeId: store.id, storeName: store.name,
+                date: receipt.date, items, total: receipt.total, source: "whatsapp_receipt",
+              });
+              const finance = await addFinance({
+                userId: fileUser.id, type: "expense", amount: receipt.total, category: "Alimentação",
+                description: `Compra no ${store.name}`, date: receipt.date, mode: gMode, source: "whatsapp", registeredBy: from,
+              });
+              await setPurchaseFinanceId(purchase.id, fileUser.id, finance.id);
+              const bal = await getBalance(fileUser.id, gMode, nowBR().getFullYear(), nowBR().getMonth() + 1);
+
+              await setPendingAction(from, {
+                type: "receipt_save", userId: fileUser.id, fileBase64: buffer.toString("base64"), mimeType,
+                suggestedName: `${store.name} - ${receipt.date}${mimeType.includes("pdf") ? ".pdf" : ".jpg"}`,
+                description: `Compra no ${store.name}`, financeId: finance.id,
+              });
+
+              const itemsList = items.map(i => `• ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity}`).join("\n");
+              await wppSend(from, `🧾 *Compra registrada — ${store.name}!*\n\n${itemsList}\n\n💰 Total: ${formatCurrency(receipt.total)}\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar a foto do cupom no Drive? (sim/não)_`);
+              return;
+            }
+          } catch (e) {
+            console.error("[webhook] erro ao extrair cupom de mercado:", e);
           }
         }
 
@@ -1411,6 +1461,62 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "grocery_purchase": {
         const { reply: groceryReply } = await beginSlotFill("grocery_purchase", ai, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, groceryReply);
+        break;
+      }
+
+      case "grocery_purchase_finish": {
+        const { reply: finishReply } = await beginSlotFill("grocery_purchase_finish", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, finishReply);
+        break;
+      }
+
+      case "grocery_list_generate": {
+        const keys = ai.grocery?.categories ?? [];
+        const categories = keys.map(categoryForTemplateKey).filter((c): c is GroceryCategory => !!c);
+        const suggested = await getSuggestedListItems(user.id, categories.length ? categories : undefined);
+
+        if (suggested.length) {
+          for (const item of suggested) await addToShoppingList(user.id, cap(item.productName), item.category);
+          await wppSend(from, `🛒 *Lista sugerida com base no que você mais compra:*\n\n${suggested.map(i => `• ${cap(i.productName)}`).join("\n")}\n\nJá adicionei na sua lista de compras!`);
+        } else {
+          const fallbackKeys = keys.length ? keys : ["mercearia", "hortifruti"];
+          let total = 0;
+          for (const key of fallbackKeys) total += await addFromTemplate(user.id, key);
+          await wppSend(from, total > 0
+            ? `🛒 Ainda não tenho histórico seu de compras — montei uma lista básica (${total} itens) pra começar. Vai ficando mais personalizada conforme você registra suas compras!`
+            : `❓ Não reconheci essas categorias. Tente: mercearia, carnes, hortifruti, laticínios, padaria, bebidas, higiene ou limpeza.`);
+        }
+        break;
+      }
+
+      case "grocery_price_compare": {
+        const productName = ai.grocery?.productName;
+        if (!productName) { await wppSend(from, `❓ Qual produto você quer comparar? Ex: _"quanto pago no detergente"_`); break; }
+        const cmp = await getPriceComparison(user.id, productName);
+        if (!cmp.length) {
+          await wppSend(from, `❓ Não achei *"${productName}"* no seu histórico em mais de um mercado ainda.`);
+        } else {
+          const item = cmp[0];
+          let msg = `💰 *${cap(item.productName)}* — preço por mercado:\n\n`;
+          item.prices.forEach((p, i) => { msg += `${i === 0 ? "🟢" : "⚪"} ${p.storeName} — ${formatCurrency(p.price)}\n`; });
+          await wppSend(from, msg.trim());
+        }
+        break;
+      }
+
+      case "grocery_store_ranking": {
+        const { ranking, method } = await getStorePriceRanking(user.id);
+        if (!ranking.length) {
+          await wppSend(from, "❓ Ainda não tenho compras suficientes pra comparar mercados.");
+        } else {
+          let msg = `🏆 *Ranking de mercados${method === "avg_ticket" ? " (por ticket médio — poucos itens em comum ainda pra comparar preço)" : ""}:*\n\n`;
+          ranking.forEach((r, i) => {
+            msg += method === "relative_price"
+              ? `${i + 1}. ${r.storeName} — ${Math.round(r.score * 100)}%${i === 0 ? " 🏅 mais barato" : ""}\n`
+              : `${i + 1}. ${r.storeName} — ${formatCurrency(r.score)}/visita\n`;
+          });
+          await wppSend(from, msg.trim());
+        }
         break;
       }
 

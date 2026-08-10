@@ -7,6 +7,7 @@ type ShoppingItem = { id: string; name: string; category: string; quantity: stri
 type PriceComp = { productName: string; category: string; prices: Array<{ storeName: string; price: number; date: string }> };
 type SpendByStore = { storeId: string; storeName: string; total: number; visits: number };
 type Purchase = { id: string; storeName: string; date: string; total: number; items: Array<{ productName: string; price: number; quantity: number; category: string; unit: string }> };
+type Product = { id: string; name: string; category: string; defaultUnit: string };
 
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 
@@ -38,18 +39,22 @@ const LIST_FILTER_CATS = [
 
 export default function SupermercadoPage() {
   const [mode, setMode] = useState<string>("");
-  const [tab, setTab] = useState<"lista" | "compras" | "comparar" | "gastos">("lista");
+  const [tab, setTab] = useState<"lista" | "compras" | "comparar" | "gastos" | "catalogo">("lista");
   const [list, setList] = useState<ShoppingItem[]>([]);
   const [listFilter, setListFilter] = useState("");
   const [prices, setPrices] = useState<PriceComp[]>([]);
   const [spend, setSpend] = useState<SpendByStore[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [overview, setOverview] = useState<{ totalSpent: number; purchasesCount: number; topStore: SpendByStore | null; shoppingListCount: number } | null>(null);
 
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", category: "Mercearia", quantity: "1" });
   const [showAddPurchase, setShowAddPurchase] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
+  const [showFinish, setShowFinish] = useState(false);
+  const [finishForm, setFinishForm] = useState({ storeName: "", date: "", total: "" });
+  const [finishing, setFinishing] = useState(false);
 
   const loadList = (cat?: string) => {
     fetch(`/api/admin/grocery?view=list${cat ? `&category=${cat}` : ""}`)
@@ -69,6 +74,7 @@ export default function SupermercadoPage() {
       fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend);
       fetch("/api/admin/grocery?view=purchases").then(r => r.json()).then(setPurchases);
     }
+    if (tab === "catalogo") fetch("/api/admin/grocery?view=products").then(r => r.json()).then(setProducts);
   }, [tab, listFilter]);
 
   async function toggleItem(id: string) {
@@ -102,6 +108,22 @@ export default function SupermercadoPage() {
     if (tab === "gastos") { fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend); fetch("/api/admin/grocery?view=purchases").then(r => r.json()).then(setPurchases); }
   }
 
+  async function finishFromChecked(e: React.FormEvent) {
+    e.preventDefault();
+    setFinishing(true);
+    const r = await fetch("/api/admin/grocery", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "finish_from_checked", storeName: finishForm.storeName, total: parseFloat(finishForm.total), date: finishForm.date || undefined }),
+    });
+    setFinishing(false);
+    if (r.ok) {
+      setShowFinish(false);
+      setFinishForm({ storeName: "", date: "", total: "" });
+      loadList(listFilter);
+      fetch("/api/admin/grocery?view=overview").then(r2 => r2.json()).then(setOverview);
+    }
+  }
+
   const checkedCount = list.filter(i => i.checked).length;
   const grouped = list.reduce((acc, i) => { (acc[i.category] = acc[i.category] || []).push(i); return acc; }, {} as Record<string, ShoppingItem[]>);
 
@@ -124,10 +146,18 @@ export default function SupermercadoPage() {
           <h1 className="text-2xl font-bold text-slate-900">🛒 Supermercado</h1>
           <p className="text-slate-400 text-sm mt-0.5">👤 Pessoal</p>
         </div>
-        <button onClick={() => setShowAddPurchase(true)}
-          className="px-4 py-2 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition">
-          + Registrar Compra
-        </button>
+        <div className="flex gap-2">
+          {checkedCount > 0 && (
+            <button onClick={() => setShowFinish(true)}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition">
+              ✅ Finalizar compra ({checkedCount})
+            </button>
+          )}
+          <button onClick={() => setShowAddPurchase(true)}
+            className="px-4 py-2 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition">
+            + Registrar do zero
+          </button>
+        </div>
       </div>
 
       {/* Overview */}
@@ -171,6 +201,7 @@ export default function SupermercadoPage() {
           { key: "compras", label: "🧾 Histórico" },
           { key: "comparar", label: "💰 Preços" },
           { key: "gastos", label: "📊 Por mercado" },
+          { key: "catalogo", label: "📦 Catálogo" },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             className={clsx("px-4 py-2 rounded-lg text-sm font-medium transition",
@@ -380,6 +411,30 @@ export default function SupermercadoPage() {
         </div>
       )}
 
+      {/* ── CATÁLOGO ── */}
+      {tab === "catalogo" && (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-400">Produtos cadastrados automaticamente conforme você registra compras. Se algo aparecer duplicado ou junto errado, me avise.</p>
+          {products.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
+              <p className="text-4xl mb-3">📦</p>
+              <p className="font-semibold text-slate-700">Nenhum produto cadastrado ainda</p>
+              <p className="text-sm text-slate-400 mt-1">Aparece aqui conforme você registra compras</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-50">
+              {products.map(p => (
+                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span>{CAT_ICON[p.category] || "📦"}</span>
+                  <span className="text-sm text-slate-700 flex-1">{p.name}</span>
+                  <span className="text-xs text-slate-400">{p.category}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Modal: adicionar item */}
       {showAddItem && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
@@ -397,6 +452,28 @@ export default function SupermercadoPage() {
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowAddItem(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
                 <button type="submit" className="flex-1 bg-slate-800 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-700 transition">Adicionar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: finalizar compra a partir da lista marcada */}
+      {showFinish && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-slate-900 mb-1">✅ Finalizar compra</h3>
+            <p className="text-xs text-slate-400 mb-4">Fecha os {checkedCount} itens marcados como uma compra, lança em Finanças e limpa a lista.</p>
+            <form onSubmit={finishFromChecked} className="space-y-3">
+              <input value={finishForm.storeName} onChange={e => setFinishForm(f => ({ ...f, storeName: e.target.value }))} required
+                placeholder="Nome do mercado" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              <input type="date" value={finishForm.date} onChange={e => setFinishForm(f => ({ ...f, date: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              <input type="number" step="0.01" value={finishForm.total} onChange={e => setFinishForm(f => ({ ...f, total: e.target.value }))} required
+                placeholder="Total pago (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setShowFinish(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                <button type="submit" disabled={finishing} className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">{finishing ? "..." : "Finalizar"}</button>
               </div>
             </form>
           </div>

@@ -47,6 +47,10 @@ export type Intent =
   | "grocery_list_show"
   | "grocery_list_check"
   | "grocery_purchase"
+  | "grocery_purchase_finish"
+  | "grocery_list_generate"
+  | "grocery_price_compare"
+  | "grocery_store_ranking"
   | "grocery_spend_query"
   | "employee_create"
   | "employee_list"
@@ -170,6 +174,12 @@ export type GroceryData = {
   /** grocery_list_add a partir de modelo pronto — chave de LIST_TEMPLATES
    *  (ex: "mercearia", "carnes", "hortifruti", "laticinios", "padaria", "bebidas", "higiene", "limpeza") */
   template?: string;
+  /** grocery_list_generate: categorias pedidas (chaves de LIST_TEMPLATES) — vazio/omitido gera de todas */
+  categories?: string[];
+  /** grocery_purchase_finish: valor total dito pelo usuário, se vier na mesma frase */
+  total?: number;
+  /** grocery_price_compare: produto específico perguntado (ex: "detergente") */
+  productName?: string;
 };
 
 export type EmployeeData = {
@@ -358,7 +368,11 @@ INTENÇÕES POSSÍVEIS:
 - grocery_list_show: ver a lista de compras ("o que tem na lista de compras", "minha lista do mercado", "o que falta comprar")
 - grocery_list_check: marcar item(ns) da lista como já comprado(s) ("comprei o arroz", "já peguei leite e ovos", "risca o detergente da lista"). Use "grocery.itemNames" com os nomes mencionados.
 - grocery_purchase: registrar uma compra de mercado COMPLETA, com itens e valores ("comprei no Assaí: arroz 25, feijão 8, leite 6"). Use "grocery.storeName" e "grocery.items" (productName, price, quantity). ⚠️ DIFERENTE de finance_register: se a mensagem só disser um valor total sem listar os itens ("gastei 350 no mercado"), é finance_register (categoria Alimentação), NÃO grocery_purchase — só use grocery_purchase quando os itens individuais forem listados.
-- grocery_spend_query: perguntar sobre gastos/preços de mercado especificamente ("quanto gastei no mercado esse mês", "onde o leite tá mais barato", "qual mercado eu gasto mais")
+- grocery_purchase_finish: fechar a compra a partir dos itens JÁ MARCADOS na lista de compras, sem listar os itens de novo ("finalizei a compra no Assaí, foi 120 reais", "terminei as compras, gastei 85", "fechei a lista"). Use "grocery.storeName" e "grocery.total" se vierem na mensagem (se não vierem, será perguntado depois). ⚠️ DIFERENTE de grocery_purchase: aqui os itens NÃO são listados na mensagem, vêm da lista de compras já marcada.
+- grocery_list_generate: gerar/sugerir uma lista de compras básica ("gera uma lista de carnes e verduras pro dia a dia", "monta uma lista básica de mercearia pra mim", "sugere o que comprar"). Use "grocery.categories" com as chaves mencionadas (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) — se nenhuma categoria for citada, deixe vazio (gera de todas).
+- grocery_price_compare: perguntar o preço de UM produto específico entre os mercados que a pessoa já comprou ("quanto pago no detergente", "onde o leite tá mais barato", "qual o preço do arroz nos mercados que comprei"). Use "grocery.productName" com o nome do produto perguntado. ⚠️ DIFERENTE de grocery_spend_query: aqui é sobre o PREÇO de um item específico comparado entre lojas, não sobre gasto total/mercado favorito.
+- grocery_store_ranking: perguntar qual mercado é mais barato NO GERAL, considerando os itens comprados em comum entre eles ("qual mercado é mais barato pra mim", "onde compensa mais eu comprar", "ranking dos mercados que eu compro")
+- grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito de mercado ("quanto gastei no mercado esse mês", "qual mercado eu gasto mais", "quantas vezes fui no Assaí")
 - employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
@@ -839,6 +853,33 @@ OU para registrar compra completa ("comprei no Assaí: arroz 25, feijão 8"):
 OU para gasto de mercado ("quanto gastei no mercado esse mês"):
 {
   "intent": "grocery_spend_query",
+  "confidence": 0.85
+}
+
+OU para finalizar compra a partir da lista marcada ("finalizei a compra no Assaí, foi 120 reais"):
+{
+  "intent": "grocery_purchase_finish",
+  "confidence": 0.9,
+  "grocery": { "storeName": "Assaí", "total": 120.00 }
+}
+
+OU para gerar lista sugerida ("gera uma lista de carnes e verduras pro dia a dia"):
+{
+  "intent": "grocery_list_generate",
+  "confidence": 0.9,
+  "grocery": { "categories": ["carnes", "hortifruti"] }
+}
+
+OU para comparar preço de um item específico ("quanto pago no detergente"):
+{
+  "intent": "grocery_price_compare",
+  "confidence": 0.9,
+  "grocery": { "productName": "detergente" }
+}
+
+OU para ranking de mercado mais barato ("qual mercado é mais barato pra mim"):
+{
+  "intent": "grocery_store_ranking",
   "confidence": 0.85
 }
 
@@ -1589,6 +1630,99 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`,
     return { transactions };
   } catch (e) {
     console.error("[ai-processor] Erro extractInvoiceTransactions:", e);
+    return null;
+  }
+}
+
+export type GroceryReceiptItem = { productName: string; category: GroceryCategory; unitPrice: number; quantity: number; unit: string };
+
+/** Extrai os PRODUTOS individuais de um cupom fiscal de supermercado (não
+ *  confundir com extractInvoiceTransactions, que é fatura de cartão com
+ *  várias TRANSAÇÕES de valor único cada — aqui é uma compra ÚNICA com
+ *  vários ITENS). Mesmo padrão de classificação interna (retorna null se
+ *  não bater) usado em extractInvoiceTransactions/extractFinanceFromDocument. */
+export async function extractGroceryReceiptItems(
+  buffer: Buffer, mimeType: string, caption?: string
+): Promise<{ storeName: string; date: string; items: GroceryReceiptItem[]; total: number } | null> {
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  const hoje = todayStrBR();
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent([
+      `Analise esta imagem e determine se é um CUPOM FISCAL/NOTA FISCAL DE SUPERMERCADO com MÚLTIPLOS PRODUTOS individuais (cada linha um item comprado, com preço).
+
+Hoje é: ${hoje}
+${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
+
+⚠️ NÃO é cupom fiscal de mercado (retorne isGroceryReceipt: false nesses casos): boleto de cobrança, comprovante de PIX/transferência, fatura de cartão de crédito, conta de luz/água/internet, nota fiscal de serviço (sem lista de produtos), recibo genérico sem itens discriminados.
+
+Se FOR um cupom fiscal de mercado com produtos, extraia:
+{
+  "isGroceryReceipt": true,
+  "storeName": "nome do mercado/loja (do cabeçalho do cupom)",
+  "date": "YYYY-MM-DD (data da compra)",
+  "items": [
+    { "productName": "nome do produto", "category": "uma das categorias abaixo", "unitPrice": número (preço UNITÁRIO), "lineTotal": número (valor total da linha = unitPrice × quantity), "quantity": número, "unit": "un/kg/g/lt/ml/etc" }
+  ],
+  "total": número (valor final pago, do rodapé do cupom)
+}
+
+Se NÃO for cupom de mercado, ou tiver só 1 produto, retorne: {"isGroceryReceipt": false}
+
+CATEGORIAS: ${GROCERY_CATEGORIES.join(", ")}
+
+Retorne APENAS JSON válido, sem markdown.`,
+      { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
+    ]);
+
+    const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(text);
+    if (!parsed.isGroceryReceipt || !Array.isArray(parsed.items) || parsed.items.length < 2) return null;
+
+    const items: GroceryReceiptItem[] = [];
+    for (const raw of parsed.items) {
+      const parseNum = (v: unknown) => Number(String(v ?? "0").replace(/\s/g, "").replace(/\.(?=\d{3}[,.])/g, "").replace(",", "."));
+      let unitPrice = parseNum(raw?.unitPrice);
+      const lineTotal = parseNum(raw?.lineTotal);
+      let quantity = parseNum(raw?.quantity) || 1;
+      if (isNaN(unitPrice) || unitPrice <= 0) {
+        if (!isNaN(lineTotal) && lineTotal > 0) unitPrice = lineTotal / quantity;
+        else continue;
+      }
+      // Cupons NFC-e mostram unitPrice e lineTotal separados — se divergirem
+      // muito do que quantity×unitPrice daria, o modelo provavelmente errou
+      // a quantidade (ex: leu "2" de outra coluna); recalcula pela linha.
+      if (!isNaN(lineTotal) && lineTotal > 0) {
+        const expected = unitPrice * quantity;
+        if (Math.abs(expected - lineTotal) / lineTotal > 0.05) {
+          quantity = Math.round((lineTotal / unitPrice) * 100) / 100;
+        }
+      }
+      const productName = String(raw?.productName || "").trim().slice(0, 80);
+      if (!productName) continue;
+      const category = GROCERY_CATEGORIES.includes(raw?.category) ? raw.category as GroceryCategory : "Outros";
+      items.push({ productName, category, unitPrice, quantity, unit: String(raw?.unit || "un").slice(0, 10) });
+    }
+    if (items.length < 2) return null;
+
+    const rawTotal = String(parsed.total ?? "0").replace(/\s/g, "").replace(/\.(?=\d{3}[,.])/g, "").replace(",", ".");
+    const parsedTotal = Number(rawTotal);
+    const sumItems = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    const total = (!isNaN(parsedTotal) && parsedTotal > 0 && Math.abs(parsedTotal - sumItems) / sumItems < 0.15) ? parsedTotal : sumItems;
+
+    const rawDate = String(parsed.date || "");
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
+    const storeName = String(parsed.storeName || "Mercado").trim().slice(0, 60);
+
+    return { storeName, date, items, total };
+  } catch (e) {
+    console.error("[ai-processor] Erro extractGroceryReceiptItems:", e);
     return null;
   }
 }

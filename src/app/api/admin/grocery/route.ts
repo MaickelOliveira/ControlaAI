@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
   getStoresByUser, findOrCreateStore, addPurchase, getPurchasesByUser,
-  getSpendByStore, getPriceComparison,
+  getSpendByStore, getPriceComparison, getStorePriceRanking, getProductsByUser,
   getShoppingList, addToShoppingList, toggleShoppingItem,
   clearCheckedItems, removeShoppingItem, LIST_TEMPLATES, addFromTemplate,
+  finalizePurchaseFromChecked, setPurchaseFinanceId,
   type GroceryCategory,
 } from "@/lib/grocery";
+import { addFinance } from "@/lib/finances";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -20,6 +22,8 @@ export async function GET(req: NextRequest) {
   if (view === "purchases") return NextResponse.json((await getPurchasesByUser(session.sub)).slice(0, 30));
   if (view === "spend") return NextResponse.json(await getSpendByStore(session.sub));
   if (view === "prices") return NextResponse.json(await getPriceComparison(session.sub));
+  if (view === "ranking") return NextResponse.json(await getStorePriceRanking(session.sub));
+  if (view === "products") return NextResponse.json(await getProductsByUser(session.sub));
   if (view === "list") return NextResponse.json(await getShoppingList(session.sub, category));
   if (view === "templates") return NextResponse.json(LIST_TEMPLATES);
 
@@ -47,12 +51,30 @@ export async function POST(req: NextRequest) {
   const { action, ...body } = await req.json();
 
   if (action === "purchase") {
-    const { storeName, items, date } = body;
+    const { storeName, items, date, clearChecked } = body;
     if (!storeName || !items?.length) return NextResponse.json({ error: "storeName e items obrigatórios" }, { status: 400 });
     const store = await findOrCreateStore(session.sub, storeName);
     const total = items.reduce((s: number, i: { price: number; quantity: number }) => s + i.price * i.quantity, 0);
-    const purchase = await addPurchase({ userId: session.sub, storeId: store.id, storeName: store.name, date: date || new Date().toISOString().slice(0, 10), items, total });
-    return NextResponse.json(purchase, { status: 201 });
+    const purchaseDate = date || new Date().toISOString().slice(0, 10);
+    const purchase = await addPurchase({ userId: session.sub, storeId: store.id, storeName: store.name, date: purchaseDate, items, total, source: "manual" });
+    // Registrar uma compra sempre gerava o histórico do Supermercado, mas
+    // nunca aparecia em Finanças — mesmo gap que existia no bot, corrigido
+    // junto já que os dois passam por addPurchase.
+    const finance = await addFinance({
+      userId: session.sub, type: "expense", amount: total, category: "Alimentação",
+      description: `Compra no ${store.name}`, date: purchaseDate, mode: "personal", source: "web", registeredBy: session.sub,
+    });
+    await setPurchaseFinanceId(purchase.id, session.sub, finance.id);
+    if (clearChecked) await clearCheckedItems(session.sub);
+    return NextResponse.json({ ...purchase, financeId: finance.id }, { status: 201 });
+  }
+
+  if (action === "finish_from_checked") {
+    const { storeName, total, date } = body;
+    if (!storeName || !total) return NextResponse.json({ error: "storeName e total obrigatórios" }, { status: 400 });
+    const result = await finalizePurchaseFromChecked(session.sub, "personal", storeName, Number(total), session.sub, date || undefined);
+    if (!result) return NextResponse.json({ error: "Nenhum item marcado na lista" }, { status: 400 });
+    return NextResponse.json(result.purchase, { status: 201 });
   }
 
   if (action === "list_add") {

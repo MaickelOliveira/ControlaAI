@@ -472,6 +472,13 @@ export function replyGroceryPurchaseSaved(p: GroceryPurchase): string {
   return msg;
 }
 
+export function replyGroceryPurchaseFinished(p: GroceryPurchase): string {
+  let msg = `✅ *Compra fechada — ${p.storeName}!*\n\n`;
+  p.items.forEach(i => { msg += `• ${i.productName}\n`; });
+  msg += `\n💰 *Total: ${formatCurrency(p.total)}*\n📊 Lançado em Finanças e a lista marcada foi limpa.`;
+  return msg;
+}
+
 export function replyGrocerySpend(spend: Array<{ storeName: string; total: number; visits: number }>, totalSpent: number): string {
   if (!spend.length) return `🛒 Nenhuma compra de mercado registrada ainda.`;
   let msg = `💲 *Gastos no mercado:*\n\n`;
