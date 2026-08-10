@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { getSupabase } from "./supabase";
 
 export type UserPlan = "personal" | "business";
+export type BillingCycle = "monthly" | "semiannual" | "annual";
 export type UserStatus = "trial" | "active" | "inactive";
 export type UserMode = "personal" | "business";
 
@@ -13,6 +14,7 @@ export type User = {
   email: string;
   passwordHash: string;
   plan: UserPlan;
+  billingCycle: BillingCycle;
   status: UserStatus;
   activeMode: UserMode;
   company?: string;
@@ -36,7 +38,7 @@ export type User = {
 // call-site além de tornar as chamadas assíncronas).
 type Row = {
   id: string; phone: string; name: string; email: string; password_hash: string;
-  plan: UserPlan; status: UserStatus; active_mode: UserMode; company: string | null;
+  plan: UserPlan; billing_cycle: BillingCycle | null; status: UserStatus; active_mode: UserMode; company: string | null;
   max_wpp_phones: number | null; wpp_verify_code: string | null; wpp_verify_expires: string | null;
   custom_categories_expense: string[]; custom_categories_income: string[];
   price_override: number | null; activated_at: string | null; deactivated_at: string | null;
@@ -46,7 +48,7 @@ type Row = {
 function fromRow(r: Row): User {
   return {
     id: r.id, phone: r.phone, name: r.name, email: r.email, passwordHash: r.password_hash,
-    plan: r.plan, status: r.status, activeMode: r.active_mode, company: r.company ?? undefined,
+    plan: r.plan, billingCycle: r.billing_cycle ?? "monthly", status: r.status, activeMode: r.active_mode, company: r.company ?? undefined,
     maxWppPhones: r.max_wpp_phones ?? undefined, wppVerifyCode: r.wpp_verify_code ?? undefined,
     wppVerifyExpires: r.wpp_verify_expires ?? undefined, customCategoriesExpense: r.custom_categories_expense,
     customCategoriesIncome: r.custom_categories_income, priceOverride: r.price_override ?? undefined,
@@ -60,7 +62,7 @@ function fromRow(r: Row): User {
 function toRowPatch(patch: Partial<Omit<User, "id" | "createdAt">>): Record<string, unknown> {
   const map: Record<string, string> = {
     phone: "phone", name: "name", email: "email", passwordHash: "password_hash",
-    plan: "plan", status: "status", activeMode: "active_mode", company: "company",
+    plan: "plan", billingCycle: "billing_cycle", status: "status", activeMode: "active_mode", company: "company",
     maxWppPhones: "max_wpp_phones", wppVerifyCode: "wpp_verify_code", wppVerifyExpires: "wpp_verify_expires",
     customCategoriesExpense: "custom_categories_expense", customCategoriesIncome: "custom_categories_income",
     priceOverride: "price_override", activatedAt: "activated_at", deactivatedAt: "deactivated_at",
@@ -105,6 +107,7 @@ export async function createUser(data: {
   password: string;
   phone: string;
   plan: UserPlan;
+  billingCycle?: BillingCycle;
   company?: string;
 }): Promise<User> {
   const trialEnd = new Date();
@@ -117,6 +120,7 @@ export async function createUser(data: {
     email: data.email.toLowerCase(),
     password_hash: await bcrypt.hash(data.password, 10),
     plan: data.plan,
+    billing_cycle: data.billingCycle ?? "monthly",
     status: "trial",
     active_mode: data.plan === "business" ? "business" : "personal",
     company: data.company,
@@ -170,6 +174,7 @@ export async function createUserByPhone(phone: string, name: string, plan: UserP
     email: `${cleanPhone}@whatsapp.controlaai.app`,
     password_hash: "",
     plan,
+    billing_cycle: "monthly",
     status: "trial",
     active_mode: plan === "business" ? "business" : "personal",
     trial_ends_at: trialEnd.toISOString(),
@@ -179,8 +184,11 @@ export async function createUserByPhone(phone: string, name: string, plan: UserP
   return fromRow(inserted as Row);
 }
 
-export function getMaxWppPhones(user: User): number {
-  return user.maxWppPhones ?? 1;
+export const UNLIMITED_WPP_PHONES = 1_000_000;
+
+export function getMaxWppPhones(_user: User): number {
+  void _user;
+  return UNLIMITED_WPP_PHONES;
 }
 
 export async function generateWppVerifyCode(userId: string): Promise<string> {

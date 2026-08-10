@@ -747,13 +747,15 @@ function Faq() {
         </div>
         <div className="space-y-2.5">
           {FAQS.map((f, i) => (
-            <div key={f.q} className="rounded-xl bg-white/[0.04] border border-white/10 overflow-hidden">
+            <div key={f.q} className="rounded-2xl bg-white/[0.04] border border-white/10 overflow-hidden">
               <button onClick={() => setOpen(open === i ? null : i)}
+                aria-expanded={open === i}
+                aria-controls={`faq-answer-${i}`}
                 className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left text-sm font-medium text-slate-100 hover:bg-white/[0.03] transition">
                 {f.q}
                 <span className={`shrink-0 w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-xs transition-transform ${open === i ? "rotate-45" : ""}`}>+</span>
               </button>
-              {open === i && <p className="px-5 pb-4 text-sm text-slate-400 leading-relaxed">{f.a}</p>}
+              {open === i && <p id={`faq-answer-${i}`} className="px-5 pb-5 text-sm text-slate-400 leading-relaxed">{f.a}</p>}
             </div>
           ))}
         </div>
@@ -762,14 +764,131 @@ function Faq() {
   );
 }
 
-export default function LandingPage() {
+const STEPS = [
+  {
+    number: "01",
+    title: "Crie sua conta",
+    desc: "Escolha o modo pessoal ou empresa e comece o teste grátis, sem cartão.",
+  },
+  {
+    number: "02",
+    title: "Conecte seu WhatsApp",
+    desc: "Vincule seu número com um código rápido e seguro dentro do painel.",
+  },
+  {
+    number: "03",
+    title: "Fale com o Zelo",
+    desc: "Envie texto, áudio, foto ou documento. A IA entende e organiza para você.",
+  },
+];
+
+function HowItWorks() {
   return (
-    <div className={heading.variable}>
+    <section id="como-funciona" className="relative overflow-hidden bg-white py-24">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-2xl">
+          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">COMECE EM POUCOS MINUTOS</span>
+          <h2 className={`${heading.className} mt-5 text-3xl font-extrabold text-slate-950 sm:text-5xl`}>Da conversa ao controle completo.</h2>
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-500">Você não precisa aprender um sistema novo para organizar sua rotina. O Zelo começa no WhatsApp e mantém tudo visível no painel.</p>
+        </div>
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {STEPS.map((step, index) => (
+            <article key={step.number} className="group relative rounded-3xl border border-slate-200 bg-slate-50 p-7 transition duration-300 hover:-translate-y-1 hover:border-amber-300 hover:bg-white hover:shadow-xl hover:shadow-slate-900/5">
+              <div className="flex items-center justify-between">
+                <span className={`${heading.className} text-4xl font-extrabold text-slate-200 transition group-hover:text-amber-300`}>{step.number}</span>
+                {index < STEPS.length - 1 && <span className="hidden text-slate-300 md:block" aria-hidden="true">→</span>}
+              </div>
+              <h3 className={`${heading.className} mt-7 text-xl font-bold text-slate-900`}>{step.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-500">{step.desc}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const PLAN_OPTIONS = [
+  {
+    id: "monthly",
+    label: "Mensal",
+    price: "47",
+    cents: "00",
+    total: "Pagamento mensal",
+    badge: null,
+  },
+  {
+    id: "semiannual",
+    label: "Semestral",
+    price: "39",
+    cents: "66",
+    total: "R$ 147,00 à vista",
+    badge: "Mais popular",
+  },
+  {
+    id: "annual",
+    label: "Anual",
+    price: "29",
+    cents: "70",
+    total: "R$ 297,00 à vista",
+    badge: "Melhor valor",
+  },
+] as const;
+
+function PlanChoice() {
+  return (
+    <section id="planos" className="relative overflow-hidden bg-slate-50 py-24">
+      <div className="pointer-events-none absolute left-1/2 top-0 h-80 w-[42rem] -translate-x-1/2 rounded-full bg-amber-300/20 blur-[120px]" />
+      <div className="relative mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1.5 text-xs font-bold text-amber-700">14 DIAS GRÁTIS · SEM CARTÃO</span>
+          <h2 className={`${heading.className} mt-5 text-3xl font-extrabold text-slate-950 sm:text-5xl`}>Um plano para cada momento.</h2>
+          <p className="mt-4 text-base text-slate-500">Todos os planos liberam o Zelo completo para uso pessoal e empresarial, com quantos números da família você quiser.</p>
+        </div>
+
+        <div className="mt-12 grid items-stretch gap-5 lg:grid-cols-3">
+          {PLAN_OPTIONS.map(option => (
+            <article key={option.id} className={clsx("relative flex flex-col rounded-[2rem] border bg-white p-7 transition duration-300 hover:-translate-y-1 hover:shadow-2xl sm:p-8", option.id === "semiannual" ? "border-amber-300 shadow-xl shadow-amber-500/10" : "border-slate-200 shadow-lg shadow-slate-900/5")}>
+              {option.badge && (
+                <span className={clsx("absolute -top-4 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-slate-950 shadow-lg", option.id === "annual" ? "bg-emerald-400" : "bg-amber-400")}>{option.badge}</span>
+              )}
+              <h3 className={`${heading.className} mt-2 text-center text-2xl font-extrabold text-slate-950`}>{option.label}</h3>
+              <div className="mt-7 flex items-end justify-center text-slate-950">
+                <span className="mb-2 text-xl font-extrabold">R$</span>
+                <span className={`${heading.className} text-6xl font-extrabold tracking-tight`}>{option.price}</span>
+                <span className="mb-2 text-lg font-bold">,{option.cents}/mês</span>
+              </div>
+              <p className="mt-2 min-h-6 text-center text-sm font-semibold text-slate-500">{option.total}</p>
+              <div className="my-7 h-px bg-slate-100" />
+              <ul className="flex-1 space-y-3.5">
+                {["Acesso a todas as funcionalidades", "Painel completo e personalizado", "Zelo no WhatsApp", "Uso pessoal e empresarial", "Números ilimitados para família", "Suporte prioritário"].map(feature => (
+                  <li key={feature} className="flex items-start gap-3 text-sm leading-relaxed text-slate-600">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-black text-emerald-700">✓</span>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              <Link href={`/cadastro?cycle=${option.id}`} className={clsx("mt-8 inline-flex items-center justify-center rounded-xl px-6 py-3.5 text-sm font-extrabold transition", option.id === "semiannual" ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 hover:bg-amber-300" : "border border-slate-300 text-slate-900 hover:border-slate-950 hover:bg-slate-950 hover:text-white")}>Começar agora →</Link>
+            </article>
+          ))}
+        </div>
+        <p className="mt-7 text-center text-xs text-slate-400">Você poderá escolher entre uso pessoal ou empresarial ao criar a conta. Os recursos são os mesmos em todos os períodos.</p>
+      </div>
+    </section>
+  );
+}
+
+export default function LandingPage() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <div className={`${heading.variable} overflow-x-hidden bg-white`}>
       {/* ── NAV ── */}
       <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Image src="/brand/zelo-wordmark-light.png" alt="Zelo" width={640} height={293} className="h-7 w-auto" priority />
-          <nav className="hidden md:flex items-center gap-7 text-sm text-slate-300">
+          <nav className="hidden md:flex items-center gap-7 text-sm text-slate-300" aria-label="Navegação principal">
+            <a href="#como-funciona" className="hover:text-white transition">Como funciona</a>
             <a href="#financas" className="hover:text-white transition">Finanças</a>
             <a href="#modo" className="hover:text-white transition">Modo Empresa</a>
             <a href="#agenda" className="hover:text-white transition">Agenda</a>
@@ -779,10 +898,23 @@ export default function LandingPage() {
           <div className="flex items-center gap-4">
             <Link href="/login" className="hidden sm:block text-sm text-slate-300 hover:text-white transition">Entrar</Link>
             <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 text-sm font-bold px-4 py-2.5 hover:opacity-90 transition">
-              Começar agora →
+              Testar grátis →
             </Link>
+            <button type="button" onClick={() => setMenuOpen(v => !v)} aria-expanded={menuOpen} aria-label="Abrir menu" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-white md:hidden">
+              <span className="text-xl leading-none">{menuOpen ? "×" : "≡"}</span>
+            </button>
           </div>
         </div>
+        {menuOpen && (
+          <nav className="border-t border-white/10 bg-slate-950 px-6 py-5 md:hidden" aria-label="Navegação móvel">
+            <div className="mx-auto grid max-w-7xl gap-1 text-sm text-slate-300">
+              {[['como-funciona', 'Como funciona'], ['financas', 'Finanças'], ['modo', 'Modo Empresa'], ['agenda', 'Agenda'], ['drive', 'Drive'], ['planos', 'Planos']].map(([id, label]) => (
+                <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 hover:bg-white/5 hover:text-white">{label}</a>
+              ))}
+              <Link href="/login" className="mt-2 rounded-xl border border-white/10 px-3 py-3 text-center font-bold text-white">Entrar na minha conta</Link>
+            </div>
+          </nav>
+        )}
       </header>
 
       {/* ── HERO ── */}
@@ -802,11 +934,13 @@ export default function LandingPage() {
             <p className="text-slate-400 mt-5 text-[16px] leading-relaxed max-w-md">
               Finanças, agenda, tarefas, veículos e documentos. Organizados por IA, sem sair da conversa que você já usa todos os dias — no modo pessoal ou no modo empresa.
             </p>
-            <div className="mt-8 flex items-center gap-4">
+            <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
               <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
-                Começar agora →
+                Começar 14 dias grátis →
               </Link>
+              <a href="#como-funciona" className="rounded-xl border border-white/10 px-6 py-3.5 text-center text-sm font-bold text-white transition hover:bg-white/5">Ver como funciona</a>
             </div>
+            <p className="mt-3 text-xs text-slate-500">Sem cartão de crédito · configuração rápida · cancele quando quiser</p>
             <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-500">
               <span>🎙️ Registre por áudio</span>
               <span>⚡ Consulte em segundos</span>
@@ -839,6 +973,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <HowItWorks />
 
       {/* ── FINANÇAS ── */}
       <div id="financas">
@@ -1071,38 +1207,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── PLANOS ── */}
-      <section id="planos" className="relative overflow-hidden bg-slate-50 py-24">
-        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[36rem] h-[20rem] rounded-full bg-amber-300/25 blur-[110px]" />
-        <div className="relative max-w-md mx-auto px-6 text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs font-semibold px-3 py-1.5">🌿 Experimente sem risco</span>
-          <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-slate-900 mt-4`}>Comece grátis por 14 dias.</h2>
-          <p className="text-slate-500 mt-2 text-sm">Sem cartão de crédito. Acesso completo a todas as funções, desde o primeiro dia.</p>
-
-          <div className="mt-8 rounded-3xl bg-white border border-slate-200 shadow-xl p-7 text-left">
-            <p className="font-bold text-slate-900 mb-4">Tudo incluso no período de teste:</p>
-            <ul className="space-y-2.5">
-              {[
-                "Zelo no seu WhatsApp",
-                "Painel completo pelo navegador",
-                "Modo Pessoal e Modo Empresa",
-                "Finanças, agenda, metas e reuniões",
-                "Importação de fatura de cartão",
-                "Drive inteligente com IA",
-                "Conta compartilhada com sua equipe ou família",
-              ].map(f => (
-                <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
-                  <span className="w-4 h-4 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-slate-900 text-[9px] font-bold shrink-0">✓</span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Link href="/cadastro" className="mt-6 block text-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
-              Criar minha conta →
-            </Link>
-          </div>
-        </div>
-      </section>
+      <PlanChoice />
 
       <Faq />
 
@@ -1114,6 +1219,7 @@ export default function LandingPage() {
             <p className="text-slate-500 text-xs">Gestão inteligente, direto no WhatsApp.</p>
           </div>
           <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400">
+            <a href="#como-funciona" className="hover:text-white transition">Como funciona</a>
             <a href="#financas" className="hover:text-white transition">Finanças</a>
             <a href="#modo" className="hover:text-white transition">Modo Empresa</a>
             <a href="#agenda" className="hover:text-white transition">Agenda</a>
@@ -1124,6 +1230,10 @@ export default function LandingPage() {
         </div>
         <p className="text-center text-slate-600 text-[11px] mt-8">© {new Date().getFullYear()} Zelo. Todos os direitos reservados.</p>
       </footer>
+
+      <div className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur md:hidden">
+        <Link href="/cadastro" className="flex items-center justify-center rounded-xl bg-amber-400 px-5 py-3.5 text-sm font-extrabold text-slate-950">Começar 14 dias grátis →</Link>
+      </div>
     </div>
   );
 }

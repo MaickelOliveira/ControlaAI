@@ -5,9 +5,24 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Zelo — Gestão Inteligente via WhatsApp",
-  description: "Gerencie finanças, tarefas e lembretes pelo WhatsApp com IA",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://controlaai.app"),
+  title: "Zelo — Organize sua rotina pelo WhatsApp",
+  description: "Finanças, agenda, tarefas e documentos organizados por IA no WhatsApp. Teste grátis por 14 dias, sem cartão.",
   icons: { icon: "/brand/zelo-icon.png" },
+  openGraph: {
+    title: "Zelo — Organize sua rotina pelo WhatsApp",
+    description: "Finanças, agenda, tarefas e documentos organizados por IA. Teste grátis por 14 dias.",
+    type: "website",
+    locale: "pt_BR",
+    siteName: "Zelo",
+    images: [{ url: "/og-zelo.png", width: 1536, height: 1024, alt: "Zelo — organização inteligente pelo WhatsApp" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Zelo — Organize sua rotina pelo WhatsApp",
+    description: "Finanças, agenda, tarefas e documentos organizados por IA. Teste grátis por 14 dias.",
+    images: ["/og-zelo.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
