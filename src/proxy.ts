@@ -43,10 +43,10 @@ export async function proxy(req: NextRequest) {
     if (clientRole !== "client") return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // ── Raiz: se já estiver logado, manda pro dashboard certo; senão mostra a landing page pública
+  // ── A landing page é sempre pública, inclusive para quem está logado.
+  // Cliente e admin usam cookies separados e podem manter as duas sessões no
+  // mesmo navegador sem a raiz escolher um painel e trocar o contexto.
   if (pathname === "/") {
-    if (clientRole === "client") return NextResponse.redirect(new URL("/dashboard", req.url));
-    if (adminRole === "admin") return NextResponse.redirect(new URL("/admin", req.url));
     return NextResponse.next();
   }
 
