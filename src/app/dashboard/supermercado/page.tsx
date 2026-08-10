@@ -72,11 +72,12 @@ export default function SupermercadoPage() {
 
   useEffect(() => {
     if (tab === "lista") loadList(listFilter);
+    // "compras" (Histórico) e "gastos" (Por mercado) mostram a mesma lista
+    // de purchases — antes só "gastos" buscava, então Histórico ficava
+    // vazio até o usuário clicar em Por mercado primeiro.
+    if (tab === "compras" || tab === "gastos") fetch("/api/admin/grocery?view=purchases").then(r => r.json()).then(setPurchases);
     if (tab === "comparar") fetch("/api/admin/grocery?view=prices").then(r => r.json()).then(setPrices);
-    if (tab === "gastos") {
-      fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend);
-      fetch("/api/admin/grocery?view=purchases").then(r => r.json()).then(setPurchases);
-    }
+    if (tab === "gastos") fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend);
     if (tab === "catalogo") fetch("/api/admin/grocery?view=products").then(r => r.json()).then(setProducts);
   }, [tab, listFilter]);
 
@@ -347,11 +348,13 @@ export default function SupermercadoPage() {
                 </div>
                 <span className="text-base font-bold text-amber-600">{fmt(p.total)}</span>
               </div>
-              <div className="grid grid-cols-2 gap-1">
+              <div className="space-y-0.5">
                 {p.items.map((item, i) => (
                   <div key={i} className="flex justify-between text-xs py-1 border-b border-slate-50">
-                    <span className="text-slate-600">{item.productName} × {item.quantity}</span>
-                    <span className="font-medium text-slate-700">{fmt(item.price)}</span>
+                    <span className="text-slate-600">{item.productName}</span>
+                    <span className="text-slate-500 shrink-0 ml-2">
+                      {fmt(item.price)} × {item.quantity} = <span className="font-medium text-slate-700">{fmt(item.price * item.quantity)}</span>
+                    </span>
                   </div>
                 ))}
               </div>

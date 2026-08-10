@@ -467,7 +467,11 @@ export function replyGroceryItemChecked(checked: string[], notFound: string[]): 
 
 export function replyGroceryPurchaseSaved(p: GroceryPurchase): string {
   let msg = `🧾 *Compra registrada!*\n\n🏪 ${p.storeName}\n📅 ${formatDateBR(p.date)}\n\n`;
-  p.items.forEach(i => { msg += `• ${i.productName} — ${formatCurrency(i.price)}${i.quantity > 1 ? ` × ${i.quantity}` : ""}\n`; });
+  p.items.forEach(i => {
+    msg += i.quantity > 1
+      ? `• ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity} = ${formatCurrency(i.price * i.quantity)}\n`
+      : `• ${i.productName} — ${formatCurrency(i.price)}\n`;
+  });
   msg += `\n💰 *Total: ${formatCurrency(p.total)}*`;
   return msg;
 }

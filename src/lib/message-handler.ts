@@ -257,7 +257,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 description: `Compra no ${store.name}`, financeId: finance.id,
               });
 
-              const itemsList = items.map(i => `• ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity}`).join("\n");
+              const itemsList = items.map(i => `• ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity} = ${formatCurrency(i.price * i.quantity)}`).join("\n");
               await wppSend(from, `🧾 *Compra registrada — ${store.name}!*\n\n${itemsList}\n\n💰 Total: ${formatCurrency(receipt.total)}\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar a foto do cupom no Drive? (sim/não)_`);
               return;
             }

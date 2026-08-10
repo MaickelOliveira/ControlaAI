@@ -1662,15 +1662,21 @@ ${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
 
 ⚠️ NÃO é cupom fiscal de mercado (retorne isGroceryReceipt: false nesses casos): boleto de cobrança, comprovante de PIX/transferência, fatura de cartão de crédito, conta de luz/água/internet, nota fiscal de serviço (sem lista de produtos), recibo genérico sem itens discriminados.
 
+⚠️ DESCONTOS: é muito comum o cupom trazer uma linha de desconto (ex: "Desconto Clube X", "Desconto Fidelidade", "Vale Compras") logo ABAIXO de um produto — esse desconto vale só pra aquele item específico, não é um item novo. Quando isso acontecer:
+- NÃO crie uma entrada separada pra linha de desconto.
+- Subtraia o valor do desconto do "lineTotal" desse produto (lineTotal líquido = lineTotal bruto da linha do produto − desconto).
+- Recalcule "unitPrice" como lineTotal líquido ÷ quantity, pra refletir o preço que a pessoa PAGOU de verdade por unidade (é isso que entra na comparação de preço entre mercados depois — usar o preço bruto sem desconto deixaria a comparação errada).
+Exemplo: linha "Arroz 5kg  1  Un  25,00  25,00" seguida de "Desconto Clube X  -5,00" → um item só: productName "Arroz 5kg", quantity 1, lineTotal 20,00, unitPrice 20,00.
+
 Se FOR um cupom fiscal de mercado com produtos, extraia:
 {
   "isGroceryReceipt": true,
   "storeName": "nome do mercado/loja (do cabeçalho do cupom)",
   "date": "YYYY-MM-DD (data da compra)",
   "items": [
-    { "productName": "nome do produto", "category": "uma das categorias abaixo", "unitPrice": número (preço UNITÁRIO), "lineTotal": número (valor total da linha = unitPrice × quantity), "quantity": número, "unit": "un/kg/g/lt/ml/etc" }
+    { "productName": "nome do produto", "category": "uma das categorias abaixo", "unitPrice": número (preço UNITÁRIO já com desconto aplicado, se houver), "lineTotal": número (valor total da linha JÁ com desconto aplicado, se houver), "quantity": número, "unit": "un/kg/g/lt/ml/etc" }
   ],
-  "total": número (valor final pago, do rodapé do cupom)
+  "total": número (o valor FINAL PAGO — geralmente rotulado "Valor Total", "Valor Pago" ou "Total" no rodapé do cupom, DEPOIS de descontos. ⚠️ NÃO use o "Subtotal" — em cupons com desconto, subtotal e total são diferentes; o campo "total" aqui é sempre o que a pessoa realmente pagou, o valor mais próximo da forma de pagamento)
 }
 
 Se NÃO for cupom de mercado, ou tiver só 1 produto, retorne: {"isGroceryReceipt": false}
