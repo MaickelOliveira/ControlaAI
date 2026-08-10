@@ -242,11 +242,11 @@ Me responda *1* ou *2*.`;
 }
 
 export function replyOnboardingDone(name: string, plan: string): string {
-  return `Pronto, *${name}* — sua conta já está configurada no modo ${plan === "business" ? "Empresarial 🏢" : "Pessoal 👤"}.\n\nVocê tem *14 dias grátis* para experimentar tudo sem compromisso.\n\nQuando quiser ver o que posso fazer por você, digite *ajuda*.`;
+  return `Pronto, *${name}* — sua conta já está configurada no modo ${plan === "business" ? "Empresarial 🏢" : "Pessoal 👤"}.\n\nQuando quiser ver o que posso fazer por você, digite *ajuda*.`;
 }
 
 export function replyTrialExpired(): string {
-  return `Seu período de teste chegou ao fim.\n\nPara eu continuar cuidando das suas finanças e da sua agenda, é só assinar um plano no painel:\n🌐 controlaai.app/planos`;
+  return `Seu acesso ainda não está ativo.\n\nPara eu continuar cuidando das suas finanças e da sua agenda, escolha um plano no site:\n🌐 controlaai.app/#planos`;
 }
 
 export function replyAccountInactive(): string {

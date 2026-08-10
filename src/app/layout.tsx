@@ -8,11 +8,11 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://controlaai.app"),
   title: "Zelo — Organize sua rotina pelo WhatsApp",
-  description: "Finanças, agenda, tarefas e documentos organizados por IA no WhatsApp. Teste grátis por 14 dias, sem cartão.",
+  description: "Finanças, agenda, tarefas e documentos organizados por IA no WhatsApp. Escolha seu plano com 7 dias de garantia.",
   icons: { icon: "/brand/zelo-icon.png" },
   openGraph: {
     title: "Zelo — Organize sua rotina pelo WhatsApp",
-    description: "Finanças, agenda, tarefas e documentos organizados por IA. Teste grátis por 14 dias.",
+    description: "Finanças, agenda, tarefas e documentos organizados por IA, com 7 dias de garantia.",
     type: "website",
     locale: "pt_BR",
     siteName: "Zelo",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Zelo — Organize sua rotina pelo WhatsApp",
-    description: "Finanças, agenda, tarefas e documentos organizados por IA. Teste grátis por 14 dias.",
+    description: "Finanças, agenda, tarefas e documentos organizados por IA, com 7 dias de garantia.",
     images: ["/og-zelo.png"],
   },
 };
