@@ -11,13 +11,13 @@ import { createRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
 import { createAppointment } from "./agenda";
 import { todayStrBR, spToUTC } from "./date-br";
-import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, type GroceryPurchaseItem } from "./grocery";
+import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchaseFinanceId, type GroceryPurchaseItem } from "./grocery";
 import { createEmployee } from "./employees";
 import { createCustomer } from "./customers";
 import {
   replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated,
 } from "./bot-replies";
-import { formatCurrency } from "./finances";
+import { formatCurrency, addFinance } from "./finances";
 
 /**
  * Motor genérico de "perguntar o que falta" (slot-filling), usado quando uma
@@ -582,14 +582,27 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       const items = draft.items as GroceryPurchaseItem[];
       const store = await findOrCreateStore(ctx.userId, (draft.storeName as string) || "Não informado");
       const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
+      const purchaseDate = (draft.date as string) || todayStrBR();
       const purchase = await addPurchase({
         userId: ctx.userId,
         storeId: store.id,
         storeName: store.name,
-        date: (draft.date as string) || todayStrBR(),
+        date: purchaseDate,
         items,
         total,
+        source: "whatsapp_text",
       });
+      // Compra registrava no histórico do Supermercado mas nunca aparecia em
+      // Finanças — mesmo gap já corrigido em finalizePurchaseFromChecked e no
+      // fluxo de foto de cupom fiscal, faltava só aqui (compra completa via
+      // texto, "comprei no Assaí: arroz 25...").
+      if (total > 0) {
+        const finance = await addFinance({
+          userId: ctx.userId, type: "expense", amount: total, category: "Alimentação",
+          description: `Compra no ${store.name}`, date: purchaseDate, mode: ctx.mode, source: "whatsapp", registeredBy: ctx.phone,
+        });
+        await setPurchaseFinanceId(purchase.id, ctx.userId, finance.id);
+      }
       return replyGroceryPurchaseSaved(purchase);
     },
 

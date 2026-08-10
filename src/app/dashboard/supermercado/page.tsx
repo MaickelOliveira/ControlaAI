@@ -52,6 +52,8 @@ export default function SupermercadoPage() {
   const [newItem, setNewItem] = useState({ name: "", category: "Mercearia", quantity: "1" });
   const [showAddPurchase, setShowAddPurchase] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [savingPurchase, setSavingPurchase] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
   const [finishForm, setFinishForm] = useState({ storeName: "", date: "" });
   const [finishPrices, setFinishPrices] = useState<Record<string, string>>({});
@@ -101,12 +103,20 @@ export default function SupermercadoPage() {
   }
   async function addPurchase(e: React.FormEvent) {
     e.preventDefault();
+    setPurchaseError(null);
+    setSavingPurchase(true);
     const items = purchaseForm.items.filter(i => i.productName && i.price).map(i => ({ ...i, price: parseFloat(i.price), quantity: parseInt(i.quantity) || 1 }));
-    await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "purchase", storeName: purchaseForm.storeName, date: purchaseForm.date || undefined, items }) });
+    const r = await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "purchase", storeName: purchaseForm.storeName, date: purchaseForm.date || undefined, items }) });
+    setSavingPurchase(false);
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setPurchaseError(d.error || "Não consegui registrar a compra");
+      return;
+    }
     setShowAddPurchase(false);
     setPurchaseForm({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
-    fetch("/api/admin/grocery?view=overview").then(r => r.json()).then(setOverview);
-    if (tab === "gastos") { fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend); fetch("/api/admin/grocery?view=purchases").then(r => r.json()).then(setPurchases); }
+    fetch("/api/admin/grocery?view=overview").then(r2 => r2.json()).then(setOverview);
+    if (tab === "gastos") { fetch("/api/admin/grocery?view=spend").then(r2 => r2.json()).then(setSpend); fetch("/api/admin/grocery?view=purchases").then(r2 => r2.json()).then(setPurchases); }
   }
 
   function openFinish() {
@@ -557,9 +567,13 @@ export default function SupermercadoPage() {
                 Total: {fmt(purchaseForm.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.quantity) || 1), 0))}
               </div>
 
+              {purchaseError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-600">{purchaseError}</div>
+              )}
+
               <div className="flex gap-3">
-                <button type="button" onClick={() => setShowAddPurchase(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition">Registrar</button>
+                <button type="button" onClick={() => { setShowAddPurchase(false); setPurchaseError(null); }} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                <button type="submit" disabled={savingPurchase} className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">{savingPurchase ? "..." : "Registrar"}</button>
               </div>
             </form>
           </div>

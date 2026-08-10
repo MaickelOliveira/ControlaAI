@@ -430,8 +430,8 @@ export async function finalizePurchaseFromChecked(
   });
 
   const finance = await addFinance({
-    userId, type: "expense", amount: total, category: "Alimentação",
-    description: `Compra no ${store.name}`, date: purchaseDate, mode, source: "whatsapp", registeredBy,
+    userId, type: "expense", amount: purchaseTotal, category: "Alimentação",
+    description: `Compra no ${store.name}`, date: purchaseDate, mode, source: source.startsWith("whatsapp") ? "whatsapp" : "web", registeredBy,
   });
   await setPurchaseFinanceId(purchase.id, userId, finance.id);
   await clearCheckedItems(userId);

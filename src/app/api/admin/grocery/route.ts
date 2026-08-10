@@ -53,8 +53,13 @@ export async function POST(req: NextRequest) {
   if (action === "purchase") {
     const { storeName, items, date, clearChecked } = body;
     if (!storeName || !items?.length) return NextResponse.json({ error: "storeName e items obrigatórios" }, { status: 400 });
-    const store = await findOrCreateStore(session.sub, storeName);
     const total = items.reduce((s: number, i: { price: number; quantity: number }) => s + i.price * i.quantity, 0);
+    // Item sem preço preenchido é descartado no cliente antes de chegar aqui
+    // (ver purchaseForm.items.filter em page.tsx) — se sobrar total 0, é
+    // porque nenhum item tinha preço de verdade; bloqueia em vez de criar
+    // uma "compra"/despesa fantasma de R$0.
+    if (total <= 0) return NextResponse.json({ error: "Preencha o preço de pelo menos um item (maior que zero)" }, { status: 400 });
+    const store = await findOrCreateStore(session.sub, storeName);
     const purchaseDate = date || new Date().toISOString().slice(0, 10);
     const purchase = await addPurchase({ userId: session.sub, storeId: store.id, storeName: store.name, date: purchaseDate, items, total, source: "manual" });
     // Registrar uma compra sempre gerava o histórico do Supermercado, mas
