@@ -13,7 +13,8 @@ export async function register() {
 
   const tick = async () => {
     const { acquireCronLock, releaseCronLock } = await import("./lib/cron-lock");
-    if (!(await acquireCronLock())) return; // outra instância/tick já está processando agora
+    const lockToken = await acquireCronLock();
+    if (!lockToken) return; // outra instância/tick já está processando agora
 
     try {
       // ── Auto-posta lançamentos pendentes cuja data chegou ──
@@ -175,7 +176,7 @@ export async function register() {
     } catch (e) {
       console.error("[cron] Erro no tick:", e);
     } finally {
-      await releaseCronLock();
+      await releaseCronLock(lockToken);
     }
   };
 

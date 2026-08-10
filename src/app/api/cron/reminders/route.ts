@@ -27,7 +27,8 @@ async function runCron() {
   // Mesma trava do tick em-processo (src/instrumentation.ts) — evita que
   // esse endpoint e o tick disparem o mesmo lembrete duas vezes se
   // rodarem no mesmo instante.
-  if (!(await acquireCronLock())) {
+  const lockToken = await acquireCronLock();
+  if (!lockToken) {
     return NextResponse.json({ ok: true, fired: 0, results: [], skipped: "outra execução já em andamento" });
   }
   try {
@@ -47,6 +48,6 @@ async function runCron() {
     console.error("[cron/reminders] Erro:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   } finally {
-    await releaseCronLock();
+    await releaseCronLock(lockToken);
   }
 }

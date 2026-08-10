@@ -306,6 +306,7 @@ create table if not exists webhook_message_ids (
 create table if not exists cron_lock (
   id int primary key default 1,
   locked_at timestamptz,
+  owner text,
   constraint single_row check (id = 1)
 );
 insert into cron_lock (id, locked_at) values (1, null) on conflict (id) do nothing;
