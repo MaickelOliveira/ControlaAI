@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const reset = await createPasswordResetCode(user.id);
     requestId = reset.id;
     try {
-      await sendPasswordResetEmail({ email: user.email, name: user.name, code: reset.code });
+      await sendPasswordResetEmail({ email: user.email, name: user.name, code: reset.code, resetId: reset.id });
     } catch (error) {
       await invalidatePasswordResetCode(reset.id);
       requestId = randomUUID();

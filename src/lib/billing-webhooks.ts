@@ -2,8 +2,8 @@ import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { encryptField, decryptField } from "./crypto-store";
 import { getUserByEmail, activateUser, createPaidUser, deactivateUser, updateUser, type UserPlan } from "./users";
-import { createPasswordResetCode } from "./password-reset";
-import { sendPasswordResetEmail } from "./brevo";
+import { createPasswordSetupLink } from "./password-reset";
+import { sendFirstAccessLinkEmail } from "./brevo";
 
 /** Recebe webhooks de plataforma de venda (Hotmart, Kiwify, etc.) e ativa/
  *  desativa/troca o plano do cliente correspondente automaticamente. Como
@@ -207,8 +207,8 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     const phone = firstString(body, ["data.buyer.checkout_phone", "data.buyer.phone", "Customer.mobile", "Customer.phone"]);
     user = await createPaidUser({ name, email, phone, plan: mappedPlan });
     try {
-      const reset = await createPasswordResetCode(user.id);
-      await sendPasswordResetEmail({ email: user.email, name: user.name, code: reset.code, welcome: true });
+      const setup = await createPasswordSetupLink(user.id);
+      await sendFirstAccessLinkEmail({ email: user.email, name: user.name, setupId: setup.id });
     } catch (error) {
       console.error("[billing-webhook] conta criada, mas o e-mail de acesso falhou", error);
     }
