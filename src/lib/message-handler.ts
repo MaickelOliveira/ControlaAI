@@ -1,4 +1,4 @@
-import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones } from "@/lib/users";
+import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, type AIResult } from "@/lib/ai-processor";
@@ -20,6 +20,7 @@ import { createMeetEvent } from "@/lib/google-meet";
 import { isConnected } from "@/lib/google-oauth";
 import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/whatsapp";
+import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, formatDateTimeBR } from "@/lib/date-br";
 import {
@@ -404,6 +405,24 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const relation = cap(relationCmdMatch[1].trim());
       await setPhoneRelation(user.id, from, relation);
       await wppSend(from, `Combinado, você é *${relation}* nessa conta. 👍`);
+      return;
+    }
+
+    // ── Comando pra gerar o código de vinculação de outro número direto pelo
+    //    WhatsApp — antes só dava pra gerar entrando no painel web, o que
+    //    trava quem só usa o bot pelo celular. Mesma função que o botão
+    //    "Vincular mais um número" do painel usa (generateWppVerifyCode). ──
+    const linkCodeCmdMatch = /vincular.*n[uú]mero|n[uú]mero.*vincular|c[oó]digo de vincula[çc][ãa]o/i.test(messageText.trim());
+    if (linkCodeCmdMatch) {
+      const linkedCount = await countPhonesForUser(user.id);
+      const max = getMaxWppPhones(user);
+      if (linkedCount >= max) {
+        await wppSend(from, `❌ Esta conta já atingiu o limite de ${max} número(s) vinculado(s).`);
+        return;
+      }
+      const code = await generateWppVerifyCode(user.id);
+      const botNumber = (await getConfig()).wppBotNumber;
+      await wppSend(from, `📲 *Código de vinculação:* ${code}\n\nPeça para a pessoa salvar${botNumber ? ` o número *${botNumber}*` : " este número do Zelo"} e mandar esse código por aqui — o bot vai perguntar o nome dela, o vínculo e o modo (pessoal/empresa/os dois) que ela pode acessar.\n\n⏱ Válido por 10 minutos.`);
       return;
     }
 
