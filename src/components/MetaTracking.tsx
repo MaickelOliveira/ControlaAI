@@ -76,7 +76,7 @@ export function trackMetaEvent(
 
 export default function MetaTracking() {
   const pathname = usePathname();
-  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID || "1673074203783828";
   const isPublicPage = PUBLIC_PATHS.has(pathname);
   const [consent, setConsent] = useState<Consent | "loading">("loading");
   const initialized = useRef(false);
