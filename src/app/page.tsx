@@ -25,6 +25,20 @@ function useInView<T extends HTMLElement>() {
   return { ref, inView };
 }
 
+function useAnimatedStage<T extends HTMLElement>(total: number, interval = 1900) {
+  const { ref, inView } = useInView<T>();
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    if (!inView) {
+      Promise.resolve().then(() => setStage(0));
+      return;
+    }
+    const timer = setInterval(() => setStage(current => (current + 1) % total), interval);
+    return () => clearInterval(timer);
+  }, [inView, interval, total]);
+  return { ref, stage };
+}
+
 type Msg = { from?: "bot" | "user"; text: React.ReactNode; tags?: string[]; time?: string; typed?: string };
 type Chip = { label: string; pos: string; delay?: string };
 
@@ -398,26 +412,28 @@ function CalendarCard() {
   const days = ["S", "T", "Q", "Q", "S", "S", "D"];
   const dates = [13, 14, 15, 16, 17, 18, 19];
   const todayIdx = 4;
+  const { ref, stage } = useAnimatedStage<HTMLDivElement>(3, 1900);
   return (
-    <div className="max-w-sm mx-auto space-y-3 relative">
+    <div ref={ref} className="max-w-sm mx-auto space-y-3 relative">
       <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/20 blur-3xl -z-10" />
       <div className="rounded-2xl border border-slate-100 bg-white shadow-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <p className="font-bold text-slate-900 text-sm">Julho, esta semana</p>
-          <span className="text-[10px] bg-amber-50 text-amber-600 rounded-full px-2.5 py-1 font-semibold">✓ Google Agenda</span>
+          <span className={clsx("text-[10px] rounded-full px-2.5 py-1 font-semibold transition-all", stage >= 1 ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600")}>{stage >= 1 ? "✓ Sincronizado" : "↻ Google Agenda"}</span>
         </div>
         <div className="grid grid-cols-7 gap-1.5">
           {days.map((d, i) => (
             <div key={i} className="text-center">
               <p className="text-[10px] text-slate-400 font-semibold mb-1.5">{d}</p>
-              <div className={clsx("aspect-square rounded-lg flex items-center justify-center text-xs font-bold", i === todayIdx ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900 shadow-md" : "text-slate-500 bg-slate-50")}>
+              <div className={clsx("relative aspect-square rounded-lg flex items-center justify-center text-xs font-bold transition-all duration-500", i === todayIdx ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900 shadow-md" : "text-slate-500 bg-slate-50", i === todayIdx && stage === 0 && "scale-110 ring-4 ring-amber-100")}>
                 {dates[i]}
+                {i === todayIdx && stage >= 1 && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}
               </div>
             </div>
           ))}
         </div>
       </div>
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 flex items-center gap-3">
+      <div className={clsx("rounded-2xl border bg-white p-4 flex items-center gap-3 transition-all duration-500", stage === 1 ? "border-amber-300 shadow-xl -translate-y-1" : "border-slate-100 shadow-sm")}>
         <span className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-amber-600">
             <circle cx="12" cy="12" r="9" />
@@ -426,19 +442,82 @@ function CalendarCard() {
         </span>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-800 truncate">Reunião com o time todo</p>
-          <p className="text-xs text-slate-400">Hoje, 14:00 · lembrete às 12:00</p>
+          <p className="text-xs text-slate-400">Hoje, 14:00 · Google Meet</p>
+        </div>
+        <span className={clsx("ml-auto text-[10px] font-bold transition", stage >= 1 ? "text-emerald-600 opacity-100" : "text-slate-300 opacity-0")}>CRIADO</span>
+      </div>
+      <div className={clsx("rounded-2xl border p-4 flex items-center gap-3 transition-all duration-500", stage === 2 ? "border-slate-800 bg-slate-950 text-white shadow-xl translate-y-0 opacity-100" : "border-slate-100 bg-white text-slate-800 translate-y-2 opacity-60")}>
+        <span className={clsx("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", stage === 2 ? "bg-amber-400 text-slate-950" : "bg-amber-50 text-amber-600")}>{FEATURE_ICONS.bell}</span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold truncate">Lembrete enviado no WhatsApp</p>
+          <p className={clsx("text-xs", stage === 2 ? "text-slate-400" : "text-slate-400")}>Reunião com o time em 15 minutos</p>
         </div>
       </div>
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 flex items-center gap-3">
-        <span className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5 text-amber-600">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-800 truncate">Consulta médica</p>
-          <p className="text-xs text-slate-400">Sexta, 09:30 · confirmada pelo WhatsApp</p>
+      <div className="flex justify-center gap-1.5" aria-label={`Etapa ${stage + 1} de 3`}>{[0, 1, 2].map(item => <span key={item} className={clsx("h-1.5 rounded-full transition-all", item === stage ? "w-6 bg-amber-400" : "w-1.5 bg-slate-200")} />)}</div>
+    </div>
+  );
+}
+
+function MeetingFlowDemo() {
+  const { ref, stage } = useAnimatedStage<HTMLDivElement>(4, 1900);
+  const steps = [
+    ["Reunião criada", "Time Comercial · hoje, 14:00"],
+    ["Convites enviados", "Carla, Pedro e Marina confirmados"],
+    ["Google Meet em andamento", "3 participantes · 32 minutos"],
+    ["Ata pronta pela IA", "Decisões e próximas ações organizadas"],
+  ];
+  return (
+    <div ref={ref} className="relative mx-auto w-full max-w-md">
+      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/20 blur-3xl" />
+      <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl shadow-slate-900/10">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-sm font-extrabold text-slate-900">Reunião · Time Comercial</p><p className="text-[11px] text-slate-400">Fluxo automatizado pelo Zelo</p></div><span className={clsx("h-2.5 w-2.5 rounded-full", stage === 2 ? "animate-pulse bg-red-500" : "bg-emerald-500")} /></div>
+        <div className="p-5">
+          <div className="relative space-y-3 before:absolute before:bottom-5 before:left-[19px] before:top-5 before:w-px before:bg-slate-200">
+            {steps.map(([title, desc], index) => (
+              <div key={title} className={clsx("relative flex items-start gap-3 rounded-2xl border p-3.5 transition-all duration-500", stage === index ? "translate-x-1 border-amber-300 bg-amber-50 shadow-lg" : index < stage ? "border-emerald-100 bg-emerald-50/50" : "border-slate-100 bg-white opacity-55")}>
+                <span className={clsx("relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-black transition", index < stage ? "bg-emerald-500 text-white" : stage === index ? "bg-amber-400 text-slate-950" : "bg-slate-100 text-slate-400")}>{index < stage ? "✓" : index + 1}</span>
+                <div><p className="text-sm font-bold text-slate-800">{title}</p><p className="mt-0.5 text-[11px] text-slate-500">{desc}</p></div>
+              </div>
+            ))}
+          </div>
+          <div className={clsx("mt-4 overflow-hidden rounded-2xl bg-slate-950 p-4 text-white transition-all duration-500", stage === 3 ? "max-h-36 opacity-100" : "max-h-0 p-0 opacity-0")}>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-400">Resumo da IA</p><p className="mt-2 text-xs leading-relaxed text-slate-300">Decidido: fechar a proposta até sexta. Carla envia o contrato revisado. Próxima reunião na quinta-feira.</p>
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceImportDemo() {
+  const { ref, stage } = useAnimatedStage<HTMLDivElement>(4, 1850);
+  const steps = [
+    ["PDF recebido", "fatura_julho.pdf", "📤"],
+    ["IA lendo lançamentos", "34 itens identificados", "✦"],
+    ["Duplicados comparados", "5 compras já registradas", "↻"],
+    ["Pronto para confirmar", "29 novos lançamentos", "✓"],
+  ];
+  return (
+    <div ref={ref} className="grid gap-5 lg:grid-cols-[.85fr_1.15fr]">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+        {steps.map(([title, desc, icon], index) => (
+          <div key={title} className={clsx("flex items-center gap-3 rounded-2xl border p-4 transition-all duration-500", stage === index ? "translate-x-1 border-amber-300 bg-amber-50 shadow-lg" : index < stage ? "border-emerald-100 bg-emerald-50/50" : "border-slate-100 bg-white opacity-60")}>
+            <span className={clsx("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg transition", index < stage ? "bg-emerald-500 text-white" : stage === index ? "bg-amber-400 text-slate-950" : "bg-slate-100")}>{index < stage ? "✓" : icon}</span>
+            <div><p className="text-sm font-bold text-slate-900">{index + 1}. {title}</p><p className="text-xs text-slate-500">{desc}</p></div>
+          </div>
+        ))}
+      </div>
+      <div className="overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white sm:p-8">
+        <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">Importação inteligente</p><p className="mt-1 text-lg font-extrabold">Fatura de julho</p></div><span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold text-slate-400">Etapa {stage + 1}/4</span></div>
+        <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-emerald-400 transition-all duration-700" style={{ width: `${(stage + 1) * 25}%` }} /></div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          {[
+            ["Encontrados", "34", "text-white"],
+            ["Novos", stage >= 1 ? "29" : "—", "text-emerald-400"],
+            ["Duplicados", stage >= 2 ? "5" : "—", "text-amber-400"],
+          ].map(([label, value, color]) => <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p><p className={clsx("mt-2 text-2xl font-extrabold transition-all", color)}>{value}</p></div>)}
+        </div>
+        <div className={clsx("mt-5 rounded-2xl border p-4 transition-all duration-500", stage === 3 ? "border-emerald-400/30 bg-emerald-400/10 opacity-100" : "border-white/10 bg-white/[0.03] opacity-55")}><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-bold">Revisão concluída</p><p className="mt-1 text-[11px] text-slate-400">Nada é importado sem sua aprovação.</p></div><span className={clsx("rounded-xl px-4 py-2 text-xs font-extrabold transition", stage === 3 ? "bg-emerald-400 text-slate-950" : "bg-white/10 text-slate-500")}>Confirmar</span></div></div>
       </div>
     </div>
   );
@@ -1076,41 +1155,7 @@ export default function LandingPage() {
             <p className="text-slate-500 mt-3 text-sm leading-relaxed">Envie a fatura em PDF pelo WhatsApp ou pelo painel. O Zelo lê cada lançamento, categoriza automaticamente e nunca registra o mesmo gasto duas vezes.</p>
           </div>
 
-          <div className="grid sm:grid-cols-4 gap-4 mb-14">
-            {[
-              { icon: "📤", title: "1. Envie o PDF", desc: "Pelo WhatsApp ou pelo painel web." },
-              { icon: "🔍", title: "2. A IA lê tudo", desc: "Cada lançamento é identificado e categorizado." },
-              { icon: "♻️", title: "3. Compara duplicados", desc: "Cruza valor e data com o que já existe." },
-              { icon: "✅", title: "4. Você confirma", desc: "Revisa a lista e importa só o que quiser." },
-            ].map(s => (
-              <div key={s.title} className="rounded-2xl border border-slate-100 p-4 text-center">
-                <span className="text-2xl">{s.icon}</span>
-                <p className="font-bold text-slate-900 text-sm mt-2">{s.title}</p>
-                <p className="text-xs text-slate-500 mt-1">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="rounded-3xl bg-slate-950 p-8 sm:p-10">
-            <div className="grid md:grid-cols-3 gap-5">
-              <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-5">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-3">Fatura analisada</p>
-                <p className="text-white font-bold text-lg">34 lançamentos</p>
-                <p className="text-xs text-slate-500 mt-1">encontrados no PDF</p>
-              </div>
-              <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-5">
-                <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-3">✅ Novos</p>
-                <p className="text-amber-300 font-bold text-lg">29 lançamentos</p>
-                <p className="text-xs text-amber-400/70 mt-1">prontos pra importar</p>
-              </div>
-              <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-5">
-                <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-3">♻️ Duplicados</p>
-                <p className="text-amber-300 font-bold text-lg">5 lançamentos</p>
-                <p className="text-xs text-amber-400/70 mt-1">já estavam registrados — ignorados</p>
-              </div>
-            </div>
-            <p className="text-center text-slate-500 text-xs mt-6">Você sempre revisa a lista antes de confirmar — nada é importado sem sua aprovação.</p>
-          </div>
+          <InvoiceImportDemo />
 
           <div className="text-center mt-10">
             <Link href="/cadastro" className="inline-block rounded-xl bg-gradient-to-br from-amber-500 to-amber-500 text-white text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
@@ -1138,22 +1183,7 @@ export default function LandingPage() {
         title="Reuniões marcadas e resumidas sozinhas."
         desc="Peça pro Zelo criar o link do Google Meet, convocar os participantes pelo WhatsApp e, quando a reunião terminar, ele mesmo gera a ata com os pontos principais."
         details={REUNIOES_DETAILS}
-        visual={
-          <div className="max-w-sm mx-auto space-y-3 relative">
-            <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/20 blur-3xl -z-10" />
-            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm flex items-center gap-3">
-              <span className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-lg">📹</span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Reunião — Time Comercial</p>
-                <p className="text-xs text-slate-400">14:00 · Google Meet</p>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold text-slate-800 mb-1.5">📝 Ata gerada automaticamente</p>
-              <p className="text-xs text-slate-500 leading-relaxed">Decidido: fechamento da proposta até sexta. Ação: Carla envia contrato revisado. Próxima reunião: quinta-feira.</p>
-            </div>
-          </div>
-        }
+        visual={<MeetingFlowDemo />}
       />
 
       {/* ── GRID DE MÓDULOS SECUNDÁRIOS ── */}
