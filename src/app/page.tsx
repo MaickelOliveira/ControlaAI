@@ -444,29 +444,6 @@ function CalendarCard() {
   );
 }
 
-/* ── Moldura de celular genérica (mesmo bezel do WhatsAppMock) pra
- *  encapsular qualquer conteúdo de tela — usada na composição de dois
- *  celulares do painel financeiro. ── */
-function PhoneShell({ children, width = 230, rotateY = 0, rotateZ = 0, className }: { children: React.ReactNode; width?: number; rotateY?: number; rotateZ?: number; className?: string }) {
-  return (
-    <div
-      className="relative"
-      style={{
-        width,
-        transform: `perspective(1400px) rotateY(${rotateY}deg) rotateX(4deg) rotateZ(${rotateZ}deg)`,
-        transformStyle: "preserve-3d",
-      }}
-    >
-      <div className={clsx("relative rounded-[2.6rem] border-[6px] border-slate-800 bg-black shadow-2xl overflow-hidden ring-1 ring-white/10", className)}>
-        <div className="absolute -left-[6px] top-[72px] w-[6px] h-7 bg-slate-800 rounded-l" />
-        <div className="absolute -left-[6px] top-[110px] w-[6px] h-11 bg-slate-800 rounded-l" />
-        <div className="absolute -right-[6px] top-[95px] w-[6px] h-14 bg-slate-800 rounded-r" />
-        {children}
-      </div>
-    </div>
-  );
-}
-
 const NAV_ICONS = {
   home: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-[15px] h-[15px]"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6" /></svg>,
   chart: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-[15px] h-[15px]"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
@@ -572,58 +549,28 @@ function DashboardPhoneScreen() {
   );
 }
 
-/* ── Tela 2: extrato (celular de trás) — mostra um pedaço diferente do
- *  app, reforçando que é o mesmo painel visto de outro ângulo. ── */
-function TransactionsPhoneScreen() {
-  const rows = [
-    { label: "Mercado", sub: "Hoje", value: -184.9, icon: "↓" },
-    { label: "Salário", sub: "Ontem", value: 4200, icon: "↑" },
-    { label: "Uber", sub: "Ontem", value: -32.5, icon: "↓" },
-    { label: "Cliente — projeto X", sub: "22 jul", value: 1200, icon: "↑" },
-  ];
+/* ── Painel realista dentro de um único celular elegante. Os cards ao redor
+ * reforçam o que acabou de acontecer sem competir com a tela principal. ── */
+function DashboardDevice() {
   return (
-    <div>
-      <PhoneStatusBar />
-      <div className="bg-slate-950 px-5 pt-2 pb-4">
-        <p className="text-white text-[13px] font-bold mb-3">Extrato</p>
-        <div className="space-y-2">
-          {rows.map(r => (
-            <div key={r.label} className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-2.5 flex items-center gap-2.5">
-              <span className={clsx("w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0", r.value > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")}>
-                {r.icon}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-[11px] font-semibold truncate">{r.label}</p>
-                <p className="text-slate-500 text-[8.5px]">{r.sub}</p>
-              </div>
-              <span className={clsx("text-[11px] font-bold shrink-0 tabular-nums", r.value > 0 ? "text-emerald-400" : "text-red-400")}>
-                {r.value > 0 ? "+" : "-"}{fmt(Math.abs(r.value))}
-              </span>
-            </div>
-          ))}
-        </div>
+    <div className="relative mx-auto flex min-h-[570px] w-full max-w-[420px] items-center justify-center">
+      <div className="pointer-events-none absolute inset-10 rounded-full bg-amber-300/30 blur-[90px]" />
+      <div className="absolute left-0 top-20 z-20 hidden rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:block">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Gasto registrado</p>
+        <p className="mt-1 text-sm font-extrabold text-slate-900">Mercado · R$ 184,90</p>
+        <p className="mt-0.5 text-[11px] font-semibold text-emerald-600">Categorizado automaticamente</p>
       </div>
-      <PhoneNavBar active="chart" />
-    </div>
-  );
-}
-
-/* ── Composição de dois celulares mostrando o painel financeiro real,
- *  um na frente e outro atrás, cada um numa tela diferente — como o
- *  print de referência. ── */
-function DualPhoneDashboard() {
-  return (
-    <div className="relative mx-auto w-full max-w-[400px]" style={{ height: 540 }}>
-      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/25 blur-3xl -z-10" />
-      <div className="absolute right-2 top-0 z-0">
-        <PhoneShell width={205} rotateY={18} rotateZ={5} className="opacity-90">
-          <TransactionsPhoneScreen />
-        </PhoneShell>
+      <div className="absolute bottom-24 right-0 z-20 hidden rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:block">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Visão completa</p>
+        <p className="mt-1 text-sm font-extrabold text-slate-900">Pessoal separado da empresa</p>
       </div>
-      <div className="absolute left-0 bottom-0 z-10">
-        <PhoneShell width={250} rotateY={-18} rotateZ={-4}>
+      <div className="relative z-10 rounded-[3.4rem] bg-gradient-to-br from-slate-700 via-slate-950 to-black p-[7px] shadow-[0_35px_80px_-30px_rgba(15,23,42,.7)] ring-1 ring-slate-400/40">
+        <div className="overflow-hidden rounded-[2.95rem] bg-slate-950 ring-1 ring-white/10">
           <DashboardPhoneScreen />
-        </PhoneShell>
+        </div>
+        <span className="absolute -right-[3px] top-28 h-16 w-[3px] rounded-r bg-slate-700" />
+        <span className="absolute -left-[3px] top-24 h-10 w-[3px] rounded-l bg-slate-700" />
+        <span className="absolute -left-[3px] top-36 h-14 w-[3px] rounded-l bg-slate-700" />
       </div>
     </div>
   );
@@ -674,6 +621,124 @@ function ModeToggleDemo() {
   );
 }
 
+const MODE_BENEFITS = {
+  personal: {
+    label: "Modo Pessoal",
+    eyebrow: "Sua vida em ordem",
+    description: "Cuide das contas da casa, dos compromissos e dos objetivos pessoais sem depender de planilhas ou vários aplicativos.",
+    benefits: [
+      ["Finanças pessoais", "Receitas, despesas, faturas e parcelamentos organizados automaticamente."],
+      ["Agenda e tarefas", "Compromissos, tarefas e lembretes criados pela conversa."],
+      ["Metas e recorrências", "Acompanhe objetivos e não esqueça contas que se repetem."],
+      ["Casa e família", "Lista de mercado, veículos e números familiares ilimitados."],
+      ["Documentos importantes", "Guarde comprovantes e encontre tudo por significado."],
+      ["Visão de quem registrou", "Saiba qual pessoa da família adicionou cada informação."],
+    ],
+  },
+  business: {
+    label: "Modo Empresa",
+    eyebrow: "Seu negócio sob controle",
+    description: "Centralize a operação do dia a dia e acompanhe o que entra, o que sai e o que sua equipe precisa fazer.",
+    benefits: [
+      ["Financeiro empresarial", "Caixa, contas a pagar e receber, faturas e categorias do negócio."],
+      ["Clientes organizados", "Cadastre contatos, empresas, telefones, endereços e observações."],
+      ["Equipe e folha", "Funcionários, cargos, salários e pagamentos recorrentes em um lugar."],
+      ["Veículos da empresa", "Quilometragem, combustível, manutenção, seguro e despesas."],
+      ["Reuniões e agenda", "Google Meet, participantes, compromissos e atas geradas por IA."],
+      ["Sócios e equipe", "Cada pessoa usa o próprio WhatsApp, com acesso definido por modo."],
+    ],
+  },
+} as const;
+
+function ModeBenefits() {
+  const [mode, setMode] = useState<keyof typeof MODE_BENEFITS>("personal");
+  const content = MODE_BENEFITS[mode];
+  return (
+    <section id="modo" className="relative overflow-hidden bg-slate-950 py-24">
+      <div className="pointer-events-none absolute left-1/2 top-0 h-[28rem] w-[48rem] -translate-x-1/2 rounded-full bg-amber-500/10 blur-[120px]" />
+      <div className="relative mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-3xl text-center">
+          <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-amber-300">DOIS MODOS · UMA ÚNICA CONTA</span>
+          <h2 className={`${heading.className} mt-5 text-3xl font-extrabold text-white sm:text-5xl`}>Sua vida pessoal e sua empresa, cada uma no seu lugar.</h2>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-400">Você alterna o modo no painel ou pelo WhatsApp. Saldos, categorias, metas e relatórios permanecem separados para não misturar a casa com o negócio.</p>
+        </div>
+
+        <div className="mx-auto mt-10 flex max-w-lg rounded-2xl border border-white/10 bg-white/5 p-1.5" role="tablist" aria-label="Benefícios por modo">
+          {(Object.keys(MODE_BENEFITS) as Array<keyof typeof MODE_BENEFITS>).map(key => (
+            <button key={key} role="tab" aria-selected={mode === key} onClick={() => setMode(key)} className={clsx("flex-1 rounded-xl px-4 py-3 text-sm font-extrabold transition", mode === key ? "bg-amber-400 text-slate-950 shadow-lg" : "text-slate-400 hover:text-white")}>{MODE_BENEFITS[key].label}</button>
+          ))}
+        </div>
+
+        <div className="mt-8 grid overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] lg:grid-cols-[.78fr_1.22fr]">
+          <div className="border-b border-white/10 p-7 lg:border-b-0 lg:border-r sm:p-10">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-400">{content.eyebrow}</p>
+            <h3 className={`${heading.className} mt-3 text-3xl font-extrabold text-white`}>{content.label}</h3>
+            <p className="mt-4 text-sm leading-relaxed text-slate-400">{content.description}</p>
+            <div className="mt-8"><ModeToggleDemo /></div>
+          </div>
+          <div className="grid gap-px bg-white/10 sm:grid-cols-2">
+            {content.benefits.map(([title, desc], index) => (
+              <article key={title} className="bg-slate-950/90 p-6 sm:p-7">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400/10 text-xs font-extrabold text-amber-400">0{index + 1}</span>
+                <h4 className={`${heading.className} mt-4 font-bold text-white`}>{title}</h4>
+                <p className="mt-2 text-[13px] leading-relaxed text-slate-400">{desc}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DriveSearchDemo() {
+  const { ref, inView } = useInView<HTMLDivElement>();
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    const timer = setInterval(() => setStage(current => (current + 1) % 3), 2200);
+    return () => clearInterval(timer);
+  }, [inView]);
+
+  return (
+    <div ref={ref} className="relative mx-auto w-full max-w-lg">
+      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-amber-300/25 blur-3xl" />
+      <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl shadow-slate-900/10">
+        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-amber-400">{FEATURE_ICONS.folder}</span>
+          <div className="flex-1"><p className="text-sm font-extrabold text-slate-900">Drive do Zelo</p><p className="text-[11px] text-slate-400">Organizado automaticamente por IA</p></div>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-600">Sincronizado</span>
+        </div>
+        <div className="p-5 sm:p-6">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <span className="text-slate-400">⌕</span>
+            <p className="flex-1 truncate text-sm text-slate-700">comprovante do mecânico deste ano</p>
+            <span className={clsx("h-2 w-2 rounded-full bg-amber-400", stage === 1 && "animate-ping")} />
+          </div>
+
+          <div className="mt-5 min-h-[265px]">
+            <div className={clsx("rounded-2xl border p-4 transition-all duration-500", stage === 0 ? "translate-y-0 border-amber-200 bg-amber-50 opacity-100" : "-translate-y-2 border-slate-100 bg-slate-50 opacity-45")}>
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-lg shadow-sm">📄</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800">comprovante_mecanico.pdf</p><p className="text-[11px] text-slate-400">Recebido pelo WhatsApp · agora</p></div><span className="text-xs font-bold text-amber-600">Enviando</span></div>
+            </div>
+
+            <div className={clsx("mt-3 rounded-2xl border p-4 transition-all duration-500", stage === 1 ? "scale-100 border-sky-200 bg-sky-50 opacity-100" : "scale-[.98] border-slate-100 bg-white opacity-45")}>
+              <div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-sky-600">IA analisando</p><p className="mt-1 text-sm font-bold text-slate-800">Comprovante identificado</p></div><span className="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold text-sky-700">Comprovantes</span></div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-sky-100"><div className={clsx("h-full rounded-full bg-sky-500 transition-all duration-1000", stage === 1 ? "w-full" : "w-1/3")} /></div>
+            </div>
+
+            <div className={clsx("mt-3 rounded-2xl border p-4 transition-all duration-500", stage === 2 ? "translate-y-0 border-emerald-200 bg-emerald-50 opacity-100 shadow-lg shadow-emerald-500/10" : "translate-y-2 border-slate-100 bg-white opacity-45")}>
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">✓</span><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Encontrado pela busca</p><p className="truncate text-sm font-bold text-slate-800">Comprovante · Oficina Mecânica</p><p className="text-[11px] text-slate-400">PDF · pasta Comprovantes</p></div></div>
+            </div>
+          </div>
+          <div className="mt-1 flex items-center justify-center gap-1.5" aria-label={`Etapa ${stage + 1} de 3`}>
+            {[0, 1, 2].map(item => <span key={item} className={clsx("h-1.5 rounded-full transition-all", stage === item ? "w-6 bg-amber-400" : "w-1.5 bg-slate-200")} />)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const FINANCAS_DETAILS: Detail[] = [
   { icon: FEATURE_ICONS.mic, title: "Áudio, texto ou foto", desc: "Fale naturalmente, digite ou mande foto do recibo — os três formatos são entendidos na hora." },
   { icon: FEATURE_ICONS.tag, title: "Categorização automática", desc: "Cada gasto já chega organizado por categoria, sem escolher nada na mão." },
@@ -686,13 +751,6 @@ const PAINEL_DETAILS: Detail[] = [
   { icon: FEATURE_ICONS.clock, title: "Lançamentos pendentes", desc: "Contas futuras entram automaticamente no saldo assim que a data chega." },
   { icon: FEATURE_ICONS.target, title: "Metas com prazo", desc: "Defina o valor alvo e a data, acompanhe o progresso quando quiser." },
   { icon: FEATURE_ICONS.pencil, title: "Edite conversando", desc: "Mude valor, categoria ou data só descrevendo o que precisa mudar." },
-];
-
-const MODO_DETAILS: Detail[] = [
-  { icon: FEATURE_ICONS.switch, title: "Troque com um clique", desc: "Sem trocar de conta nem digitar senha de novo — o botão fica ali no painel." },
-  { icon: FEATURE_ICONS.calculator, title: "Saldos separados", desc: "Categorias, metas e relatórios calculados de forma independente por modo." },
-  { icon: FEATURE_ICONS.building, title: "Empresa completa", desc: "Funcionários, veículos e fornecedores organizados do lado do negócio." },
-  { icon: FEATURE_ICONS.zen, title: "Sem confusão", desc: "Ideal pra quem empreende e também cuida da vida pessoal, no mesmo lugar." },
 ];
 
 const AGENDA_DETAILS: Detail[] = [
@@ -1003,28 +1061,10 @@ export default function LandingPage() {
         title="Seu dinheiro organizado em um só painel."
         desc="Seus gastos, compromissos e metas organizados num painel completo. Você sempre sabe o que aconteceu, o que está pendente e o que vem pela frente."
         details={PAINEL_DETAILS}
-        visual={<DualPhoneDashboard />}
+        visual={<DashboardDevice />}
       />
 
-      {/* ── MODO PESSOAL / MODO EMPRESA ── */}
-      <section id="modo" className="relative overflow-hidden bg-slate-950 py-24">
-        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[40rem] h-[24rem] rounded-full bg-amber-500/10 blur-[120px]" />
-        <div className="relative max-w-7xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-14">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold px-3 py-1.5">👤🏢 Modo Pessoal e Modo Empresa</span>
-            <h2 className={`${heading.className} text-3xl sm:text-4xl font-extrabold text-white mt-4`}>A mesma conta. Duas vidas, sem misturar.</h2>
-            <p className="text-slate-400 mt-3 text-sm leading-relaxed">
-              Alterne entre Modo Pessoal e Modo Empresa direto no painel ou pelo WhatsApp. Cada um com seu próprio saldo, categorias, metas e relatórios — perfeito pra quem empreende e também cuida da vida pessoal, sem abrir uma segunda conta.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="grid sm:grid-cols-2 gap-3">
-              {MODO_DETAILS.map(d => <DetailCard key={d.title} {...d} dark />)}
-            </div>
-            <ModeToggleDemo />
-          </div>
-        </div>
-      </section>
+      <ModeBenefits />
 
       {/* ── FATURA DE CARTÃO (destaque) ── */}
       <section id="fatura" className="relative overflow-hidden bg-white py-24">
@@ -1181,17 +1221,7 @@ export default function LandingPage() {
           title="Seus documentos guardados. Encontrados por IA."
           desc="Envie qualquer arquivo pelo WhatsApp e tenha tudo salvo e organizado. Quando precisar, é só descrever com suas palavras que o Zelo encontra pra você."
           details={DRIVE_DETAILS}
-          visual={
-            <WhatsAppMock
-              tilt={2}
-              messages={[
-                { from: "user", time: "10:02", text: "📄 comprovante_mecanico.pdf\nSalva isso na pasta de comprovantes" },
-                { time: "10:02", tags: ["Comprovantes"], text: "Pronto! Salvei na pasta Comprovantes ✅" },
-                { from: "user", time: "10:20", text: "Ache o comprovante que fiz pro mecânico esse ano" },
-                { time: "10:20", text: "Achei! Aqui está 👇\n📄 comprovante_mecanico.pdf" },
-              ]}
-            />
-          }
+          visual={<DriveSearchDemo />}
         />
       </div>
 
