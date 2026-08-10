@@ -1216,7 +1216,7 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     return { intent: "unknown", confidence: 0 };
   }
 
-  console.log(`[ai-processor] processando: "${message}" | key=${apiKey.slice(0,8)}...`);
+  console.log(`[ai-processor] processando mensagem (${message.length} caracteres)`);
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -1236,9 +1236,8 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    console.log(`[ai-processor] resposta Gemini: ${text.slice(0, 200)}`);
-
     const parsed = JSON.parse(text) as AIResult;
+    console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   } catch (e) {
     console.error("[ai-processor] Erro Gemini:", String(e));

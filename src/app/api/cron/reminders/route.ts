@@ -35,7 +35,7 @@ async function runCron() {
     console.log(`[cron/reminders] ${due.length} lembrete(s) a disparar`);
     const results = [];
     for (const r of due) {
-      console.log(`[cron/reminders] Enviando para ${r.phone}: "${r.message}"`);
+      console.log(`[cron/reminders] Enviando id=${r.id}`);
       const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", `🔔 *Lembrete:* ${r.message}`, { lembrete: r.message });
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
       if (ok) await markReminderSent(r.id, r.repeat);

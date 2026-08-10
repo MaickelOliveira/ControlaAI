@@ -28,7 +28,7 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
     ok = result.ok;
     // wamid aqui é o único jeito de casar esse envio com o evento de status
     // (sent/delivered/read/failed) que chega depois, assíncrono, no webhook.
-    if (ok) console.log(`[whatsapp] template ${templateName} → ${to} aceito, msg=${result.messageId}`);
+    if (ok) console.log(`[whatsapp] template ${templateName} aceito, msg=${result.messageId}`);
   } else {
     ok = await evolution.sendText(to, renderedText);
   }

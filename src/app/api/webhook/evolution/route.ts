@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     if (remoteJid.endsWith("@lid")) {
       const real = [data.key.remoteJidAlt, data.key.senderPn].find(j => j && !j.endsWith("@lid"));
       if (real) remoteJid = real;
-      else console.warn(`[webhook/evolution] contato chegou como @lid sem número real disponível (${remoteJid}) — vai processar mesmo assim, mas qualquer telefone salvo a partir daqui fica incorreto`);
+      else console.warn(`[webhook/evolution] contato chegou como @lid sem número real disponível (***${remoteJid.slice(-8)}) — vai processar mesmo assim, mas qualquer telefone salvo a partir daqui fica incorreto`);
     }
     if (remoteJid.endsWith("@g.us")) return NextResponse.json({ ok: true }); // ignora grupos
 

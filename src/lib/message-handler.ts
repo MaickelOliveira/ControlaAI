@@ -620,7 +620,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
     // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──
     if (await getAiPaused(from)) {
-      console.log(`[message-handler] from=${from} — IA pausada, não processa`);
+      console.log("[message-handler] IA pausada, não processa");
       return;
     }
 
@@ -723,7 +723,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "finance_edit": {
         const keyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
-        console.log(`[bot] finance_edit keyword="${keyword}" finance=${JSON.stringify(ai.finance)}`);
+        console.log(`[bot] finance_edit keyword="${keyword}" hasAmount=${!!ai.finance?.amount} hasCategory=${!!ai.finance?.category}`);
 
         const editPatch: Record<string, unknown> = {};
         if (ai.finance?.amount && ai.finance.amount > 0) editPatch.amount = ai.finance.amount;
@@ -801,7 +801,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "finance_delete": {
         const delKeyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
-        console.log(`[bot] finance_delete keyword="${delKeyword}" finance=${JSON.stringify(ai.finance)}`);
+        console.log(`[bot] finance_delete keyword="${delKeyword}"`);
 
         const delCandidates = delKeyword ? await findFinanceByDescription(user.id, null, delKeyword) : [];
         console.log(`[bot] finance_delete encontrados por palavra-chave=${delCandidates.length}`);

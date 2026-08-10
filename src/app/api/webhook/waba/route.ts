@@ -73,7 +73,8 @@ export async function POST(req: NextRequest) {
       for (const st of statuses || []) {
         if (st.status === "failed") {
           const err = st.errors?.[0];
-          console.error(`[webhook/waba] entrega falhou — msg=${st.id} para=${st.recipient_id}: ${err?.title || ""} ${err?.message || ""} ${err?.error_data?.details || ""}`.trim());
+          const paraMasked = st.recipient_id ? `***${st.recipient_id.slice(-4)}` : "?";
+          console.error(`[webhook/waba] entrega falhou — msg=${st.id} para=${paraMasked}: ${err?.title || ""} ${err?.message || ""} ${err?.error_data?.details || ""}`.trim());
         } else {
           console.log(`[webhook/waba] status msg=${st.id} → ${st.status}`);
         }

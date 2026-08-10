@@ -3,6 +3,10 @@ import { getBillingWebhookById, verifyBillingWebhookAuth, evaluateBillingWebhook
 
 type Params = Promise<{ id: string }>;
 
+function maskEmail(email: string): string {
+  return email.replace(/^(.).*(@.*)$/, "$1***$2");
+}
+
 export async function POST(req: NextRequest, { params }: { params: Params }) {
   const { id } = await params;
   const cfg = await getBillingWebhookById(id);
@@ -19,9 +23,9 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
 
   const result = await evaluateBillingWebhook(cfg, body);
   if (!result.ok) {
-    console.error(`[webhook/billing/${cfg.label}] ${result.error}`);
+    console.error(`[webhook/billing/${cfg.label}] ${result.error.replace(/[\w.+-]+@[\w.-]+/g, m => maskEmail(m))}`);
   } else {
-    console.log(`[webhook/billing/${cfg.label}] ${result.action}${result.email ? ` — ${result.email}` : ""}${result.detail ? ` (${result.detail})` : ""}`);
+    console.log(`[webhook/billing/${cfg.label}] ${result.action}${result.email ? ` — ${maskEmail(result.email)}` : ""}${result.detail ? ` (${result.detail})` : ""}`);
   }
 
   return NextResponse.json({ ok: true });
