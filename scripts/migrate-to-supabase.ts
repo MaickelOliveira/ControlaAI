@@ -106,7 +106,7 @@ async function main() {
   const finances = loadJSON<OldFinance[]>("finances.json", []);
   await upsert("finances", finances.map(f => ({
     id: f.id, user_id: f.userId, type: f.type, amount: f.amount, description: f.description, category: f.category,
-    mode: f.mode, date: f.date, pending: f.status === "pending", source: f.source ?? null,
+    mode: f.mode ?? "personal", date: f.date, pending: f.status === "pending", source: f.source ?? null,
     registered_by: f.registeredBy ?? null, created_at: f.createdAt,
   })));
 
@@ -115,7 +115,7 @@ async function main() {
   const tasks = loadJSON<OldTask[]>("tasks.json", []);
   await upsert("tasks", tasks.map(t => ({
     id: t.id, user_id: t.userId, title: t.title, status: t.status, priority: t.priority ?? "medium",
-    mode: t.mode, due_date: t.dueDate ?? null, created_at: t.createdAt,
+    mode: t.mode ?? "personal", due_date: t.dueDate ?? null, created_at: t.createdAt,
   })));
 
   // ── reminders ──
@@ -123,7 +123,7 @@ async function main() {
   const reminders = loadJSON<OldReminder[]>("reminders.json", []);
   await upsert("reminders", reminders.map(r => ({
     id: r.id, user_id: r.userId, message: r.message, phone: r.phone, scheduled_at: r.scheduledAt,
-    repeat: r.repeat, mode: r.mode, sent: r.sent, created_at: r.createdAt,
+    repeat: r.repeat, mode: r.mode ?? "personal", sent: r.sent, created_at: r.createdAt,
   })));
 
   // ── goals ──
@@ -131,7 +131,7 @@ async function main() {
   const goals = loadJSON<OldGoal[]>("goals.json", []);
   await upsert("goals", goals.map(g => ({
     id: g.id, user_id: g.userId, title: g.title, target_amount: g.targetAmount, current_amount: g.currentAmount,
-    deadline: g.deadline ?? null, category: g.category, mode: g.mode, status: g.status, created_at: g.createdAt,
+    deadline: g.deadline ?? null, category: g.category, mode: g.mode ?? "personal", status: g.status, created_at: g.createdAt,
   })));
 
   // ── vehicles ──
@@ -142,7 +142,7 @@ async function main() {
   const vehicles = loadJSON<OldVehicle[]>("vehicles.json", []);
   await upsert("vehicles", vehicles.map(v => ({
     id: v.id, user_id: v.userId, plate: v.plate, brand: v.brand, model: v.model, year: v.year,
-    fuel_type: v.fuelType, current_km: v.currentKm, mode: v.mode, expenses: v.expenses ?? [],
+    fuel_type: v.fuelType, current_km: v.currentKm, mode: v.mode ?? "personal", expenses: v.expenses ?? [],
     notes: v.notes ?? "", created_at: v.createdAt,
   })));
 
@@ -172,7 +172,7 @@ async function main() {
   const recurring = loadJSON<OldRecurring[]>("recurring.json", []);
   await upsert("recurring_transactions", recurring.map(r => ({
     id: r.id, user_id: r.userId, type: r.type, amount: r.amount, total_amount: r.totalAmount ?? null,
-    category: r.category, description: r.description, mode: r.mode, recurrence_type: r.recurrenceType,
+    category: r.category, description: r.description, mode: r.mode ?? "personal", recurrence_type: r.recurrenceType,
     total_installments: r.totalInstallments ?? null, paid_installments: r.paidInstallments,
     repeat_unit: r.repeatUnit, day_of_month: r.dayOfMonth ?? null, start_date: r.startDate,
     next_due_date: r.nextDueDate, status: r.status, last_notified_date: r.lastNotifiedDate ?? null,
