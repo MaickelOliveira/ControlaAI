@@ -1,12 +1,13 @@
 "use client";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  PieChart, Pie, Cell, AreaChart, Area,
+  PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Line, LineChart,
 } from "recharts";
 
-type BarEntry = { label: string; receitas: number; despesas: number };
+type BarEntry = { label: string; receitas: number; despesas: number; saldo?: number };
 type PieEntry = { name: string; value: number };
 type AreaEntry = { label: string; saldo: number };
+type FlowEntry = { label: string; receitas: number; despesas: number };
 
 const PIE_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6"];
 
@@ -19,18 +20,56 @@ function fmtK(v: number) {
 export function BarChartComponent({ data }: { data: BarEntry[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} barCategoryGap="30%" barGap={4}>
+      <ComposedChart data={data} barCategoryGap="30%" barGap={4}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
         <Tooltip
-          formatter={(value, name) => [fmt(Number(value ?? 0)), name === "receitas" ? "Receitas" : "Despesas"]}
+          formatter={(value, name) => [fmt(Number(value ?? 0)), name === "receitas" ? "Receitas" : name === "despesas" ? "Despesas" : "Resultado"]}
           contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
           cursor={{ fill: "#f8fafc" }}
         />
-        <Legend formatter={(v) => v === "receitas" ? "Receitas" : "Despesas"} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+        <Legend formatter={(v) => v === "receitas" ? "Receitas" : v === "despesas" ? "Despesas" : "Resultado"} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
         <Bar dataKey="receitas" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={36} />
         <Bar dataKey="despesas" fill="#ef4444" radius={[6, 6, 0, 0]} maxBarSize={36} />
+        <Line type="monotone" dataKey="saldo" stroke="#0f172a" strokeWidth={2.5} dot={{ r: 3, fill: "#0f172a" }} activeDot={{ r: 5 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function DailyFlowChartComponent({ data }: { data: FlowEntry[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={230}>
+      <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} minTickGap={22} />
+        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
+        <Tooltip
+          formatter={(value, name) => [fmt(Number(value ?? 0)), name === "receitas" ? "Receitas" : "Despesas"]}
+          contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
+        />
+        <Legend formatter={(v) => v === "receitas" ? "Receitas" : "Despesas"} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+        <Line type="monotone" dataKey="receitas" stroke="#10b981" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+        <Line type="monotone" dataKey="despesas" stroke="#f43f5e" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function CategoryBarChartComponent({ data }: { data: PieEntry[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={238}>
+      <BarChart data={data.slice(0, 6)} layout="vertical" margin={{ top: 2, right: 12, left: 4, bottom: 2 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+        <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="name" width={92} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+        <Tooltip
+          formatter={(value) => [fmt(Number(value ?? 0)), "Despesas"]}
+          contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
+          cursor={{ fill: "#f8fafc" }}
+        />
+        <Bar dataKey="value" fill="#f59e0b" radius={[0, 7, 7, 0]} maxBarSize={22} />
       </BarChart>
     </ResponsiveContainer>
   );

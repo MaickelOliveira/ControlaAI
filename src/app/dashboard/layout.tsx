@@ -269,7 +269,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const sidebarProps = { user, pathname, modeChanging, isPersonal, toggleMode, logout, onNavClick: () => setSidebarOpen(false) };
 
   return (
-    <div className="flex h-screen bg-[#F1F5F9]">
+    <div className="flex h-screen bg-[#F6F7F9]">
       {/* Sidebar — desktop (lg+) */}
       <div className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col shrink-0 shadow-sm">
         <SidebarContent {...sidebarProps} />
@@ -305,7 +305,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Page content */}
         <div className="flex-1 overflow-auto">
-          <main className="p-4 sm:p-6 max-w-6xl mx-auto">
+          <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-7">
             {children}
           </main>
         </div>
