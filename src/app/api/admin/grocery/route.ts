@@ -24,13 +24,16 @@ export async function GET(req: NextRequest) {
   if (view === "templates") return NextResponse.json(LIST_TEMPLATES);
 
   // overview
-  const purchases = await getPurchasesByUser(session.sub);
-  const spend = await getSpendByStore(session.sub);
-  const list = await getShoppingList(session.sub);
+  const [purchases, spend, list, stores] = await Promise.all([
+    getPurchasesByUser(session.sub),
+    getSpendByStore(session.sub),
+    getShoppingList(session.sub),
+    getStoresByUser(session.sub),
+  ]);
   return NextResponse.json({
     totalSpent: purchases.reduce((s, p) => s + p.total, 0),
     purchasesCount: purchases.length,
-    storesCount: (await getStoresByUser(session.sub)).length,
+    storesCount: stores.length,
     topStore: spend[0] ?? null,
     recentPurchases: purchases.slice(0, 5),
     shoppingListCount: list.filter(i => !i.checked).length,

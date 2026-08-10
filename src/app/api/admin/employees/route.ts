@@ -7,8 +7,10 @@ export async function GET(req: NextRequest) {
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") as "active" | "inactive" | undefined;
-  const employees = await getEmployeesByUser(session.sub, status || undefined);
-  const totalPayroll = await getTotalPayroll(session.sub);
+  const [employees, totalPayroll] = await Promise.all([
+    getEmployeesByUser(session.sub, status || undefined),
+    getTotalPayroll(session.sub),
+  ]);
   return NextResponse.json({ employees, totalPayroll });
 }
 

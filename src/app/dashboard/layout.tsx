@@ -237,7 +237,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => d.user && setUser(d.user)).catch(() => {});
+    fetch("/api/me").then(r => r.json()).then(d => d.user && setUser(d.user)).catch(() => {});
   }, []);
 
   // Fecha a sidebar ao trocar de rota (mobile) — ajusta o estado durante o

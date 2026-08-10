@@ -10,8 +10,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const folderId = searchParams.get("folderId") ?? undefined;
 
-  const files = await getFiles(session.sub, folderId);
-  const folders = await getFolders(session.sub);
+  const [files, folders] = await Promise.all([getFiles(session.sub, folderId), getFolders(session.sub)]);
 
   return NextResponse.json({ files, folders });
 }

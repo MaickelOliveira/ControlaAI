@@ -15,15 +15,22 @@ export async function GET() {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  const personalBalance = await getBalance(user.id, "personal", year, month);
-  const businessBalance = await getBalance(user.id, "business", year, month);
-  const personalDailyTotals = await getDailyTotals(user.id, "personal", 30);
-  const businessDailyTotals = await getDailyTotals(user.id, "business", 30);
-  const personalExpCategories = await getByCategory(user.id, "personal", "expense", year, month);
-  const businessExpCategories = await getByCategory(user.id, "business", "expense", year, month);
-  const pendingTasks = await getPendingTasks(user.id, user.activeMode);
-  const overdueTasks = await getOverdueTasks(user.id, user.activeMode);
-  const recentTransactions = await getRecentTransactions(user.id, user.activeMode, 5);
+  const [
+    personalBalance, businessBalance,
+    personalDailyTotals, businessDailyTotals,
+    personalExpCategories, businessExpCategories,
+    pendingTasks, overdueTasks, recentTransactions,
+  ] = await Promise.all([
+    getBalance(user.id, "personal", year, month),
+    getBalance(user.id, "business", year, month),
+    getDailyTotals(user.id, "personal", 30),
+    getDailyTotals(user.id, "business", 30),
+    getByCategory(user.id, "personal", "expense", year, month),
+    getByCategory(user.id, "business", "expense", year, month),
+    getPendingTasks(user.id, user.activeMode),
+    getOverdueTasks(user.id, user.activeMode),
+    getRecentTransactions(user.id, user.activeMode, 5),
+  ]);
 
   return NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, plan: user.plan, status: user.status, activeMode: user.activeMode, trialEndsAt: user.trialEndsAt, wppPhone: user.wppPhone ?? null, wppPhones: getWppPhones(user), wppPhoneNames: user.wppPhoneNames ?? {}, wppPhoneRelations: user.wppPhoneRelations ?? {}, wppPhoneAccess: user.wppPhoneAccess ?? {}, maxWppPhones: getMaxWppPhones(user) },
