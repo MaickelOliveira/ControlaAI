@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
@@ -18,14 +18,14 @@ export default function ClienteDetailPage() {
   const [priceInput, setPriceInput] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
 
-  function load() {
+  const load = useCallback(() => {
     fetch("/api/admin/clientes").then(r => r.json()).then(d => {
       const found = d.clientes?.find((c: ClienteDetail) => c.id === id);
       if (found) { setCliente(found); setPriceInput(found.priceOverride ? String(found.priceOverride) : ""); }
     });
-  }
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   async function savePriceOverride() {
     setSavingPrice(true);

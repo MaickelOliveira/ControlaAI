@@ -424,7 +424,6 @@ export default function AgendaPage() {
           onEdit={openEdit}
           onDone={handleDone}
           onDelete={handleDelete}
-          onNew={openNew}
           loading={loading}
         />
       )}
@@ -589,13 +588,12 @@ function DayEventRow({ evt, onEdit, onDone, onDelete }: {
   );
 }
 
-function ListView({ appointments, today, onEdit, onDone, onDelete, onNew, loading }: {
+function ListView({ appointments, today, onEdit, onDone, onDelete, loading }: {
   appointments: Appointment[];
   today: string;
   onEdit: (a: Appointment) => void;
   onDone: (id: string) => void;
   onDelete: (id: string) => void;
-  onNew: (date?: string) => void;
   loading: boolean;
 }) {
   const scheduled = appointments.filter(a => a.status === "scheduled");
@@ -615,7 +613,7 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, onNew, loadin
     <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-2xl">
       <p className="text-5xl mb-4">🗓️</p>
       <p className="text-slate-600 font-medium">Nenhum compromisso agendado</p>
-      <p className="text-slate-400 text-sm mt-1">Clique em "Novo" ou envie pelo WhatsApp.</p>
+      <p className="text-slate-400 text-sm mt-1">Clique em &quot;Novo&quot; ou envie pelo WhatsApp.</p>
     </div>
   );
 

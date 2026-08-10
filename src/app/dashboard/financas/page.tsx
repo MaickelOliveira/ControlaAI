@@ -175,7 +175,7 @@ export default function FinancasPage() {
       setMode(m);
       loadCategories();
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSaveCategory(e: React.FormEvent) {
     e.preventDefault();

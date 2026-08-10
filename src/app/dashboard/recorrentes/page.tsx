@@ -77,7 +77,7 @@ export default function RecorrentesPage() {
       setMode(m);
       load(m);
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   function openCreate() {
     setEditingId(null);

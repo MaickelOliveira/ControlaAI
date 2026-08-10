@@ -44,7 +44,7 @@ export default function VeiculosPage() {
         setMode(m);
         load(m);
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   async function createVehicle(e: React.FormEvent) {
     e.preventDefault();

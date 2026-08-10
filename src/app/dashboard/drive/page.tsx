@@ -157,7 +157,7 @@ export default function DrivePage() {
         <span className="text-2xl shrink-0">💡</span>
         <div className="text-sm text-amber-800">
           <p className="font-semibold">Envie arquivos pelo WhatsApp!</p>
-          <p className="text-amber-700 mt-0.5">Mande PDF, imagem ou documento direto no chat e a IA organiza automaticamente. Para buscar: <em>"Ache o comprovante do mecânico"</em></p>
+          <p className="text-amber-700 mt-0.5">Mande PDF, imagem ou documento direto no chat e a IA organiza automaticamente. Para buscar: <em>&quot;Ache o comprovante do mecânico&quot;</em></p>
         </div>
       </div>
 

@@ -152,6 +152,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 type: "invoice_import",
                 userId: fileUser.id,
                 mode: fMode,
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars -- exclui "duplicate" do objeto, não usa a variável em si
                 items: novos.map(({ duplicate: _duplicate, ...rest }) => rest),
               });
 
@@ -597,7 +598,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         await clearPendingAction(from);
         const result = await confirmRecurring(pending.recurringId, user.id);
         if (result) {
-          await wppSend(from, replyRecurringConfirmed(result.updated, result.finance));
+          await wppSend(from, replyRecurringConfirmed(result.updated));
         }
       } else if (isNo) {
         await clearPendingAction(from);

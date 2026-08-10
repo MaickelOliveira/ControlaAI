@@ -122,7 +122,7 @@ export default function BillingWebhooksPage() {
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-800">
-        ⚠️ O mapeamento de campos (email, status) é uma sugestão baseada na documentação pública de cada plataforma — <b>confira sempre com um payload de teste real</b> (a plataforma tem um botão "enviar teste") antes de ativar, usando o botão "Testar" abaixo. Um mapeamento errado pode ativar/desativar o cliente errado.
+        ⚠️ O mapeamento de campos (email, status) é uma sugestão baseada na documentação pública de cada plataforma — <b>confira sempre com um payload de teste real</b> (a plataforma tem um botão &quot;enviar teste&quot;) antes de ativar, usando o botão &quot;Testar&quot; abaixo. Um mapeamento errado pode ativar/desativar o cliente errado.
       </div>
 
       <div className="space-y-3">

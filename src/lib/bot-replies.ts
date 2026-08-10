@@ -3,7 +3,6 @@ import type { Task } from "./tasks";
 import type { Reminder } from "./reminders";
 import { type RecurringTransaction, recurringRemaining } from "./recurring";
 import type { Appointment } from "./agenda";
-import type { Meet } from "./meets";
 import { formatCurrency } from "./finances";
 import { PRIORITY_LABEL, formatDueDate } from "./tasks";
 import type { UserMode } from "./users";
@@ -264,7 +263,7 @@ export function buildRecurringNotification(r: RecurringTransaction): string {
   return `Passando para lembrar da conta de hoje:\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n📅 ${dueDateStr}\n\nJá foi ${r.type === "income" ? "recebida" : "paga"}? Me responda *sim* ou *não*.`;
 }
 
-export function replyRecurringConfirmed(r: RecurringTransaction, _finance: Finance): string {
+export function replyRecurringConfirmed(r: RecurringTransaction): string {
   const fmt = (v: number) => formatCurrency(v);
   if (r.status === "completed") {
     const total = fmt(r.totalAmount ?? r.amount * (r.totalInstallments ?? 1));

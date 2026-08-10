@@ -25,7 +25,6 @@ export default function MetasPage() {
   const [showForm, setShowForm] = useState(false);
   const [showAdd, setShowAdd] = useState<Goal | null>(null);
   const [addAmount, setAddAmount] = useState("");
-  const [editTarget, setEditTarget] = useState<Goal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Goal | null>(null);
   const [form, setForm] = useState({ title: "", targetAmount: "", currentAmount: "0", deadline: "", category: "Geral" });
 

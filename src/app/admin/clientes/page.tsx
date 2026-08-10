@@ -21,7 +21,6 @@ export default function ClientesPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
-  const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
