@@ -1,4 +1,19 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Zelo
+
+## Rastreamento Meta Ads
+
+O site suporta Meta Pixel no navegador e Conversions API no servidor, com consentimento e deduplicação do evento de cadastro. Configure no ambiente de produção:
+
+```bash
+NEXT_PUBLIC_META_PIXEL_ID=seu_dataset_id
+META_PIXEL_ID=seu_dataset_id
+META_CONVERSIONS_API_TOKEN=seu_token_secreto
+META_GRAPH_API_VERSION=v25.0
+```
+
+Para validar eventos sem contaminar os dados reais, adicione temporariamente `META_TEST_EVENT_CODE`, copie o código mostrado em **Gerenciador de Eventos > Testar eventos** e remova a variável depois do teste.
+
+O token da Conversions API é secreto: configure-o somente no servidor/EasyPanel e nunca use o prefixo `NEXT_PUBLIC_` nele.
 
 ## Getting Started
 

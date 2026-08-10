@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { hasMetaConsent, readBrowserCookie, trackMetaEvent } from "@/components/MetaTracking";
 
 export default function CadastroPage() {
   const router = useRouter();
@@ -24,13 +25,28 @@ export default function CadastroPage() {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
+      const eventId = crypto.randomUUID();
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          meta: {
+            consent: hasMetaConsent(),
+            eventId,
+            fbp: readBrowserCookie("_fbp"),
+            fbc: readBrowserCookie("_fbc"),
+          },
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Erro ao cadastrar"); return; }
+      trackMetaEvent("CompleteRegistration", {
+        content_name: "Cadastro Zelo",
+        plan: form.plan,
+        billing_cycle: form.billingCycle,
+        status: "trial",
+      }, eventId);
       router.push("/dashboard");
     } catch { setError("Erro de conexão"); }
     finally { setLoading(false); }
