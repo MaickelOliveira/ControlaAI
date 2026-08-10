@@ -131,6 +131,7 @@ export type PendingInvoiceImport = {
   userId: string;
   mode: "personal" | "business";
   items: PendingInvoiceImportItem[];
+  accountHint?: string; // nome do banco/cartão identificado no documento (ver accounts.ts resolveAccountForFinance)
   expiresAt: string;
 };
 
@@ -181,7 +182,21 @@ export type PendingEmployeePaymentSelect = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect;
+/** Pergunta qual conta/cartão o usuário quis dizer quando o nome citado
+ *  (accountHint/keyword) bate em mais de uma conta cadastrada — mesmo padrão
+ *  de PendingVehicleSelection/PendingAppointmentSelection. "action" decide o
+ *  que fazer com a conta escolhida (ver resolução em message-handler.ts). */
+export type PendingAccountSelection = {
+  type: "account_selection";
+  phone: string;
+  userId: string;
+  mode: string;
+  action: "query" | "set_default" | "invoice_query" | "invoice_pay";
+  accounts: Array<{ id: string; name: string; type: string }>;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect | PendingAccountSelection;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -205,7 +220,8 @@ type PendingActionInput =
   | Omit<PendingReceiptSave, "phone" | "expiresAt">
   | Omit<PendingInvoiceImport, "phone" | "expiresAt">
   | Omit<PendingSlotFill, "phone" | "expiresAt">
-  | Omit<PendingEmployeePaymentSelect, "phone" | "expiresAt">;
+  | Omit<PendingEmployeePaymentSelect, "phone" | "expiresAt">
+  | Omit<PendingAccountSelection, "phone" | "expiresAt">;
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   recurring_confirmation: TTL_RECURRING_MS,
@@ -270,6 +286,15 @@ export function parseAppointmentChoice(
   appointments: Array<{ id: string; title: string; startAt: string; location?: string }>
 ): number {
   return choiceIndexByLabels(text, appointments, a => [a.title]);
+}
+
+/** Interpreta a resposta do usuário como escolha de conta/cartão.
+ *  Aceita: "1", "2", parte do nome. Retorna índice (0-based) ou -1. */
+export function parseAccountChoice(
+  text: string,
+  accounts: Array<{ id: string; name: string; type: string }>
+): number {
+  return choiceIndexByLabels(text, accounts, a => [a.name]);
 }
 
 /** Interpreta a resposta do usuário como escolha de lançamento financeiro.

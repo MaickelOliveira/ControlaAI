@@ -29,6 +29,17 @@ export async function register() {
         console.error("[cron] Erro ao postar pendentes:", e);
       }
 
+      // ── Fecha faturas de cartão de crédito cujo ciclo já passou do period_end ──
+      try {
+        const accountsModule = await import("./lib/accounts").catch(() => null);
+        if (accountsModule) {
+          const closed = await accountsModule.closeDueInvoices();
+          if (closed.length > 0) console.log(`[cron] ${closed.length} fatura(s) de cartão fechada(s)`);
+        }
+      } catch (e) {
+        console.error("[cron] Erro ao fechar faturas:", e);
+      }
+
       const remindersModule = await import("./lib/reminders").catch(() => null);
       const wppModule = await import("./lib/whatsapp").catch(() => null);
       if (!remindersModule || !wppModule) return;

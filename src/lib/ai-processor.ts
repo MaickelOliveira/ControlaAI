@@ -53,6 +53,11 @@ export type Intent =
   | "grocery_store_ranking"
   | "grocery_history_query"
   | "grocery_spend_query"
+  | "account_create"
+  | "account_query"
+  | "account_set_default"
+  | "card_invoice_query"
+  | "card_invoice_pay"
   | "employee_create"
   | "employee_list"
   | "employee_update"
@@ -90,6 +95,16 @@ export type FinanceData = {
   category: string;
   description: string;
   date: string;
+  mode?: "personal" | "business"; // detectado automaticamente
+  accountHint?: string; // nome da conta/cartão mencionado, ex: "no Nubank", "cartão Inter" — ausente = usa a conta padrão
+};
+
+export type AccountData = {
+  name?: string; // nome dado pelo usuário, ex: "Nubank", "Cartão Inter"
+  type?: "bank" | "credit_card";
+  creditLimit?: number; // só faz sentido em credit_card
+  closingDay?: number; // só faz sentido em credit_card — dia do mês (1-28) em que a fatura fecha
+  dueDay?: number; // só faz sentido em credit_card — dia do mês (1-28) em que a fatura vence
   mode?: "personal" | "business"; // detectado automaticamente
 };
 
@@ -220,6 +235,7 @@ export type AIResult = {
   agendaData?: AgendaData;
   meetData?: MeetData;
   grocery?: GroceryData;
+  account?: AccountData;
   employee?: EmployeeData;
   customer?: CustomerData;
   mode?: UserMode;
@@ -326,7 +342,7 @@ Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:S
 As categorias válidas, a data de hoje, o calendário e os períodos pré-calculados vêm no início da mensagem do usuário a cada chamada — use sempre os valores de lá, nunca invente.
 
 INTENÇÕES POSSÍVEIS:
-- finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular)
+- finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular). Se a mensagem mencionar EXPLICITAMENTE em qual conta/cartão/banco o valor entrou ou saiu (ex: "paguei 50 no cartão Nubank", "recebi 2000 no Itaú", "gastei 30 no crédito Inter"), inclua "accountHint" com o nome citado (ex: "Nubank", "Itaú", "Inter"). Sem menção nenhuma de conta/banco/cartão, NÃO inclua "accountHint" — o sistema usa a conta padrão sozinho.
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
@@ -382,6 +398,11 @@ INTENÇÕES POSSÍVEIS:
 - grocery_store_ranking: perguntar qual mercado é mais barato NO GERAL, considerando os itens comprados em comum entre eles ("qual mercado é mais barato pra mim", "onde compensa mais eu comprar", "ranking dos mercados que eu compro")
 - grocery_history_query: listar as COMPRAS de mercado de fato (itens + valor), opcionalmente filtrado por categoria e/ou período ("o que comprei no mercado esse mês", "qual carne comprei semana passada", "minhas compras de mercado", "resumo das compras do mês", "o que comprei de limpeza esse mês"). ⚠️ DIFERENTE de grocery_spend_query (que só dá o total por mercado, sem listar item) e de grocery_price_compare (preço de 1 item específico entre lojas) — aqui é "o que eu comprei", com os itens de verdade. Se mencionar uma categoria (carne, limpeza, bebida, etc.), inclua "grocery.category" com uma das categorias válidas (Carnes, Mercearia, Hortifruti, Laticínios, Padaria, Bebidas, Limpeza, Higiene, Outros). Se mencionar um período diferente do mês atual ("semana passada", "mês passado"), inclua "grocery.period" com os valores pré-calculados do início da mensagem (mesma regra de finance_query — NUNCA calcule a data por conta própria).
 - grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito de mercado, SEM listar os itens comprados ("quanto gastei no mercado esse mês", "qual mercado eu gasto mais", "quantas vezes fui no Assaí")
+- account_create: cadastrar uma conta bancária ou cartão de crédito ("cadastra minha conta do Nubank", "adiciona o cartão Inter", "cria uma conta banco Itaú", "novo cartão Bradesco, fecha dia 5 vence dia 12"). Use "account.name" (obrigatório) e "account.type" ("bank" para conta bancária/corrente/poupança, "credit_card" para cartão de crédito — inferido por palavras como "cartão"/"crédito" vs "conta"/"banco"). Se for credit_card e a mensagem mencionar dia de fechamento/vencimento ("fecha dia 5", "vence dia 12"), inclua "account.closingDay" e "account.dueDay". Se mencionar limite ("limite de 3000"), inclua "account.creditLimit".
+- account_query: ver contas/cartões cadastrados ou saldo/limite de uma conta específica ("minhas contas", "meus cartões", "quais contas tenho", "qual o limite do meu cartão Inter"). Se citar o nome de uma conta específica, use "keyword" com esse nome.
+- account_set_default: marcar uma conta como padrão/principal, pra onde vai o que não especifica conta ("deixa o Nubank como conta padrão", "usa o Itaú como principal", "toda despesa sem conta cai no Inter"). Use "keyword" com o nome da conta.
+- card_invoice_query: ver a fatura (aberta ou a pagar) de um cartão de crédito específico ("fatura do cartão Inter", "quanto tá minha fatura do Nubank", "quanto devo no cartão", "valor da fatura do Bradesco"). Use "keyword" com o nome do cartão citado (se não citar nenhum e o usuário só tiver 1 cartão cadastrado, o sistema usa esse).
+- card_invoice_pay: marcar a fatura de um cartão como paga ("paguei a fatura do Inter", "fatura do Nubank paga", "quitei o cartão Bradesco"). Use "keyword" com o nome do cartão citado.
 - employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
@@ -406,7 +427,7 @@ Exemplo: "gastei 500 com vendedor" → type: "expense", category: "Outros"
 
 As categorias válidas (incluindo as personalizadas do usuário, se houver) vêm no início da mensagem, em CATEGORIAS DE DESPESA/CATEGORIAS DE RECEITA.
 
-MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, finance_edit, task_create, goal_create, vehicle_expense, recurring_create, recurring_edit, reminder_set. Sempre que a intenção criar/editar algo, tente identificar o campo "mode":
+MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, finance_edit, task_create, goal_create, vehicle_expense, recurring_create, recurring_edit, reminder_set, account_create. Sempre que a intenção criar/editar algo, tente identificar o campo "mode":
 1. PRIORIDADE MÁXIMA — pedido explícito: se a mensagem disser "modo empresa"/"empresarial"/"para empresa"/"na empresa" → mode: "business". Se disser "modo pessoal"/"pessoal" → mode: "personal". Isso vale mesmo que o conteúdo pareça sugerir o modo contrário — o pedido explícito do usuário sempre vence.
 2. Sem pedido explícito, infira pelo CONTEÚDO/CONTEXTO:
    - business: menções a FGTS, INSS, funcionário(s), salário de funcionário, folha, fornecedor, marketing, nota fiscal, cliente, faturamento, ou nome de projeto/cliente que soe como trabalho (ex: "construir site [nome de cliente]", "reunião com [cliente]", "entregar proposta para [empresa]"), ou categoria Funcionários/Marketing/Fornecedores/Impostos de empresa
@@ -904,6 +925,27 @@ OU para listar todas as compras do mês, sem filtro ("o que comprei no mercado e
   "intent": "grocery_history_query",
   "confidence": 0.9,
   "grocery": {}
+}
+
+OU para cadastrar cartão de crédito ("adiciona o cartão Inter, fecha dia 5, vence dia 12"):
+{
+  "intent": "account_create",
+  "confidence": 0.9,
+  "account": { "name": "Inter", "type": "credit_card", "closingDay": 5, "dueDay": 12 }
+}
+
+OU para cadastrar conta bancária ("cadastra minha conta do Nubank"):
+{
+  "intent": "account_create",
+  "confidence": 0.9,
+  "account": { "name": "Nubank", "type": "bank" }
+}
+
+OU para ver a fatura de um cartão ("quanto tá minha fatura do Inter"):
+{
+  "intent": "card_invoice_query",
+  "confidence": 0.9,
+  "keyword": "Inter"
 }
 
 OU para cadastrar funcionário ("cadastra a Ana como vendedora, salário 2000"):
@@ -1577,6 +1619,7 @@ Retorne APENAS JSON válido, sem markdown.`,
 }
 
 export type InvoiceTransaction = { date: string; description: string; amount: number; category: string };
+export type InvoiceExtraction = { transactions: InvoiceTransaction[]; bankName?: string };
 
 /** Extrai TODAS as transações de uma fatura de cartão de crédito ou extrato (várias
  *  linhas), diferente de extractFinanceFromDocument que assume um único lançamento
@@ -1586,7 +1629,7 @@ export async function extractInvoiceTransactions(
   buffer: Buffer,
   mimeType: string,
   caption?: string
-): Promise<{ transactions: InvoiceTransaction[] } | null> {
+): Promise<InvoiceExtraction | null> {
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
@@ -1606,6 +1649,7 @@ ${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
 Se for uma fatura/extrato com várias transações, extraia CADA lançamento de compra individual (ignore o "total da fatura", "pagamento efetuado", "saldo anterior" e "valor mínimo" — esses NÃO são transações individuais, são resumo/pagamento da fatura em si) e retorne JSON:
 {
   "isInvoice": true,
+  "bankName": "nome do banco/cartão impresso no documento, se identificável (ex: 'Nubank', 'Itaú', 'Inter', 'Bradesco') — null se não conseguir identificar",
   "transactions": [
     { "date": "YYYY-MM-DD (data da compra; se só tiver dia/mês, use o ano da fatura)", "description": "descrição curta e legível (ex: Uber, Supermercado Extra, Netflix)", "amount": número positivo, "category": "uma das categorias abaixo" }
   ]
@@ -1650,7 +1694,8 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`,
     }
 
     if (transactions.length === 0) return null;
-    return { transactions };
+    const bankName = String(parsed.bankName || "").trim() || undefined;
+    return { transactions, bankName };
   } catch (e) {
     console.error("[ai-processor] Erro extractInvoiceTransactions:", e);
     return null;

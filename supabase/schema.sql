@@ -54,6 +54,44 @@ create table if not exists wpp_phone_links (
 );
 create index if not exists wpp_phone_links_user_idx on wpp_phone_links(user_id);
 
+-- Controle de contas: conta bancária ou cartão de crédito, associada aos
+-- lançamentos de finances abaixo. Separada por mode (mesmo padrão do resto
+-- do sistema). is_default = "conta coringa" do modo — quando o usuário não
+-- especifica qual conta, o lançamento cai nela.
+create table if not exists accounts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  mode text not null default 'personal' check (mode in ('personal', 'business')),
+  name text not null,
+  type text not null check (type in ('bank', 'credit_card')),
+  is_default boolean not null default false,
+  credit_limit numeric,     -- só type='credit_card'
+  closing_day int check (closing_day between 1 and 28), -- idem; 1-28 evita fev/meses curtos
+  due_day int check (due_day between 1 and 28),          -- idem
+  created_at timestamptz not null default now()
+);
+create index if not exists accounts_user_idx on accounts(user_id);
+create index if not exists accounts_user_mode_idx on accounts(user_id, mode);
+create unique index if not exists accounts_user_mode_name_uidx on accounts(user_id, mode, lower(name));
+create unique index if not exists accounts_user_mode_default_uidx on accounts(user_id, mode) where is_default;
+
+-- Ciclo de fatura de uma conta type='credit_card' — uma linha por período
+-- (fechamento a fechamento). open → closed (automático, cron, quando
+-- period_end passa) → paid (manual).
+create table if not exists card_invoices (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id) on delete cascade,
+  period_start date not null,
+  period_end date not null,
+  due_date date not null,
+  status text not null default 'open' check (status in ('open', 'closed', 'paid')),
+  paid_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists card_invoices_account_idx on card_invoices(account_id);
+create index if not exists card_invoices_account_status_idx on card_invoices(account_id, status);
+create unique index if not exists card_invoices_account_period_uidx on card_invoices(account_id, period_end);
+
 create table if not exists finances (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
@@ -66,10 +104,17 @@ create table if not exists finances (
   pending boolean not null default false,
   source text,
   registered_by text,
+  -- nullable: lançamento antigo ou usuário sem conta cadastrada fica sem
+  -- conta pra sempre, sem quebrar nada. on delete set null: apagar
+  -- conta/fatura nunca apaga o lançamento, só desvincula.
+  account_id uuid references accounts(id) on delete set null,
+  card_invoice_id uuid references card_invoices(id) on delete set null,
   created_at timestamptz not null default now()
 );
 create index if not exists finances_user_idx on finances(user_id);
 create index if not exists finances_user_mode_date_idx on finances(user_id, mode, date);
+create index if not exists finances_account_idx on finances(account_id);
+create index if not exists finances_card_invoice_idx on finances(card_invoice_id);
 
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),

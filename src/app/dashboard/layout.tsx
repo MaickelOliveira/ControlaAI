@@ -99,6 +99,11 @@ const Icons = {
       <line x1="1" y1="10" x2="23" y2="10" strokeLinecap="round" />
     </svg>
   ),
+  wallet: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4.5 h-4.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h13a1 1 0 011 1v3M3 7v10a2 2 0 002 2h14a2 2 0 002-2v-6a1 1 0 00-1-1h-4a2 2 0 100 4h5" />
+    </svg>
+  ),
   menu: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -114,6 +119,7 @@ const Icons = {
 const BASE_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: Icons.home },
   { href: "/dashboard/financas", label: "Finanças", icon: Icons.chart },
+  { href: "/dashboard/contas", label: "Contas", icon: Icons.wallet },
   { href: "/dashboard/tarefas", label: "Tarefas", icon: Icons.tasks },
   { href: "/dashboard/metas", label: "Metas", icon: Icons.target },
   { href: "/dashboard/veiculos", label: "Veículos", icon: Icons.car },

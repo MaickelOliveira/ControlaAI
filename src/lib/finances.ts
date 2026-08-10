@@ -28,6 +28,8 @@ export type Finance = {
   source: FinanceSource;
   status?: FinanceStatus; // undefined = posted (retrocompatível)
   registeredBy?: string; // número de WhatsApp de quem registrou (para contas com vários números vinculados)
+  accountId?: string; // conta bancária/cartão associada (src/lib/accounts.ts) — ausente em lançamentos antigos ou quem não cadastrou conta
+  cardInvoiceId?: string; // só quando accountId aponta pra um cartão — a fatura do ciclo em que a despesa caiu
   createdAt: string;
 };
 
@@ -40,6 +42,7 @@ type Row = {
   id: string; user_id: string; type: FinanceType; amount: number; category: string;
   description: string; date: string; mode: FinanceMode; source: FinanceSource;
   pending: boolean; registered_by: string | null; created_at: string;
+  account_id: string | null; card_invoice_id: string | null;
 };
 
 function fromRow(r: Row): Finance {
@@ -47,6 +50,7 @@ function fromRow(r: Row): Finance {
     id: r.id, userId: r.user_id, type: r.type, amount: Number(r.amount), category: r.category,
     description: r.description, date: r.date, mode: r.mode, source: r.source,
     status: r.pending ? "pending" : "posted", registeredBy: r.registered_by ?? undefined, createdAt: r.created_at,
+    accountId: r.account_id ?? undefined, cardInvoiceId: r.card_invoice_id ?? undefined,
   };
 }
 
@@ -74,6 +78,7 @@ export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promi
     category: data.category, description: data.description, date: data.date,
     mode: data.mode, source: data.source, pending: data.status === "pending",
     registered_by: data.registeredBy,
+    account_id: data.accountId ?? null, card_invoice_id: data.cardInvoiceId ?? null,
   };
   const { data: inserted, error } = await getSupabase().from("finances").insert(row).select("*").single();
   if (error) throw new Error(`[finances] addFinance falhou: ${error.message}`);
