@@ -2,6 +2,25 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { getUserById, hasAccess, type User } from "./users";
 
+// Evita que cada API aberta em paralelo por uma página repita a mesma ida ao
+// Supabase só para validar a conta. Dez segundos preservam revogação rápida e
+// eliminam a viagem de rede extra nas navegações seguintes do dashboard.
+const USER_AUTH_CACHE_MS = 10_000;
+const userAuthCache = new Map<string, { expiresAt: number; value: Promise<User | null> }>();
+
+function getCachedUser(userId: string): Promise<User | null> {
+  const now = Date.now();
+  const cached = userAuthCache.get(userId);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const value = getUserById(userId).catch(error => {
+    userAuthCache.delete(userId);
+    throw error;
+  });
+  userAuthCache.set(userId, { expiresAt: now + USER_AUTH_CACHE_MS, value });
+  return value;
+}
+
 // Sem valor padrão de propósito: uma chave fixa no código público permitiria
 // qualquer um forjar um cookie de sessão válido (inclusive de admin). A
 // checagem é preguiçosa (só na hora de assinar/verificar, não no import do
@@ -65,7 +84,7 @@ export async function getSessionWithUser(): Promise<{ session: SessionPayload; u
   const payload = await verifyToken(token);
   if (!payload) return null;
 
-  const user = await getUserById(payload.sub);
+  const user = await getCachedUser(payload.sub);
   if (!user || !hasAccess(user)) return null;
 
   return { session: payload, user };

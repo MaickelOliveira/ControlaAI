@@ -18,8 +18,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": file.mimeType,
-      "Content-Disposition": `inline; filename="${encodeURIComponent(file.originalName)}"`,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
       "Content-Length": String(buffer.length),
+      "Cache-Control": "private, no-store",
+      "Content-Security-Policy": "sandbox",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
