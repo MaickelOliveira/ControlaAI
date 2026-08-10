@@ -119,7 +119,19 @@ export default function MetaTracking() {
       const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
       if (!target) return;
       const url = new URL(target.href, window.location.href);
-      if (url.origin !== window.location.origin || url.pathname !== "/cadastro") return;
+      const isRegistration = url.origin === window.location.origin && url.pathname === "/cadastro";
+      const isHotmartCheckout = url.hostname === "pay.hotmart.com";
+      if (!isRegistration && !isHotmartCheckout) return;
+      if (isHotmartCheckout) {
+        trackMetaEvent("InitiateCheckout", {
+          content_name: "Plano Zelo",
+          content_category: "subscription",
+          plan: target.dataset.metaPlan || "not_selected",
+          currency: "BRL",
+          value: Number(target.dataset.metaValue || 0),
+        }, crypto.randomUUID());
+        return;
+      }
       trackMetaEvent("StartRegistration", {
         plan: url.searchParams.get("plan") || "not_selected",
         billing_cycle: url.searchParams.get("cycle") || "not_selected",

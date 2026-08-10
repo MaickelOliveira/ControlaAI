@@ -61,7 +61,7 @@ export default function CadastroPage() {
         <div className="text-center mb-6">
           <Image src="/brand/zelo-icon.png" alt="Zelo" width={56} height={56} className="mx-auto mb-2 w-14 h-14" priority />
           <h1 className="text-2xl font-bold text-gray-900">Criar conta</h1>
-          <p className="text-gray-500 text-sm">14 dias grátis, sem cartão</p>
+          <p className="text-gray-500 text-sm">Crie seu acesso à plataforma Zelo</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

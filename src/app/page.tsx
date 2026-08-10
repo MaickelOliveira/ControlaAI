@@ -869,7 +869,7 @@ const FAQS = [
   { q: "O que acontece com minhas reuniões do Google Meet?", a: "Você pode pedir pro Zelo criar o link da reunião, chamar os participantes pelo WhatsApp e, quando terminar, ele gera automaticamente uma ata com os principais pontos discutidos." },
   { q: "Como funciona o Drive Inteligente?", a: "Mande qualquer arquivo pelo WhatsApp e o Zelo guarda na pasta certa sozinho. Depois, é só descrever o que procura — \"ache o comprovante do mecânico\" — que ele encontra pra você." },
   { q: "Meus dados estão seguros?", a: "Sim. Seus dados ficam vinculados à sua conta e nunca são compartilhados entre usuários diferentes — cada família, sócio ou equipe só enxerga a própria informação." },
-  { q: "Como funciona o período de teste?", a: "Você começa com 14 dias grátis, sem precisar de cartão de crédito, com acesso completo a todas as funções." },
+  { q: "Como funciona a garantia?", a: "Sua primeira compra tem 7 dias de garantia. Dentro desse prazo, você pode solicitar o cancelamento e a devolução do valor pela plataforma da Hotmart." },
 ];
 
 function Faq() {
@@ -905,7 +905,7 @@ const STEPS = [
   {
     number: "01",
     title: "Crie sua conta",
-    desc: "Escolha o modo pessoal ou empresa e comece o teste grátis, sem cartão.",
+    desc: "Escolha seu plano e conclua a compra com pagamento seguro pela Hotmart.",
   },
   {
     number: "02",
@@ -953,7 +953,9 @@ const PLAN_OPTIONS = [
     price: "47",
     cents: "00",
     total: "Pagamento mensal",
+    totalValue: 47,
     installments: null,
+    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=00zzvpfa&checkoutMode=6",
     badge: null,
   },
   {
@@ -962,7 +964,9 @@ const PLAN_OPTIONS = [
     price: "39",
     cents: "66",
     total: "R$ 147,00 à vista",
+    totalValue: 147,
     installments: "ou 6x de R$ 27,58",
+    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=gbxytpij&checkoutMode=6&bid=1786344680923",
     badge: "Mais popular",
   },
   {
@@ -971,7 +975,9 @@ const PLAN_OPTIONS = [
     price: "29",
     cents: "70",
     total: "R$ 297,00 à vista",
+    totalValue: 297,
     installments: "ou 12x de R$ 30,72",
+    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=zyi6wlxp&checkoutMode=6",
     badge: "Melhor valor",
   },
 ] as const;
@@ -982,7 +988,7 @@ function PlanChoice() {
       <div className="pointer-events-none absolute left-1/2 top-0 h-80 w-[42rem] -translate-x-1/2 rounded-full bg-amber-300/20 blur-[120px]" />
       <div className="relative mx-auto max-w-7xl px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <span className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1.5 text-xs font-bold text-amber-700">14 DIAS GRÁTIS · SEM CARTÃO</span>
+          <span className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1.5 text-xs font-bold text-amber-700">7 DIAS DE GARANTIA · COMPRA SEGURA</span>
           <h2 className={`${heading.className} mt-5 text-3xl font-extrabold text-slate-950 sm:text-5xl`}>Um plano para cada momento.</h2>
           <p className="mt-4 text-base text-slate-500">Todos os planos liberam o Zelo completo para uso pessoal e empresarial, com quantos números da família você quiser.</p>
         </div>
@@ -1010,7 +1016,14 @@ function PlanChoice() {
                   </li>
                 ))}
               </ul>
-              <Link href={`/cadastro?cycle=${option.id}`} className={clsx("mt-8 inline-flex items-center justify-center rounded-xl px-6 py-3.5 text-sm font-extrabold transition", option.id === "semiannual" ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 hover:bg-amber-300" : "border border-slate-300 text-slate-900 hover:border-slate-950 hover:bg-slate-950 hover:text-white")}>Começar agora →</Link>
+              <a
+                href={option.checkoutUrl}
+                data-meta-plan={option.id}
+                data-meta-value={option.totalValue}
+                className={clsx("mt-8 inline-flex items-center justify-center rounded-xl px-6 py-3.5 text-sm font-extrabold transition", option.id === "semiannual" ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 hover:bg-amber-300" : "border border-slate-300 text-slate-900 hover:border-slate-950 hover:bg-slate-950 hover:text-white")}
+              >
+                Comprar pela Hotmart →
+              </a>
             </article>
           ))}
         </div>
@@ -1038,9 +1051,9 @@ export default function LandingPage() {
           </nav>
           <div className="flex items-center gap-4">
             <Link href="/login" className="hidden sm:block text-sm text-slate-300 hover:text-white transition">Entrar</Link>
-            <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 text-sm font-bold px-4 py-2.5 hover:opacity-90 transition">
-              Testar grátis →
-            </Link>
+            <a href="#planos" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 text-sm font-bold px-4 py-2.5 hover:opacity-90 transition">
+              Ver planos →
+            </a>
             <button type="button" onClick={() => setMenuOpen(v => !v)} aria-expanded={menuOpen} aria-label="Abrir menu" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-white md:hidden">
               <span className="text-xl leading-none">{menuOpen ? "×" : "≡"}</span>
             </button>
@@ -1076,12 +1089,12 @@ export default function LandingPage() {
               Finanças, agenda, tarefas, veículos e documentos. Organizados por IA, sem sair da conversa que você já usa todos os dias — no modo pessoal ou no modo empresa.
             </p>
             <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-              <Link href="/cadastro" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
-                Começar 14 dias grátis →
-              </Link>
+              <a href="#planos" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-center text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
+                Escolher meu plano →
+              </a>
               <a href="#como-funciona" className="rounded-xl border border-white/10 px-6 py-3.5 text-center text-sm font-bold text-white transition hover:bg-white/5">Ver como funciona</a>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Sem cartão de crédito · configuração rápida · cancele quando quiser</p>
+            <p className="mt-3 text-xs text-slate-500">7 dias de garantia · pagamento seguro pela Hotmart · configuração rápida</p>
             <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-500">
               <span>🎙️ Registre por áudio</span>
               <span>⚡ Consulte em segundos</span>
@@ -1265,9 +1278,9 @@ export default function LandingPage() {
         <div className="relative max-w-4xl mx-auto px-6 text-center">
           <h2 className={`${heading.className} text-3xl sm:text-5xl font-extrabold text-slate-900`}>Sua rotina, sob controle.</h2>
           <p className="text-slate-800/80 mt-3 text-lg">Pessoal ou empresa — onde quer que você esteja, é só abrir o WhatsApp.</p>
-          <Link href="/cadastro" className="inline-block mt-8 rounded-xl bg-slate-900 text-white text-sm font-bold px-7 py-3.5 hover:bg-slate-800 transition shadow-xl">
-            Começar agora →
-          </Link>
+          <a href="#planos" className="inline-block mt-8 rounded-xl bg-slate-900 text-white text-sm font-bold px-7 py-3.5 hover:bg-slate-800 transition shadow-xl">
+            Escolher meu plano →
+          </a>
         </div>
       </section>
 
@@ -1289,14 +1302,14 @@ export default function LandingPage() {
             <a href="#agenda" className="hover:text-white transition">Agenda</a>
             <a href="#drive" className="hover:text-white transition">Drive</a>
             <Link href="/login" className="hover:text-white transition">Login</Link>
-            <Link href="/cadastro" className="hover:text-white transition">Criar conta</Link>
+            <a href="#planos" className="hover:text-white transition">Ver planos</a>
           </nav>
         </div>
         <p className="text-center text-slate-600 text-[11px] mt-8">© {new Date().getFullYear()} Zelo. Todos os direitos reservados.</p>
       </footer>
 
       <div className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur md:hidden">
-        <Link href="/cadastro" className="flex items-center justify-center rounded-xl bg-amber-400 px-5 py-3.5 text-sm font-extrabold text-slate-950">Começar 14 dias grátis →</Link>
+        <a href="#planos" className="flex items-center justify-center rounded-xl bg-amber-400 px-5 py-3.5 text-sm font-extrabold text-slate-950">Escolher meu plano →</a>
       </div>
     </div>
   );
