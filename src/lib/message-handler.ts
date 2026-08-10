@@ -34,7 +34,7 @@ import {
   replyCustomerList, replyCustomerInfo, replyCustomerUpdated, replyCustomerDeactivated,
 } from "@/lib/bot-replies";
 
-function phoneMatches(stored: string, incoming: string): boolean {
+export function phoneMatches(stored: string, incoming: string): boolean {
   const s = stored.replace(/\D/g, "");
   const i = incoming.replace(/\D/g, "");
   if (!s || !i) return false;
