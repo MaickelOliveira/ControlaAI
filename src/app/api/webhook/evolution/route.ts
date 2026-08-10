@@ -61,8 +61,17 @@ export async function POST(req: NextRequest) {
     // Oficial isso nunca acontece, o "from" já vem sempre como número real).
     if (remoteJid.endsWith("@lid")) {
       const real = [data.key.remoteJidAlt, data.key.senderPn].find(j => j && !j.endsWith("@lid"));
-      if (real) remoteJid = real;
-      else console.warn(`[webhook/evolution] contato chegou como @lid sem número real disponível (***${remoteJid.slice(-8)}) — vai processar mesmo assim, mas qualquer telefone salvo a partir daqui fica incorreto`);
+      if (real) {
+        remoteJid = real;
+      } else {
+        // Sem número real disponível, o ID @lid não é um telefone de verdade —
+        // processar mesmo assim gravaria esse ID como se fosse o número da
+        // pessoa (vinculação errada, ou mensagem atribuída a ninguém). Mais
+        // seguro ignorar essa mensagem; o Baileys costuma resolver o @lid
+        // pro número real numa próxima mensagem do mesmo contato.
+        console.warn(`[webhook/evolution] contato chegou como @lid sem número real disponível (***${remoteJid.slice(-8)}) — mensagem ignorada`);
+        return NextResponse.json({ ok: true });
+      }
     }
     if (remoteJid.endsWith("@g.us")) return NextResponse.json({ ok: true }); // ignora grupos
 

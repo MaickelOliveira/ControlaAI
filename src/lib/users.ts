@@ -281,18 +281,26 @@ function normalizeName(name: string): string {
 }
 
 export async function generateWppVerifyCode(userId: string): Promise<string> {
-  const code = String(Math.floor(1000 + Math.random() * 9000)); // 4 dígitos
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
-  await updateUser(userId, { wppVerifyCode: code, wppVerifyExpires: expires });
-  return code;
+  // Sorteia até achar um código sem dono com vinculação ainda válida — sem
+  // isso, dois clientes pedindo código na mesma janela de 10min podiam
+  // colidir e travar a busca por código (mais de uma linha bate).
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = String(Math.floor(1000 + Math.random() * 9000)); // 4 dígitos
+    const holder = await getUserByWppCode(code);
+    if (holder && holder.id !== userId) continue;
+    await updateUser(userId, { wppVerifyCode: code, wppVerifyExpires: expires });
+    return code;
+  }
+  throw new Error("[users] não foi possível gerar um código de vinculação único");
 }
 
 export async function getUserByWppCode(code: string): Promise<User | null> {
-  const { data, error } = await getSupabase().from("users").select("*").eq("wpp_verify_code", code).maybeSingle();
-  if (error || !data) return null;
-  const row = data as Row;
-  if (!row.wpp_verify_expires || new Date(row.wpp_verify_expires) <= new Date()) return null;
-  return fromRow(row);
+  const { data, error } = await getSupabase().from("users").select("*").eq("wpp_verify_code", code);
+  if (error || !data || data.length === 0) return null;
+  const now = Date.now();
+  const valid = (data as Row[]).find(row => row.wpp_verify_expires && new Date(row.wpp_verify_expires).getTime() > now);
+  return valid ? fromRow(valid) : null;
 }
 
 export function isTrialExpired(user: User): boolean {
