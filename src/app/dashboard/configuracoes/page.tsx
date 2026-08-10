@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import PasswordField from "@/components/PasswordField";
 
 type UserData = {
   name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[];
@@ -421,9 +422,9 @@ export default function ClienteConfigPage() {
         </h2>
         <p className="text-xs text-slate-400 mb-5">Mantenha sua conta segura com uma senha forte</p>
         <form onSubmit={changePassword} className="max-w-sm space-y-3">
-          <input type="password" value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} required placeholder="Senha atual" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
-          <input type="password" minLength={10} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required placeholder="Nova senha (mín. 10 caracteres)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
-          <input type="password" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required placeholder="Confirmar nova senha" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <PasswordField value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} required autoComplete="current-password" placeholder="Senha atual" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <PasswordField minLength={10} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required autoComplete="new-password" placeholder="Nova senha (mín. 10 caracteres)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <PasswordField value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required autoComplete="new-password" placeholder="Confirmar nova senha" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
           {pwMsg && (
             <p className={`text-xs px-3 py-2 rounded-lg ${pwMsg.ok ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-600"}`}>{pwMsg.text}</p>
           )}
