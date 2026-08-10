@@ -1,7 +1,9 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { encryptField, decryptField } from "./crypto-store";
-import { getUserByEmail, activateUser, deactivateUser, updateUser, type UserPlan } from "./users";
+import { getUserByEmail, activateUser, createPaidUser, deactivateUser, updateUser, type UserPlan } from "./users";
+import { createPasswordResetCode } from "./password-reset";
+import { sendPasswordResetEmail } from "./brevo";
 
 /** Recebe webhooks de plataforma de venda (Hotmart, Kiwify, etc.) e ativa/
  *  desativa/troca o plano do cliente correspondente automaticamente. Como
@@ -159,6 +161,14 @@ function getByPath(obj: unknown, pathStr: string): unknown {
   }, obj);
 }
 
+function firstString(body: unknown, paths: string[]): string | undefined {
+  for (const path of paths) {
+    const value = getByPath(body, path);
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
 export type BillingWebhookResult =
   | { ok: true; action: "activated" | "deactivated" | "plan_changed" | "ignored"; email?: string; detail?: string }
   | { ok: false; error: string };
@@ -176,9 +186,6 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     return { ok: false, error: `Não achei o status em "${cfg.statusPath}" — confira o caminho do campo.` };
   }
 
-  const user = await getUserByEmail(email);
-  if (!user) return { ok: false, error: `Nenhum cliente do Zelo com o email "${email}".` };
-
   const isActivate = cfg.activateValues.includes(status);
   const isDeactivate = cfg.deactivateValues.includes(status);
 
@@ -186,12 +193,30 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     return { ok: true, action: "ignored", email, detail: `status "${status}" não está mapeado pra nenhuma ação` };
   }
 
+  let mappedPlan: UserPlan | undefined;
   if (cfg.planPath && cfg.planMap) {
     const planRaw = getByPath(body, cfg.planPath);
-    const mappedPlan = typeof planRaw === "string" ? cfg.planMap[planRaw] : undefined;
-    if (mappedPlan && !dryRun) await updateUser(user.id, { plan: mappedPlan });
-    if (mappedPlan && dryRun) return { ok: true, action: "plan_changed", email, detail: `plano seria trocado pra "${mappedPlan}"` };
+    mappedPlan = typeof planRaw === "string" || typeof planRaw === "number" ? cfg.planMap[String(planRaw)] : undefined;
   }
+
+  let user = await getUserByEmail(email);
+  if (!user && !isActivate) return { ok: true, action: "ignored", email, detail: "cliente ainda não possui conta" };
+  if (!user && dryRun) return { ok: true, action: "activated", email, detail: "conta paga seria criada e o acesso enviado por e-mail" };
+  if (!user) {
+    const name = firstString(body, ["data.buyer.name", "data.buyer.first_name", "Customer.full_name", "Customer.first_name"]) || email.split("@")[0];
+    const phone = firstString(body, ["data.buyer.checkout_phone", "data.buyer.phone", "Customer.mobile", "Customer.phone"]);
+    user = await createPaidUser({ name, email, phone, plan: mappedPlan });
+    try {
+      const reset = await createPasswordResetCode(user.id);
+      await sendPasswordResetEmail({ email: user.email, name: user.name, code: reset.code, welcome: true });
+    } catch (error) {
+      console.error("[billing-webhook] conta criada, mas o e-mail de acesso falhou", error);
+    }
+    return { ok: true, action: "activated", email, detail: "conta paga criada e acesso enviado por e-mail" };
+  }
+
+  if (mappedPlan && !dryRun) await updateUser(user.id, { plan: mappedPlan });
+  if (mappedPlan && dryRun) return { ok: true, action: "plan_changed", email, detail: `plano seria trocado pra "${mappedPlan}"` };
 
   if (isActivate) {
     if (!dryRun) await activateUser(user.id);

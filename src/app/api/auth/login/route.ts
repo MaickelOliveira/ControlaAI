@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validatePassword } from "@/lib/users";
+import { hasAccess, validatePassword } from "@/lib/users";
 import { signToken, setSessionCookie } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getRequestIp } from "@/lib/request-ip";
@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
 
   const user = await validatePassword(normalizedEmail, password);
   if (!user) return NextResponse.json({ error: "Email ou senha incorretos" }, { status: 401 });
+  if (!hasAccess(user)) return NextResponse.json({ error: "Acesso aguardando confirmação do pagamento" }, { status: 403 });
 
   const token = await signToken({ sub: user.id, name: user.name, email: user.email, plan: user.plan, role: "client" });
   await setSessionCookie(token);

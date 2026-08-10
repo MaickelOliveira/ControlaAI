@@ -51,6 +51,7 @@ export default function LoginPage() {
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               placeholder="••••••"
             />
+            <div className="mt-2 text-right"><Link href="/esqueci-senha" className="text-sm font-semibold text-amber-700 hover:underline">Esqueci minha senha</Link></div>
           </div>
           {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2">{error}</p>}
           <button
@@ -61,12 +62,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Não tem conta?{" "}
-          <Link href="/cadastro" className="text-amber-600 font-semibold hover:underline">
-            Cadastre-se grátis
-          </Link>
-        </p>
+        <p className="mt-6 text-center text-sm text-gray-500">O acesso é liberado após a confirmação do pagamento.</p>
       </div>
     </div>
   );

@@ -52,6 +52,7 @@ export type SessionPayload = {
   email: string;
   plan: string;
   role: "client" | "admin";
+  iat?: number;
 };
 
 export async function signToken(payload: SessionPayload): Promise<string> {
@@ -86,6 +87,7 @@ export async function getSessionWithUser(): Promise<{ session: SessionPayload; u
 
   const user = await getCachedUser(payload.sub);
   if (!user || !hasAccess(user)) return null;
+  if (user.passwordChangedAt && (!payload.iat || payload.iat * 1000 < new Date(user.passwordChangedAt).getTime())) return null;
 
   return { session: payload, user };
 }

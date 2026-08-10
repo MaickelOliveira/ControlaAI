@@ -29,6 +29,7 @@ export type User = {
   priceOverride?: number;    // R$/mês negociado pra esse cliente; ausente = usa o preço padrão do plano (billing.ts)
   activatedAt?: string;      // ISO — quando o status virou "active" pela primeira vez
   deactivatedAt?: string;    // ISO — quando o status virou "inactive" pela última vez
+  passwordChangedAt?: string;// ISO — invalida sessões anteriores à troca de senha
   trialEndsAt: string;
   createdAt: string;
 };
@@ -41,7 +42,7 @@ type Row = {
   plan: UserPlan; billing_cycle: BillingCycle | null; status: UserStatus; active_mode: UserMode; company: string | null;
   max_wpp_phones: number | null; wpp_verify_code: string | null; wpp_verify_expires: string | null;
   custom_categories_expense: string[]; custom_categories_income: string[];
-  price_override: number | null; activated_at: string | null; deactivated_at: string | null;
+  price_override: number | null; activated_at: string | null; deactivated_at: string | null; password_changed_at: string | null;
   trial_ends_at: string; created_at: string;
 };
 
@@ -52,7 +53,7 @@ function fromRow(r: Row): User {
     maxWppPhones: r.max_wpp_phones ?? undefined, wppVerifyCode: r.wpp_verify_code ?? undefined,
     wppVerifyExpires: r.wpp_verify_expires ?? undefined, customCategoriesExpense: r.custom_categories_expense,
     customCategoriesIncome: r.custom_categories_income, priceOverride: r.price_override ?? undefined,
-    activatedAt: r.activated_at ?? undefined, deactivatedAt: r.deactivated_at ?? undefined,
+    activatedAt: r.activated_at ?? undefined, deactivatedAt: r.deactivated_at ?? undefined, passwordChangedAt: r.password_changed_at ?? undefined,
     trialEndsAt: r.trial_ends_at, createdAt: r.created_at,
   };
 }
@@ -65,7 +66,7 @@ function toRowPatch(patch: Partial<Omit<User, "id" | "createdAt">>): Record<stri
     plan: "plan", billingCycle: "billing_cycle", status: "status", activeMode: "active_mode", company: "company",
     maxWppPhones: "max_wpp_phones", wppVerifyCode: "wpp_verify_code", wppVerifyExpires: "wpp_verify_expires",
     customCategoriesExpense: "custom_categories_expense", customCategoriesIncome: "custom_categories_income",
-    priceOverride: "price_override", activatedAt: "activated_at", deactivatedAt: "deactivated_at",
+    priceOverride: "price_override", activatedAt: "activated_at", deactivatedAt: "deactivated_at", passwordChangedAt: "password_changed_at",
     trialEndsAt: "trial_ends_at",
   };
   const out: Record<string, unknown> = {};
@@ -109,6 +110,7 @@ export async function createUser(data: {
   plan: UserPlan;
   billingCycle?: BillingCycle;
   company?: string;
+  status?: UserStatus;
 }): Promise<User> {
   const trialEnd = new Date();
   trialEnd.setDate(trialEnd.getDate() + 14);
@@ -121,7 +123,7 @@ export async function createUser(data: {
     password_hash: await bcrypt.hash(data.password, 10),
     plan: data.plan,
     billing_cycle: data.billingCycle ?? "monthly",
-    status: "trial",
+    status: data.status ?? "trial",
     active_mode: data.plan === "business" ? "business" : "personal",
     company: data.company,
     trial_ends_at: trialEnd.toISOString(),
@@ -129,6 +131,17 @@ export async function createUser(data: {
   const { data: inserted, error } = await getSupabase().from("users").insert(row).select("*").single();
   if (error) throw new Error(`[users] createUser falhou: ${error.message}`);
   return fromRow(inserted as Row);
+}
+
+export async function createPaidUser(data: { name: string; email: string; phone?: string; plan?: UserPlan }): Promise<User> {
+  return createUser({
+    name: data.name,
+    email: data.email,
+    phone: data.phone || "",
+    password: randomUUID() + randomUUID(),
+    plan: data.plan || "personal",
+    status: "active",
+  });
 }
 
 export async function validatePassword(email: string, password: string): Promise<User | null> {
@@ -228,5 +241,5 @@ export function isTrialExpired(user: User): boolean {
  *  único e correto: usa em getSession() (web) e no handler do WhatsApp
  *  (bot), pra não ter dois lugares checando isso de formas diferentes. */
 export function hasAccess(user: User): boolean {
-  return user.status !== "inactive" && !isTrialExpired(user);
+  return user.status === "active";
 }
