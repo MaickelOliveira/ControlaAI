@@ -43,7 +43,7 @@ function loadJSON<T>(file: string, fallback: T): T {
   }
 }
 
-async function restUpsert(table: string, rows: Record<string, unknown>[]): Promise<string | null> {
+async function restUpsertOne(table: string, row: Record<string, unknown>): Promise<string | null> {
   const res = await fetch(`${REST_URL}/${table}`, {
     method: "POST",
     headers: {
@@ -52,22 +52,35 @@ async function restUpsert(table: string, rows: Record<string, unknown>[]): Promi
       Authorization: `Bearer ${key}`,
       Prefer: "resolution=merge-duplicates,return=minimal",
     },
-    body: JSON.stringify(rows),
+    body: JSON.stringify([row]),
   });
   if (!res.ok) return `${res.status} ${await res.text()}`;
   return null;
 }
 
+// Manda linha por linha em vez de um lote só — dado antigo (JSON de anos
+// atrás) às vezes tem campos que só existem em registros mais novos
+// (schema evoluiu com o produto), e um POST em lote com objetos de formato
+// diferente entre si é rejeitado inteiro pelo Postgres ("All object keys
+// must match"). Rodando um request por linha, um registro problemático não
+// derruba os outros, e dá pra ver exatamente qual id falhou e por quê.
 async function upsert(table: string, rows: Record<string, unknown>[]) {
   if (rows.length === 0) {
     console.log(`  ${table}: nada para migrar`);
     return;
   }
-  const error = await restUpsert(table, rows);
-  if (error) {
-    console.error(`  ✗ ${table}: ${error}`);
+  let ok = 0;
+  const failures: string[] = [];
+  for (const row of rows) {
+    const error = await restUpsertOne(table, row);
+    if (error) failures.push(`id=${row.id ?? row.phone ?? row.user_id ?? "?"}: ${error}`);
+    else ok++;
+  }
+  if (failures.length === 0) {
+    console.log(`  ✓ ${table}: ${ok} linha(s)`);
   } else {
-    console.log(`  ✓ ${table}: ${rows.length} linha(s)`);
+    console.log(`  ~ ${table}: ${ok} ok, ${failures.length} falhou(aram)`);
+    for (const f of failures) console.error(`    ✗ ${f}`);
   }
 }
 
