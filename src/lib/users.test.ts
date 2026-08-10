@@ -44,9 +44,9 @@ describe("hasAccess", () => {
     expect(hasAccess(user)).toBe(true);
   });
 
-  it("grants access to a user still mid-trial", () => {
+  it("blocks trial accounts because access requires confirmed payment", () => {
     const user = makeUser({ status: "trial", trialEndsAt: new Date(Date.now() + 86_400_000).toISOString() });
-    expect(hasAccess(user)).toBe(true);
+    expect(hasAccess(user)).toBe(false);
   });
 });
 

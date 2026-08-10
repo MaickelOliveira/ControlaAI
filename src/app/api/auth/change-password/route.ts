@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!valid) return NextResponse.json({ error: "Senha atual incorreta" }, { status: 400 });
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await updateUser(session.sub, { passwordHash });
+  await updateUser(session.sub, { passwordHash, passwordChangedAt: new Date().toISOString() });
 
   return NextResponse.json({ ok: true });
 }
