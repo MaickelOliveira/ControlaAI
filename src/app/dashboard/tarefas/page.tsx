@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Task = { id: string; title: string; status: string; priority: string; dueDate?: string; mode: string };
 
@@ -33,8 +34,7 @@ export default function TarefasPage() {
   }
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
+    fetchDashboardMe()
       .then(d => {
         const m = d.user?.activeMode || "personal";
         setMode(m);

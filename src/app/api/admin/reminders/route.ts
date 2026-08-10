@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getAllRemindersByUser, createReminder, deleteReminder, updateReminder } from "@/lib/reminders";
 import { getUserById } from "@/lib/users";
+import { getPhonesForUser } from "@/lib/wpp-phone-links";
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,7 +24,8 @@ export async function POST(req: NextRequest) {
   if (!message || !scheduledAt) return NextResponse.json({ error: "message e scheduledAt obrigatórios" }, { status: 400 });
 
   const user = await getUserById(session.sub);
-  const phone = user?.wppPhone || user?.phone || "";
+  const phoneLinks = user ? await getPhonesForUser(user.id) : [];
+  const phone = phoneLinks[0]?.phone || user?.phone || "";
 
   const r = await createReminder({ userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none", mode: mode || "personal" });
   return NextResponse.json(r, { status: 201 });

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Reminder = {
   id: string;
@@ -64,8 +65,7 @@ export default function LembretesPage() {
   }
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
+    fetchDashboardMe()
       .then(d => {
         const m = d.user?.activeMode || "personal";
         setMode(m);

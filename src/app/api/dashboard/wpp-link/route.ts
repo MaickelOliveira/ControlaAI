@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getUserById, generateWppVerifyCode, getWppPhones, getMaxWppPhones, removeWppPhone, setWppPhoneName, setWppPhoneRelation, setWppPhoneAccess } from "@/lib/users";
+import { getUserById, generateWppVerifyCode, getMaxWppPhones } from "@/lib/users";
+import { getPhonesForUser, unlinkPhone, setPhoneName, setPhoneRelation, setPhoneAccess } from "@/lib/wpp-phone-links";
 
 export async function POST() {
   const session = await getSession();
@@ -9,7 +10,7 @@ export async function POST() {
   const user = await getUserById(session.sub);
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
-  const phones = getWppPhones(user);
+  const phones = await getPhonesForUser(user.id);
   const max = getMaxWppPhones(user);
   if (phones.length >= max) {
     return NextResponse.json({ error: `Limite de ${max} número(s) atingido. Desvincule um número antes de adicionar outro.` }, { status: 400 });
@@ -28,7 +29,7 @@ export async function DELETE(req: NextRequest) {
 
   if (!phone) return NextResponse.json({ error: "Número não informado" }, { status: 400 });
 
-  await removeWppPhone(session.sub, phone);
+  await unlinkPhone(session.sub, phone);
   return NextResponse.json({ ok: true });
 }
 
@@ -48,20 +49,21 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Acesso inválido" }, { status: 400 });
   }
 
-  const user = await getUserById(session.sub);
-  if (!user || !getWppPhones(user).includes(phone)) {
+  const links = await getPhonesForUser(session.sub);
+  if (!links.some(link => link.phone === phone)) {
     return NextResponse.json({ error: "Número não vinculado a essa conta" }, { status: 400 });
   }
 
-  let updated = user;
-  if (name) updated = (await setWppPhoneName(session.sub, phone, name)) ?? updated;
-  if (relation) updated = (await setWppPhoneRelation(session.sub, phone, relation)) ?? updated;
-  if (access) updated = (await setWppPhoneAccess(session.sub, phone, access)) ?? updated;
+  if (name) await setPhoneName(session.sub, phone, name);
+  if (relation) await setPhoneRelation(session.sub, phone, relation);
+  if (access) await setPhoneAccess(session.sub, phone, access);
+
+  const updated = await getPhonesForUser(session.sub);
 
   return NextResponse.json({
     ok: true,
-    wppPhoneNames: updated.wppPhoneNames ?? {},
-    wppPhoneRelations: updated.wppPhoneRelations ?? {},
-    wppPhoneAccess: updated.wppPhoneAccess ?? {},
+    wppPhoneNames: Object.fromEntries(updated.filter(link => link.name).map(link => [link.phone, link.name])),
+    wppPhoneRelations: Object.fromEntries(updated.filter(link => link.relation).map(link => [link.phone, link.relation])),
+    wppPhoneAccess: Object.fromEntries(updated.map(link => [link.phone, link.access])),
   });
 }

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type ShoppingItem = { id: string; name: string; category: string; quantity: string; checked: boolean };
 type PriceComp = { productName: string; category: string; prices: Array<{ storeName: string; price: number; date: string }> };
@@ -56,7 +57,7 @@ export default function SupermercadoPage() {
   };
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => setMode(d.user?.activeMode || "personal"));
+    fetchDashboardMe().then(d => setMode(d.user?.activeMode || "personal"));
     fetch("/api/admin/grocery?view=overview").then(r => r.json()).then(setOverview);
     loadList();
   }, []);

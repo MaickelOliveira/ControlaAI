@@ -5,7 +5,7 @@ import { getConfig, saveConfig, type WhatsAppConfig } from "@/lib/whatsapp-confi
 import { checkConnection, getQrCode } from "@/lib/whatsapp";
 import { createOrRestartInstance } from "@/lib/evolution";
 import { sendTemplate } from "@/lib/waba";
-import { detectBotNumber } from "@/app/api/bot-info/route";
+import { detectBotNumber } from "@/lib/bot-info";
 
 const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
 

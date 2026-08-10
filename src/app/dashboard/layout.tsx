@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 const Icons = {
   home: (
@@ -237,7 +238,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    fetch("/api/me").then(r => r.json()).then(d => d.user && setUser(d.user)).catch(() => {});
+    fetchDashboardMe().then(d => d.user && setUser(d.user)).catch(() => {});
   }, []);
 
   // Fecha a sidebar ao trocar de rota (mobile) — ajusta o estado durante o

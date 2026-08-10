@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { getUserById, hasAccess } from "./users";
+import { getUserById, hasAccess, type User } from "./users";
 
 // Sem valor padrão de propósito: uma chave fixa no código público permitiria
 // qualquer um forjar um cookie de sessão válido (inclusive de admin). A
@@ -58,7 +58,7 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
  *  Como getSession() já é chamado por praticamente toda API do dashboard,
  *  essa checagem central cobre tudo de uma vez, sem precisar mexer rota
  *  por rota. */
-export async function getSession(): Promise<SessionPayload | null> {
+export async function getSessionWithUser(): Promise<{ session: SessionPayload; user: User } | null> {
   const jar = await cookies();
   const token = jar.get(CLIENT_COOKIE)?.value;
   if (!token) return null;
@@ -68,7 +68,11 @@ export async function getSession(): Promise<SessionPayload | null> {
   const user = await getUserById(payload.sub);
   if (!user || !hasAccess(user)) return null;
 
-  return payload;
+  return { session: payload, user };
+}
+
+export async function getSession(): Promise<SessionPayload | null> {
+  return (await getSessionWithUser())?.session ?? null;
 }
 
 export async function setSessionCookie(token: string) {

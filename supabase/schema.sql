@@ -19,6 +19,10 @@ create table if not exists users (
   status text not null default 'trial',
   active_mode text not null default 'personal',
   company text,
+  -- wpp_phone/wpp_phones/wpp_phone_names/wpp_phone_relations/wpp_phone_access
+  -- ficam OBSOLETOS a partir da tabela wpp_phone_links abaixo — mantidos só
+  -- pra não quebrar quem ainda não rodou a migração que move esses dados
+  -- (ver supabase/migrations). Não são mais lidos pelo código.
   wpp_phone text,
   wpp_phones jsonb not null default '[]',
   wpp_phone_names jsonb not null default '{}',
@@ -36,6 +40,19 @@ create table if not exists users (
   created_at timestamptz not null default now()
 );
 
+-- Substitui os campos wpp_phones/wpp_phone_names/etc do users (acima) —
+-- phone como PK garante que o mesmo número NUNCA fica vinculado a duas
+-- contas ao mesmo tempo (impossível de garantir com array por usuário).
+create table if not exists wpp_phone_links (
+  phone text primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  name text,
+  relation text,
+  access text not null default 'both' check (access in ('personal', 'business', 'both')),
+  linked_at timestamptz not null default now()
+);
+create index if not exists wpp_phone_links_user_idx on wpp_phone_links(user_id);
+
 create table if not exists finances (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
@@ -51,6 +68,7 @@ create table if not exists finances (
   created_at timestamptz not null default now()
 );
 create index if not exists finances_user_idx on finances(user_id);
+create index if not exists finances_user_mode_date_idx on finances(user_id, mode, date);
 
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
@@ -63,6 +81,7 @@ create table if not exists tasks (
   created_at timestamptz not null default now()
 );
 create index if not exists tasks_user_idx on tasks(user_id);
+create index if not exists tasks_user_mode_status_idx on tasks(user_id, mode, status);
 
 create table if not exists reminders (
   id uuid primary key default gen_random_uuid(),
@@ -310,3 +329,11 @@ create table if not exists cron_lock (
   constraint single_row check (id = 1)
 );
 insert into cron_lock (id, locked_at) values (1, null) on conflict (id) do nothing;
+
+-- Contador de tentativas por janela (login, cadastro, código de vinculação
+-- de WhatsApp) — sem isso nada impede força bruta/abuso automatizado.
+create table if not exists rate_limits (
+  key text primary key,
+  count int not null default 0,
+  window_start timestamptz not null default now()
+);

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
+import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type RecurringTransaction = {
   id: string;
@@ -72,7 +73,7 @@ export default function RecorrentesPage() {
   }
 
   useEffect(() => {
-    fetch("/api/dashboard").then(r => r.json()).then(d => {
+    fetchDashboardMe().then(d => {
       const m = d.user?.activeMode || "personal";
       setMode(m);
       load(m);
