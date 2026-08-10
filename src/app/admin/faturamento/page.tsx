@@ -9,7 +9,7 @@ type ClienteBilling = {
 };
 
 type BillingData = {
-  prices: { personal: number; business: number };
+  prices: { monthly: number; semiannual: number; annual: number };
   mrr: number;
   mrrByPlan: { personal: number; business: number };
   countByPlan: { personal: number; business: number };
@@ -23,13 +23,13 @@ function fmtDate(d?: string) { return d ? new Date(d).toLocaleDateString("pt-BR"
 export default function FaturamentoPage() {
   const [data, setData] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [priceForm, setPriceForm] = useState({ personal: "", business: "" });
+  const [priceForm, setPriceForm] = useState({ monthly: "", semiannual: "", annual: "" });
   const [saving, setSaving] = useState(false);
 
   function load() {
     fetch("/api/admin/billing").then(r => r.json()).then(d => {
       setData(d);
-      setPriceForm({ personal: String(d.prices.personal), business: String(d.prices.business) });
+      setPriceForm({ monthly: String(d.prices.monthly), semiannual: String(d.prices.semiannual), annual: String(d.prices.annual) });
       setLoading(false);
     }).catch(() => setLoading(false));
   }
@@ -41,7 +41,7 @@ export default function FaturamentoPage() {
     setSaving(true);
     await fetch("/api/admin/billing", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ personal: priceForm.personal, business: priceForm.business }),
+      body: JSON.stringify(priceForm),
     });
     setSaving(false);
     load();
@@ -99,18 +99,24 @@ export default function FaturamentoPage() {
       {/* Configurar preços */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <h2 className="font-semibold text-slate-900 mb-1">Preço padrão por plano</h2>
-        <p className="text-slate-400 text-xs mb-4">Usado pra todo cliente que não tiver um valor negociado individualmente.</p>
+        <p className="text-slate-400 text-xs mb-4">Valor mensal equivalente usado para cada período contratado.</p>
         <form onSubmit={savePrices} className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">👤 Pessoal (R$/mês)</label>
-            <input type="number" step="0.01" min="0" value={priceForm.personal}
-              onChange={e => setPriceForm(f => ({ ...f, personal: e.target.value }))}
+            <label className="text-xs text-slate-500 mb-1 block">Mensal (R$/mês)</label>
+            <input type="number" step="0.01" min="0" value={priceForm.monthly}
+              onChange={e => setPriceForm(f => ({ ...f, monthly: e.target.value }))}
               className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none w-36" />
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">🏢 Empresa (R$/mês)</label>
-            <input type="number" step="0.01" min="0" value={priceForm.business}
-              onChange={e => setPriceForm(f => ({ ...f, business: e.target.value }))}
+            <label className="text-xs text-slate-500 mb-1 block">Semestral (R$/mês)</label>
+            <input type="number" step="0.01" min="0" value={priceForm.semiannual}
+              onChange={e => setPriceForm(f => ({ ...f, semiannual: e.target.value }))}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none w-36" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Anual (R$/mês)</label>
+            <input type="number" step="0.01" min="0" value={priceForm.annual}
+              onChange={e => setPriceForm(f => ({ ...f, annual: e.target.value }))}
               className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none w-36" />
           </div>
           <button type="submit" disabled={saving}

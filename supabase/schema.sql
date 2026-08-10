@@ -16,6 +16,7 @@ create table if not exists users (
   email text not null unique,
   password_hash text not null,
   plan text not null default 'personal',
+  billing_cycle text not null default 'monthly' check (billing_cycle in ('monthly','semiannual','annual')),
   status text not null default 'trial',
   active_mode text not null default 'personal',
   company text,
@@ -276,6 +277,9 @@ create table if not exists billing_config (
   id int primary key default 1,
   personal numeric not null default 0,
   business numeric not null default 0,
+  monthly numeric not null default 47,
+  semiannual numeric not null default 39.66,
+  annual numeric not null default 29.70,
   constraint single_row check (id = 1)
 );
 

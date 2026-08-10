@@ -25,6 +25,16 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+::selection {
+  background: #fbbf24;
+  color: #0f172a;
+}
+
 /* Animações dos mockups de conversa do WhatsApp na landing page (src/app/page.tsx) */
 @keyframes chat-msg-in {
   from { opacity: 0; transform: translateY(10px) scale(0.98); }
@@ -56,4 +66,14 @@ body {
 }
 .blink-cursor {
   animation: blink-cursor 1s step-start infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

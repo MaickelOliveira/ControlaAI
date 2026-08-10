@@ -4,7 +4,7 @@ import { isTrialExpired, hasAccess, getMaxWppPhones, type User } from "./users";
 function makeUser(overrides: Partial<User> = {}): User {
   return {
     id: "u1", phone: "5511987654321", name: "Teste", email: "teste@example.com",
-    passwordHash: "hash", plan: "personal", status: "trial", activeMode: "personal",
+    passwordHash: "hash", plan: "personal", billingCycle: "monthly", status: "trial", activeMode: "personal",
     trialEndsAt: new Date(Date.now() + 86_400_000).toISOString(), // amanhã
     createdAt: new Date().toISOString(),
     ...overrides,
@@ -51,11 +51,11 @@ describe("hasAccess", () => {
 });
 
 describe("getMaxWppPhones", () => {
-  it("defaults to 1 when unset", () => {
-    expect(getMaxWppPhones(makeUser({ maxWppPhones: undefined }))).toBe(1);
+  it("allows unlimited family numbers when unset", () => {
+    expect(getMaxWppPhones(makeUser({ maxWppPhones: undefined }))).toBe(1_000_000);
   });
 
-  it("returns the configured limit", () => {
-    expect(getMaxWppPhones(makeUser({ maxWppPhones: 3 }))).toBe(3);
+  it("keeps family numbers unlimited for legacy configured limits", () => {
+    expect(getMaxWppPhones(makeUser({ maxWppPhones: 3 }))).toBe(1_000_000);
   });
 });

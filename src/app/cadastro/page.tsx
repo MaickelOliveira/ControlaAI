@@ -1,14 +1,24 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function CadastroPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", plan: "personal", company: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", plan: "personal", billingCycle: "monthly", company: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const requestedPlan = new URLSearchParams(window.location.search).get("plan");
+    const requestedCycle = new URLSearchParams(window.location.search).get("cycle");
+    const validPlan = requestedPlan === "personal" || requestedPlan === "business" ? requestedPlan : null;
+    const validCycle = requestedCycle === "monthly" || requestedCycle === "semiannual" || requestedCycle === "annual" ? requestedCycle : null;
+    if (validPlan || validCycle) Promise.resolve().then(() => {
+      setForm(current => ({ ...current, ...(validPlan ? { plan: validPlan } : {}), ...(validCycle ? { billingCycle: validCycle } : {}) }));
+    });
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,6 +73,16 @@ export default function CadastroPage() {
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
               <option value="personal">👤 Pessoal — finanças e tarefas individuais</option>
               <option value="business">🏢 Empresarial — gestão da empresa e equipe</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Plano escolhido</label>
+            <select value={form.billingCycle} onChange={set("billingCycle")}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+              <option value="monthly">Mensal — R$ 47/mês</option>
+              <option value="semiannual">Semestral — R$ 39,66/mês</option>
+              <option value="annual">Anual — R$ 29,70/mês</option>
             </select>
           </div>
 

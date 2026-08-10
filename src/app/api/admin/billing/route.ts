@@ -58,12 +58,13 @@ export async function PUT(req: NextRequest) {
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const personal = Number(body.personal);
-  const business = Number(body.business);
-  if (isNaN(personal) || isNaN(business) || personal < 0 || business < 0) {
+  const monthly = Number(body.monthly);
+  const semiannual = Number(body.semiannual);
+  const annual = Number(body.annual);
+  if ([monthly, semiannual, annual].some(price => !Number.isFinite(price) || price < 0)) {
     return NextResponse.json({ error: "Preços inválidos" }, { status: 400 });
   }
 
-  await setPlanPrices({ personal, business });
+  await setPlanPrices({ monthly, semiannual, annual });
   return NextResponse.json({ ok: true });
 }

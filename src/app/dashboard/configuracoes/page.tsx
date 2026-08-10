@@ -29,6 +29,7 @@ export default function ClienteConfigPage() {
   const [pwLoading, setPwLoading] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email?: string } | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const unlimitedPhones = (user?.maxWppPhones ?? 0) >= 1_000_000;
 
   function normalizeUser(d: { user: Partial<UserData> }): UserData {
     return {
@@ -162,7 +163,7 @@ export default function ClienteConfigPage() {
             <div className="space-y-2 mb-4">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs font-semibold text-slate-600">Números vinculados</p>
-                <span className="text-xs text-slate-400">{user.wppPhones.length}/{user.maxWppPhones}</span>
+                <span className="text-xs font-semibold text-emerald-600">{user.wppPhones.length} vinculado(s) · ilimitados</span>
               </div>
               <p className="text-[11px] text-slate-400 -mt-1 mb-1">
                 Dê um nome, vínculo (ex: esposa, filho) e o modo que cada pessoa pode acessar — o bot já sabe quem é quem e limita o que cada uma vê.
@@ -252,11 +253,11 @@ export default function ClienteConfigPage() {
           {!code ? (
             <button
               onClick={generateCode}
-              disabled={linking || (user ? user.wppPhones.length >= user.maxWppPhones : false)}
+              disabled={linking || (user ? !unlimitedPhones && user.wppPhones.length >= user.maxWppPhones : false)}
               className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
               {linking ? (
                 <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
-              ) : user && user.wppPhones.length >= user.maxWppPhones ? (
+              ) : user && !unlimitedPhones && user.wppPhones.length >= user.maxWppPhones ? (
                 `🔒 Limite atingido (${user.maxWppPhones} número${user.maxWppPhones > 1 ? "s" : ""})`
               ) : (
                 `📲 ${user && user.wppPhones.length > 0 ? "Vincular mais um número" : "Vincular meu WhatsApp"}`
@@ -345,7 +346,7 @@ export default function ClienteConfigPage() {
                 <span className="text-xs text-slate-500">WhatsApp</span>
                 <span className="text-xs font-semibold text-slate-800">
                   {user.wppPhones.length > 0
-                    ? <span className="text-amber-600">✓ {user.wppPhones.length}/{user.maxWppPhones} número{user.maxWppPhones > 1 ? "s" : ""}</span>
+                    ? <span className="text-amber-600">✓ {user.wppPhones.length} número{user.wppPhones.length > 1 ? "s" : ""} · ilimitados</span>
                     : <span className="text-amber-600">⚠ Não vinculado</span>}
                 </span>
               </div>

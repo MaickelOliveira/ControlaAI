@@ -122,10 +122,11 @@ export default function ClientesPage() {
                       {(() => {
                         const phones = c.wppPhones?.length ? c.wppPhones : c.wppPhone ? [c.wppPhone] : [];
                         const max = c.maxWppPhones ?? 1;
+                        const maxLabel = max >= 1_000_000 ? "ilimitados" : String(max);
                         return phones.length > 0 ? (
-                          <span className="text-xs text-amber-400 bg-amber-900/20 border border-amber-900/40 rounded-lg px-2 py-0.5">✓ {phones.length}/{max} número{max > 1 ? "s" : ""}</span>
+                          <span className="text-xs text-amber-400 bg-amber-900/20 border border-amber-900/40 rounded-lg px-2 py-0.5">✓ {phones.length} número{phones.length > 1 ? "s" : ""} · {maxLabel}</span>
                         ) : (
-                          <span className="text-xs text-slate-400">Não vinculado ({max} slot{max > 1 ? "s" : ""})</span>
+                          <span className="text-xs text-slate-400">Não vinculado · {maxLabel}</span>
                         );
                       })()}
                     </td>
@@ -171,14 +172,7 @@ export default function ClientesPage() {
                             Trial
                           </button>
                         )}
-                        <button onClick={async () => {
-                          const atual = c.maxWppPhones ?? 1;
-                          const d = prompt(`Quantos números WhatsApp este cliente pode vincular?\n(Atual: ${atual})`, String(atual));
-                          if (d && Number(d) > 0) { await clienteAction(c.id, "set_wpp_limit", { maxWppPhones: Number(d) }); load(); }
-                        }}
-                          className="text-xs border border-purple-200 text-purple-600 hover:bg-purple-50 rounded-lg px-2.5 py-1 transition">
-                          📱 {c.maxWppPhones ?? 1}
-                        </button>
+                        <span className="text-xs border border-purple-200 text-purple-600 rounded-lg px-2.5 py-1">📱 Ilimitados</span>
                         <button onClick={async () => { if (!confirm(`Excluir ${c.name}?`)) return; await fetch(`/api/admin/clientes/${c.id}`, { method: "DELETE" }); load(); }}
                           className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-2.5 py-1 transition">
                           Excluir

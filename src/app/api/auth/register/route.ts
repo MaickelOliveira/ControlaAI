@@ -5,7 +5,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { getRequestIp } from "@/lib/request-ip";
 
 export async function POST(req: NextRequest) {
-  const { name, email, password, phone, plan, company } = await req.json();
+  const { name, email, password, phone, plan, company, billingCycle } = await req.json();
   if (!name || !email || !password || !phone) return NextResponse.json({ error: "Campos obrigatórios" }, { status: 400 });
   if (password.length < 10) return NextResponse.json({ error: "Senha deve ter no mínimo 10 caracteres" }, { status: 400 });
 
@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
   if (!ipAllowed || !accountAllowed) return NextResponse.json({ error: "Muitas tentativas de cadastro. Tente novamente mais tarde." }, { status: 429 });
   if (await getUserByEmail(normalizedEmail)) return NextResponse.json({ error: "Email já cadastrado" }, { status: 409 });
 
-  const user = await createUser({ name, email: normalizedEmail, password, phone, plan: plan || "personal", company });
+  const selectedBillingCycle = ["monthly", "semiannual", "annual"].includes(billingCycle) ? billingCycle : "monthly";
+  const user = await createUser({ name, email: normalizedEmail, password, phone, plan: plan || "personal", company, billingCycle: selectedBillingCycle });
   const token = await signToken({ sub: user.id, name: user.name, email: user.email, plan: user.plan, role: "client" });
   await setSessionCookie(token);
 
