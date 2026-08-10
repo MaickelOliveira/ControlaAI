@@ -953,6 +953,7 @@ const PLAN_OPTIONS = [
     price: "47",
     cents: "00",
     total: "Pagamento mensal",
+    installments: null,
     badge: null,
   },
   {
@@ -961,6 +962,7 @@ const PLAN_OPTIONS = [
     price: "39",
     cents: "66",
     total: "R$ 147,00 à vista",
+    installments: "ou 6x de R$ 27,58",
     badge: "Mais popular",
   },
   {
@@ -969,6 +971,7 @@ const PLAN_OPTIONS = [
     price: "29",
     cents: "70",
     total: "R$ 297,00 à vista",
+    installments: "ou 12x de R$ 30,72",
     badge: "Melhor valor",
   },
 ] as const;
@@ -997,6 +1000,7 @@ function PlanChoice() {
                 <span className="mb-2 text-lg font-bold">,{option.cents}/mês</span>
               </div>
               <p className="mt-2 min-h-6 text-center text-sm font-semibold text-slate-500">{option.total}</p>
+              <p className="mt-1 min-h-5 text-center text-xs font-bold text-amber-700">{option.installments}</p>
               <div className="my-7 h-px bg-slate-100" />
               <ul className="flex-1 space-y-3.5">
                 {["Acesso a todas as funcionalidades", "Painel completo e personalizado", "Zelo no WhatsApp", "Uso pessoal e empresarial", "Números ilimitados para família", "Suporte prioritário"].map(feature => (

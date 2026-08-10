@@ -97,8 +97,8 @@ export default function CadastroPage() {
             <select value={form.billingCycle} onChange={set("billingCycle")}
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
               <option value="monthly">Mensal — R$ 47/mês</option>
-              <option value="semiannual">Semestral — R$ 39,66/mês</option>
-              <option value="annual">Anual — R$ 29,70/mês</option>
+              <option value="semiannual">Semestral — R$ 147 à vista ou 6x de R$ 27,58</option>
+              <option value="annual">Anual — R$ 297 à vista ou 12x de R$ 30,72</option>
             </select>
           </div>
 
