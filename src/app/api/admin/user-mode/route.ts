@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, invalidateUserAuthCache } from "@/lib/auth";
 import { updateUser, getUserById } from "@/lib/users";
 
 // Só troca o modo (pessoal/empresa) daqui. Vincular número de WhatsApp tem
@@ -14,6 +14,7 @@ export async function PATCH(req: NextRequest) {
   if (mode !== "personal" && mode !== "business") return NextResponse.json({ error: "mode inválido" }, { status: 400 });
 
   await updateUser(session.sub, { activeMode: mode });
+  invalidateUserAuthCache(session.sub);
   const user = await getUserById(session.sub);
   return NextResponse.json({ ok: true, activeMode: user?.activeMode });
 }

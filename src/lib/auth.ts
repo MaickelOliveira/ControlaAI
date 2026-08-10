@@ -21,6 +21,14 @@ function getCachedUser(userId: string): Promise<User | null> {
   return value;
 }
 
+/** Chame depois de qualquer updateUser() cujo efeito precise refletir na
+ *  hora (ex: troca de modo pessoal/empresa) — sem isso, outras rotas que
+ *  leem o usuário via getSessionWithUser() continuam vendo o valor antigo
+ *  por até 10s mesmo já com o banco atualizado. */
+export function invalidateUserAuthCache(userId: string): void {
+  userAuthCache.delete(userId);
+}
+
 // Sem valor padrão de propósito: uma chave fixa no código público permitiria
 // qualquer um forjar um cookie de sessão válido (inclusive de admin). A
 // checagem é preguiçosa (só na hora de assinar/verificar, não no import do
