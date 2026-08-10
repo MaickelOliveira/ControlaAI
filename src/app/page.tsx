@@ -950,33 +950,36 @@ const PLAN_OPTIONS = [
   {
     id: "monthly",
     label: "Mensal",
+    pricePrefix: null,
     price: "47",
     cents: "00",
+    priceSuffix: "/mês",
     total: "Pagamento mensal",
     totalValue: 47,
-    installments: null,
     checkoutUrl: "https://pay.hotmart.com/B107093609V?off=00zzvpfa&checkoutMode=6",
     badge: null,
   },
   {
     id: "semiannual",
     label: "Semestral",
-    price: "39",
-    cents: "66",
-    total: "R$ 147,00 à vista",
+    pricePrefix: "6x",
+    price: "27",
+    cents: "58",
+    priceSuffix: "",
+    total: "ou R$ 147,00 à vista",
     totalValue: 147,
-    installments: "ou 6x de R$ 27,58",
     checkoutUrl: "https://pay.hotmart.com/B107093609V?off=gbxytpij&checkoutMode=6&bid=1786344680923",
     badge: "Mais popular",
   },
   {
     id: "annual",
     label: "Anual",
-    price: "29",
-    cents: "70",
-    total: "R$ 297,00 à vista",
+    pricePrefix: "12x",
+    price: "30",
+    cents: "72",
+    priceSuffix: "",
+    total: "ou R$ 297,00 à vista",
     totalValue: 297,
-    installments: "ou 12x de R$ 30,72",
     checkoutUrl: "https://pay.hotmart.com/B107093609V?off=zyi6wlxp&checkoutMode=6",
     badge: "Melhor valor",
   },
@@ -1001,12 +1004,12 @@ function PlanChoice() {
               )}
               <h3 className={`${heading.className} mt-2 text-center text-2xl font-extrabold text-slate-950`}>{option.label}</h3>
               <div className="mt-7 flex items-end justify-center text-slate-950">
+                {option.pricePrefix && <span className={`${heading.className} mb-1.5 mr-2 text-2xl font-extrabold`}>{option.pricePrefix}</span>}
                 <span className="mb-2 text-xl font-extrabold">R$</span>
                 <span className={`${heading.className} text-6xl font-extrabold tracking-tight`}>{option.price}</span>
-                <span className="mb-2 text-lg font-bold">,{option.cents}/mês</span>
+                <span className="mb-2 text-lg font-bold">,{option.cents}{option.priceSuffix}</span>
               </div>
               <p className="mt-2 min-h-6 text-center text-sm font-semibold text-slate-500">{option.total}</p>
-              <p className="mt-1 min-h-5 text-center text-xs font-bold text-amber-700">{option.installments}</p>
               <div className="my-7 h-px bg-slate-100" />
               <ul className="flex-1 space-y-3.5">
                 {["Acesso a todas as funcionalidades", "Painel completo e personalizado", "Zelo no WhatsApp", "Uso pessoal e empresarial", "Números ilimitados para família", "Suporte prioritário"].map(feature => (
