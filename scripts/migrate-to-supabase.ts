@@ -19,13 +19,16 @@ import path from "path";
 // sem depender do pacote @supabase/supabase-js, que não fica disponível no
 // container de produção (build "standalone" do Next.js só empacota o que as
 // rotas do app usam, não scripts avulsos).
-const url = process.env.SUPABASE_URL;
+const rawUrl = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) {
+if (!rawUrl || !key) {
   console.error("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY não configurados no ambiente.");
   process.exit(1);
 }
-const REST_URL = `${url.replace(/\/$/, "")}/rest/v1`;
+// Aceita a env vindo com ou sem "/rest/v1" já colado no final (comum copiar
+// da tela errada do painel do Supabase) — normaliza pra URL base do projeto.
+const projectUrl = rawUrl.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
+const REST_URL = `${projectUrl}/rest/v1`;
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
