@@ -5,10 +5,7 @@ import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriv
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
-import {
-  resolveAccountForFinance, getAccountsByUser, createAccount, findAccountByName,
-  setDefaultAccount, getLatestUnpaidInvoice, getInvoiceTotal, markInvoicePaid, type Account,
-} from "@/lib/accounts";
+import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
@@ -21,7 +18,7 @@ import {
 } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseAppointmentChoice, parseAccountChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseAppointmentChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
@@ -157,75 +154,6 @@ async function resolveAccountFields(
     return { accountId: fallback.accountId, cardInvoiceId: fallback.cardInvoiceId };
   }
   return { accountId: resolved.accountId, cardInvoiceId: resolved.cardInvoiceId };
-}
-
-/** Lista compacta de contas — usada quando "minhas contas" não cita nenhum
- *  nome específico. ⭐ marca a padrão ("coringa") de cada modo. */
-async function replyAccountList(accounts: Account[], from: string): Promise<void> {
-  if (!accounts.length) {
-    await wppSend(from, `🏦 Nenhuma conta cadastrada ainda.\n\nDiga algo como _"cadastra minha conta do Nubank"_ ou _"adiciona o cartão Inter, fecha dia 5, vence dia 12"_.`);
-    return;
-  }
-  let msg = `🏦 *Suas contas:*\n\n`;
-  for (const a of accounts) {
-    const emoji = a.type === "credit_card" ? "💳" : "🏦";
-    msg += `${emoji} *${a.name}*${a.isDefault ? " ⭐" : ""}\n`;
-  }
-  msg += `\n_⭐ = conta padrão (usada quando você não diz qual conta)._`;
-  await wppSend(from, msg.trim());
-}
-
-/** Detalhe de UMA conta — inclui resumo da fatura em aberto quando for cartão. */
-async function replyAccountDetail(account: Account, from: string): Promise<void> {
-  const emoji = account.type === "credit_card" ? "💳" : "🏦";
-  let msg = `${emoji} *${account.name}*${account.isDefault ? " ⭐ _(padrão)_" : ""}\n`;
-  msg += account.type === "credit_card" ? "Tipo: Cartão de crédito\n" : "Tipo: Conta bancária\n";
-  if (account.type === "credit_card") {
-    if (account.creditLimit) msg += `Limite: ${formatCurrency(account.creditLimit)}\n`;
-    if (account.closingDay && account.dueDay) msg += `Fecha dia ${account.closingDay}, vence dia ${account.dueDay}\n`;
-    const invoice = await getLatestUnpaidInvoice(account.id);
-    if (invoice) {
-      const total = await getInvoiceTotal(invoice.id);
-      const dueFmt = new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("pt-BR");
-      msg += `\n💰 Fatura ${invoice.status === "open" ? "aberta" : "fechada"}: ${formatCurrency(total)} _(vence ${dueFmt})_`;
-    } else {
-      msg += `\n✅ Sem fatura em aberto`;
-    }
-  }
-  await wppSend(from, msg.trim());
-}
-
-/** Resposta de "fatura do cartão X" — conta bancária não tem fatura. */
-async function replyAccountInvoice(account: Account, from: string): Promise<void> {
-  if (account.type !== "credit_card") {
-    await wppSend(from, `ℹ️ *${account.name}* é uma conta bancária, não tem fatura.`);
-    return;
-  }
-  const invoice = await getLatestUnpaidInvoice(account.id);
-  if (!invoice) {
-    await wppSend(from, `✅ *${account.name}* não tem fatura em aberto.`);
-    return;
-  }
-  const total = await getInvoiceTotal(invoice.id);
-  const dueFmt = new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("pt-BR");
-  const statusLabel = invoice.status === "open" ? "🟢 Aberta" : "🔴 Fechada";
-  await wppSend(from, `💳 *Fatura ${account.name}*\n\n${statusLabel}\n💰 Total: ${formatCurrency(total)}\n📅 Vencimento: ${dueFmt}`);
-}
-
-/** Marca a fatura mais recente não paga de um cartão como paga. */
-async function performInvoicePay(account: Account, userId: string, from: string): Promise<void> {
-  if (account.type !== "credit_card") {
-    await wppSend(from, `ℹ️ *${account.name}* é uma conta bancária, não tem fatura pra pagar.`);
-    return;
-  }
-  const invoice = await getLatestUnpaidInvoice(account.id);
-  if (!invoice) {
-    await wppSend(from, `✅ *${account.name}* não tem fatura pendente.`);
-    return;
-  }
-  const total = await getInvoiceTotal(invoice.id);
-  const paid = await markInvoicePaid(invoice.id, userId);
-  await wppSend(from, paid ? `✅ *Fatura paga!*\n\n💳 ${account.name}\n💰 ${formatCurrency(total)}` : `❌ Não consegui marcar a fatura como paga.`);
 }
 
 /** Mensagem recebida já normalizada pelo webhook do provider (Evolution ou
@@ -726,31 +654,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         } else if (pending.action === "add_meet") {
           const full = await getAppointmentById(chosenAppt.id, user.id);
           if (full) await performAddMeet(full, user.id, from);
-        }
-        return;
-      } else {
-        await clearPendingAction(from);
-      }
-    }
-
-    // ── Verifica seleção de conta/cartão pendente (nome ambíguo em account_query/set_default/card_invoice_query/card_invoice_pay) ──
-    if (pending?.type === "account_selection" && pending.userId === user.id) {
-      const acctChoiceIdx = parseAccountChoice(messageText, pending.accounts);
-      if (acctChoiceIdx >= 0) {
-        await clearPendingAction(from);
-        const chosenRef = pending.accounts[acctChoiceIdx];
-        const acctMode = pending.mode as "personal" | "business";
-        const full = (await getAccountsByUser(user.id, acctMode)).find(a => a.id === chosenRef.id);
-        if (!full) { await wppSend(from, "❌ Conta não encontrada."); return; }
-        if (pending.action === "query") {
-          await replyAccountDetail(full, from);
-        } else if (pending.action === "set_default") {
-          const ok = await setDefaultAccount(user.id, acctMode, full.id);
-          await wppSend(from, ok ? `✅ *${full.name}* agora é a conta padrão.` : "❌ Não consegui definir como padrão.");
-        } else if (pending.action === "invoice_query") {
-          await replyAccountInvoice(full, from);
-        } else if (pending.action === "invoice_pay") {
-          await performInvoicePay(full, user.id, from);
         }
         return;
       } else {
@@ -1327,8 +1230,35 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (!ai.reminder?.message || !ai.reminder?.scheduledAt) { await wppSend(from, replyUnknown(messageText)); break; }
         // Converte horário SP (gerado pela IA) para UTC antes de salvar
         const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
-        await createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: from, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none", mode: ai.reminder.mode || mode });
-        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat || "none"));
+
+        let targetPhone = from;
+        let recipientType: "self" | "customer" | "employee" | "other" = "self";
+        let recipientName: string | undefined;
+
+        const recipientQuery = ai.reminder.recipientName;
+        if (recipientQuery) {
+          // Assessor notifica por você: se o pedido citar outra pessoa, resolve
+          // o telefone real dela (cliente → funcionário → número da família
+          // já vinculado) antes de agendar — sem isso, todo lembrete ia sempre
+          // pro número de quem mandou a mensagem.
+          const customer = await findCustomerByName(user.id, recipientQuery);
+          const employee = await findEmployeeByName(user.id, recipientQuery);
+          const linkedPhone = await findPhoneByName(user.id, recipientQuery);
+
+          if (customer?.phone) {
+            targetPhone = customer.phone; recipientType = "customer"; recipientName = customer.name;
+          } else if (employee?.phone) {
+            targetPhone = employee.phone; recipientType = "employee"; recipientName = employee.name;
+          } else if (linkedPhone) {
+            targetPhone = linkedPhone; recipientType = "other"; recipientName = recipientQuery;
+          } else {
+            await wppSend(from, `❓ Não encontrei *${cap(recipientQuery)}* com telefone cadastrado. Cadastre o contato (cliente, funcionário ou número da família) antes de criar esse lembrete pra ele, ou peça de novo sem citar ninguém pra lembrar você mesmo.`);
+            break;
+          }
+        }
+
+        await createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: targetPhone, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none", mode: ai.reminder.mode || mode, recipientType, recipientName });
+        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat || "none", recipientName));
         break;
       }
 
@@ -1531,95 +1461,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             msg += `• *${v.brand} ${v.model}* (${v.year})\n  Placa: ${v.plate || "—"} | Km: ${v.currentKm.toLocaleString()}\n  Total gastos: ${formatCurrency(total)}\n\n`;
           });
           await wppSend(from, msg.trim());
-        }
-        break;
-      }
-
-      case "account_create": {
-        const acctMode = (ai.account?.mode || mode) as "personal" | "business";
-        const acctName = ai.account?.name?.trim();
-        if (!acctName) {
-          await wppSend(from, `❓ Qual o nome da conta ou cartão? Ex: _"cadastra minha conta do Nubank"_`);
-          break;
-        }
-        const acctType = ai.account?.type || "bank";
-        if (acctType === "credit_card" && (!ai.account?.closingDay || !ai.account?.dueDay)) {
-          await wppSend(from, `❓ Pra cadastrar um cartão preciso saber o dia de fechamento e o dia de vencimento da fatura.\n\nEx: _"adiciona o cartão ${acctName}, fecha dia 5, vence dia 12"_`);
-          break;
-        }
-        const existingAcct = await findAccountByName(user.id, acctMode, acctName, acctType);
-        if (existingAcct.length > 0) {
-          await wppSend(from, `⚠️ Você já tem uma conta chamada *${existingAcct[0].name}* cadastrada.`);
-          break;
-        }
-        const created = await createAccount({
-          userId: user.id, mode: acctMode, name: acctName, type: acctType,
-          creditLimit: ai.account?.creditLimit, closingDay: ai.account?.closingDay, dueDay: ai.account?.dueDay,
-        });
-        const acctEmoji = acctType === "credit_card" ? "💳" : "🏦";
-        let acctMsg = `${acctEmoji} *Conta cadastrada!*\n\n${created.name}${created.isDefault ? " ⭐ _(virou a conta padrão)_" : ""}`;
-        if (acctType === "credit_card") acctMsg += `\nFecha dia ${created.closingDay}, vence dia ${created.dueDay}`;
-        await wppSend(from, acctMsg);
-        break;
-      }
-
-      case "account_query": {
-        if (ai.keyword) {
-          const matches = await findAccountByName(user.id, mode, ai.keyword);
-          if (matches.length === 0) {
-            await wppSend(from, `❓ Não achei nenhuma conta chamada "${ai.keyword}".`);
-          } else if (matches.length === 1) {
-            await replyAccountDetail(matches[0], from);
-          } else {
-            await setPendingAction(from, { type: "account_selection", userId: user.id, mode, action: "query", accounts: matches.map(a => ({ id: a.id, name: a.name, type: a.type })) });
-            let msg = `🏦 Encontrei ${matches.length} contas com esse nome. Qual você quer ver?\n\n`;
-            matches.forEach((a, i) => { msg += `*${i + 1}.* ${a.name}\n`; });
-            msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
-            await wppSend(from, msg);
-          }
-        } else {
-          await replyAccountList(await getAccountsByUser(user.id, mode), from);
-        }
-        break;
-      }
-
-      case "account_set_default": {
-        const kw = ai.keyword || ai.account?.name;
-        if (!kw) { await wppSend(from, `❓ Qual conta deseja deixar como padrão?`); break; }
-        const matches = await findAccountByName(user.id, mode, kw);
-        if (matches.length === 0) {
-          await wppSend(from, `❓ Não achei nenhuma conta chamada "${kw}".`);
-        } else if (matches.length === 1) {
-          const ok = await setDefaultAccount(user.id, mode, matches[0].id);
-          await wppSend(from, ok ? `✅ *${matches[0].name}* agora é a conta padrão.` : "❌ Não consegui definir como padrão.");
-        } else {
-          await setPendingAction(from, { type: "account_selection", userId: user.id, mode, action: "set_default", accounts: matches.map(a => ({ id: a.id, name: a.name, type: a.type })) });
-          let msg = `🏦 Encontrei ${matches.length} contas com esse nome. Qual quer deixar como padrão?\n\n`;
-          matches.forEach((a, i) => { msg += `*${i + 1}.* ${a.name}\n`; });
-          msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
-          await wppSend(from, msg);
-        }
-        break;
-      }
-
-      case "card_invoice_query":
-      case "card_invoice_pay": {
-        const isPay = ai.intent === "card_invoice_pay";
-        const kw = ai.keyword;
-        const cardCandidates = kw
-          ? await findAccountByName(user.id, mode, kw, "credit_card")
-          : (await getAccountsByUser(user.id, mode)).filter(a => a.type === "credit_card");
-        if (cardCandidates.length === 0) {
-          await wppSend(from, kw ? `❓ Não achei nenhum cartão chamado "${kw}".` : `💳 Nenhum cartão de crédito cadastrado ainda.`);
-        } else if (cardCandidates.length === 1) {
-          if (isPay) await performInvoicePay(cardCandidates[0], user.id, from);
-          else await replyAccountInvoice(cardCandidates[0], from);
-        } else {
-          await setPendingAction(from, { type: "account_selection", userId: user.id, mode, action: isPay ? "invoice_pay" : "invoice_query", accounts: cardCandidates.map(a => ({ id: a.id, name: a.name, type: a.type })) });
-          let msg = `💳 Você tem ${cardCandidates.length} cartões. ${isPay ? "Qual fatura foi paga" : "De qual quer ver a fatura"}?\n\n`;
-          cardCandidates.forEach((a, i) => { msg += `*${i + 1}.* ${a.name}\n`; });
-          msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
-          await wppSend(from, msg);
         }
         break;
       }

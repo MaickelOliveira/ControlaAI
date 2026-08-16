@@ -996,6 +996,31 @@ function PlanChoice() {
           <p className="mt-4 text-base text-slate-500">Todos os planos liberam o Zelo completo para uso pessoal e empresarial, com quantos números da família você quiser.</p>
         </div>
 
+        <div className="mx-auto mt-10 max-w-3xl rounded-[2rem] border border-slate-200 bg-white p-7 shadow-lg shadow-slate-900/5 sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className={`${heading.className} text-lg font-extrabold text-slate-950 sm:text-xl`}>O que está incluso</h3>
+            <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700">Tudo totalmente ilimitado</span>
+          </div>
+          <ul className="mt-6 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            {[
+              "Meu Assessor no WhatsApp",
+              "Painel completo do Meu Assessor",
+              "Gestão compartilhada",
+              "Lembretes ilimitados",
+              "Controle total das finanças",
+              "Controle total da agenda — com integração Google Agenda",
+              "Controle total de tarefas e projetos",
+              "Gestão de arquivos",
+              "E muito mais",
+            ].map(feature => (
+              <li key={feature} className="flex items-start gap-3 text-sm leading-relaxed text-slate-700">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-black text-emerald-700">✓</span>
+                {feature}
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <div className="mt-12 grid items-stretch gap-5 lg:grid-cols-3">
           {PLAN_OPTIONS.map(option => (
             <article key={option.id} className={clsx("relative flex flex-col rounded-[2rem] border bg-white p-7 transition duration-300 hover:-translate-y-1 hover:shadow-2xl sm:p-8", option.id === "semiannual" ? "border-amber-300 shadow-xl shadow-amber-500/10" : "border-slate-200 shadow-lg shadow-slate-900/5")}>

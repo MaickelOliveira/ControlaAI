@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 
 export type ReminderRepeat = "none" | "daily" | "weekly" | "monthly";
+export type ReminderRecipientType = "self" | "customer" | "employee" | "other";
 
 // Depois de MAX_FAILED_ATTEMPTS tentativas seguidas sem sucesso (ex: número
 // inválido, WhatsApp fora do ar por horas), getDueReminders() para de
@@ -19,18 +20,22 @@ export type Reminder = {
   mode: "personal" | "business";
   sent: boolean;
   failedAttempts: number;
+  recipientType: ReminderRecipientType;
+  recipientName?: string;
   createdAt: string;
 };
 
 type Row = {
   id: string; user_id: string; message: string; phone: string; scheduled_at: string;
-  repeat: ReminderRepeat; mode: "personal" | "business"; sent: boolean; failed_attempts: number; created_at: string;
+  repeat: ReminderRepeat; mode: "personal" | "business"; sent: boolean; failed_attempts: number;
+  recipient_type: ReminderRecipientType | null; recipient_name: string | null; created_at: string;
 };
 
 function fromRow(r: Row): Reminder {
   return {
     id: r.id, userId: r.user_id, message: r.message, phone: r.phone, scheduledAt: r.scheduled_at,
-    repeat: r.repeat, mode: r.mode, sent: r.sent, failedAttempts: r.failed_attempts ?? 0, createdAt: r.created_at,
+    repeat: r.repeat, mode: r.mode, sent: r.sent, failedAttempts: r.failed_attempts ?? 0,
+    recipientType: r.recipient_type || "self", recipientName: r.recipient_name ?? undefined, createdAt: r.created_at,
   };
 }
 
@@ -52,7 +57,11 @@ export async function createReminder(data: Omit<Reminder, "id" | "sent" | "faile
     scheduledAt = d.toISOString();
   }
 
-  const row = { id: randomUUID(), user_id: data.userId, message: data.message, phone: data.phone, scheduled_at: scheduledAt, repeat: data.repeat, mode: data.mode, sent: false };
+  const row = {
+    id: randomUUID(), user_id: data.userId, message: data.message, phone: data.phone, scheduled_at: scheduledAt,
+    repeat: data.repeat, mode: data.mode, sent: false,
+    recipient_type: data.recipientType || "self", recipient_name: data.recipientName || null,
+  };
   const { data: inserted, error } = await getSupabase().from("reminders").insert(row).select("*").single();
   if (error) throw new Error(`[reminders] createReminder falhou: ${error.message}`);
   return fromRow(inserted as Row);
@@ -107,11 +116,14 @@ export async function getAllRemindersByUser(userId: string, mode?: "personal" | 
   return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 
-export async function updateReminder(id: string, userId: string, patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat">>): Promise<Reminder | null> {
+export async function updateReminder(id: string, userId: string, patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat" | "phone" | "recipientType" | "recipientName">>): Promise<Reminder | null> {
   const rowPatch: Record<string, unknown> = { sent: false };
   if (patch.message !== undefined) rowPatch.message = patch.message;
   if (patch.scheduledAt !== undefined) rowPatch.scheduled_at = patch.scheduledAt;
   if (patch.repeat !== undefined) rowPatch.repeat = patch.repeat;
+  if (patch.phone !== undefined) rowPatch.phone = patch.phone;
+  if (patch.recipientType !== undefined) rowPatch.recipient_type = patch.recipientType;
+  if (patch.recipientName !== undefined) rowPatch.recipient_name = patch.recipientName || null;
   const { data, error } = await getSupabase().from("reminders").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);

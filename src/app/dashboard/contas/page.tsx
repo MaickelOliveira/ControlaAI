@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
@@ -18,7 +19,16 @@ function fmtDate(s: string) {
 
 const EMPTY_FORM = { name: "", type: "bank" as "bank" | "credit_card", creditLimit: "", closingDay: "", dueDay: "" };
 
+// Feature em standby (usuário ainda não decidiu como quer usar contas
+// bancárias/cartões dentro do Zelo) — página fica no código pra retomar
+// depois, mas some do menu e não é mais acessível direto pela URL.
 export default function ContasPage() {
+  const router = useRouter();
+  useEffect(() => { router.replace("/dashboard"); }, [router]);
+  return null;
+}
+
+function DisabledContasPage() {
   const [mode, setMode] = useState<string>("personal");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);

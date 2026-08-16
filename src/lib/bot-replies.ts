@@ -77,7 +77,7 @@ export function replyTaskUpdated(task: Task): string {
   return `${statusMsg[task.status] ?? "Tarefa atualizada."}\n\n📌 ${task.title}`;
 }
 
-export function replyReminderSet(message: string, scheduledAt: string, repeat: string): string {
+export function replyReminderSet(message: string, scheduledAt: string, repeat: string, recipientName?: string): string {
   const date = new Date(scheduledAt);
   const dateStr = formatDateBR(scheduledAt);
   const timeStr = date.toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
@@ -87,7 +87,8 @@ export function replyReminderSet(message: string, scheduledAt: string, repeat: s
     weekly: "Toda semana",
     monthly: "Todo mês",
   };
-  return `Pode deixar, eu te aviso. 🔔\n\n💬 ${message}\n📅 ${dateStr} às ${timeStr}\n🔁 ${repeatLabel[repeat] ?? "Uma vez"}`;
+  const intro = recipientName ? `Pode deixar, vou avisar *${recipientName}*. 🔔` : "Pode deixar, eu te aviso. 🔔";
+  return `${intro}\n\n💬 ${message}\n📅 ${dateStr} às ${timeStr}\n🔁 ${repeatLabel[repeat] ?? "Uma vez"}`;
 }
 
 export function replyReminderList(reminders: Reminder[]): string {
@@ -97,7 +98,8 @@ export function replyReminderList(reminders: Reminder[]): string {
   reminders.slice(0, 10).forEach((r, i) => {
     const dateStr = formatDateBR(r.scheduledAt);
     const timeStr = new Date(r.scheduledAt).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
-    msg += `${i + 1}. 💬 ${r.message} — ${dateStr} às ${timeStr} _(${repeatLabel[r.repeat] ?? "uma vez"})_\n`;
+    const para = r.recipientType !== "self" && r.recipientName ? ` _(pra ${r.recipientName})_` : "";
+    msg += `${i + 1}. 💬 ${r.message}${para} — ${dateStr} às ${timeStr} _(${repeatLabel[r.repeat] ?? "uma vez"})_\n`;
   });
   return msg.trim();
 }

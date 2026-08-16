@@ -20,14 +20,27 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const { message, scheduledAt, repeat, mode } = await req.json();
+  const { message, scheduledAt, repeat, mode, phone: recipientPhone, recipientType, recipientName } = await req.json();
   if (!message || !scheduledAt) return NextResponse.json({ error: "message e scheduledAt obrigatórios" }, { status: 400 });
+  if (recipientType && recipientType !== "self" && !recipientPhone) {
+    return NextResponse.json({ error: "Telefone do destinatário obrigatório" }, { status: 400 });
+  }
 
   const user = await getUserById(session.sub);
-  const phoneLinks = user ? await getPhonesForUser(user.id) : [];
-  const phone = phoneLinks[0]?.phone || user?.phone || "";
 
-  const r = await createReminder({ userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none", mode: mode || "personal" });
+  // "self" (padrão) continua indo pro próprio telefone vinculado do usuário —
+  // qualquer outro tipo de destinatário já chega com o telefone resolvido
+  // (cliente/funcionário/outro número) escolhido no painel.
+  let phone = recipientPhone;
+  if (!recipientType || recipientType === "self") {
+    const phoneLinks = user ? await getPhonesForUser(user.id) : [];
+    phone = phoneLinks[0]?.phone || user?.phone || "";
+  }
+
+  const r = await createReminder({
+    userId: session.sub, message, phone, scheduledAt, repeat: repeat || "none", mode: mode || "personal",
+    recipientType: recipientType || "self", recipientName: recipientName || undefined,
+  });
   return NextResponse.json(r, { status: 201 });
 }
 

@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
+type RecipientType = "self" | "customer" | "employee" | "other";
+
 type Reminder = {
   id: string;
   message: string;
@@ -11,6 +13,17 @@ type Reminder = {
   sent: boolean;
   failedAttempts: number;
   phone: string;
+  recipientType: RecipientType;
+  recipientName?: string;
+};
+
+type Contact = { id: string; name: string; phone?: string };
+
+const RECIPIENT_LABEL: Record<RecipientType, string> = {
+  self: "👤 Você",
+  customer: "🧑‍💼 Cliente",
+  employee: "🧑‍🔧 Equipe",
+  other: "📱 Outro",
 };
 
 // Precisa bater com MAX_FAILED_ATTEMPTS em src/lib/reminders.ts — não
@@ -50,6 +63,14 @@ export default function LembretesPage() {
   const [form, setForm] = useState({ message: "", date: "", time: "", repeat: "none" });
   const [filter, setFilter] = useState<"all" | "active" | "sent">("active");
 
+  // Destinatário — "Assessor notifica por você"
+  const [recipientType, setRecipientType] = useState<RecipientType>("self");
+  const [recipientId, setRecipientId] = useState("");
+  const [recipientLabel, setRecipientLabel] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
+  const [customers, setCustomers] = useState<Contact[]>([]);
+  const [employees, setEmployees] = useState<Contact[]>([]);
+
   function load(m: string) {
     setLoading(true);
     fetch(`/api/admin/reminders?mode=${m}`)
@@ -70,9 +91,20 @@ export default function LembretesPage() {
         const m = d.user?.activeMode || "personal";
         setMode(m);
         load(m);
+        if (m === "business") {
+          fetch("/api/admin/customers").then(r => r.json()).then(d => setCustomers(d.customers || [])).catch(() => {});
+          fetch("/api/admin/employees").then(r => r.json()).then(d => setEmployees(d.employees || [])).catch(() => {});
+        }
       })
       .catch(() => load("personal"));
   }, []);
+
+  function resetRecipient() {
+    setRecipientType("self");
+    setRecipientId("");
+    setRecipientLabel("");
+    setRecipientPhone("");
+  }
 
   function openNew() {
     const now = new Date();
@@ -83,6 +115,7 @@ export default function LembretesPage() {
       time: now.toTimeString().slice(0, 5),
       repeat: "none",
     });
+    resetRecipient();
     setEditingId(null);
     setShowForm(true);
   }
@@ -95,6 +128,12 @@ export default function LembretesPage() {
       time: d.toTimeString().slice(0, 5),
       repeat: r.repeat,
     });
+    setRecipientType(r.recipientType || "self");
+    if (r.recipientType === "customer") setRecipientId(customers.find(c => c.name === r.recipientName)?.id || "");
+    else if (r.recipientType === "employee") setRecipientId(employees.find(c => c.name === r.recipientName)?.id || "");
+    else setRecipientId("");
+    setRecipientLabel(r.recipientType === "other" ? (r.recipientName || "") : "");
+    setRecipientPhone(r.recipientType === "other" ? r.phone : "");
     setEditingId(r.id);
     setShowForm(true);
   }
@@ -103,21 +142,30 @@ export default function LembretesPage() {
     e.preventDefault();
     const scheduledAt = new Date(`${form.date}T${form.time}:00`).toISOString();
 
+    const recipientPayload = recipientType === "self"
+      ? { recipientType: "self" as const }
+      : recipientType === "customer"
+      ? (() => { const c = customers.find(x => x.id === recipientId); return { recipientType: "customer" as const, recipientName: c?.name, phone: c?.phone }; })()
+      : recipientType === "employee"
+      ? (() => { const e = employees.find(x => x.id === recipientId); return { recipientType: "employee" as const, recipientName: e?.name, phone: e?.phone }; })()
+      : { recipientType: "other" as const, recipientName: recipientLabel, phone: recipientPhone };
+
     if (editingId) {
       await fetch("/api/admin/reminders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingId, message: form.message, scheduledAt, repeat: form.repeat }),
+        body: JSON.stringify({ id: editingId, message: form.message, scheduledAt, repeat: form.repeat, ...recipientPayload }),
       });
     } else {
       await fetch("/api/admin/reminders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: form.message, scheduledAt, repeat: form.repeat, mode }),
+        body: JSON.stringify({ message: form.message, scheduledAt, repeat: form.repeat, mode, ...recipientPayload }),
       });
     }
     setShowForm(false);
     setEditingId(null);
+    resetRecipient();
     load(mode);
   }
 
@@ -249,9 +297,15 @@ export default function LembretesPage() {
                     )}>
                       {REPEAT_LABEL[r.repeat]}
                     </span>
-                    {r.phone && (
-                      <span className="text-xs text-slate-300">📱 {r.phone}</span>
-                    )}
+                    <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium border",
+                      r.recipientType && r.recipientType !== "self"
+                        ? "bg-violet-50 text-violet-600 border-violet-200"
+                        : "bg-slate-50 text-slate-400 border-slate-200"
+                    )}>
+                      {r.recipientType === "self" || !r.recipientType
+                        ? RECIPIENT_LABEL.self
+                        : `${RECIPIENT_LABEL[r.recipientType]}${r.recipientName ? ` · ${r.recipientName}` : ""}`}
+                    </span>
                     {!r.sent && r.failedAttempts > 0 && (
                       <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium border",
                         r.failedAttempts >= MAX_FAILED_ATTEMPTS
@@ -317,6 +371,53 @@ export default function LembretesPage() {
                 <input value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} required
                   placeholder="Ex: Tomar remédio de pressão"
                   className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-500 font-medium mb-1 block">Para quem é esse lembrete?</label>
+                <div className={clsx("grid gap-2", mode === "business" ? "grid-cols-4" : "grid-cols-2")}>
+                  {(mode === "business"
+                    ? (["self", "customer", "employee", "other"] as const)
+                    : (["self", "other"] as const)
+                  ).map(t => (
+                    <button key={t} type="button"
+                      onClick={() => { setRecipientType(t); setRecipientId(""); setRecipientLabel(""); setRecipientPhone(""); }}
+                      className={clsx("py-2 rounded-xl text-xs font-medium border transition text-center",
+                        recipientType === t
+                          ? "bg-violet-600 text-white border-violet-600"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100")}>
+                      {t === "self" ? "Para mim" : t === "customer" ? "Cliente" : t === "employee" ? "Funcionário" : "Outro número"}
+                    </button>
+                  ))}
+                </div>
+
+                {recipientType === "customer" && (
+                  <select value={recipientId} onChange={e => setRecipientId(e.target.value)} required
+                    className="w-full mt-2 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200">
+                    <option value="">Selecione o cliente...</option>
+                    {customers.filter(c => c.phone).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
+                {recipientType === "employee" && (
+                  <select value={recipientId} onChange={e => setRecipientId(e.target.value)} required
+                    className="w-full mt-2 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200">
+                    <option value="">Selecione o funcionário...</option>
+                    {employees.filter(e => e.phone).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                )}
+                {(recipientType === "customer" || recipientType === "employee") && (customers.length === 0 && employees.length === 0) && (
+                  <p className="text-xs text-amber-600 mt-1.5">Nenhum cliente/funcionário com telefone cadastrado ainda.</p>
+                )}
+                {recipientType === "other" && (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <input value={recipientLabel} onChange={e => setRecipientLabel(e.target.value)} required
+                      placeholder="Nome (ex: Milena)"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200" />
+                    <input value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} required
+                      placeholder="Telefone com DDD"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200" />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
