@@ -21,8 +21,8 @@ export type BillingWebhookConfig = {
   id: string;
   label: string;
   active: boolean;
-  // Autenticação: ou um campo dentro do próprio corpo JSON (ex: Hotmart
-  // manda "hottok" no payload), ou um header HTTP — configure só um dos dois.
+  // Autenticação: ou um campo dentro do próprio corpo JSON, ou um header
+  // HTTP (ex: a Hotmart v2 envia o Hottok em X-HOTMART-HOTTOK).
   secretBodyField?: string;
   secretHeader?: string;
   secretValue?: string;
@@ -133,7 +133,7 @@ export async function deleteBillingWebhook(id: string): Promise<void> {
 export const BILLING_WEBHOOK_PRESETS: Record<string, Omit<BillingWebhookConfig, "id" | "createdAt" | "active" | "secretValue">> = {
   hotmart: {
     label: "Hotmart",
-    secretBodyField: "hottok",
+    secretHeader: "X-HOTMART-HOTTOK",
     emailPath: "data.buyer.email",
     statusPath: "event",
     activateValues: ["PURCHASE_APPROVED", "PURCHASE_COMPLETE", "SUBSCRIPTION_RENEWED"],
@@ -229,6 +229,14 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
 export function verifyBillingWebhookAuth(cfg: BillingWebhookConfig, body: unknown, headers: Headers): boolean {
   if (!cfg.secretValue) return false; // sem secret configurado, não autentica ninguém — mais seguro que aceitar tudo
   if (cfg.secretHeader) return headers.get(cfg.secretHeader) === cfg.secretValue;
-  if (cfg.secretBodyField) return getByPath(body, cfg.secretBodyField) === cfg.secretValue;
+  if (cfg.secretBodyField) {
+    if (getByPath(body, cfg.secretBodyField) === cfg.secretValue) return true;
+
+    // Compatibilidade com integrações Hotmart criadas antes da correção do
+    // preset. Na versão 2.0, o Hottok vem no header, não dentro do JSON.
+    if (cfg.secretBodyField.toLowerCase() === "hottok") {
+      return headers.get("X-HOTMART-HOTTOK") === cfg.secretValue;
+    }
+  }
   return false;
 }
