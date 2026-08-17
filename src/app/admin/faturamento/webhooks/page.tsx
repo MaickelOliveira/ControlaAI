@@ -2,6 +2,14 @@
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 
+type WebhookAttempt = {
+  at: string;
+  wasActive: boolean;
+  authOk: boolean;
+  body: unknown;
+  result?: { ok: boolean; action?: string; email?: string; detail?: string; error?: string };
+};
+
 type Config = {
   id: string;
   label: string;
@@ -15,6 +23,7 @@ type Config = {
   deactivateValues: string[];
   planPath?: string;
   planMap?: Record<string, string>;
+  lastAttempt?: WebhookAttempt;
 };
 
 type Preset = Omit<Config, "id" | "active" | "secretValue">;
@@ -150,6 +159,39 @@ export default function BillingWebhooksPage() {
                 </div>
               )}
               <p className="text-[11px] text-slate-400">email: <code>{c.emailPath}</code> · status: <code>{c.statusPath}</code> · ativa em: <code>{c.activateValues.join(", ") || "—"}</code> · desativa em: <code>{c.deactivateValues.join(", ") || "—"}</code></p>
+
+              {c.lastAttempt && (
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-slate-600">📥 Última requisição recebida</p>
+                    <span className="text-[11px] text-slate-400">{new Date(c.lastAttempt.at).toLocaleString("pt-BR")}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={clsx("text-[11px] px-2 py-0.5 rounded-full border font-medium",
+                      c.lastAttempt.wasActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-600 border-red-200")}>
+                      {c.lastAttempt.wasActive ? "integração estava ativa" : "⚠️ integração estava DESATIVADA"}
+                    </span>
+                    <span className={clsx("text-[11px] px-2 py-0.5 rounded-full border font-medium",
+                      c.lastAttempt.authOk ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-600 border-red-200")}>
+                      {c.lastAttempt.authOk ? "autenticação passou" : "⚠️ autenticação FALHOU"}
+                    </span>
+                    {c.lastAttempt.result && (
+                      <span className={clsx("text-[11px] px-2 py-0.5 rounded-full border font-medium",
+                        c.lastAttempt.result.ok ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-red-50 text-red-600 border-red-200")}>
+                        {c.lastAttempt.result.ok
+                          ? `${c.lastAttempt.result.action}${c.lastAttempt.result.email ? ` — ${c.lastAttempt.result.email}` : ""}`
+                          : c.lastAttempt.result.error}
+                      </span>
+                    )}
+                  </div>
+                  <details className="text-[11px]">
+                    <summary className="cursor-pointer text-slate-500 hover:text-slate-800">Ver payload recebido (JSON real)</summary>
+                    <pre className="mt-1.5 bg-slate-50 border border-slate-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(c.lastAttempt.body, null, 2)}</pre>
+                    <button type="button" onClick={() => setTestPayload(p => ({ ...p, [c.id]: JSON.stringify(c.lastAttempt!.body, null, 2) }))}
+                      className="mt-1.5 text-blue-600 hover:underline">Usar esse payload no teste abaixo ↓</button>
+                  </details>
+                </div>
+              )}
 
               <div className="border-t border-slate-100 pt-3 space-y-2">
                 <p className="text-[11px] text-slate-400">Cole aqui um payload de teste (JSON) pra ver se o mapeamento bate, sem mexer em nenhum cliente de verdade:</p>

@@ -426,7 +426,8 @@ create table if not exists billing_webhooks (
   deactivate_values jsonb not null default '[]',
   plan_path text,
   plan_map jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  last_attempt jsonb
 );
 
 -- dedup de webhook (mensagens já processadas) — substitui

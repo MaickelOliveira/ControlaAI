@@ -37,6 +37,18 @@ export type BillingWebhookConfig = {
   planPath?: string;
   planMap?: Record<string, UserPlan>;
   createdAt: string;
+  // Última requisição recebida de verdade nessa URL, autenticada ou não —
+  // guardado pra dar visibilidade real do que a plataforma de venda está
+  // mandando, sem precisar adivinhar o formato ou vasculhar log de servidor.
+  lastAttempt?: WebhookAttempt;
+};
+
+export type WebhookAttempt = {
+  at: string;
+  wasActive: boolean;
+  authOk: boolean;
+  body: unknown;
+  result?: BillingWebhookResult;
 };
 
 type Row = {
@@ -53,6 +65,7 @@ type Row = {
   plan_path: string | null;
   plan_map: Record<string, UserPlan> | null;
   created_at: string;
+  last_attempt: WebhookAttempt | null;
 };
 
 function fromRow(r: Row): BillingWebhookConfig {
@@ -70,6 +83,7 @@ function fromRow(r: Row): BillingWebhookConfig {
     planPath: r.plan_path ?? undefined,
     planMap: r.plan_map ?? undefined,
     createdAt: r.created_at,
+    lastAttempt: r.last_attempt ?? undefined,
   };
 }
 
@@ -97,6 +111,20 @@ export async function getBillingWebhooks(): Promise<BillingWebhookConfig[]> {
 export async function getBillingWebhookById(id: string): Promise<BillingWebhookConfig | null> {
   const { data } = await getSupabase().from("billing_webhooks").select("*").eq("id", id).maybeSingle();
   return data ? fromRow(data as Row) : null;
+}
+
+/** Grava a última requisição recebida de verdade, autenticada ou não —
+ *  inclusive quando a integração está desativada (esse é o caso mais fácil
+ *  de passar despercebido: a plataforma de venda manda o webhook, recebe
+ *  200 OK, o admin acha que "testou e funcionou", mas nada acontece porque
+ *  ninguém tinha ligado a integração ainda). Best-effort: nunca deve
+ *  derrubar o processamento do webhook por causa de erro aqui. */
+export async function recordWebhookAttempt(id: string, attempt: WebhookAttempt): Promise<void> {
+  try {
+    await getSupabase().from("billing_webhooks").update({ last_attempt: attempt }).eq("id", id);
+  } catch (e) {
+    console.error("[billing-webhook] falha ao gravar last_attempt:", e);
+  }
 }
 
 export async function createBillingWebhook(data: Omit<BillingWebhookConfig, "id" | "createdAt">): Promise<BillingWebhookConfig> {
@@ -228,15 +256,21 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
 
 export function verifyBillingWebhookAuth(cfg: BillingWebhookConfig, body: unknown, headers: Headers): boolean {
   if (!cfg.secretValue) return false; // sem secret configurado, não autentica ninguém — mais seguro que aceitar tudo
-  if (cfg.secretHeader) return headers.get(cfg.secretHeader) === cfg.secretValue;
-  if (cfg.secretBodyField) {
-    if (getByPath(body, cfg.secretBodyField) === cfg.secretValue) return true;
+  if (cfg.secretHeader && headers.get(cfg.secretHeader) === cfg.secretValue) return true;
+  if (cfg.secretBodyField && getByPath(body, cfg.secretBodyField) === cfg.secretValue) return true;
 
-    // Compatibilidade com integrações Hotmart criadas antes da correção do
-    // preset. Na versão 2.0, o Hottok vem no header, não dentro do JSON.
-    if (cfg.secretBodyField.toLowerCase() === "hottok") {
-      return headers.get("X-HOTMART-HOTTOK") === cfg.secretValue;
-    }
+  // O Hottok da Hotmart aparece no header X-HOTMART-HOTTOK OU no campo
+  // "hottok" do corpo, dependendo da conta/versão do vendedor na Hotmart —
+  // não é sempre um só, mesmo dentro da v2 (relatos de comerciantes variam).
+  // Sem isso, uma conta configurada só com o campo "errado" (header quando a
+  // Hotmart manda no corpo, ou vice-versa) rejeita a compra silenciosamente,
+  // mesmo com o token certo. Checa os dois lugares sempre que a config
+  // parecer ser Hotmart, sem exigir que o admin acerte de primeira qual dos
+  // dois a própria conta Hotmart dele usa.
+  const looksLikeHotmart = cfg.secretHeader?.toUpperCase() === "X-HOTMART-HOTTOK" || cfg.secretBodyField?.toLowerCase() === "hottok";
+  if (looksLikeHotmart) {
+    if (headers.get("X-HOTMART-HOTTOK") === cfg.secretValue) return true;
+    if (getByPath(body, "hottok") === cfg.secretValue) return true;
   }
   return false;
 }
