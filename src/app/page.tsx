@@ -1110,17 +1110,17 @@ export default function LandingPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> IA no WhatsApp para sua rotina
             </span>
             <h1 className={`${heading.className} text-4xl sm:text-6xl font-extrabold text-white mt-5 leading-[1.05]`}>
-              Sua rotina organizada,{" "}
-              <span className="bg-gradient-to-br from-amber-300 to-amber-500 bg-clip-text text-transparent">direto no WhatsApp.</span>
+              Organize seu negócio e sua vida pessoal pelo WhatsApp —{" "}
+              <span className="bg-gradient-to-br from-amber-300 to-amber-500 bg-clip-text text-transparent">sem misturar os dois.</span>
             </h1>
             <p className="text-slate-400 mt-5 text-[16px] leading-relaxed max-w-md">
-              Finanças, agenda, tarefas, veículos e documentos. Organizados por IA, sem sair da conversa que você já usa todos os dias — no modo pessoal ou no modo empresa.
+              Envie áudios, fotos, faturas ou mensagens. O Zelo organiza finanças, agenda, tarefas e documentos em modos separados para você e sua empresa.
             </p>
             <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-              <a href="#planos" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-center text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
-                Escolher meu plano →
+              <a href="#como-funciona" className="rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-center text-slate-950 text-sm font-bold px-6 py-3.5 hover:opacity-90 transition shadow-lg shadow-amber-500/20">
+                Ver o Zelo funcionando →
               </a>
-              <a href="#como-funciona" className="rounded-xl border border-white/10 px-6 py-3.5 text-center text-sm font-bold text-white transition hover:bg-white/5">Ver como funciona</a>
+              <a href="#planos" className="rounded-xl border border-white/10 px-6 py-3.5 text-center text-sm font-bold text-white transition hover:bg-white/5">Conhecer os planos</a>
             </div>
             <p className="mt-3 text-xs text-slate-500">7 dias de garantia · pagamento seguro pela Hotmart · configuração rápida</p>
             <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-500">
