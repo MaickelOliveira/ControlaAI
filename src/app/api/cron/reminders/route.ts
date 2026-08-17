@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDueReminders, markReminderSent, markReminderFailed } from "@/lib/reminders";
 import { sendReminderTemplate } from "@/lib/whatsapp";
 import { acquireCronLock, releaseCronLock } from "@/lib/cron-lock";
+import { getUserById } from "@/lib/users";
 
 // Sem CRON_SECRET configurado, o endpoint fica bloqueado — nada de segredo
 // padrão previsível, e o POST (que ficava sem checagem nenhuma) agora exige
@@ -37,7 +38,18 @@ async function runCron() {
     const results = [];
     for (const r of due) {
       console.log(`[cron/reminders] Enviando id=${r.id}`);
-      const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", `🔔 *Lembrete:* ${r.message}`, { lembrete: r.message });
+      let ok: boolean;
+      if (r.recipientType !== "self") {
+        const owner = await getUserById(r.userId);
+        const remetente = owner?.name || "alguém";
+        ok = await sendReminderTemplate(r.phone, "lembrete_assessor", `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`, { remetente, lembrete: r.message });
+      } else if (r.mode === "business") {
+        const texto = `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
+        ok = await sendReminderTemplate(r.phone, "lembrete_empresarial", texto, { lembrete: r.message });
+      } else {
+        const texto = `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
+        ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
+      }
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
       if (ok) await markReminderSent(r.id, r.repeat);
       else await markReminderFailed(r.id);

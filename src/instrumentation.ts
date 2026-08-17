@@ -42,6 +42,7 @@ export async function register() {
 
       const remindersModule = await import("./lib/reminders").catch(() => null);
       const wppModule = await import("./lib/whatsapp").catch(() => null);
+      const usersModuleForReminders = await import("./lib/users").catch(() => null);
       if (!remindersModule || !wppModule) return;
 
       const { getDueReminders, markReminderSent, markReminderFailed } = remindersModule;
@@ -50,8 +51,23 @@ export async function register() {
       if (due.length > 0) console.log(`[cron] ${due.length} lembrete(s) a disparar`);
       for (const r of due) {
         try {
-          const texto = `🔔 *Lembrete:* ${r.message}`;
-          const ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
+          // Lembrete pra outra pessoa (cliente/funcionário/outro número) usa o
+          // template "lembrete_assessor" — deixa claro pro destinatário quem
+          // pediu, já que ele pode nunca ter falado com o bot antes. Lembrete
+          // "pra mim mesmo" continua no template original.
+          let ok: boolean;
+          if (r.recipientType !== "self" && usersModuleForReminders) {
+            const owner = await usersModuleForReminders.getUserById(r.userId);
+            const remetente = owner?.name || "alguém";
+            const texto = `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
+            ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message });
+          } else if (r.mode === "business") {
+            const texto = `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
+            ok = await sendReminderTemplate(r.phone, "lembrete_empresarial", texto, { lembrete: r.message });
+          } else {
+            const texto = `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
+            ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
+          }
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) await markReminderSent(r.id, r.repeat);
           else await markReminderFailed(r.id);
