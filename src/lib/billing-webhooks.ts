@@ -204,11 +204,17 @@ export type BillingWebhookResult =
 /** Processa um payload já autenticado — separado da checagem de auth pra
  *  poder ser usado também no "testar mapeamento" do admin (dry run). */
 export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: unknown, dryRun = false): Promise<BillingWebhookResult> {
-  const email = getByPath(body, cfg.emailPath);
+  // Eventos de COMPRA (Hotmart) trazem o email em "data.buyer.email"; eventos
+  // de ASSINATURA (ex: SUBSCRIPTION_CANCELLATION, SUBSCRIPTION_RENEWED) vêm
+  // com um formato de payload DIFERENTE, sem "buyer" — o email fica em
+  // "data.subscriber.email". Sem esse fallback, todo evento de assinatura
+  // falhava silenciosamente em achar o email e nunca cancelava/renovava
+  // ninguém, mesmo com o "emailPath" configurado certo pra compras.
+  const email = getByPath(body, cfg.emailPath) ?? getByPath(body, "data.subscriber.email");
   const status = getByPath(body, cfg.statusPath);
 
   if (typeof email !== "string" || !email) {
-    return { ok: false, error: `Não achei o email em "${cfg.emailPath}" — confira o caminho do campo.` };
+    return { ok: false, error: `Não achei o email em "${cfg.emailPath}" (nem em "data.subscriber.email") — confira o caminho do campo.` };
   }
   if (typeof status !== "string" || !status) {
     return { ok: false, error: `Não achei o status em "${cfg.statusPath}" — confira o caminho do campo.` };
@@ -231,7 +237,7 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
   if (!user && !isActivate) return { ok: true, action: "ignored", email, detail: "cliente ainda não possui conta" };
   if (!user && dryRun) return { ok: true, action: "activated", email, detail: "conta paga seria criada e o acesso enviado por e-mail" };
   if (!user) {
-    const name = firstString(body, ["data.buyer.name", "data.buyer.first_name", "Customer.full_name", "Customer.first_name"]) || email.split("@")[0];
+    const name = firstString(body, ["data.buyer.name", "data.buyer.first_name", "data.subscriber.name", "Customer.full_name", "Customer.first_name"]) || email.split("@")[0];
     const phone = firstString(body, ["data.buyer.checkout_phone", "data.buyer.phone", "Customer.mobile", "Customer.phone"]);
     user = await createPaidUser({ name, email, phone, plan: mappedPlan });
     try {
