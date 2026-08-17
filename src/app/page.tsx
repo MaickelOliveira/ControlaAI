@@ -901,45 +901,154 @@ function Faq() {
   );
 }
 
-const STEPS = [
-  {
-    number: "01",
-    title: "Crie sua conta",
-    desc: "Escolha seu plano e conclua a compra com pagamento seguro pela Hotmart.",
+const DEMO_SCENARIOS = {
+  business: {
+    tab: "Pessoal e empresa",
+    icon: "🏢",
+    tabDescription: "Contas sempre separadas",
+    userMessage: "Gastei R$ 87 de combustível na empresa",
+    response: "Pronto! Registrei R$ 87,00 em Combustível no modo Empresa.",
+    tags: ["Modo Empresa", "Combustível"],
+    resultLabel: "Painel atualizado",
+    resultTitle: "Despesa da empresa",
+    resultMeta: "Combustível · hoje",
+    resultValue: "− R$ 87,00",
+    proof: "Seu saldo pessoal não foi alterado.",
   },
-  {
-    number: "02",
-    title: "Conecte seu WhatsApp",
-    desc: "Vincule seu número com um código rápido e seguro dentro do painel.",
+  invoice: {
+    tab: "Importar fatura",
+    icon: "📄",
+    tabDescription: "PDF organizado pela IA",
+    userMessage: "Importa essa fatura em PDF pra mim",
+    response: "Fatura lida! Encontrei 34 compras e separei 5 que já estavam registradas.",
+    tags: ["29 novos gastos", "5 duplicados"],
+    resultLabel: "Importação pronta",
+    resultTitle: "Fatura de julho",
+    resultMeta: "Revise antes de confirmar",
+    resultValue: "34 itens",
+    proof: "Nada é duplicado ou importado sem sua aprovação.",
   },
-  {
-    number: "03",
-    title: "Fale com o Zelo",
-    desc: "Envie texto, áudio, foto ou documento. A IA entende e organiza para você.",
+  calendar: {
+    tab: "Agenda e lembretes",
+    icon: "📅",
+    tabDescription: "Compromissos no automático",
+    userMessage: "Marca reunião amanhã às 10h e me lembra antes",
+    response: "Reunião marcada para amanhã, às 10h. Vou te avisar 15 minutos antes.",
+    tags: ["Google Agenda", "Lembrete criado"],
+    resultLabel: "Agenda sincronizada",
+    resultTitle: "Reunião",
+    resultMeta: "Amanhã · 10:00",
+    resultValue: "15 min antes",
+    proof: "Compromisso e lembrete criados em uma conversa.",
   },
-];
+} as const;
 
 function HowItWorks() {
+  const [activeScenario, setActiveScenario] = useState<keyof typeof DEMO_SCENARIOS>("business");
+  const scenario = DEMO_SCENARIOS[activeScenario];
+
   return (
     <section id="como-funciona" className="relative overflow-hidden bg-white py-24">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="max-w-2xl">
-          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">COMECE EM POUCOS MINUTOS</span>
-          <h2 className={`${heading.className} mt-5 text-3xl font-extrabold text-slate-950 sm:text-5xl`}>Da conversa ao controle completo.</h2>
-          <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-500">Você não precisa aprender um sistema novo para organizar sua rotina. O Zelo começa no WhatsApp e mantém tudo visível no painel.</p>
+      <div className="pointer-events-none absolute left-1/2 top-24 h-80 w-[42rem] -translate-x-1/2 rounded-full bg-amber-300/15 blur-[120px]" />
+      <div className="relative max-w-7xl mx-auto px-6">
+        <div className="mx-auto max-w-3xl text-center">
+          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">VEJA NA PRÁTICA</span>
+          <h2 className={`${heading.className} mt-5 text-3xl font-extrabold text-slate-950 sm:text-5xl`}>Veja o Zelo trabalhando por você.</h2>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-500">Escolha uma situação e acompanhe como uma mensagem vira organização no WhatsApp e no painel.</p>
         </div>
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
-          {STEPS.map((step, index) => (
-            <article key={step.number} className="group relative rounded-3xl border border-slate-200 bg-slate-50 p-7 transition duration-300 hover:-translate-y-1 hover:border-amber-300 hover:bg-white hover:shadow-xl hover:shadow-slate-900/5">
-              <div className="flex items-center justify-between">
-                <span className={`${heading.className} text-4xl font-extrabold text-slate-200 transition group-hover:text-amber-300`}>{step.number}</span>
-                {index < STEPS.length - 1 && <span className="hidden text-slate-300 md:block" aria-hidden="true">→</span>}
+
+        <div className="mt-10 grid gap-3 sm:grid-cols-3" role="tablist" aria-label="Exemplos do Zelo em funcionamento">
+          {(Object.keys(DEMO_SCENARIOS) as Array<keyof typeof DEMO_SCENARIOS>).map(key => {
+            const item = DEMO_SCENARIOS[key];
+            const selected = key === activeScenario;
+            return (
+              <button
+                key={key}
+                id={`demo-tab-${key}`}
+                role="tab"
+                aria-selected={selected}
+                aria-controls={`demo-panel-${key}`}
+                onClick={() => setActiveScenario(key)}
+                className={clsx(
+                  "rounded-2xl border p-4 text-left transition duration-300",
+                  selected
+                    ? "border-amber-300 bg-amber-50 shadow-lg shadow-amber-500/10"
+                    : "border-slate-200 bg-white hover:border-amber-200 hover:bg-slate-50"
+                )}
+              >
+                <span className="flex items-center gap-3">
+                  <span className={clsx("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg", selected ? "bg-amber-400" : "bg-slate-100")}>{item.icon}</span>
+                  <span>
+                    <span className="block text-sm font-extrabold text-slate-900">{item.tab}</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-500">{item.tabDescription}</span>
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div
+          key={activeScenario}
+          id={`demo-panel-${activeScenario}`}
+          role="tabpanel"
+          aria-labelledby={`demo-tab-${activeScenario}`}
+          className="chat-msg-in mt-5 grid overflow-hidden rounded-[2rem] bg-slate-950 shadow-2xl shadow-slate-900/15 lg:grid-cols-[1.08fr_.92fr]"
+        >
+          <div className="relative border-b border-white/10 p-6 sm:p-9 lg:border-b-0 lg:border-r">
+            <div className="pointer-events-none absolute -left-20 -top-20 h-52 w-52 rounded-full bg-amber-400/10 blur-3xl" />
+            <div className="relative mx-auto max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-[#F5F1E8] shadow-xl">
+              <div className="flex items-center gap-3 border-b border-slate-100 bg-white px-4 py-3.5">
+                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-slate-950">
+                  <Image src="/brand/zelo-icon.png" alt="" width={24} height={24} />
+                </div>
+                <div className="flex-1">
+                  <p className="flex items-center gap-1 text-sm font-extrabold text-slate-900">Zelo <span className="text-sky-500">✓</span></p>
+                  <p className="text-[10px] font-medium text-emerald-600">online agora</p>
+                </div>
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">WhatsApp</span>
               </div>
-              <h3 className={`${heading.className} mt-7 text-xl font-bold text-slate-900`}>{step.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">{step.desc}</p>
-            </article>
-          ))}
+              <div className="space-y-3 p-4 sm:p-5">
+                <div className="flex justify-end">
+                  <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-[#d9fdd3] px-4 py-3 text-[13px] leading-relaxed text-slate-800 shadow-sm">
+                    {scenario.userMessage}
+                    <p className="mt-1 text-right text-[9px] text-slate-400">10:09 <span className="text-sky-500">✓✓</span></p>
+                  </div>
+                </div>
+                <div className="flex justify-start">
+                  <div className="max-w-[92%] rounded-2xl rounded-tl-sm border border-black/[0.03] bg-white px-4 py-3 text-[13px] leading-relaxed text-slate-800 shadow-sm">
+                    {scenario.response}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {scenario.tags.map(tag => <span key={tag} className="rounded-full border border-amber-300 px-2 py-0.5 text-[9px] font-bold text-amber-700">{tag}</span>)}
+                    </div>
+                    <p className="mt-1 text-right text-[9px] text-slate-400">10:09</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="relative mt-5 flex items-center justify-center gap-2 text-[11px] font-semibold text-slate-500">
+              <span>Você envia</span><span className="text-amber-400">→</span><span>a IA entende</span><span className="text-amber-400">→</span><span>o painel atualiza</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-center p-6 sm:p-9 lg:p-10">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-400">{scenario.resultLabel}</p>
+            <div className="mt-4 rounded-3xl border border-white/10 bg-white/[0.05] p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-lg font-extrabold text-white">{scenario.resultTitle}</p>
+                  <p className="mt-1 text-xs text-slate-400">{scenario.resultMeta}</p>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-sm font-black text-emerald-400">✓</span>
+              </div>
+              <p className={`${heading.className} mt-8 text-3xl font-extrabold text-white`}>{scenario.resultValue}</p>
+              <div className="mt-5 h-px bg-white/10" />
+              <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-slate-400"><span className="text-emerald-400">✓</span>{scenario.proof}</p>
+            </div>
+            <a href="#planos" className="mt-6 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 px-6 py-3.5 text-center text-sm font-extrabold text-slate-950 shadow-lg shadow-amber-500/10 transition hover:opacity-90">Quero organizar minha rotina →</a>
+            <p className="mt-3 text-center text-[11px] text-slate-500">Comece em poucos minutos · 7 dias de garantia</p>
+          </div>
         </div>
       </div>
     </section>
