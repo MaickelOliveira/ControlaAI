@@ -25,6 +25,7 @@ export type Appointment = {
   ataContent?: string;
   ataNotifiedAt?: string;
   reminderSentAt?: string;
+  reminder15MinSentAt?: string;
 };
 
 type Row = {
@@ -33,6 +34,7 @@ type Row = {
   status: AppointmentStatus; source: "whatsapp" | "web"; created_at: string;
   meet_link: string | null; calendar_event_id: string | null; ata_generated: boolean;
   ata_content: string | null; ata_notified_at: string | null; reminder_sent_at: string | null;
+  reminder_15min_sent_at: string | null;
 };
 
 function fromRow(r: Row): Appointment {
@@ -43,6 +45,7 @@ function fromRow(r: Row): Appointment {
     meetLink: r.meet_link ?? undefined, calendarEventId: r.calendar_event_id ?? undefined,
     ataGenerated: r.ata_generated, ataContent: r.ata_content ?? undefined,
     ataNotifiedAt: r.ata_notified_at ?? undefined, reminderSentAt: r.reminder_sent_at ?? undefined,
+    reminder15MinSentAt: r.reminder_15min_sent_at ?? undefined,
   };
 }
 
@@ -52,6 +55,7 @@ function toRowPatch(patch: Partial<Omit<Appointment, "id" | "userId" | "createdA
     endAt: "end_at", allDay: "all_day", repeat: "repeat", status: "status", source: "source",
     meetLink: "meet_link", calendarEventId: "calendar_event_id", ataGenerated: "ata_generated",
     ataContent: "ata_content", ataNotifiedAt: "ata_notified_at", reminderSentAt: "reminder_sent_at",
+    reminder15MinSentAt: "reminder_15min_sent_at",
   };
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) {
@@ -68,6 +72,7 @@ export async function createAppointment(data: Omit<Appointment, "id" | "createdA
     repeat: data.repeat, status: data.status, source: data.source, meet_link: data.meetLink,
     calendar_event_id: data.calendarEventId, ata_generated: data.ataGenerated ?? false,
     ata_content: data.ataContent, ata_notified_at: data.ataNotifiedAt, reminder_sent_at: data.reminderSentAt,
+    reminder_15min_sent_at: data.reminder15MinSentAt,
   };
   const { data: inserted, error } = await getSupabase().from("appointments").insert(row).select("*").single();
   if (error) throw new Error(`[agenda] createAppointment falhou: ${error.message}`);
@@ -149,6 +154,21 @@ export async function getAppointmentsNeedingReminder(): Promise<Appointment[]> {
     const startMs = new Date(a.startAt).getTime();
     const diff = startMs - now;
     return diff > 0 && diff <= hours2;
+  });
+}
+
+/** Segundo lembrete, independente do de 2h — compromissos que começam em
+ *  até 15min e ainda não receberam ESSE lembrete específico (reminder_sent_at
+ *  do lembrete de 2h não impede este, cada um tem sua própria coluna). */
+export async function getAppointmentsNeeding15MinReminder(): Promise<Appointment[]> {
+  const now = Date.now();
+  const min15 = 15 * 60_000;
+  const { data, error } = await getSupabase().from("appointments").select("*").eq("status", "scheduled").is("reminder_15min_sent_at", null);
+  if (error || !data) return [];
+  return (data as Row[]).map(fromRow).filter(a => {
+    const startMs = new Date(a.startAt).getTime();
+    const diff = startMs - now;
+    return diff > 0 && diff <= min15;
   });
 }
 

@@ -33,7 +33,7 @@ export default function AdminWhatsappPage() {
   const [testingWaba, setTestingWaba] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [testPhone, setTestPhone] = useState("");
-  const [testTemplate, setTestTemplate] = useState<"lembrete_pessoal" | "lembrete_compromisso" | "cobranca_recorrente">("lembrete_pessoal");
+  const [testTemplate, setTestTemplate] = useState<"lembrete_pessoal" | "lembrete_compromisso" | "lembrete_compromisso15" | "cobranca_recorrente">("lembrete_pessoal");
   const [testingTemplate, setTestingTemplate] = useState(false);
   const [testTemplateMsg, setTestTemplateMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
@@ -234,12 +234,13 @@ export default function AdminWhatsappPage() {
             </button>
 
             <div className="border-t border-slate-200 pt-3 mt-1">
-              <p className="text-[11px] text-slate-400 mb-2">Disparar um template real de teste (lembrete_pessoal, lembrete_compromisso, cobranca_recorrente) pra um número, pra confirmar que está disparando.</p>
+              <p className="text-[11px] text-slate-400 mb-2">Disparar um template real de teste (lembrete_pessoal, lembrete_compromisso, lembrete_compromisso15, cobranca_recorrente) pra um número, pra confirmar que está disparando.</p>
               <div className="flex gap-2 mb-2">
                 <select value={testTemplate} onChange={e => setTestTemplate(e.target.value as typeof testTemplate)}
                   className="bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-amber-500 transition">
                   <option value="lembrete_pessoal">lembrete_pessoal</option>
                   <option value="lembrete_compromisso">lembrete_compromisso</option>
+                  <option value="lembrete_compromisso15">lembrete_compromisso15</option>
                   <option value="cobranca_recorrente">cobranca_recorrente</option>
                 </select>
                 <input value={testPhone} onChange={e => setTestPhone(e.target.value.replace(/\D/g, ""))}
