@@ -6,6 +6,7 @@ import { checkConnection, getQrCode } from "@/lib/whatsapp";
 import { createOrRestartInstance } from "@/lib/evolution";
 import { sendTemplate } from "@/lib/waba";
 import { detectBotNumber } from "@/lib/bot-info";
+import { addMessage } from "@/lib/conversations";
 
 const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
 
@@ -123,6 +124,14 @@ export async function POST(req: NextRequest) {
     const params = template ? testParams[template] : undefined;
     if (!params) return NextResponse.json({ error: "Template inválido" }, { status: 400 });
     const result = await sendTemplate(phone, template!, "pt_BR", params);
+    // Esse envio chama waba.sendTemplate direto (não passa pela fachada
+    // src/lib/whatsapp.ts), então precisa logar no Inbox manualmente — senão
+    // a mensagem sai pro WhatsApp do destinatário mas nunca aparece na
+    // conversa dele no /admin/inbox.
+    if (result.ok) {
+      const preview = `🧪 Teste de template "${template}"\n${Object.entries(params).map(([k, v]) => `${k}: ${v}`).join("\n")}`;
+      await addMessage(phone, { role: "assistant", content: preview, ts: Date.now() });
+    }
     return NextResponse.json(result);
   }
 
