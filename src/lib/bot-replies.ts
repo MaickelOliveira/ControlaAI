@@ -362,11 +362,16 @@ export function replyAgendaDeleted(title: string): string {
   return `Cancelado — removi *${title}* da sua agenda.`;
 }
 
-export function replyAppointmentReminder(a: Appointment): string {
+/** `quando` é o texto livre de "daqui a quanto tempo" (ex: "2 horas",
+ *  "15 minutos") — usado tanto no lembrete de 2h quanto no de 15min, cada
+ *  um controlado por sua própria coluna em appointments (reminder_sent_at
+ *  vs reminder_15min_sent_at), então os dois podem disparar de forma
+ *  independente pro mesmo compromisso. */
+export function replyAppointmentReminder(a: Appointment, quando: string): string {
   const dateTime = formatDateTimeBR(a.startAt);
   const locationLine = a.location ? `\n📍 ${a.location}` : "";
   const meetLine = a.meetLink ? `\n🔗 ${a.meetLink}` : "";
-  return `⏰ Passando para lembrar — daqui a 2 horas você tem:\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}${meetLine}`;
+  return `⏰ Passando para lembrar — daqui a ${quando} você tem:\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}${meetLine}`;
 }
 
 type MeetLike = {

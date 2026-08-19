@@ -194,6 +194,7 @@ create table if not exists appointments (
   ata_content text,
   ata_notified_at timestamptz,
   reminder_sent_at timestamptz,
+  reminder_15min_sent_at timestamptz,
   created_at timestamptz not null default now()
 );
 create index if not exists appointments_user_idx on appointments(user_id);
@@ -426,8 +427,7 @@ create table if not exists billing_webhooks (
   deactivate_values jsonb not null default '[]',
   plan_path text,
   plan_map jsonb,
-  created_at timestamptz not null default now(),
-  last_attempt jsonb
+  created_at timestamptz not null default now()
 );
 
 -- dedup de webhook (mensagens já processadas) — substitui

@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
     const testParams: Record<string, Record<string, string>> = {
       lembrete_pessoal: { lembrete: "Teste de disparo do Zelo 🔔" },
       lembrete_compromisso: { compromisso: "Compromisso de teste", horario: "14:30" },
+      lembrete_compromisso15: { compromisso: "Compromisso de teste", horario: "14:30" },
       cobranca_recorrente: { descricao: "Teste de cobrança", valor: "R$ 99,90", data: new Date().toLocaleDateString("pt-BR") },
     };
     const params = template ? testParams[template] : undefined;
