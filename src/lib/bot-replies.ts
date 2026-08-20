@@ -248,11 +248,11 @@ export function replyOnboardingDone(name: string, plan: string): string {
 }
 
 export function replyTrialExpired(): string {
-  return `Seu acesso ainda não está ativo.\n\nPara eu continuar cuidando das suas finanças e da sua agenda, escolha um plano no site:\n🌐 controlaai.app/#planos`;
+  return `Seu acesso ainda não está ativo.\n\nPara eu continuar cuidando das suas finanças e da sua agenda, escolha um plano no site:\n🌐 zelogestaointeligente.com.br/#planos`;
 }
 
 export function replyAccountInactive(): string {
-  return `Sua conta está inativa no momento.\n\nPara voltar a usar o Zelo, regularize sua assinatura no painel:\n🌐 controlaai.app/planos`;
+  return `Sua conta está inativa no momento.\n\nPara voltar a usar o Zelo, regularize sua assinatura no painel:\n🌐 zelogestaointeligente.com.br/planos`;
 }
 
 export function buildRecurringNotification(r: RecurringTransaction): string {
