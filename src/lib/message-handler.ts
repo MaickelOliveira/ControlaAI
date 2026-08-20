@@ -4,7 +4,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, getFinancesInRange } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
@@ -28,7 +28,7 @@ import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused } from "@/lib/conversations";
-import { nowBR, spToUTC, todayStrBR, formatDateTimeBR } from "@/lib/date-br";
+import { nowBR, spToUTC, todayStrBR, formatDateTimeBR, dateStrBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
@@ -41,6 +41,7 @@ import {
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
   replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
   replyCustomerList, replyCustomerInfo, replyCustomerUpdated, replyCustomerDeactivated,
+  replyDailySummary, detectHelpCategory,
 } from "@/lib/bot-replies";
 
 export function phoneMatches(stored: string, incoming: string): boolean {
@@ -109,6 +110,40 @@ async function performAddMeet(appt: Appointment, userId: string, from: string): 
     console.error("[agenda_add_meet]", e);
     await wppSend(from, `❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.`);
   }
+}
+
+/** "resuma meu dia" — agrega contas, recorrentes ainda não confirmados,
+ *  lembretes, compromissos e tarefas de HOJE nos dois modos (pessoal +
+ *  empresa) numa única mensagem. Mostra os dois modos juntos (não só o
+ *  ativo) porque agenda não tem conceito de modo, e uma conta empresarial
+ *  vencendo hoje não pode sumir silenciosamente só por causa do modo ativo
+ *  no momento em que a pessoa pergunta. */
+async function sendDailySummary(from: string, userId: string, personName?: string): Promise<void> {
+  const today = todayStrBR();
+  const [billsP, billsB, recP, recB, remP, remB, apts, taskP, taskB] = await Promise.all([
+    getFinancesInRange(userId, "personal", today, today),
+    getFinancesInRange(userId, "business", today, today),
+    getRecurringByUser(userId, "personal", "active"),
+    getRecurringByUser(userId, "business", "active"),
+    getRemindersByUser(userId, "personal"),
+    getRemindersByUser(userId, "business"),
+    getUpcomingAppointments(userId, 1),
+    getPendingTasks(userId, "personal"),
+    getPendingTasks(userId, "business"),
+  ]);
+  const dueRecurring = (items: typeof recP) => items.filter(r => r.nextDueDate === today);
+  const dueReminders = (items: typeof remP) => items.filter(r => dateStrBR(r.scheduledAt) === today);
+  const dueTasks = (items: typeof taskP) => items.filter(t => t.dueDate === today);
+
+  await wppSend(from, replyDailySummary({
+    personName,
+    dateLabel: new Date(today + "T12:00:00").toLocaleDateString("pt-BR"),
+    billsToday: { personal: billsP, business: billsB },
+    recurringToday: { personal: dueRecurring(recP), business: dueRecurring(recB) },
+    remindersToday: { personal: dueReminders(remP), business: dueReminders(remB) },
+    appointmentsToday: apts,
+    tasksToday: { personal: dueTasks(taskP), business: dueTasks(taskB) },
+  }));
 }
 
 // Label do modo (pessoal/empresa) pra deixar claro em listas e confirmações
@@ -1235,12 +1270,25 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         let recipientType: "self" | "customer" | "employee" | "other" = "self";
         let recipientName: string | undefined;
 
+        const recipientPhoneRaw = ai.reminder.recipientPhone?.replace(/\D/g, "");
         const recipientQuery = ai.reminder.recipientName;
-        if (recipientQuery) {
-          // Assessor notifica por você: se o pedido citar outra pessoa, resolve
-          // o telefone real dela (cliente → funcionário → número da família
-          // já vinculado) antes de agendar — sem isso, todo lembrete ia sempre
-          // pro número de quem mandou a mensagem.
+
+        if (recipientPhoneRaw) {
+          // Telefone dito diretamente: usa DIRETO, sem exigir que a pessoa
+          // esteja cadastrada como cliente/funcionário/vinculado — cadastro só
+          // é exigido de quem precisa acessar a plataforma de verdade (lançar
+          // finanças etc), não pra receber um lembrete avulso.
+          if (recipientPhoneRaw.length < 10 || recipientPhoneRaw.length > 13) {
+            await wppSend(from, `❓ O número *${ai.reminder.recipientPhone}* não parece completo. Me manda com DDD, ex: _"lembra o 44999998888 às 15h..."_`);
+            break;
+          }
+          targetPhone = recipientPhoneRaw;
+          recipientType = "other";
+          recipientName = recipientQuery ? cap(recipientQuery) : recipientPhoneRaw;
+        } else if (recipientQuery) {
+          // Sem telefone direto: resolve pelo nome (cliente → funcionário →
+          // número da família já vinculado) antes de agendar — sem isso, todo
+          // lembrete ia sempre pro número de quem mandou a mensagem.
           const customer = await findCustomerByName(user.id, recipientQuery);
           const employee = await findEmployeeByName(user.id, recipientQuery);
           const linkedPhone = await findPhoneByName(user.id, recipientQuery);
@@ -1252,7 +1300,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           } else if (linkedPhone) {
             targetPhone = linkedPhone; recipientType = "other"; recipientName = recipientQuery;
           } else {
-            await wppSend(from, `❓ Não encontrei *${cap(recipientQuery)}* com telefone cadastrado. Cadastre o contato (cliente, funcionário ou número da família) antes de criar esse lembrete pra ele, ou peça de novo sem citar ninguém pra lembrar você mesmo.`);
+            await wppSend(from, `❓ Não encontrei *${cap(recipientQuery)}* com telefone cadastrado. Cadastre o contato (cliente, funcionário ou número da família), ou me diga o número diretamente — ex: _"lembra ${recipientQuery}, número 44999998888, às 15h..."_`);
             break;
           }
         }
@@ -1918,24 +1966,33 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "daily_summary": {
+        await sendDailySummary(from, user.id, user.name);
+        break;
+      }
+
       case "how_to": {
         if (ai.response) {
           await wppSend(from, ai.response);
         } else {
-          await wppSend(from, replyHelp());
+          await wppSend(from, replyHelp(detectHelpCategory(messageText)));
         }
         break;
       }
 
       case "help": {
-        await wppSend(from, replyHelp());
+        await wppSend(from, replyHelp(detectHelpCategory(messageText)));
         break;
       }
 
       default: {
         const lower = messageText.toLowerCase();
         if (lower.includes("ajuda") || lower === "?") {
-          await wppSend(from, replyHelp());
+          await wppSend(from, replyHelp(detectHelpCategory(messageText)));
+        } else if ((lower.includes("resum") || lower.includes("organiz")) && (lower.includes("dia") || lower.includes("hoje"))) {
+          // Precisa vir ANTES do check de "saldo"/"resumo" abaixo — "resumo do
+          // dia" contém literalmente a palavra "resumo" e cairia lá por engano.
+          await sendDailySummary(from, user.id, user.name);
         } else if (lower.includes("saldo") || lower.includes("resumo")) {
           const personal = await getBalance(user.id, "personal", year, month);
           const business = await getBalance(user.id, "business", year, month);

@@ -62,6 +62,7 @@ export type Intent =
   | "customer_query"
   | "customer_update"
   | "customer_deactivate"
+  | "daily_summary"
   | "how_to"
   | "help"
   | "unknown";
@@ -119,6 +120,10 @@ export type ReminderData = {
   repeat?: "none" | "daily" | "weekly" | "monthly";
   mode?: "personal" | "business"; // detectado automaticamente
   recipientName?: string; // nome de quem deve RECEBER o lembrete, se não for pra quem está pedindo (ex: "Milena", "equipe", "cliente Carlos") — ausente = lembrete pra quem está mandando a mensagem
+  recipientPhone?: string; // telefone dito diretamente na mensagem para quem deve RECEBER o lembrete,
+  // nos dígitos exatamente como a pessoa falou (não invente nem complete dígitos que faltarem).
+  // Presente = usa DIRETO, sem exigir que a pessoa já esteja cadastrada como cliente/funcionário/
+  // vinculado — pode vir sozinho ou junto com recipientName.
 };
 
 export type MeetData = {
@@ -341,7 +346,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular).
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
-- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
+- finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ "resumo do MÊS" (ou sem período claro) é finance_query; "resumo do DIA"/"resumo de hoje" é daily_summary — nunca confunda os dois. Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
   ⚠️ DISTINÇÃO IMPORTANTE — categoria genérica vs comerciante/app específico:
   • CATEGORIA/ASSUNTO amplo (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"): inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA (no início da mensagem) (ex: "comida"/"mercado"/"restaurante" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte").
   • COMERCIANTE/APP/MARCA específico (ex: "quanto gastei com ifood", "gastos no aiqfome", "quanto gastei no 99", "gasto com uber eats", "quanto gastei na farmácia X"): inclua "keyword" com o nome do comerciante (NÃO use "category" nesse caso — a descrição do lançamento pode estar abreviada, ex: "IFD" em vez de "iFood", e o sistema já sabe expandir essas variantes a partir do "keyword").
@@ -354,7 +359,11 @@ INTENÇÕES POSSÍVEIS:
 - task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título) pra identificar qual.
 - task_delete: apagar/excluir uma tarefa ("apaga a tarefa 3", "remove a tarefa de ligar pro cliente", "deleta essa tarefa"). Use "taskNumber" ou "title" igual ao task_update.
 - task_query: listar tarefas
-- reminder_set: criar lembrete agendado. ⚠️ Se a mensagem pedir pra avisar/lembrar OUTRA PESSOA em vez de quem está mandando a mensagem (ex: "lembra a Milena de pagar amanhã às 10h", "avisa o cliente Carlos que a reunião é sexta", "manda um lembrete pra equipe às 9h", "lembra o João de ligar pro fornecedor"), inclua "reminder.recipientName" com o nome citado (ex: "Milena", "Carlos", "equipe", "João"). Sem menção a outra pessoa, NÃO inclua "recipientName" — o lembrete é pra quem está mandando a mensagem, como sempre.
+- reminder_set: criar lembrete agendado. ⚠️ Se a mensagem pedir pra avisar/lembrar OUTRA PESSOA em vez de quem está mandando a mensagem:
+  • Se a mensagem citar um NÚMERO DE TELEFONE diretamente para quem deve receber (ex: "lembra o 44999998888 às 15h de buscar o pedido", "manda um aviso pro 44 98888-7777 amanhã às 9h"), inclua "reminder.recipientPhone" com os dígitos exatamente como foram ditos (mantenha o DDD; inclua o DDI 55 só se o usuário disser; NUNCA invente ou complete dígitos que faltarem). Isso vale MESMO que a pessoa não esteja cadastrada como cliente/funcionário/número vinculado — não é necessário cadastro pra receber um lembrete avulso.
+  • Se a mensagem citar só um NOME, sem número (ex: "lembra a Milena de pagar amanhã às 10h", "avisa o cliente Carlos que a reunião é sexta", "manda um lembrete pra equipe às 9h", "lembra o João de ligar pro fornecedor"), inclua "reminder.recipientName" com o nome citado — o sistema tenta achar o telefone dela entre clientes, funcionários e números da família já vinculados.
+  • Se a mensagem citar NOME E TELEFONE juntos (ex: "lembra a Maria, número 44988887777, de pagar amanhã"), inclua AMBOS "recipientName" (pra saudação, "vou avisar a Maria") E "recipientPhone" (o telefone é usado direto, sem depender de cadastro).
+  Sem menção a outra pessoa (nem nome nem telefone), NÃO inclua nenhum dos dois campos — o lembrete é pra quem está mandando a mensagem, como sempre.
 - reminder_list: listar lembretes ativos ("meus lembretes", "quais lembretes eu tenho", "o que eu tenho agendado pra me avisar")
 - reminder_update: editar um lembrete existente — mensagem, data/hora ou repetição ("muda o lembrete do remédio pra 8h", "troca o lembrete da conta de luz pra todo dia 5"). Use "keyword" com o termo de busca e "reminder" com os novos valores (só os campos que mudaram).
 - reminder_delete: cancelar/apagar um lembrete ("cancela o lembrete do remédio", "apaga o lembrete da reunião", "não precisa mais me lembrar disso"). Use "keyword" com o termo de busca.
@@ -376,7 +385,7 @@ INTENÇÕES POSSÍVEIS:
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
 - agenda_create: agendar um compromisso, reunião, consulta ou evento com data e hora ("agendar reunião amanhã às 14h", "consulta médica sexta às 10h", "evento no sábado às 9h"). Use "agendaData" com título, startDate, startTime e opcionalmente location, description, endDate, endTime, repeat, allDay (true se for um evento de dia inteiro, sem horário específico, ex: "aniversário dia 15" sem hora).
-- agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
+- agenda_list: ver os próximos compromissos agendados ("meus compromissos", "o que tenho essa semana", "próximos eventos"). ⚠️ Se a mensagem mencionar especificamente "hoje" junto com agenda/resumo (ex: "agenda de hoje", "minha agenda de hoje"), é daily_summary, não agenda_list — daily_summary já inclui os compromissos de hoje, junto com contas, lembretes e tarefas.
 - agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: "reunião", "consulta") — NUNCA inclua dia/data/hora no keyword, já que a busca compara com o título salvo (que não tem essas palavras) e um keyword mais longo que o título nunca bate. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
 - agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "reagendar a reunião para segunda às 10h" extraia keyword: "reunião", NÃO "reunião para segunda") e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
 - agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "apaga o compromisso de sexta" extraia keyword: "compromisso", NÃO "compromisso de sexta"; de "cancelar a reunião de amanhã" extraia "reunião", NÃO "reunião de amanhã").
@@ -404,8 +413,9 @@ INTENÇÕES POSSÍVEIS:
 - customer_update: alterar dados de um cliente existente ("muda o telefone do Pedro", "atualiza o email da Maria"). Use "keyword" com o nome e "customer" com os campos novos.
 - customer_deactivate: desativar/remover um cliente ("remove o cliente Pedro", "esse cliente não compra mais comigo"). Use "keyword" com o nome.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
+- daily_summary: pedir um resumo geral do dia — tudo que a pessoa tem previsto/pendente pra HOJE (contas a pagar/receber, lembretes, compromissos, tarefas) de uma vez só ("resuma meu dia", "resumo do dia", "o que eu tenho pra hoje", "organize meu dia", "minha agenda de hoje", "o que tá previsto pra hoje"). Sem campos extras — só o intent.
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos"). Nesse caso, escreva uma explicação clara e amigável no campo "response".
-- help: pedir lista de comandos ("ajuda", "help", "o que você faz")
+- help: pedir lista de comandos ("ajuda", "help", "o que você faz", "ajuda financeiro", "ajuda mercado", "ajuda agenda" — qualquer "ajuda [algo]" continua sendo intent "help", o sistema decide a categoria certa depois a partir do texto, você só precisa reconhecer que é um pedido de ajuda)
 - unknown: não identificado
 
 ⚠️ REGRA CRÍTICA — tipo income vs expense:
@@ -629,9 +639,40 @@ OU para lembrete pra OUTRA pessoa ("lembra a Milena de pagar amanhã às 10h"):
   }
 }
 
+OU para lembrete direto a um TELEFONE não cadastrado ("lembra o 44999998888 às 15h de buscar o pedido"):
+{
+  "intent": "reminder_set",
+  "confidence": 0.9,
+  "reminder": {
+    "message": "Buscar o pedido",
+    "scheduledAt": "2026-07-06T15:00:00",
+    "repeat": "none",
+    "recipientPhone": "44999998888"
+  }
+}
+
+OU para lembrete com NOME e TELEFONE juntos ("lembra a Maria, número 44988887777, de pagar amanhã às 10h"):
+{
+  "intent": "reminder_set",
+  "confidence": 0.9,
+  "reminder": {
+    "message": "Pagar",
+    "scheduledAt": "2026-07-06T10:00:00",
+    "repeat": "none",
+    "recipientName": "Maria",
+    "recipientPhone": "44988887777"
+  }
+}
+
 OU para listar lembretes ("meus lembretes"):
 {
   "intent": "reminder_list",
+  "confidence": 0.9
+}
+
+OU para resumo do dia ("resuma meu dia", "o que eu tenho pra hoje"):
+{
+  "intent": "daily_summary",
   "confidence": 0.9
 }
 
