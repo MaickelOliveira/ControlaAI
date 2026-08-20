@@ -12,6 +12,14 @@ export function todayStrBR(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(new Date());
 }
 
+/** Data (YYYY-MM-DD) em SP de um timestamp UTC ISO — usado pra comparar
+ *  campos como scheduledAt (lembretes, armazenados em UTC) contra
+ *  todayStrBR(); um slice(0,10) ingênuo no ISO erraria perto da virada
+ *  do dia (ex: 23h SP já é dia seguinte em UTC). */
+export function dateStrBR(utcISO: string): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(new Date(utcISO));
+}
+
 /** Horário atual em SP no formato HH:MM */
 export function nowTimeBR(): string {
   return new Date().toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });

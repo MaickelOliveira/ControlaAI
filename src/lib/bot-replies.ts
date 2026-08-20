@@ -6,7 +6,7 @@ import type { Appointment } from "./agenda";
 import { formatCurrency } from "./finances";
 import { PRIORITY_LABEL, formatDueDate } from "./tasks";
 import type { UserMode } from "./users";
-import { formatDateBR, formatDateTimeBR } from "./date-br";
+import { formatDateBR, formatDateTimeBR, formatTimeBR } from "./date-br";
 import type { ShoppingListItem, GroceryPurchase } from "./grocery";
 import type { Employee } from "./employees";
 import type { Customer } from "./customers";
@@ -119,109 +119,259 @@ export function replyModeSwitch(mode: UserMode): string {
   return "Certo, voltamos ao modo *Pessoal*. 👤\nSeus próximos registros entram como finanças e tarefas pessoais.";
 }
 
-export function replyHelp(): string {
-  return `*Zelo — seu assessor pessoal*
+export type DailySummaryData = {
+  personName?: string;
+  dateLabel: string; // ex: "18/08"
+  billsToday: { personal: Finance[]; business: Finance[] };
+  recurringToday: { personal: RecurringTransaction[]; business: RecurringTransaction[] };
+  remindersToday: { personal: Reminder[]; business: Reminder[] };
+  appointmentsToday: Appointment[]; // sem mode — agenda é unificada
+  tasksToday: { personal: Task[]; business: Task[] };
+};
 
-Fale comigo naturalmente, como falaria com alguém de confiança que cuida das suas coisas. Aqui está tudo que posso fazer por você:
+export function replyDailySummary(data: DailySummaryData): string {
+  const { personName, dateLabel, billsToday, recurringToday, remindersToday, appointmentsToday, tasksToday } = data;
+  const tag = (m: "personal" | "business") => (m === "business" ? " 🏢" : " 👤");
 
-━━━━━━━━━━━━━━━
-💰 *REGISTRAR DINHEIRO*
-Me conte o que aconteceu que eu anoto:
+  const totalItems =
+    billsToday.personal.length + billsToday.business.length +
+    recurringToday.personal.length + recurringToday.business.length +
+    remindersToday.personal.length + remindersToday.business.length +
+    appointmentsToday.length +
+    tasksToday.personal.length + tasksToday.business.length;
+
+  const greeting = personName ? `Bom dia, ${personName}! ☀️` : "Bom dia! ☀️";
+  if (totalItems === 0) {
+    return `${greeting}\n\n📅 *${dateLabel}* — hoje tá tranquilo, nada previsto. Aproveite! 🌿`;
+  }
+
+  let msg = `${greeting}\n\n📅 *Seu dia — ${dateLabel}:*\n`;
+
+  const bills = [...billsToday.personal.map(f => ({ f, mode: "personal" as const })), ...billsToday.business.map(f => ({ f, mode: "business" as const }))];
+  const recs = [...recurringToday.personal.map(r => ({ r, mode: "personal" as const })), ...recurringToday.business.map(r => ({ r, mode: "business" as const }))];
+  if (bills.length || recs.length) {
+    msg += `\n💰 *Contas de hoje:*\n`;
+    bills.forEach(({ f, mode }) => {
+      const emoji = f.type === "income" ? "💰" : "💸";
+      msg += `• ${emoji} ${f.description} — ${formatCurrency(f.amount)}${tag(mode)}\n`;
+    });
+    recs.forEach(({ r, mode }) => {
+      msg += `• 🔁 ${r.description} — ${formatCurrency(r.amount)}${tag(mode)} _(recorrente, ainda não confirmado)_\n`;
+    });
+  }
+
+  const reminders = [...remindersToday.personal.map(r => ({ r, mode: "personal" as const })), ...remindersToday.business.map(r => ({ r, mode: "business" as const }))];
+  if (reminders.length) {
+    msg += `\n🔔 *Lembretes de hoje:*\n`;
+    reminders.forEach(({ r, mode }) => {
+      const timeStr = formatTimeBR(r.scheduledAt);
+      const para = r.recipientType !== "self" && r.recipientName ? ` _(pra ${r.recipientName})_` : "";
+      msg += `• ${timeStr} — ${r.message}${para}${tag(mode)}\n`;
+    });
+  }
+
+  if (appointmentsToday.length) {
+    msg += `\n🗓️ *Compromissos de hoje:*\n`;
+    appointmentsToday.forEach(a => {
+      const timeStr = a.allDay ? "dia todo" : formatTimeBR(a.startAt);
+      const local = a.location ? ` — 📍 ${a.location}` : "";
+      msg += `• ${timeStr} — ${a.title}${local}\n`;
+    });
+  }
+
+  const tasks = [...tasksToday.personal.map(t => ({ t, mode: "personal" as const })), ...tasksToday.business.map(t => ({ t, mode: "business" as const }))];
+  if (tasks.length) {
+    msg += `\n📋 *Tarefas de hoje:*\n`;
+    tasks.forEach(({ t, mode }) => {
+      const pr = t.priority === "high" ? "⚡" : t.priority === "medium" ? "🟡" : "⚪";
+      msg += `• ${pr} ${t.title}${tag(mode)}\n`;
+    });
+  }
+
+  return msg.trim();
+}
+
+export type HelpCategory = "financeiro" | "mercado" | "tarefas" | "agenda" | "empresa" | "arquivos" | "contatos";
+
+const HELP_CATEGORY_KEYWORDS: Record<HelpCategory, string[]> = {
+  financeiro: ["financeiro", "dinheiro", "financas", "finanças", "gasto", "receita", "saldo", "extrato", "parcela", "conta fixa", "veiculo", "veículo", "carro"],
+  mercado: ["mercado", "compra", "supermercado", "lista de compras"],
+  tarefas: ["tarefa", "lembrete", "meta", "metas"],
+  agenda: ["agenda", "compromisso", "reuniao", "reunião", "meet", "video", "vídeo"],
+  empresa: ["empresa", "funcionario", "funcionário", "cliente", "empresarial", "equipe"],
+  arquivos: ["arquivo", "drive", "documento"],
+  contatos: ["contato", "vincular", "vinculo", "vínculo", "acesso", "outro numero", "outro número"],
+};
+
+/** Decide qual seção de ajuda mostrar a partir do texto cru da mensagem (ex:
+ *  "ajuda financeiro" → categoria "financeiro"). Sem categoria = menu geral.
+ *  Mesmo padrão de correspondência por palavra-chave já usado pro atalho de
+ *  "ajuda"/"?" e pro regex de vínculo de número — não depende de um campo
+ *  estruturado novo da IA. */
+export function detectHelpCategory(text: string): HelpCategory | undefined {
+  const lower = text.toLowerCase();
+  for (const [cat, keywords] of Object.entries(HELP_CATEGORY_KEYWORDS)) {
+    if (keywords.some(k => lower.includes(k))) return cat as HelpCategory;
+  }
+  return undefined;
+}
+
+const HELP_MENU = `*Zelo — seu assessor pessoal*
+
+Fale comigo naturalmente, como falaria com alguém de confiança que cuida das suas coisas. Pra ver o que eu faço em cada área, digite:
+
+💰 *ajuda financeiro* — registrar, corrigir, parcelas, veículo, saldo e extrato
+🛒 *ajuda mercado* — lista de compras, comparar preços, registrar compra
+📋 *ajuda tarefas* — tarefas, lembretes (inclusive pra outras pessoas) e metas
+🗓️ *ajuda agenda* — compromissos e reuniões por vídeo (Meet)
+🏢 *ajuda empresa* — funcionários, clientes e modo empresa/pessoal
+📁 *ajuda arquivos* — guardar e buscar documentos no Drive
+👥 *ajuda contatos* — dar acesso à sua conta pra outra pessoa
+
+A qualquer momento, digite *resuma meu dia* pra ver tudo que você tem previsto hoje — contas, lembretes, compromissos e tarefas, de uma vez só.
+
+💡 Se eu não tiver certeza do que você quis dizer, eu pergunto antes de fazer qualquer coisa — nunca ajo no escuro.
+
+Ou me pergunte do seu jeito, sem comando decorado — eu entendo linguagem natural.`;
+
+const HELP_SECTIONS: Record<HelpCategory, string> = {
+  financeiro: `💰 *FINANCEIRO*
+
+*Registrar:*
 • _"Gastei 50 no mercado"_ → despesa registrada
-• _"Paguei 120 de conta de luz"_ → despesa registrada
 • _"Recebi 2000 de salário"_ → receita registrada
-• _"Entrou 500 de freela"_ → receita registrada
-📸 Também aceito foto de nota fiscal ou boleto — registro sozinho.
+• _"Gastei 50 no Nubank"_ → registro já na conta/cartão certo
+• _"Comprei uma passagem 800 pro dia 20"_ → fica agendado, só entra no saldo quando a data chegar
+📸 Também aceito foto de nota fiscal, boleto, cupom fiscal ou comprovante — registro sozinho.
 
-━━━━━━━━━━━━━━━
-📊 *VER SEUS NÚMEROS*
-• _"Meu saldo"_ → quanto entrou e saiu no mês
-• _"Extrato"_ → seus últimos lançamentos
+*Ver seus números* ("extrato" = seu histórico de lançamentos):
+• _"Meu saldo"_ / _"Extrato"_ → resumo e últimos lançamentos do mês
 • _"Extrato detalhado"_ → cada gasto separado por categoria
-• _"No que gastei mais?"_ → uma análise com dicas
-• _"Extrato detalhado da empresa"_ → gastos da conta empresa
+• _"No que gastei mais?"_ → análise com dicas
+• _"Quanto gastei com ifood"_ → total por um gasto/categoria específica
+• _"Extrato do mês passado"_ → qualquer período, não só o atual
+• _"Quanto a Ana gastou"_ → filtra só pelo que uma pessoa da família/equipe registrou (se ela tiver o número dela vinculado — veja *ajuda contatos*)
 
-━━━━━━━━━━━━━━━
-✏️ *CORRIGIR OU APAGAR*
-Errou um valor? Sem problema, eu ajusto:
+*Corrigir ou apagar:*
 • _"Corrige o ifood para 80 reais"_ → altero o valor
 • _"Muda a categoria do mercado para Lazer"_ → altero a categoria
-• _"Apaga o gasto do ifood"_ → removo o lançamento
+• _"Corrige o nome do lançamento X para Y"_ → renomeio
+• _"Apaga o gasto do ifood"_ → removo
+• _"Já paguei aquela conta que agendei"_ → confirmo um lançamento futuro antes da data
 
-━━━━━━━━━━━━━━━
-💳 *PARCELAS E CONTAS FIXAS*
-Para compras parceladas ou contas que se repetem:
+*Fatura ou extrato bancário com vários lançamentos:* me envie a foto/PDF — eu extraio cada compra individual e confirmo antes de importar.
+
+*Parcelas e contas fixas:*
 • _"Comprei geladeira 5000 em 10x de 500"_ → cadastro as parcelas
-• _"Pago netflix 55 todo mês"_ → cadastro a conta mensal
-• _"Recebo aluguel todo dia 5, 1200"_ → receita mensal
-• _"Minhas parcelas"_ → todas as contas e parcelas ativas
-• _"Cancela o netflix"_ → paro de acompanhar
-• _"Muda o netflix para 65"_ → atualizo o valor
+• _"Pago netflix 55 todo mês"_ → conta mensal
+• _"Minhas parcelas"_ → tudo que está ativo
+• _"Cancela o netflix"_ / _"Muda o netflix para 65"_
 Eu aviso automaticamente no dia do vencimento. 🔔
 
-━━━━━━━━━━━━━━━
-🚗 *GASTOS COM VEÍCULO*
-Se você tem carro ou moto cadastrado no painel:
-• _"Abasteci 80 reais"_ → registro combustível
-• _"Paguei 300 de revisão no carro"_ → manutenção
-• _"Seguro do carro 1200"_ → seguro
-• _"Paguei 800 de IPVA"_ → imposto
+*Veículo* (se tiver carro/moto cadastrado no painel):
+• _"Abasteci 80 reais"_ / _"Paguei 300 de revisão"_ / _"Seguro do carro 1200"_ / _"Paguei 800 de IPVA"_
+• _"Gastos do carro"_ → total já gasto com ele`,
 
-━━━━━━━━━━━━━━━
-📋 *TAREFAS*
-• _"Criar tarefa: ligar pro João amanhã"_ → crio a tarefa
+  mercado: `🛒 *LISTA DE COMPRAS E MERCADO*
+
+*Lista de compras:*
+• _"Põe arroz na lista"_ → adiciono
+• _"Adiciona leite e ovos na lista de compras"_ → vários de uma vez
+• _"Quero a lista de carnes"_ → adiciono um grupo pronto (mercearia, carnes, hortifruti, laticínios, padaria, bebidas, higiene, limpeza)
+• _"O que tem na lista"_ → mostro tudo
+• _"Comprei o arroz"_ → risco da lista
+• _"Gera uma lista básica de mercearia"_ → eu sugiro o que comprar
+
+*Registrar a compra:*
+• _"Comprei no Assaí: arroz 25, feijão 8, leite 6"_ → registro item por item
+• _"Finalizei a compra no Assaí, foi 120 reais"_ → fecho a partir do que já estava marcado na lista
+📸 Foto do cupom fiscal também funciona — eu leio os itens sozinho.
+
+*Comparar preços e histórico:*
+• _"Onde o leite tá mais barato"_ → comparo entre os mercados que você já comprou
+• _"Qual mercado é mais barato pra mim"_ → ranking geral
+• _"O que comprei no mercado esse mês"_ → lista de compras passadas
+• _"Quanto gastei no mercado esse mês"_ → só o total, sem listar item por item`,
+
+  tarefas: `📋 *TAREFAS, LEMBRETES E METAS*
+
+*Tarefas:*
+• _"Criar tarefa: ligar pro João amanhã"_ → crio
 • _"Minhas tarefas"_ → o que está pendente
-• _"Concluir 1"_ → marco a tarefa número 1 como feita
-• _"Tarefa 2 em andamento"_ → atualizo o status
+• _"Concluir 1"_ / _"Tarefa 2 em andamento"_ → atualizo o status
+• _"Apaga a tarefa 3"_ → removo
 
-━━━━━━━━━━━━━━━
-🔔 *LEMBRETES*
-Eu te aviso na hora certa:
+*Lembretes* — eu aviso na hora certa, pra você ou pra outra pessoa:
 • _"Me lembra de pagar conta sexta às 9h"_ → aviso único
-• _"Todo mês dia 5 me lembra de pagar aluguel"_ → aviso mensal
-• _"Todo dia às 8h me lembra de tomar remédio"_ → aviso diário
+• _"Todo dia às 8h me lembra de tomar remédio"_ → aviso diário/mensal
+• _"Lembra o 44999998888 às 15h de buscar o pedido"_ → manda o aviso pra QUALQUER número direto, sem precisar cadastrar a pessoa antes
+• _"Lembra a Maria, número 44988887777, de pagar amanhã"_ → nome + telefone juntos
+• _"Lembra a Milena de pagar amanhã"_ (sem número) → eu procuro o telefone dela entre seus clientes, funcionários ou números da família já vinculados (veja *ajuda contatos*)
 
-━━━━━━━━━━━━━━━
-🎯 *METAS*
-Quer juntar dinheiro para algo? Eu acompanho pra você:
+*Metas* — quer juntar dinheiro pra algo?
 • _"Quero guardar 5000 para viagem até dezembro"_ → crio a meta
 • _"Adicionei 300 na meta viagem"_ → atualizo o progresso
 • _"Minhas metas"_ → como está cada uma
-• _"Meta viagem concluída"_ → marco como atingida
+• _"Meta viagem concluída"_ / _"Cancela a meta da viagem"_`,
 
-━━━━━━━━━━━━━━━
-🗓️ *AGENDA*
-• _"Agendar reunião amanhã às 14h"_ → crio o compromisso
+  agenda: `🗓️ *AGENDA E REUNIÕES*
+
+*Compromissos:*
+• _"Agendar reunião amanhã às 14h"_ → crio
 • _"Consulta médica sexta às 10h no Hospital X"_ → com local
 • _"Meus compromissos"_ → o que está agendado
 • _"Reagendar reunião para segunda às 10h"_ → mudo o horário
-• _"Cancela a consulta de sexta"_ → removo
+• _"Já fiz a reunião de ontem"_ → marco como realizado (fica no histórico)
+• _"Cancela a consulta de sexta"_ → removo de vez
 
-━━━━━━━━━━━━━━━
-🎥 *REUNIÃO POR VÍDEO (Google Meet)*
-Eu crio o link e aviso os participantes:
+*Reunião por vídeo (Google Meet)* — eu crio o link e aviso os participantes:
 • _"Criar meet amanhã às 14h com João 11999999999"_
 • _"Meet sexta às 15h com maria@empresa.com por 2 horas"_
-• _"Adiciona meet na reunião de segunda"_ → coloco o link no compromisso existente
-Quem tem WhatsApp vinculado recebe o convite automaticamente.
+• _"Adiciona meet na reunião de segunda"_ → coloco o link num compromisso já existente
+Quem tem WhatsApp vinculado à sua conta recebe o convite automaticamente. Depois que a reunião termina, eu te peço um resumo (áudio ou texto) e já gero a ata com as decisões e tarefas — sem comando nenhum, eu que pergunto.`,
 
-━━━━━━━━━━━━━━━
-📁 *ARQUIVOS (Drive inteligente)*
-• Envie qualquer foto, PDF ou documento → eu guardo e organizo
-• Nota fiscal ou boleto → já registro como despesa
-• Pra eu só guardar, sem lançar nada: mande com legenda _"salva"_ ou _"guarda"_
+  empresa: `🏢 *EMPRESA*
+
+*Funcionários* (quem trabalha com você):
+• _"Cadastra a Ana como vendedora, 2000"_ → cria o cadastro
+• _"Meus funcionários"_ → lista + total da folha de pagamento
+• _"Muda o salário da Ana para 2200"_ → atualizo
+• _"Demite o João"_ → desativo (fica no histórico)
+Pra registrar o PAGAMENTO mensal de um funcionário já cadastrado, é diferente: _"pago a Ana 2000 todo mês"_ (veja *ajuda financeiro*, parcelas e contas fixas).
+
+*Clientes* (quem compra/contrata de você):
+• _"Cadastra o cliente Pedro, telefone 11999999999"_ → cria o cadastro
+• _"Meus clientes"_ → lista tudo
+• _"Qual o telefone do meu cliente Bruno"_ → busca um dado específico
+• _"Muda o telefone do Pedro"_ / _"Remove o cliente Pedro"_
+
+*Modo empresa/pessoal* — eu separo as finanças e tarefas da empresa das suas pessoais:
+• _"Modo empresa"_ → próximos registros vão pra empresa
+• _"Modo pessoal"_ → volto pros gastos pessoais
+O modo atual sempre aparece nas minhas respostas.`,
+
+  arquivos: `📁 *ARQUIVOS (Drive inteligente)*
+
+• Envie qualquer foto, PDF ou documento → eu guardo e organizo sozinho, na pasta certa
+• Nota fiscal, boleto ou comprovante → já registro como despesa também, além de guardar
+• Pra eu só guardar, sem lançar nada: mande com a legenda _"salva"_ ou _"guarda"_
 • _"Ache o contrato do João"_ → te devolvo o arquivo
-• _"Salva como contrato assinado"_ → renomeio o último arquivo
+• _"Salva como contrato assinado"_ → renomeio o último arquivo enviado`,
 
-━━━━━━━━━━━━━━━
-🏢 *MODO EMPRESA / PESSOAL*
-Separo as finanças da empresa das suas pessoais:
-• _"Modo empresa"_ → próximos registros vão para a empresa
-• _"Modo pessoal"_ → volto para os gastos pessoais
-O modo atual sempre aparece nas minhas respostas.
+  contatos: `👥 *DAR ACESSO À SUA CONTA*
 
-━━━━━━━━━━━━━━━
-Pode falar comigo do seu jeito — sem formalidade, sem comando decorado. Eu entendo.`;
+Isso é diferente de mandar um lembrete pra alguém (veja *ajuda tarefas*) — aqui é dar acesso de verdade à SUA conta, pra outra pessoa (funcionário, familiar, sócio) lançar gastos e usar o Zelo pelo WhatsApp dela, tudo caindo na sua mesma conta.
+
+• Digite *"vincular número"* ou *"código de vinculação"* → eu gero um código de 4 dígitos
+• A pessoa manda esse código pelo WhatsApp dela pro Zelo → eu pergunto o nome dela, o vínculo (esposa, sócio, filho...) e se ela pode acessar o modo pessoal, empresarial ou os dois
+• Pronto — o que ela registrar já aparece na sua conta, e dá pra filtrar depois (_"quanto a Ana gastou"_, veja *ajuda financeiro*)
+
+⚠️ Isso só é necessário pra quem vai REGISTRAR coisas na sua conta. Pra só receber um lembrete seu, não precisa de nada disso — veja *ajuda tarefas*.`,
+};
+
+export function replyHelp(category?: HelpCategory): string {
+  if (!category) return HELP_MENU;
+  return HELP_SECTIONS[category];
 }
 
 export function replyOnboardingWelcome(): string {
