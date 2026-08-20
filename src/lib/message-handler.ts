@@ -437,7 +437,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const user = await getUserByWppPhone(from);
 
     if (!user) {
-      await wppSend(from, "Olá! Sou o Zelo, mas ainda não encontrei seu número na minha lista de clientes.\n\nSe você já tem conta, acesse *Configurações* no painel e clique em *Vincular WhatsApp* para gerar seu código.\n\nPara conhecer o Zelo: controlaai.app");
+      await wppSend(from, "Olá! Sou o Zelo, mas ainda não encontrei seu número na minha lista de clientes.\n\nSe você já tem conta, acesse *Configurações* no painel e clique em *Vincular WhatsApp* para gerar seu código.\n\nPara conhecer o Zelo: zelogestaointeligente.com.br");
       return;
     }
 

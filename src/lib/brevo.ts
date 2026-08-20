@@ -8,11 +8,13 @@ export async function sendPasswordResetEmail(input: { email: string; name: strin
   if (!apiKey || !senderEmail) throw new Error("BREVO_API_KEY / BREVO_SENDER_EMAIL não configurados");
   const title = input.welcome ? "Seu acesso ao Zelo está liberado" : "Redefinição de senha";
   const intro = input.welcome ? "Seu pagamento foi confirmado. Use este código para criar sua senha e acessar o Zelo:" : "Use este código para criar uma nova senha:";
-  // Mesmo domínio de fallback que layout.tsx já usa pra metadataBase — nunca
-  // a URL crua do EasyPanel: um e-mail com esse link manda o usuário criar a
-  // senha/redefinir nela, e a sessão criada ali gruda nesse domínio pro resto
-  // da navegação dentro do app (é exatamente isso que já aconteceu na prática).
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://controlaai.app";
+  // Domínio real configurado no EasyPanel (confirmado direto no painel —
+  // "controlaai.app" não está cadastrado lá, é resquício de antes do
+  // rebranding pra Zelo) — nunca a URL crua do EasyPanel: um e-mail com esse
+  // link manda o usuário criar a senha/redefinir nela, e a sessão criada ali
+  // gruda nesse domínio pro resto da navegação dentro do app (é exatamente
+  // isso que já aconteceu na prática).
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br";
   const recoveryUrl = `${appUrl.replace(/\/$/, "")}/esqueci-senha?rid=${encodeURIComponent(input.resetId)}&email=${encodeURIComponent(input.email)}`;
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -47,11 +49,13 @@ async function sendBrevoEmail(input: { email: string; name: string; subject: str
 }
 
 export async function sendFirstAccessLinkEmail(input: { email: string; name: string; setupId: string }): Promise<void> {
-  // Mesmo domínio de fallback que layout.tsx já usa pra metadataBase — nunca
-  // a URL crua do EasyPanel: um e-mail com esse link manda o usuário criar a
-  // senha/redefinir nela, e a sessão criada ali gruda nesse domínio pro resto
-  // da navegação dentro do app (é exatamente isso que já aconteceu na prática).
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://controlaai.app";
+  // Domínio real configurado no EasyPanel (confirmado direto no painel —
+  // "controlaai.app" não está cadastrado lá, é resquício de antes do
+  // rebranding pra Zelo) — nunca a URL crua do EasyPanel: um e-mail com esse
+  // link manda o usuário criar a senha/redefinir nela, e a sessão criada ali
+  // gruda nesse domínio pro resto da navegação dentro do app (é exatamente
+  // isso que já aconteceu na prática).
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br";
   const setupUrl = `${appUrl.replace(/\/$/, "")}/primeiro-acesso?token=${encodeURIComponent(input.setupId)}`;
   await sendBrevoEmail({
     email: input.email,

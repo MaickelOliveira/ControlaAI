@@ -6,7 +6,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://controlaai.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br"),
   title: "Zelo — Organize sua rotina pelo WhatsApp",
   description: "Finanças, agenda, tarefas e documentos organizados por IA no WhatsApp. Escolha seu plano com 7 dias de garantia.",
   icons: { icon: "/brand/zelo-icon.png" },
