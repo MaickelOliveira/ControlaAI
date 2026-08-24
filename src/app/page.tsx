@@ -1442,7 +1442,19 @@ export default function LandingPage() {
             <a href="#planos" className="hover:text-white transition">Ver planos</a>
           </nav>
         </div>
-        <p className="text-center text-slate-600 text-[11px] mt-8">© {new Date().getFullYear()} Zelo. Todos os direitos reservados.</p>
+        <div className="flex justify-center mt-8">
+          <a
+            href="mailto:contato@zelogestaointeligente.com.br"
+            className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-400 hover:bg-amber-400/20 transition"
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6.5A1.5 1.5 0 014.5 5h15A1.5 1.5 0 0121 6.5v11a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5v-11z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 7l8 6 8-6" />
+            </svg>
+            Suporte: contato@zelogestaointeligente.com.br
+          </a>
+        </div>
+        <p className="text-center text-slate-600 text-[11px] mt-6">© {new Date().getFullYear()} Zelo. Todos os direitos reservados.</p>
       </footer>
 
       <div className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur md:hidden">
