@@ -253,7 +253,7 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     // e-mail ter falhado ou não, e só se o webhook trouxe telefone.
     if (setupId && user.phone) {
       try {
-        await sendWelcomeTemplate(user.phone, setupId);
+        await sendWelcomeTemplate(user.phone);
       } catch (error) {
         console.error("[billing-webhook] conta criada, mas a mensagem de boas-vindas por WhatsApp falhou", error);
       }

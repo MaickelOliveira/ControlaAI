@@ -36,25 +36,24 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
   return ok;
 }
 
-/** Boas-vindas de conta paga recém-criada (ver billing-webhooks.ts), com o
- *  link de "criar senha" — mesmo gatilho e mesmo token do e-mail
- *  (sendFirstAccessLinkEmail em brevo.ts), só que por WhatsApp. Template
- *  "boas_vindas_cadastro" registrado no Meta Business Manager com o link
- *  como parâmetro NOMEADO no corpo ({{link}}), não como botão — a URL
- *  inteira (já montada) é o valor desse parâmetro. Evolution não tem
- *  restrição de template, manda o mesmo texto livre. */
-export async function sendWelcomeTemplate(to: string, setupToken: string): Promise<boolean> {
+/** Boas-vindas de conta paga recém-criada (ver billing-webhooks.ts) — não
+ *  manda o link de "criar senha" aqui (esse foi rejeitado pela Meta, provável
+ *  padrão de phishing "clique pra criar sua senha" + link). O link já foi
+ *  mandado por e-mail (sendFirstAccessLinkEmail em brevo.ts, mesmo gatilho);
+ *  esta mensagem só avisa que ele está lá, com um contato de suporte de
+ *  fallback. Corpo 100% estático — sem variável nenhuma — pra reduzir risco
+ *  de rejeição de novo. */
+export async function sendWelcomeTemplate(to: string): Promise<boolean> {
   const provider = (await getConfig()).provider;
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br").replace(/\/$/, "");
-  const setupUrl = `${appUrl}/primeiro-acesso?token=${encodeURIComponent(setupToken)}`;
   const renderedText =
     "Oi! 👋 Sou o Zelo, seu assistente financeiro e de tarefas direto no WhatsApp.\n\n" +
-    "Anoto seus gastos, organizo tarefas e te ajudo a manter as contas em dia — tudo por aqui, sem precisar abrir outro app.\n\n" +
+    "Seu pagamento foi confirmado e sua conta já está pronta.\n\n" +
+    "O link para você criar sua senha de acesso está no e-mail que te enviamos agora — é só abrir a caixa de entrada.\n\n" +
     "Pra configurar o WhatsApp com a inteligência artificial da Zelo, é só entrar em zelogestaointeligente.com.br, acessar Configurações e seguir o passo a passo simples.\n\n" +
-    `Antes disso, crie sua senha de acesso clicando no link abaixo:\n${setupUrl}!`;
+    "Não achou o e-mail? Manda uma mensagem pra contato@zelogestaointeligente.com.br que a gente te ajuda.";
   let ok: boolean;
   if (provider === "waba") {
-    const result = await waba.sendTemplate(to, "boas_vindas_cadastro", "pt_BR", { link: setupUrl });
+    const result = await waba.sendTemplate(to, "boas_vindas_cadastro", "pt_BR", {});
     ok = result.ok;
     if (ok) console.log(`[whatsapp] template boas_vindas_cadastro aceito, msg=${result.messageId}`);
   } else {
