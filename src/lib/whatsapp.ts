@@ -36,6 +36,35 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
   return ok;
 }
 
+/** Boas-vindas de conta paga recém-criada (ver billing-webhooks.ts), com o
+ *  link de "criar senha" — mesmo gatilho e mesmo token do e-mail
+ *  (sendFirstAccessLinkEmail em brevo.ts), só que por WhatsApp. Template
+ *  "boas_vindas_cadastro" registrado no Meta Business Manager com um botão
+ *  de URL dinâmica (base "zelogestaointeligente.com.br/primeiro-acesso?token={{1}}"),
+ *  então o WABA só recebe o TOKEN cru como parâmetro do botão, nunca a URL
+ *  inteira. Evolution não tem essa restrição de template, manda texto livre
+ *  com o link já montado. */
+export async function sendWelcomeTemplate(to: string, setupToken: string): Promise<boolean> {
+  const provider = (await getConfig()).provider;
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br").replace(/\/$/, "");
+  const setupUrl = `${appUrl}/primeiro-acesso?token=${encodeURIComponent(setupToken)}`;
+  const renderedText =
+    "Oi! 👋 Sou o Zelo, seu assistente financeiro e de tarefas direto no WhatsApp.\n\n" +
+    "Anoto seus gastos, organizo tarefas e te ajudo a manter as contas em dia — tudo por aqui, sem precisar abrir outro app.\n\n" +
+    "Pra configurar o WhatsApp com a inteligência artificial da Zelo, é só entrar em zelogestaointeligente.com.br, acessar Configurações e seguir o passo a passo simples.\n\n" +
+    `Antes disso, crie sua senha de acesso:\n${setupUrl}`;
+  let ok: boolean;
+  if (provider === "waba") {
+    const result = await waba.sendTemplate(to, "boas_vindas_cadastro", "pt_BR", {}, setupToken);
+    ok = result.ok;
+    if (ok) console.log(`[whatsapp] template boas_vindas_cadastro aceito, msg=${result.messageId}`);
+  } else {
+    ok = await evolution.sendText(to, renderedText);
+  }
+  if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
+  return ok;
+}
+
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
   const provider = (await getConfig()).provider;
   const ok = provider === "waba"

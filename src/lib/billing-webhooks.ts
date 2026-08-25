@@ -4,6 +4,7 @@ import { encryptField, decryptField } from "./crypto-store";
 import { getUserByEmail, activateUser, createPaidUser, deactivateUser, updateUser, type UserPlan } from "./users";
 import { createPasswordSetupLink } from "./password-reset";
 import { sendFirstAccessLinkEmail } from "./brevo";
+import { sendWelcomeTemplate } from "./whatsapp";
 
 /** Recebe webhooks de plataforma de venda (Hotmart, Kiwify, etc.) e ativa/
  *  desativa/troca o plano do cliente correspondente automaticamente. Como
@@ -240,11 +241,22 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     const name = firstString(body, ["data.buyer.name", "data.buyer.first_name", "data.subscriber.name", "Customer.full_name", "Customer.first_name"]) || email.split("@")[0];
     const phone = firstString(body, ["data.buyer.checkout_phone", "data.buyer.phone", "Customer.mobile", "Customer.phone"]);
     user = await createPaidUser({ name, email, phone, plan: mappedPlan });
+    let setupId: string | undefined;
     try {
       const setup = await createPasswordSetupLink(user.id);
+      setupId = setup.id;
       await sendFirstAccessLinkEmail({ email: user.email, name: user.name, setupId: setup.id });
     } catch (error) {
       console.error("[billing-webhook] conta criada, mas o e-mail de acesso falhou", error);
+    }
+    // Mesmo link/token do e-mail, também por WhatsApp — independente do
+    // e-mail ter falhado ou não, e só se o webhook trouxe telefone.
+    if (setupId && user.phone) {
+      try {
+        await sendWelcomeTemplate(user.phone, setupId);
+      } catch (error) {
+        console.error("[billing-webhook] conta criada, mas a mensagem de boas-vindas por WhatsApp falhou", error);
+      }
     }
     return { ok: true, action: "activated", email, detail: "conta paga criada e acesso enviado por e-mail" };
   }
