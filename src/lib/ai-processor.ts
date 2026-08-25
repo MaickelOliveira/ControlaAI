@@ -246,8 +246,23 @@ export type AIResult = {
 };
 
 export type AiContext = {
-  user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome">;
+  user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome" | "locale">;
 };
+
+// Instrução curta de idioma/tom — usada tanto no classificador (volátil, pra
+// ele entender vocabulário regional na mensagem recebida) quanto nas funções
+// que geram texto de verdade pro usuário (generateAnalysisResponse,
+// generateMeetAta). "pt-BR" não precisa de instrução extra — é o padrão em
+// que todo o resto do prompt já está escrito.
+function localeInstruction(locale?: string): string {
+  if (locale === "es") {
+    return "El usuario habla español. Responde SIEMPRE en español latinoamericano neutro — usa \"ustedes\" (nunca \"vosotros\"), \"dinero\"/\"efectivo\" (nunca \"plata\"/\"lana\"), \"computadora\" (no \"ordenador\"), \"celular\" (no \"móvil\"), evita modismos de un país específico.";
+  }
+  if (locale === "pt-PT") {
+    return "O utilizador fala português europeu. Responde SEMPRE em português de Portugal — \"telemóvel\" (não \"celular\"), \"pequeno-almoço\" (não \"café da manhã\"), \"fatura\" (não \"boleto\"), construções como \"estou a fazer\" (não \"estou fazendo\").";
+  }
+  return "";
+}
 
 /** Parte do prompt que muda a cada chamada (data, calendário, períodos
  *  pré-calculados, categorias do usuário — incluindo as personalizadas,
@@ -312,8 +327,9 @@ function buildVolatileContext(ctx?: AiContext): string {
   const modeLine = ctx?.user.activeMode
     ? `\nModo ativo do usuário agora: ${ctx.user.activeMode === "business" ? "empresa" : "pessoal"} — use como padrão quando a mensagem não deixar claro qual modo usar.`
     : "";
+  const localeLine = localeInstruction(ctx?.user.locale) ? `\n${localeInstruction(ctx?.user.locale)}` : "";
 
-  return `Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).
+  return `Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).${localeLine}
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 
 Calendário dos próximos dias (use para resolver dias da semana sem errar):
@@ -1350,7 +1366,8 @@ export async function generateAnalysisResponse(
     topExpenses: Array<{ category: string; amount: number }>;
     topIncomes: Array<{ category: string; amount: number }>;
     month: string;
-  }
+  },
+  locale?: string
 ): Promise<string> {
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
@@ -1364,7 +1381,8 @@ export async function generateAnalysisResponse(
     ? data.topIncomes.map((e, i) => `${i + 1}. ${e.category}: R$ ${e.amount.toFixed(2)}`).join("\n")
     : "Nenhuma receita registrada";
 
-  const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Fale como alguém de confiança que cuida das finanças da pessoa: tom caloroso, direto e seguro, sem exagerar em formalidade nem em entusiasmo artificial (nada de "🎉 incrível!" — prefira uma segurança tranquila, tipo "aqui está o que encontrei" ou "reparei que...").
+  const localeNote = localeInstruction(locale);
+  const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Fale como alguém de confiança que cuida das finanças da pessoa: tom caloroso, direto e seguro, sem exagerar em formalidade nem em entusiasmo artificial (nada de "🎉 incrível!" — prefira uma segurança tranquila, tipo "aqui está o que encontrei" ou "reparei que...").${localeNote ? `\n${localeNote}` : ""}
 Responda à pergunta do usuário de forma PERSONALIZADA com base nos dados REAIS dele.
 Use negrito com *asterisco* (formato WhatsApp) e listas com • quando ajudar a organizar; emojis com moderação, só onde fizer sentido.
 Máximo 250 palavras.
@@ -1477,7 +1495,8 @@ export async function findDriveFileByAI(
 export async function generateMeetAta(
   notes: string,
   meetTitle: string,
-  attendeeNames: string[]
+  attendeeNames: string[],
+  locale?: string
 ): Promise<{ summary: string; decisions: string[]; tasks: string[] }> {
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
@@ -1486,12 +1505,13 @@ export async function generateMeetAta(
   const attendeesLine = attendeeNames.length
     ? `Participantes: ${attendeeNames.join(", ")}.`
     : "";
+  const localeNote = localeInstruction(locale);
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(
-      `Você é um assistente de ata de reunião. Com base nas notas abaixo, gere uma ata estruturada.
+      `Você é um assistente de ata de reunião. Com base nas notas abaixo, gere uma ata estruturada.${localeNote ? `\n${localeNote}` : ""}
 ${attendeesLine}
 Reunião: "${meetTitle}"
 

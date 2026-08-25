@@ -769,7 +769,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     if (pending?.type === "meet_ata" && pending.userId === user.id) {
       if (messageText) {
         await clearPendingAction(from);
-        const ata = await generateMeetAta(messageText, pending.meetTitle, []);
+        const ata = await generateMeetAta(messageText, pending.meetTitle, [], user.locale);
         await updateAppointment(pending.meetId, user.id, { ataGenerated: true, ataContent: ata.summary });
         for (const taskTitle of ata.tasks) {
           await createTask({ userId: user.id, title: cap(taskTitle), priority: "medium", status: "pending", mode });
@@ -1063,7 +1063,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const monthLabel = periodLabelFor(ai.period, now);
         const analysisReply = await generateAnalysisResponse(messageText, {
           mode, balance: analysisBal, topExpenses, topIncomes, month: monthLabel,
-        });
+        }, user.locale);
         await wppSend(from, analysisReply);
         break;
       }
