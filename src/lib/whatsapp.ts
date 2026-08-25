@@ -53,9 +53,9 @@ export async function sendWelcomeTemplate(to: string): Promise<boolean> {
     "Não achou o e-mail? Manda uma mensagem pra contato@zelogestaointeligente.com.br que a gente te ajuda.";
   let ok: boolean;
   if (provider === "waba") {
-    const result = await waba.sendTemplate(to, "boas_vindas_cadastro", "pt_BR", {});
+    const result = await waba.sendTemplate(to, "boas_vindas_cadastro2", "pt_BR", {});
     ok = result.ok;
-    if (ok) console.log(`[whatsapp] template boas_vindas_cadastro aceito, msg=${result.messageId}`);
+    if (ok) console.log(`[whatsapp] template boas_vindas_cadastro2 aceito, msg=${result.messageId}`);
   } else {
     ok = await evolution.sendText(to, renderedText);
   }
