@@ -72,25 +72,12 @@ export async function sendText(to: string, message: string): Promise<boolean> {
  *  aprovado — sendText silenciosamente falha nesse caso. Os templates atuais
  *  usam parâmetros NOMEADOS (ex: {{compromisso}}), não posicionais ({{1}}),
  *  então cada parâmetro do body leva parameter_name além de type/text. */
-export async function sendTemplate(
-  to: string,
-  templateName: string,
-  languageCode: string,
-  params: Record<string, string>,
-  // Valor que substitui o {{1}} da URL dinâmica configurada no botão do
-  // template no Meta Business Manager (ex: base "site.com/pagina?token={{1}}"
-  // + buttonUrlParam "abc123" = "site.com/pagina?token=abc123"). É só o
-  // trecho variável, nunca a URL inteira — a base já está fixada no template.
-  buttonUrlParam?: string,
-): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+export async function sendTemplate(to: string, templateName: string, languageCode: string, params: Record<string, string>): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   const pnid = await phoneNumberId();
   const token = await accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return { ok: false, error: "WABA não configurado (Phone Number ID / Access Token)" }; }
   try {
     const parameters = Object.entries(params).map(([parameter_name, text]) => ({ type: "text", text, parameter_name }));
-    const components: Record<string, unknown>[] = [];
-    if (parameters.length) components.push({ type: "body", parameters });
-    if (buttonUrlParam) components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: buttonUrlParam }] });
     const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pnid}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -101,7 +88,7 @@ export async function sendTemplate(
         template: {
           name: templateName,
           language: { code: languageCode },
-          components,
+          components: parameters.length ? [{ type: "body", parameters }] : [],
         },
       }),
       signal: AbortSignal.timeout(15_000),
