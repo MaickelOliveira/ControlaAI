@@ -6,6 +6,9 @@ export type UserPlan = "personal" | "business";
 export type BillingCycle = "monthly" | "semiannual" | "annual";
 export type UserStatus = "trial" | "active" | "inactive";
 export type UserMode = "personal" | "business";
+// "pt-BR" é o default de toda conta existente — nunca mudar sem ação
+// explícita do usuário (troca manual ou compra num checkout de outro idioma).
+export type UserLocale = "pt-BR" | "pt-PT" | "es";
 
 export type User = {
   id: string;
@@ -17,6 +20,7 @@ export type User = {
   billingCycle: BillingCycle;
   status: UserStatus;
   activeMode: UserMode;
+  locale: UserLocale;
   company?: string;
   // Telefones vinculados: ver wpp-phone-links.ts (tabela própria, com
   // UNIQUE(phone) — antes eram campos array/objeto aqui, sem garantia de
@@ -39,7 +43,7 @@ export type User = {
 // call-site além de tornar as chamadas assíncronas).
 type Row = {
   id: string; phone: string; name: string; email: string; password_hash: string;
-  plan: UserPlan; billing_cycle: BillingCycle | null; status: UserStatus; active_mode: UserMode; company: string | null;
+  plan: UserPlan; billing_cycle: BillingCycle | null; status: UserStatus; active_mode: UserMode; locale: string | null; company: string | null;
   max_wpp_phones: number | null; wpp_verify_code: string | null; wpp_verify_expires: string | null;
   custom_categories_expense: string[]; custom_categories_income: string[];
   price_override: number | null; activated_at: string | null; deactivated_at: string | null; password_changed_at: string | null;
@@ -49,7 +53,8 @@ type Row = {
 function fromRow(r: Row): User {
   return {
     id: r.id, phone: r.phone, name: r.name, email: r.email, passwordHash: r.password_hash,
-    plan: r.plan, billingCycle: r.billing_cycle ?? "monthly", status: r.status, activeMode: r.active_mode, company: r.company ?? undefined,
+    plan: r.plan, billingCycle: r.billing_cycle ?? "monthly", status: r.status, activeMode: r.active_mode,
+    locale: (r.locale as UserLocale) ?? "pt-BR", company: r.company ?? undefined,
     maxWppPhones: r.max_wpp_phones ?? undefined, wppVerifyCode: r.wpp_verify_code ?? undefined,
     wppVerifyExpires: r.wpp_verify_expires ?? undefined, customCategoriesExpense: r.custom_categories_expense,
     customCategoriesIncome: r.custom_categories_income, priceOverride: r.price_override ?? undefined,
@@ -63,7 +68,7 @@ function fromRow(r: Row): User {
 function toRowPatch(patch: Partial<Omit<User, "id" | "createdAt">>): Record<string, unknown> {
   const map: Record<string, string> = {
     phone: "phone", name: "name", email: "email", passwordHash: "password_hash",
-    plan: "plan", billingCycle: "billing_cycle", status: "status", activeMode: "active_mode", company: "company",
+    plan: "plan", billingCycle: "billing_cycle", status: "status", activeMode: "active_mode", locale: "locale", company: "company",
     maxWppPhones: "max_wpp_phones", wppVerifyCode: "wpp_verify_code", wppVerifyExpires: "wpp_verify_expires",
     customCategoriesExpense: "custom_categories_expense", customCategoriesIncome: "custom_categories_income",
     priceOverride: "price_override", activatedAt: "activated_at", deactivatedAt: "deactivated_at", passwordChangedAt: "password_changed_at",
@@ -111,6 +116,7 @@ export async function createUser(data: {
   billingCycle?: BillingCycle;
   company?: string;
   status?: UserStatus;
+  locale?: UserLocale;
 }): Promise<User> {
   const trialEnd = new Date();
   trialEnd.setDate(trialEnd.getDate() + 14);
@@ -125,6 +131,7 @@ export async function createUser(data: {
     billing_cycle: data.billingCycle ?? "monthly",
     status: data.status ?? "trial",
     active_mode: data.plan === "business" ? "business" : "personal",
+    ...(data.locale ? { locale: data.locale } : {}),
     company: data.company,
     trial_ends_at: trialEnd.toISOString(),
   };
@@ -133,7 +140,7 @@ export async function createUser(data: {
   return fromRow(inserted as Row);
 }
 
-export async function createPaidUser(data: { name: string; email: string; phone?: string; plan?: UserPlan }): Promise<User> {
+export async function createPaidUser(data: { name: string; email: string; phone?: string; plan?: UserPlan; locale?: UserLocale }): Promise<User> {
   return createUser({
     name: data.name,
     email: data.email,
@@ -141,6 +148,7 @@ export async function createPaidUser(data: { name: string; email: string; phone?
     password: randomUUID() + randomUUID(),
     plan: data.plan || "personal",
     status: "active",
+    locale: data.locale,
   });
 }
 

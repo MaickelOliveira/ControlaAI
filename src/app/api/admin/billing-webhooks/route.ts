@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const { label, secretBodyField, secretHeader, secretValue, emailPath, statusPath, activateValues, deactivateValues, planPath, planMap } = body;
+  const { label, secretBodyField, secretHeader, secretValue, emailPath, statusPath, activateValues, deactivateValues, planPath, planMap, localePath, localeMap } = body;
   if (!label || !emailPath || !statusPath) return NextResponse.json({ error: "label, emailPath e statusPath são obrigatórios" }, { status: 400 });
 
   const cfg = await createBillingWebhook({
@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
     deactivateValues: Array.isArray(deactivateValues) ? deactivateValues : [],
     planPath: planPath || undefined,
     planMap: planMap && typeof planMap === "object" ? planMap : undefined,
+    localePath: localePath || undefined,
+    localeMap: localeMap && typeof localeMap === "object" ? localeMap : undefined,
   });
   return NextResponse.json(cfg, { status: 201 });
 }
