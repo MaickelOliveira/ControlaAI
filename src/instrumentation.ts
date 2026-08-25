@@ -55,18 +55,34 @@ export async function register() {
           // template "lembrete_assessor" — deixa claro pro destinatário quem
           // pediu, já que ele pode nunca ter falado com o bot antes. Lembrete
           // "pra mim mesmo" continua no template original.
+          const owner = usersModuleForReminders ? await usersModuleForReminders.getUserById(r.userId) : null;
+          const locale = owner?.locale;
           let ok: boolean;
-          if (r.recipientType !== "self" && usersModuleForReminders) {
-            const owner = await usersModuleForReminders.getUserById(r.userId);
-            const remetente = owner?.name || "alguém";
-            const texto = `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message });
+          if (r.recipientType !== "self") {
+            // Destinatário é um terceiro (cliente/funcionário/outro número),
+            // sem conta Zelo própria — usa o idioma de quem criou o lembrete
+            // como melhor sinal disponível.
+            const remetente = owner?.name || (locale === "es" ? "alguien" : "alguém");
+            const texto = locale === "es"
+              ? `🔔 Recordatorio de ${remetente}: ${r.message} — Zelo Asesor`
+              : locale === "pt-PT"
+              ? `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`
+              : `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
+            ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, locale);
           } else if (r.mode === "business") {
-            const texto = `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_empresarial", texto, { lembrete: r.message });
+            const texto = locale === "es"
+              ? `🔔 Zelo — Recordatorio empresarial configurado\n\nTu empresa necesita: ${r.message}\n\nRecordatorio empresarial agendado en Zelo.`
+              : locale === "pt-PT"
+              ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`
+              : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
+            ok = await sendReminderTemplate(r.phone, "lembrete_empresarial", texto, { lembrete: r.message }, locale);
           } else {
-            const texto = `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
+            const texto = locale === "es"
+              ? `🔔 Zelo — Recordatorio que configuraste\n\nNecesitas: ${r.message}\n\nRecordatorio personal agendado por ti en Zelo.`
+              : locale === "pt-PT"
+              ? `🔔 Zelo — Lembrete que configuraste\n\nPrecisas de: ${r.message}\n\nLembrete pessoal agendado por ti no Zelo.`
+              : `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
+            ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message }, locale);
           }
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) await markReminderSent(r.id, r.repeat);
@@ -104,11 +120,11 @@ export async function register() {
               const user = await getUserById(rec.userId);
               if (!user) continue;
               const phones = (await getPhonesForUser(user.id)).map(link => link.phone);
-              const msg = buildRecurringNotification(rec);
+              const msg = buildRecurringNotification(rec, user.locale);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
               const params = { descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
               for (const phone of phones) {
-                const ok = await sendReminderTemplate(phone, "cobranca_recorrente", msg, params);
+                const ok = await sendReminderTemplate(phone, "cobranca_recorrente", msg, params, user.locale);
                 if (ok) {
                   await markNotified(rec.id);
                   await setPendingAction(phone, {
@@ -190,11 +206,11 @@ export async function register() {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser) continue;
               const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
-              const msg = replyAppointmentReminder(apt, "2 horas");
+              const msg = replyAppointmentReminder(apt, "2 horas", aptUser.locale);
               const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;
               for (const phone of phones) {
-                const ok = await sendReminderTemplate(phone, "lembrete_compromisso", msg, params);
+                const ok = await sendReminderTemplate(phone, "lembrete_compromisso", msg, params, aptUser.locale);
                 if (ok) sentToAny = true;
               }
               if (sentToAny) await updateAppointment(apt.id, apt.userId, { reminderSentAt: new Date().toISOString() });
@@ -233,11 +249,11 @@ export async function register() {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser) continue;
               const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
-              const msg = replyAppointmentReminder(apt, "15 minutos");
+              const msg = replyAppointmentReminder(apt, "15 minutos", aptUser.locale);
               const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;
               for (const phone of phones) {
-                const ok = await sendReminderTemplate(phone, "lembrete_compromisso15", msg, params);
+                const ok = await sendReminderTemplate(phone, "lembrete_compromisso15", msg, params, aptUser.locale);
                 if (ok) sentToAny = true;
               }
               if (sentToAny) await updateAppointment(apt.id, apt.userId, { reminder15MinSentAt: new Date().toISOString() });
