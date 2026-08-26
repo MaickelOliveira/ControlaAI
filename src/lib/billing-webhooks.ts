@@ -268,7 +268,7 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     try {
       const setup = await createPasswordSetupLink(user.id);
       setupId = setup.id;
-      await sendFirstAccessLinkEmail({ email: user.email, name: user.name, setupId: setup.id });
+      await sendFirstAccessLinkEmail({ email: user.email, name: user.name, setupId: setup.id, locale: user.locale });
     } catch (error) {
       console.error("[billing-webhook] conta criada, mas o e-mail de acesso falhou", error);
     }
