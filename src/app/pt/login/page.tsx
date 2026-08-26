@@ -30,6 +30,10 @@ export default function LoginPagePt() {
       });
       const data = await response.json();
       if (!response.ok) { setError(data.error || "Não foi possível entrar"); return; }
+      // Marca a conta como "pt-PT" ao entrar por esta versão do login —
+      // assim o bot e os e-mails passam a falar em português europeu sem
+      // precisar de um ecrã extra. Best-effort: não bloqueia o login se falhar.
+      await fetch("/api/account/locale", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale: "pt-PT" }) }).catch(() => {});
       router.push("/dashboard");
     } catch { setError("Não foi possível ligar. Tenta novamente."); }
     finally { setLoading(false); }

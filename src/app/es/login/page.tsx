@@ -30,6 +30,11 @@ export default function LoginPageEs() {
       });
       const data = await response.json();
       if (!response.ok) { setError(data.error || "No fue posible iniciar sesión"); return; }
+      // Marca la cuenta como "es" al iniciar sesión por esta versión del
+      // login — así el bot y los correos empiezan a hablar en español sin
+      // necesidad de una pantalla extra. Best-effort: no bloquea el ingreso
+      // si falla.
+      await fetch("/api/account/locale", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale: "es" }) }).catch(() => {});
       router.push("/dashboard");
     } catch { setError("No fue posible conectar. Intenta de nuevo."); }
     finally { setLoading(false); }
