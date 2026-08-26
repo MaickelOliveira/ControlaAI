@@ -350,7 +350,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             buffer,
           });
           console.log(`[drive] arquivo salvo: ${savedFile.id} | ${suggestedName} | pasta=${suggestedFolder}`);
-          await wppSend(from, replyFileSaved(suggestedName, suggestedFolder));
+          await wppSend(from, replyFileSaved(suggestedName, suggestedFolder, fileUser.locale));
           // Só repassa à IA se a legenda tem conteúdo além do comando de salvar
           if (caption && !hasSaveIntent) messageText = caption;
         } catch (e) {
@@ -443,7 +443,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
     // ── Verifica acesso (trial vencido OU desativado pelo admin) ──
     if (!hasAccess(user)) {
-      await wppSend(from, user.status === "inactive" ? replyAccountInactive() : replyTrialExpired());
+      await wppSend(from, user.status === "inactive" ? replyAccountInactive(user.locale) : replyTrialExpired(user.locale));
       return;
     }
 
@@ -462,7 +462,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     if (nameCmdMatch) {
       const name = cap(nameCmdMatch[1].trim());
       await setPhoneName(user.id, from, name);
-      await wppSend(from, replyWppNameSaved(name));
+      await wppSend(from, replyWppNameSaved(name, user.locale));
       return;
     }
 
@@ -524,7 +524,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               buffer,
             });
             console.log(`[drive] comprovante salvo: ${savedFile.id} | ${pending.suggestedName} | pasta=${suggestedFolder}`);
-            await wppSend(from, replyFileSaved(pending.suggestedName, suggestedFolder));
+            await wppSend(from, replyFileSaved(pending.suggestedName, suggestedFolder, user.locale));
           } catch (e) {
             console.error("[drive] erro ao salvar comprovante:", e);
             await wppSend(from, "❌ Não consegui guardar o comprovante. Tente novamente.");
@@ -644,10 +644,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const chosenAppt = pending.appointments[apptChoiceIdx];
         if (pending.action === "update") {
           const updated = await updateAppointment(chosenAppt.id, user.id, (pending.patch || {}) as Parameters<typeof updateAppointment>[2]);
-          if (updated) await wppSend(from, replyAgendaUpdated(updated));
+          if (updated) await wppSend(from, replyAgendaUpdated(updated, user.locale));
         } else if (pending.action === "delete") {
           await deleteAppointment(chosenAppt.id, user.id);
-          await wppSend(from, replyAgendaDeleted(chosenAppt.title));
+          await wppSend(from, replyAgendaDeleted(chosenAppt.title, user.locale));
         } else if (pending.action === "done") {
           await updateAppointment(chosenAppt.id, user.id, { status: "done" });
           await wppSend(from, `✅ Marquei como realizado.\n\n📅 ${chosenAppt.title}`);
@@ -755,9 +755,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           allDay: false, repeat: "none", status: "scheduled", source: "whatsapp",
           meetLink, calendarEventId,
         });
-        await wppSend(from, replyMeetCreated(apt));
+        await wppSend(from, replyMeetCreated(apt, undefined, user.locale));
         for (const a of pending.attendees.filter(a => a.phone)) {
-          await wppSend(a.phone!, replyMeetInvite(apt, a.name));
+          await wppSend(a.phone!, replyMeetInvite(apt, a.name, user.locale));
         }
       } else {
         await wppSend(from, `Responda *Sim* para incluir o link do Google Meet ou *Não* para criar só o compromisso.`);
@@ -769,14 +769,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     if (pending?.type === "meet_ata" && pending.userId === user.id) {
       if (messageText) {
         await clearPendingAction(from);
-        const ata = await generateMeetAta(messageText, pending.meetTitle, []);
+        const ata = await generateMeetAta(messageText, pending.meetTitle, [], user.locale);
         await updateAppointment(pending.meetId, user.id, { ataGenerated: true, ataContent: ata.summary });
         for (const taskTitle of ata.tasks) {
           await createTask({ userId: user.id, title: cap(taskTitle), priority: "medium", status: "pending", mode });
         }
-        await wppSend(from, replyMeetAtaGenerated(pending.meetTitle, ata));
+        await wppSend(from, replyMeetAtaGenerated(pending.meetTitle, ata, user.locale));
       } else {
-        await wppSend(from, `Para gerar a ata, me envie um *áudio* ou *texto* com o resumo da reunião. ⏱ ${replyMeetAtaRequest(pending.meetTitle)}`);
+        await wppSend(from, `Para gerar a ata, me envie um *áudio* ou *texto* com o resumo da reunião. ⏱ ${replyMeetAtaRequest(pending.meetTitle, user.locale)}`);
       }
       return;
     }
@@ -790,7 +790,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         await clearPendingAction(from);
         const result = await confirmRecurring(pending.recurringId, user.id);
         if (result) {
-          await wppSend(from, replyRecurringConfirmed(result.updated));
+          await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
         }
       } else if (isNo) {
         await clearPendingAction(from);
@@ -832,7 +832,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         : ai.reminder
         ? `🔔 Mensagem: ${ai.reminder.message}`
         : "";
-      await wppSend(from, replyLowConfidence(ai.intent, details, messageText));
+      await wppSend(from, replyLowConfidence(ai.intent, details, messageText, user.locale));
       return;
     }
 
@@ -843,7 +843,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const financeItems = (ai.finances && ai.finances.length > 0)
           ? ai.finances
           : (ai.finance ? [ai.finance] : []);
-        if (!financeItems.length) { await wppSend(from, replyUnknown(messageText)); break; }
+        if (!financeItems.length) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
 
         const today = todayStrBR();
 
@@ -869,7 +869,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const typeEmoji = fd.type === "income" ? "💰" : "💸";
             await wppSend(from, `⏳ *${typeLabel} agendada!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 Será contabilizada em *${dtFormatted}*\n\n_Lançamentos futuros não entram no saldo até a data chegar._`);
           } else {
-            await wppSend(from, replyFinanceRegistered(f, bal.balance));
+            await wppSend(from, replyFinanceRegistered(f, bal.balance, user.locale));
           }
         } else {
           // Múltiplos lançamentos — registra todos e exibe resumo
@@ -1063,7 +1063,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const monthLabel = periodLabelFor(ai.period, now);
         const analysisReply = await generateAnalysisResponse(messageText, {
           mode, balance: analysisBal, topExpenses, topIncomes, month: monthLabel,
-        });
+        }, user.locale);
         await wppSend(from, analysisReply);
         break;
       }
@@ -1169,31 +1169,31 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.personName) {
           const personPhone = (await findPhoneByName(user.id, ai.personName)) ?? (await findPhoneByRelation(user.id, ai.personName));
           if (!personPhone) {
-            await wppSend(from, replyPersonNotFound(ai.personName));
+            await wppSend(from, replyPersonNotFound(ai.personName, user.locale));
             break;
           }
           const personal = await getBalanceInRange(user.id, "personal", pFrom, pTo, personPhone);
           const business = await getBalanceInRange(user.id, "business", pFrom, pTo, personPhone);
-          await wppSend(from, replyBalance(personal, business, ai.personName, periodLabel));
+          await wppSend(from, replyBalance(personal, business, ai.personName, periodLabel, user.locale));
           break;
         }
         const personal = await getBalanceInRange(user.id, "personal", pFrom, pTo);
         const business = await getBalanceInRange(user.id, "business", pFrom, pTo);
-        await wppSend(from, replyBalance(personal, business, undefined, periodLabel));
+        await wppSend(from, replyBalance(personal, business, undefined, periodLabel, user.locale));
         break;
       }
 
       case "task_create": {
-        if (!ai.task) { await wppSend(from, replyUnknown(messageText)); break; }
+        if (!ai.task) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
         const taskMode = ai.task.mode || mode;
         const task = await createTask({ userId: user.id, title: cap(ai.task.title), priority: ai.task.priority || "medium", dueDate: ai.task.dueDate, status: "pending", mode: taskMode });
-        await wppSend(from, replyTaskCreated(task));
+        await wppSend(from, replyTaskCreated(task, user.locale));
         break;
       }
 
       case "task_query": {
         const tasks = await getPendingTasks(user.id, mode);
-        await wppSend(from, replyTaskList(tasks, mode));
+        await wppSend(from, replyTaskList(tasks, mode, user.locale));
         break;
       }
 
@@ -1205,7 +1205,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (!taskToUpdate && numMatch) taskToUpdate = await findTaskByNumber(user.id, parseInt(numMatch[1]), mode);
         if (taskToUpdate) {
           const updated = await updateTaskStatus(taskToUpdate.id, user.id, ai.task?.newStatus || "completed");
-          if (updated) await wppSend(from, replyTaskUpdated(updated));
+          if (updated) await wppSend(from, replyTaskUpdated(updated, user.locale));
         } else {
           await wppSend(from, "❓ Tarefa não encontrada. Digite *minhas tarefas* para ver a lista.");
         }
@@ -1227,7 +1227,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "reminder_set": {
-        if (!ai.reminder?.message || !ai.reminder?.scheduledAt) { await wppSend(from, replyUnknown(messageText)); break; }
+        if (!ai.reminder?.message || !ai.reminder?.scheduledAt) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
         // Converte horário SP (gerado pela IA) para UTC antes de salvar
         const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
 
@@ -1258,13 +1258,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
 
         await createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: targetPhone, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none", mode: ai.reminder.mode || mode, recipientType, recipientName });
-        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat || "none", recipientName));
+        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat || "none", recipientName, user.locale));
         break;
       }
 
       case "reminder_list": {
         const reminders = await getRemindersByUser(user.id, mode);
-        await wppSend(from, replyReminderList(reminders));
+        await wppSend(from, replyReminderList(reminders, user.locale));
         break;
       }
 
@@ -1277,7 +1277,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.reminder?.scheduledAt) patch.scheduledAt = spToUTC(ai.reminder.scheduledAt);
         if (ai.reminder?.repeat) patch.repeat = ai.reminder.repeat;
         const updated = await updateReminder(target.id, user.id, patch);
-        if (updated) await wppSend(from, replyReminderUpdated(updated));
+        if (updated) await wppSend(from, replyReminderUpdated(updated, user.locale));
         break;
       }
 
@@ -1285,7 +1285,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const delKeyword = ai.keyword || "";
         const delTarget = delKeyword ? await findReminderByKeyword(user.id, delKeyword, mode) : null;
         if (!delTarget) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
-        if (await deleteReminder(delTarget.id, user.id)) await wppSend(from, replyReminderDeleted(delTarget.message));
+        if (await deleteReminder(delTarget.id, user.id)) await wppSend(from, replyReminderDeleted(delTarget.message, user.locale));
         break;
       }
 
@@ -1412,7 +1412,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (allVehicles.length === 0) {
           const f = await addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
           const bal = (await getBalance(user.id, vehicleMode, year, month)).balance;
-          await wppSend(from, `${replyFinanceRegistered(f, bal)}\n\n💡 _Dica: Cadastre seu veículo no dashboard → Veículos para controlar gastos separadamente!_`);
+          await wppSend(from, `${replyFinanceRegistered(f, bal, user.locale)}\n\n💡 _Dica: Cadastre seu veículo no dashboard → Veículos para controlar gastos separadamente!_`);
           break;
         }
 
@@ -1469,19 +1469,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const g = ai.grocery;
         if (g?.template) {
           const added = await addFromTemplate(user.id, g.template);
-          await wppSend(from, replyGroceryListAdded(added, g.template));
+          await wppSend(from, replyGroceryListAdded(added, g.template, user.locale));
         } else if (g?.items?.length) {
           for (const i of g.items) await addToShoppingList(user.id, cap(i.productName), i.category ?? "Outros", i.quantity ? String(i.quantity) : "1");
-          await wppSend(from, replyGroceryListAdded(g.items.length));
+          await wppSend(from, replyGroceryListAdded(g.items.length, undefined, user.locale));
         } else {
-          await wppSend(from, replyGroceryListAdded(0));
+          await wppSend(from, replyGroceryListAdded(0, undefined, user.locale));
         }
         break;
       }
 
       case "grocery_list_show": {
         const list = await getShoppingList(user.id);
-        await wppSend(from, replyGroceryList(list));
+        await wppSend(from, replyGroceryList(list, user.locale));
         break;
       }
 
@@ -1497,14 +1497,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           if (found && await toggleShoppingItem(found.id, user.id)) checked.push(found.name);
           else notFound.push(name);
         }
-        await wppSend(from, replyGroceryItemChecked(checked, notFound));
+        await wppSend(from, replyGroceryItemChecked(checked, notFound, user.locale));
         break;
       }
 
       case "grocery_spend_query": {
         const spend = await getSpendByStore(user.id);
         const totalSpent = spend.reduce((s, x) => s + x.total, 0);
-        await wppSend(from, replyGrocerySpend(spend, totalSpent));
+        await wppSend(from, replyGrocerySpend(spend, totalSpent, user.locale));
         break;
       }
 
@@ -1615,7 +1615,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "employee_list": {
         const employees = await getEmployeesByUser(user.id, "active");
         const totalPayroll = await getTotalPayroll(user.id);
-        await wppSend(from, replyEmployeeList(employees, totalPayroll));
+        await wppSend(from, replyEmployeeList(employees, totalPayroll, user.locale));
         break;
       }
 
@@ -1630,7 +1630,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.employee?.email) empPatch.email = ai.employee.email;
         if (Object.keys(empPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o salário da Ana para 2200\"_"); break; }
         const empUpdated = await updateEmployee(empTarget.id, user.id, empPatch);
-        if (empUpdated) await wppSend(from, replyEmployeeUpdated(empUpdated));
+        if (empUpdated) await wppSend(from, replyEmployeeUpdated(empUpdated, user.locale));
         break;
       }
 
@@ -1639,7 +1639,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const deactTarget = deactKeyword ? await findEmployeeByName(user.id, deactKeyword) : null;
         if (!deactTarget) { await wppSend(from, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista."); break; }
         const deactivated = await updateEmployee(deactTarget.id, user.id, { status: "inactive" });
-        if (deactivated) await wppSend(from, replyEmployeeDeactivated(deactivated));
+        if (deactivated) await wppSend(from, replyEmployeeDeactivated(deactivated, user.locale));
         break;
       }
 
@@ -1651,14 +1651,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "customer_list": {
         const customers = await getCustomersByUser(user.id, "active");
-        await wppSend(from, replyCustomerList(customers));
+        await wppSend(from, replyCustomerList(customers, user.locale));
         break;
       }
 
       case "customer_query": {
         const custQueryKeyword = ai.keyword || ai.customer?.name || "";
         const custMatches = custQueryKeyword ? await findCustomersByName(user.id, custQueryKeyword) : [];
-        await wppSend(from, replyCustomerInfo(custMatches, custQueryKeyword));
+        await wppSend(from, replyCustomerInfo(custMatches, custQueryKeyword, user.locale));
         break;
       }
 
@@ -1674,7 +1674,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.customer?.notes) custPatch.notes = ai.customer.notes;
         if (Object.keys(custPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o telefone do Pedro para 11988887777\"_"); break; }
         const custUpdated = await updateCustomer(custTarget.id, user.id, custPatch);
-        if (custUpdated) await wppSend(from, replyCustomerUpdated(custUpdated));
+        if (custUpdated) await wppSend(from, replyCustomerUpdated(custUpdated, user.locale));
         break;
       }
 
@@ -1683,12 +1683,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const custDeactTarget = custDeactKeyword ? await findCustomerByName(user.id, custDeactKeyword) : null;
         if (!custDeactTarget) { await wppSend(from, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista."); break; }
         const custDeactivated = await updateCustomer(custDeactTarget.id, user.id, { status: "inactive" });
-        if (custDeactivated) await wppSend(from, replyCustomerDeactivated(custDeactivated));
+        if (custDeactivated) await wppSend(from, replyCustomerDeactivated(custDeactivated, user.locale));
         break;
       }
 
       case "recurring_create": {
-        if (!ai.recurring) { await wppSend(from, replyUnknown(messageText)); break; }
+        if (!ai.recurring) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
 
         // Pagamento de funcionário: precisa saber QUAL antes de criar o
         // recorrente, pra não ficar com descrição genérica "Funcionário".
@@ -1724,7 +1724,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "recurring_query": {
         const recs = await getRecurringByUser(user.id, mode, "active");
-        await wppSend(from, replyRecurringList(recs));
+        await wppSend(from, replyRecurringList(recs, user.locale));
         break;
       }
 
@@ -1762,21 +1762,21 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const driveQuery = ai.keyword || messageText;
         const allFiles = await getFiles(user.id);
         if (!allFiles.length) {
-          await wppSend(from, replyDriveFileList(0));
+          await wppSend(from, replyDriveFileList(0, user.locale));
           break;
         }
         const fileId = await findDriveFileByAI(driveQuery, allFiles.map(f => ({
           id: f.id, originalName: f.originalName, description: f.description, aiKeywords: f.aiKeywords,
         })));
         if (!fileId) {
-          await wppSend(from, replyFileNotFound(driveQuery));
+          await wppSend(from, replyFileNotFound(driveQuery, user.locale));
           break;
         }
         const foundFile = await getFileById(fileId, user.id);
-        if (!foundFile) { await wppSend(from, replyFileNotFound(driveQuery)); break; }
+        if (!foundFile) { await wppSend(from, replyFileNotFound(driveQuery, user.locale)); break; }
         const filePath = getFilePath(foundFile);
-        if (!existsSync(filePath)) { await wppSend(from, replyFileNotFound(driveQuery)); break; }
-        await wppSend(from, replyFileFound(foundFile.originalName));
+        if (!existsSync(filePath)) { await wppSend(from, replyFileNotFound(driveQuery, user.locale)); break; }
+        await wppSend(from, replyFileFound(foundFile.originalName, user.locale));
         const fileBuffer = readFileSync(filePath);
         await wppSendFile(from, fileBuffer, foundFile.originalName, foundFile.mimeType);
         break;
@@ -1803,7 +1803,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "agenda_list": {
         const apts = await getUpcomingAppointments(user.id, 14);
-        await wppSend(from, replyAgendaList(apts));
+        await wppSend(from, replyAgendaList(apts, user.locale));
         break;
       }
 
@@ -1823,7 +1823,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
         } else if (matches.length === 1) {
           const updated = await updateAppointment(matches[0].id, user.id, patch);
-          if (updated) await wppSend(from, replyAgendaUpdated(updated));
+          if (updated) await wppSend(from, replyAgendaUpdated(updated, user.locale));
         } else {
           await askWhichAppointment(from, user.id, matches, "update", `reagendar/alterar`, patch);
         }
@@ -1838,7 +1838,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
         } else if (matches.length === 1) {
           await deleteAppointment(matches[0].id, user.id);
-          await wppSend(from, replyAgendaDeleted(matches[0].title));
+          await wppSend(from, replyAgendaDeleted(matches[0].title, user.locale));
         } else {
           await askWhichAppointment(from, user.id, matches, "delete", "cancelar");
         }
@@ -1914,7 +1914,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         const newMode = ai.mode || (mode === "personal" ? "business" : "personal");
         await updateUser(user.id, { activeMode: newMode });
-        await wppSend(from, replyModeSwitch(newMode));
+        await wppSend(from, replyModeSwitch(newMode, user.locale));
         break;
       }
 
@@ -1922,24 +1922,24 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.response) {
           await wppSend(from, ai.response);
         } else {
-          await wppSend(from, replyHelp());
+          await wppSend(from, replyHelp(user.locale));
         }
         break;
       }
 
       case "help": {
-        await wppSend(from, replyHelp());
+        await wppSend(from, replyHelp(user.locale));
         break;
       }
 
       default: {
         const lower = messageText.toLowerCase();
         if (lower.includes("ajuda") || lower === "?") {
-          await wppSend(from, replyHelp());
+          await wppSend(from, replyHelp(user.locale));
         } else if (lower.includes("saldo") || lower.includes("resumo")) {
           const personal = await getBalance(user.id, "personal", year, month);
           const business = await getBalance(user.id, "business", year, month);
-          await wppSend(from, replyBalance(personal, business));
+          await wppSend(from, replyBalance(personal, business, undefined, undefined, user.locale));
         } else if (lower.includes("extrato") || lower.includes("últimos") || lower.includes("ultimos")) {
           const recents = await getRecentTransactions(user.id, mode, 10);
           if (!recents.length) {
@@ -1953,7 +1953,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             await wppSend(from, msg.trim());
           }
         } else {
-          await wppSend(from, replyUnknown(messageText));
+          await wppSend(from, replyUnknown(messageText, user.locale));
         }
       }
     }

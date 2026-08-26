@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const reset = await createPasswordResetCode(user.id);
   try {
-    await sendFirstAccessCodeEmail({ email: user.email, name: user.name, code: reset.code });
+    await sendFirstAccessCodeEmail({ email: user.email, name: user.name, code: reset.code, locale: user.locale });
   } catch (error) {
     await invalidatePasswordResetCode(reset.id);
     console.error("[first-access] envio do código falhou", error);

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { encryptField, decryptField } from "./crypto-store";
-import { getUserByEmail, activateUser, createPaidUser, deactivateUser, updateUser, type UserPlan } from "./users";
+import { getUserByEmail, activateUser, createPaidUser, deactivateUser, updateUser, type UserPlan, type UserLocale } from "./users";
 import { createPasswordSetupLink } from "./password-reset";
 import { sendFirstAccessLinkEmail } from "./brevo";
 import { sendWelcomeTemplate } from "./whatsapp";
@@ -37,6 +37,11 @@ export type BillingWebhookConfig = {
   // cada valor pro plano do Zelo.
   planPath?: string;
   planMap?: Record<string, UserPlan>;
+  // Mesma ideia do plano: qual campo do payload identifica o produto/checkout
+  // comprado, mapeado pro idioma da conta — precisa de um produto/checkout
+  // separado por idioma na plataforma de venda pra isso fazer sentido.
+  localePath?: string;
+  localeMap?: Record<string, UserLocale>;
   createdAt: string;
   // Última requisição recebida de verdade nessa URL, autenticada ou não —
   // guardado pra dar visibilidade real do que a plataforma de venda está
@@ -65,6 +70,8 @@ type Row = {
   deactivate_values: string[];
   plan_path: string | null;
   plan_map: Record<string, UserPlan> | null;
+  locale_path: string | null;
+  locale_map: Record<string, UserLocale> | null;
   created_at: string;
   last_attempt: WebhookAttempt | null;
 };
@@ -83,6 +90,8 @@ function fromRow(r: Row): BillingWebhookConfig {
     deactivateValues: r.deactivate_values ?? [],
     planPath: r.plan_path ?? undefined,
     planMap: r.plan_map ?? undefined,
+    localePath: r.locale_path ?? undefined,
+    localeMap: r.locale_map ?? undefined,
     createdAt: r.created_at,
     lastAttempt: r.last_attempt ?? undefined,
   };
@@ -101,6 +110,8 @@ function toRowPatch(patch: Partial<Omit<BillingWebhookConfig, "id" | "createdAt"
   if (patch.deactivateValues !== undefined) row.deactivate_values = patch.deactivateValues;
   if (patch.planPath !== undefined) row.plan_path = patch.planPath;
   if (patch.planMap !== undefined) row.plan_map = patch.planMap;
+  if (patch.localePath !== undefined) row.locale_path = patch.localePath;
+  if (patch.localeMap !== undefined) row.locale_map = patch.localeMap;
   return row;
 }
 
@@ -143,6 +154,8 @@ export async function createBillingWebhook(data: Omit<BillingWebhookConfig, "id"
     deactivate_values: cfg.deactivateValues,
     plan_path: cfg.planPath ?? null,
     plan_map: cfg.planMap ?? null,
+    locale_path: cfg.localePath ?? null,
+    locale_map: cfg.localeMap ?? null,
     created_at: cfg.createdAt,
   });
   return cfg;
@@ -169,6 +182,8 @@ export const BILLING_WEBHOOK_PRESETS: Record<string, Omit<BillingWebhookConfig, 
     deactivateValues: ["PURCHASE_CANCELED", "PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK", "PURCHASE_EXPIRED", "SUBSCRIPTION_CANCELLATION"],
     planPath: "data.product.id",
     planMap: {},
+    localePath: "data.product.id",
+    localeMap: {},
   },
   kiwify: {
     label: "Kiwify",
@@ -179,6 +194,8 @@ export const BILLING_WEBHOOK_PRESETS: Record<string, Omit<BillingWebhookConfig, 
     deactivateValues: ["compra_reembolsada", "chargeback", "subscription_canceled"],
     planPath: "Product.product_id",
     planMap: {},
+    localePath: "Product.product_id",
+    localeMap: {},
   },
 };
 
@@ -234,18 +251,24 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     mappedPlan = typeof planRaw === "string" || typeof planRaw === "number" ? cfg.planMap[String(planRaw)] : undefined;
   }
 
+  let mappedLocale: UserLocale | undefined;
+  if (cfg.localePath && cfg.localeMap) {
+    const localeRaw = getByPath(body, cfg.localePath);
+    mappedLocale = typeof localeRaw === "string" || typeof localeRaw === "number" ? cfg.localeMap[String(localeRaw)] : undefined;
+  }
+
   let user = await getUserByEmail(email);
   if (!user && !isActivate) return { ok: true, action: "ignored", email, detail: "cliente ainda não possui conta" };
   if (!user && dryRun) return { ok: true, action: "activated", email, detail: "conta paga seria criada e o acesso enviado por e-mail" };
   if (!user) {
     const name = firstString(body, ["data.buyer.name", "data.buyer.first_name", "data.subscriber.name", "Customer.full_name", "Customer.first_name"]) || email.split("@")[0];
     const phone = firstString(body, ["data.buyer.checkout_phone", "data.buyer.phone", "Customer.mobile", "Customer.phone"]);
-    user = await createPaidUser({ name, email, phone, plan: mappedPlan });
+    user = await createPaidUser({ name, email, phone, plan: mappedPlan, locale: mappedLocale });
     let setupId: string | undefined;
     try {
       const setup = await createPasswordSetupLink(user.id);
       setupId = setup.id;
-      await sendFirstAccessLinkEmail({ email: user.email, name: user.name, setupId: setup.id });
+      await sendFirstAccessLinkEmail({ email: user.email, name: user.name, setupId: setup.id, locale: user.locale });
     } catch (error) {
       console.error("[billing-webhook] conta criada, mas o e-mail de acesso falhou", error);
     }
@@ -253,7 +276,7 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     // e-mail ter falhado ou não, e só se o webhook trouxe telefone.
     if (setupId && user.phone) {
       try {
-        await sendWelcomeTemplate(user.phone);
+        await sendWelcomeTemplate(user.phone, user.locale);
       } catch (error) {
         console.error("[billing-webhook] conta criada, mas a mensagem de boas-vindas por WhatsApp falhou", error);
       }

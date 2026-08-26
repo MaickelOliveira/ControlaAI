@@ -398,7 +398,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         startDate: (draft.startDate as string) || todayStrBR(),
         source: "whatsapp",
       });
-      return replyRecurringCreated(rec);
+      return replyRecurringCreated(rec, ctx.user.locale);
     },
 
     giveUp: () => `❌ Não consegui cadastrar — faltou o valor. Tente de novo, ex: _"academia 100 por mês"_.`,
@@ -532,7 +532,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         status: "scheduled",
         source: "whatsapp",
       });
-      return replyAgendaCreated(apt);
+      return replyAgendaCreated(apt, ctx.user.locale);
     },
 
     giveUp: () => `❌ Não consegui agendar — faltou o título ou a data. Tente de novo, ex: _"agendar reunião amanhã às 14h"_.`,
@@ -603,7 +603,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         });
         await setPurchaseFinanceId(purchase.id, ctx.userId, finance.id);
       }
-      return replyGroceryPurchaseSaved(purchase);
+      return replyGroceryPurchaseSaved(purchase, ctx.user.locale);
     },
 
     giveUp: () => `❌ Não consegui registrar a compra — faltaram os itens. Tente de novo, ex: _"comprei no Assaí: arroz 25, feijão 8"_.`,
@@ -645,7 +645,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         ctx.userId, ctx.mode, draft.storeName as string, draft.total as number, ctx.phone,
       );
       if (!result) return `❓ Sua lista de compras não tem nenhum item marcado. Marca o que você já comprou (ex: _"comprei o arroz"_) e chama de novo.`;
-      return replyGroceryPurchaseFinished(result.purchase);
+      return replyGroceryPurchaseFinished(result.purchase, ctx.user.locale);
     },
 
     giveUp: () => `❌ Não consegui fechar a compra — faltou o mercado ou o valor. Tente de novo, ex: _"finalizei a compra no Assaí, foi 120 reais"_.`,
@@ -699,7 +699,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         phone: draft.phone as string | undefined,
         email: draft.email as string | undefined,
       });
-      return replyEmployeeCreated(employee);
+      return replyEmployeeCreated(employee, ctx.user.locale);
     },
 
     giveUp: () => `❌ Não consegui cadastrar — faltou o nome ou o salário. Tente de novo, ex: _"cadastra a Ana como vendedora, 2000"_.`,
@@ -741,7 +741,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         notes: draft.notes as string | undefined,
         status: "active",
       });
-      return replyCustomerCreated(customer);
+      return replyCustomerCreated(customer, ctx.user.locale);
     },
 
     giveUp: () => `❌ Não consegui cadastrar — faltou o nome. Tente de novo, ex: _"cadastra o cliente Pedro"_.`,
