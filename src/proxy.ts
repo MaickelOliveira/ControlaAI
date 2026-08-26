@@ -38,8 +38,14 @@ export async function proxy(req: NextRequest) {
     if (adminRole !== "admin") return NextResponse.redirect(new URL("/admin/login", req.url));
   }
 
-  // ── Proteção /dashboard/* (exige cookie de cliente)
-  if (pathname.startsWith("/dashboard")) {
+  // ── Proteção /dashboard/*, /es/dashboard/* e /pt/dashboard/* (exige
+  // cookie de cliente) — cada árvore de idioma manda pro login do mesmo
+  // idioma quando desloga, em vez de sempre cair no /login em português.
+  if (pathname.startsWith("/es/dashboard")) {
+    if (clientRole !== "client") return NextResponse.redirect(new URL("/es/login", req.url));
+  } else if (pathname.startsWith("/pt/dashboard")) {
+    if (clientRole !== "client") return NextResponse.redirect(new URL("/pt/login", req.url));
+  } else if (pathname.startsWith("/dashboard")) {
     if (clientRole !== "client") return NextResponse.redirect(new URL("/login", req.url));
   }
 
@@ -58,9 +64,15 @@ export async function proxy(req: NextRequest) {
   }
 
   // ── Não deixa cliente já logado ver /login ou /cadastro (nas 3 versões
-  // de idioma) — o dashboard traduzido ainda não existe (Fase 2), então
-  // manda pro dashboard padrão mesmo vindo de /es ou /pt.
-  if (["/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"].includes(pathname) && clientRole === "client") {
+  // de idioma) — agora que o dashboard traduzido existe (Fase 2), manda
+  // pro dashboard do mesmo idioma em vez de sempre cair no padrão em pt-BR.
+  if (["/es/login", "/es/cadastro"].includes(pathname) && clientRole === "client") {
+    return NextResponse.redirect(new URL("/es/dashboard", req.url));
+  }
+  if (["/pt/login", "/pt/cadastro"].includes(pathname) && clientRole === "client") {
+    return NextResponse.redirect(new URL("/pt/dashboard", req.url));
+  }
+  if (["/login", "/cadastro"].includes(pathname) && clientRole === "client") {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
@@ -68,5 +80,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/es", "/pt", "/admin/:path*", "/dashboard/:path*", "/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"],
+  matcher: ["/", "/es", "/pt", "/admin/:path*", "/dashboard/:path*", "/es/dashboard/:path*", "/pt/dashboard/:path*", "/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"],
 };
