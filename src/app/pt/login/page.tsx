@@ -34,7 +34,7 @@ export default function LoginPagePt() {
       // assim o bot e os e-mails passam a falar em português europeu sem
       // precisar de um ecrã extra. Best-effort: não bloqueia o login se falhar.
       await fetch("/api/account/locale", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale: "pt-PT" }) }).catch(() => {});
-      router.push("/dashboard");
+      router.push("/pt/dashboard");
     } catch { setError("Não foi possível ligar. Tenta novamente."); }
     finally { setLoading(false); }
   }

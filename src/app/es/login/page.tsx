@@ -35,7 +35,7 @@ export default function LoginPageEs() {
       // necesidad de una pantalla extra. Best-effort: no bloquea el ingreso
       // si falla.
       await fetch("/api/account/locale", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale: "es" }) }).catch(() => {});
-      router.push("/dashboard");
+      router.push("/es/dashboard");
     } catch { setError("No fue posible conectar. Intenta de nuevo."); }
     finally { setLoading(false); }
   }
