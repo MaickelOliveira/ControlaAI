@@ -9,7 +9,7 @@ type SpendByStore = { storeId: string; storeName: string; total: number; visits:
 type Purchase = { id: string; storeName: string; date: string; total: number; items: Array<{ productName: string; price: number; quantity: number; category: string; unit: string }> };
 type Product = { id: string; name: string; category: string; defaultUnit: string };
 
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number) { return v.toLocaleString("es-419", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol" }); }
 
 const CATEGORIES = ["Abarrotes", "Carnes", "Frutas y Verduras", "Lácteos", "Panadería", "Bebidas", "Limpieza", "Higiene", "Otros"] as const;
 const CAT_ICON: Record<string, string> = { Abarrotes: "🌾", Carnes: "🥩", "Frutas y Verduras": "🥬", Lácteos: "🥛", Panadería: "🍞", Bebidas: "🧃", Limpieza: "🧹", Higiene: "🧴", Otros: "📦" };
@@ -513,7 +513,7 @@ export default function SupermercadoPageEs() {
                     <input type="number" step="0.01" min="0" required
                       value={finishPrices[item.id] ?? ""}
                       onChange={e => setFinishPrices(p => ({ ...p, [item.id]: e.target.value }))}
-                      placeholder="R$" className="w-24 border border-slate-200 rounded-xl px-3 py-1.5 text-sm outline-none" />
+                      placeholder="$" className="w-24 border border-slate-200 rounded-xl px-3 py-1.5 text-sm outline-none" />
                   </div>
                 ))}
               </div>
@@ -555,7 +555,7 @@ export default function SupermercadoPageEs() {
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <input type="number" step="0.01" value={item.price} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], price: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
-                      placeholder="R$" className="col-span-3 sm:col-span-2 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />
+                      placeholder="$" className="col-span-3 sm:col-span-2 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />
                     <input type="number" value={item.quantity} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], quantity: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
                       placeholder="Cant." className="col-span-2 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />
                     <button type="button" onClick={() => setPurchaseForm(f => ({ ...f, items: f.items.filter((_, j) => j !== i) }))}

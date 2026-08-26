@@ -6,7 +6,7 @@ import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 type VehicleExpense = { id: string; date: string; km?: number; type: string; amount: number; description: string; financeId?: string };
 type Vehicle = { id: string; plate: string; brand: string; model: string; year: number; fuelType: string; currentKm: number; mode: string; expenses: VehicleExpense[] };
 
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number) { return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR" }); }
 const TYPE_EMOJI: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
 const TYPE_LABEL: Record<string, string> = { fuel: "Combustível", maintenance: "Manutenção", insurance: "Seguro", tax: "Impostos", other: "Outros" };
 
@@ -218,7 +218,7 @@ export default function VeiculosPagePt() {
               <select value={eForm.type} onChange={e => setEForm(f => ({ ...f, type: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none bg-white">
                 {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{TYPE_EMOJI[k]} {v}</option>)}
               </select>
-              <input type="number" step="0.01" value={eForm.amount} onChange={e => setEForm(f => ({ ...f, amount: e.target.value }))} required placeholder="Valor (R$)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+              <input type="number" step="0.01" value={eForm.amount} onChange={e => setEForm(f => ({ ...f, amount: e.target.value }))} required placeholder="Valor (€)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
               <input value={eForm.description} onChange={e => setEForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrição" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
               <div className="grid grid-cols-2 gap-3">
                 <input type="date" value={eForm.date} onChange={e => setEForm(f => ({ ...f, date: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />

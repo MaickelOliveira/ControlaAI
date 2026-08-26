@@ -11,10 +11,10 @@ type FlowEntry = { label: string; receitas: number; despesas: number };
 
 const PIE_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6"];
 
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number) { return v.toLocaleString("es-419", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol" }); }
 function fmtK(v: number) {
-  if (v >= 1000) return `R$${(v / 1000).toFixed(1)}k`;
-  return `R$${v.toFixed(0)}`;
+  if (v >= 1000) return `$${(v / 1000).toFixed(1)}k`;
+  return `$${v.toFixed(0)}`;
 }
 
 export function BarChartComponent({ data }: { data: BarEntry[] }) {

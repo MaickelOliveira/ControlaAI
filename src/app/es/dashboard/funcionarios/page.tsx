@@ -5,7 +5,7 @@ import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Employee = { id: string; name: string; role: string; salary: number; startDate: string; status: string; phone?: string; email?: string; notes?: string };
 
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number) { return v.toLocaleString("es-419", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol" }); }
 
 const ROLES = ["Gerente", "Vendedor", "Atención al Cliente", "Cajero", "Almacenista", "Técnico", "Administrativo", "Financiero", "RRHH", "Marketing", "Otro"];
 
@@ -176,7 +176,7 @@ export default function FuncionariosPageEs() {
                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <input type="number" step="0.01" value={form.salary} onChange={e => setForm(f => ({ ...f, salary: e.target.value }))}
-                placeholder="Salario (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Salario ($)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Fecha de contratación</label>
                 <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}

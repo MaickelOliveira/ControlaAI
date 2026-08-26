@@ -22,7 +22,7 @@ type RecurringTransaction = {
   createdAt: string;
 };
 
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number) { return v.toLocaleString("es-419", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol" }); }
 function fmtDate(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("es-419"); }
 
 const UNIT_LABEL: Record<string, string> = { monthly: "Mensual", weekly: "Semanal", daily: "Diario", yearly: "Anual" };
@@ -298,7 +298,7 @@ export default function RecorrentesPageEs() {
 
               <div className="grid grid-cols-2 gap-3">
                 <input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required
-                  placeholder={form.recurrenceType === "installment" ? "Monto/cuota" : "Monto (R$)"} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                  placeholder={form.recurrenceType === "installment" ? "Monto/cuota" : "Monto ($)"} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
                 {form.recurrenceType === "installment" ? (
                   <input type="number" value={form.totalInstallments} onChange={e => setForm(f => ({ ...f, totalInstallments: e.target.value }))} required
                     placeholder="N.º de cuotas" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
