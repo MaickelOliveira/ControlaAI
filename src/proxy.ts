@@ -46,7 +46,9 @@ export async function proxy(req: NextRequest) {
   // ── A landing page é sempre pública, inclusive para quem está logado.
   // Cliente e admin usam cookies separados e podem manter as duas sessões no
   // mesmo navegador sem a raiz escolher um painel e trocar o contexto.
-  if (pathname === "/") {
+  // /es e /pt são as mesmas landing pages traduzidas (espanhol e português
+  // de Portugal) — mesma regra de sempre pública.
+  if (pathname === "/" || pathname === "/es" || pathname === "/pt") {
     return NextResponse.next();
   }
 
@@ -55,8 +57,10 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/admin", req.url));
   }
 
-  // ── Não deixa cliente já logado ver /login ou /cadastro
-  if ((pathname === "/login" || pathname === "/cadastro") && clientRole === "client") {
+  // ── Não deixa cliente já logado ver /login ou /cadastro (nas 3 versões
+  // de idioma) — o dashboard traduzido ainda não existe (Fase 2), então
+  // manda pro dashboard padrão mesmo vindo de /es ou /pt.
+  if (["/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"].includes(pathname) && clientRole === "client") {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
@@ -64,5 +68,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/admin/:path*", "/dashboard/:path*", "/login", "/cadastro"],
+  matcher: ["/", "/es", "/pt", "/admin/:path*", "/dashboard/:path*", "/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"],
 };
