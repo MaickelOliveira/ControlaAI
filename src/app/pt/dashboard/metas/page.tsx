@@ -6,7 +6,7 @@ import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 type Goal = { id: string; title: string; targetAmount: number; currentAmount: number; deadline?: string; category: string; mode: string; status: string };
 
 function fmt(v: number | null | undefined) {
-  return (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return (Number(v) || 0).toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
 }
 function pct(g: Goal) {
   const target = Number(g.targetAmount) || 0;
@@ -215,9 +215,9 @@ export default function MetasPagePt() {
               <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required
                 placeholder="Ex: Poupar para uma viagem" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               <input type="number" step="0.01" value={form.targetAmount} onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))} required
-                placeholder="Valor alvo (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                placeholder="Valor alvo (€)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               <input type="number" step="0.01" value={form.currentAmount} onChange={e => setForm(f => ({ ...f, currentAmount: e.target.value }))}
-                placeholder="Já tenho (R$) — opcional" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Já tenho (€) — opcional" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
               <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -241,7 +241,7 @@ export default function MetasPagePt() {
             <p className="text-sm text-slate-500 mb-1">{showAdd.title}</p>
             <p className="text-xs text-slate-400 mb-4">{fmt(showAdd.currentAmount)} / {fmt(showAdd.targetAmount)} ({pct(showAdd)}%)</p>
             <input type="number" step="0.01" value={addAmount} onChange={e => setAddAmount(e.target.value)} autoFocus
-              placeholder="Valor a adicionar (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200 mb-3" />
+              placeholder="Valor a adicionar (€)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200 mb-3" />
             <div className="flex gap-3">
               <button onClick={() => setShowAdd(null)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
               <button onClick={() => handleAddAmount(showAdd)} disabled={!addAmount}

@@ -24,7 +24,7 @@ type Recurring = {
   status: "active" | "completed" | "cancelled";
 };
 
-function fmt(v: number | undefined | null) { return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmt(v: number | undefined | null) { return (v ?? 0).toLocaleString("pt-PT", { style: "currency", currency: "EUR" }); }
 function fmtDate(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-PT"); }
 
 const UNIT_LABEL: Record<string, string> = { monthly: "Mensal", weekly: "Semanal", daily: "Diário", yearly: "Anual" };
@@ -585,7 +585,7 @@ export default function FinancasPagePt() {
 
               {/* Campos comuns */}
               <input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required
-                placeholder={form.frequency === "installment" ? "Valor por prestação (R$)" : "Valor (R$)"}
+                placeholder={form.frequency === "installment" ? "Valor por prestação (€)" : "Valor (€)"}
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
 
               <div className="flex gap-2 items-center">
@@ -656,7 +656,7 @@ export default function FinancasPagePt() {
             <p className="text-xs text-slate-400 mb-4">{editTarget.type === "income" ? "💰 Receita" : "💸 Despesa"}</p>
             <form onSubmit={handleEdit} className="space-y-3">
               <input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} required
-                placeholder="Valor (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
+                placeholder="Valor (€)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
               <select value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} required
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
                 <option value="">Categoria</option>
@@ -685,7 +685,7 @@ export default function FinancasPagePt() {
             <p className="text-xs text-slate-400 mb-4">{editRec.description}</p>
             <form onSubmit={handleEditRec} className="space-y-3">
               <input type="number" step="0.01" value={editRecForm.amount} onChange={e => setEditRecForm(f => ({ ...f, amount: e.target.value }))}
-                placeholder="Novo valor (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
+                placeholder="Novo valor (€)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
               <input value={editRecForm.description} onChange={e => setEditRecForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="Descrição" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
               <select value={editRecForm.category} onChange={e => setEditRecForm(f => ({ ...f, category: e.target.value }))}
