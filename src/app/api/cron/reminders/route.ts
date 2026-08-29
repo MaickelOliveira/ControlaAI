@@ -47,7 +47,7 @@ async function runCron() {
         const owner = await getUserById(r.userId);
         const nome = owner?.name || "cliente";
         const texto = `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-        ok = await sendReminderTemplate(r.phone, "lbt_empresarial", texto, { nome, lembrete: r.message });
+        ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { nome, lembrete: r.message });
       } else {
         const owner = await getUserById(r.userId);
         const nome = owner?.name || "cliente";
