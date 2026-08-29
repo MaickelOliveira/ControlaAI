@@ -75,7 +75,7 @@ export async function register() {
               : locale === "pt-PT"
               ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`
               : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lbt_empresarial", texto, { nome: owner?.name || "cliente", lembrete: r.message }, locale);
+            ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { nome: owner?.name || "cliente", lembrete: r.message }, locale);
           } else {
             const texto = locale === "es"
               ? `🔔 Zelo — Recordatorio que configuraste\n\nNecesitas: ${r.message}\n\nRecordatorio personal agendado por ti en Zelo.`
