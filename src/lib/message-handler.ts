@@ -1236,11 +1236,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         let recipientName: string | undefined;
 
         const recipientQuery = ai.reminder.recipientName;
-        if (recipientQuery) {
-          // Assessor notifica por você: se o pedido citar outra pessoa, resolve
-          // o telefone real dela (cliente → funcionário → número da família
-          // já vinculado) antes de agendar — sem isso, todo lembrete ia sempre
-          // pro número de quem mandou a mensagem.
+        const explicitPhone = ai.reminder.recipientPhone?.replace(/\D/g, "");
+
+        if (explicitPhone && explicitPhone.length >= 10) {
+          // Número citado direto na mensagem (ex: "lembra o João, número
+          // 5544999999999, de pagar amanhã") — mesmo caminho que o dashboard
+          // já permite pra "outra pessoa" via campo livre de telefone, sem
+          // exigir cadastro prévio como cliente/funcionário/número da família.
+          targetPhone = explicitPhone; recipientType = "other"; recipientName = recipientQuery;
+        } else if (recipientQuery) {
+          // Assessor notifica por você: se o pedido citar outra pessoa sem
+          // telefone explícito, resolve o telefone real dela (cliente →
+          // funcionário → número da família já vinculado) antes de agendar —
+          // sem isso, todo lembrete ia sempre pro número de quem mandou a mensagem.
           const customer = await findCustomerByName(user.id, recipientQuery);
           const employee = await findEmployeeByName(user.id, recipientQuery);
           const linkedPhone = await findPhoneByName(user.id, recipientQuery);
@@ -1252,7 +1260,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           } else if (linkedPhone) {
             targetPhone = linkedPhone; recipientType = "other"; recipientName = recipientQuery;
           } else {
-            await wppSend(from, `❓ Não encontrei *${cap(recipientQuery)}* com telefone cadastrado. Cadastre o contato (cliente, funcionário ou número da família) antes de criar esse lembrete pra ele, ou peça de novo sem citar ninguém pra lembrar você mesmo.`);
+            await wppSend(from, `❓ Não encontrei *${cap(recipientQuery)}* com telefone cadastrado. Cadastre o contato (cliente, funcionário ou número da família), ou diga o número dele direto (ex: "lembra o ${cap(recipientQuery)}, número 5544999999999, de..."), ou peça de novo sem citar ninguém pra lembrar você mesmo.`);
             break;
           }
         }

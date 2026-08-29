@@ -119,6 +119,7 @@ export type ReminderData = {
   repeat?: "none" | "daily" | "weekly" | "monthly";
   mode?: "personal" | "business"; // detectado automaticamente
   recipientName?: string; // nome de quem deve RECEBER o lembrete, se não for pra quem está pedindo (ex: "Milena", "equipe", "cliente Carlos") — ausente = lembrete pra quem está mandando a mensagem
+  recipientPhone?: string; // telefone explícito citado na mensagem pra essa pessoa (só dígitos) — permite lembrete pra alguém NÃO cadastrado como cliente/funcionário/número da família
 };
 
 export type MeetData = {
@@ -370,7 +371,7 @@ INTENÇÕES POSSÍVEIS:
 - task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título) pra identificar qual.
 - task_delete: apagar/excluir uma tarefa ("apaga a tarefa 3", "remove a tarefa de ligar pro cliente", "deleta essa tarefa"). Use "taskNumber" ou "title" igual ao task_update.
 - task_query: listar tarefas
-- reminder_set: criar lembrete agendado. ⚠️ Se a mensagem pedir pra avisar/lembrar OUTRA PESSOA em vez de quem está mandando a mensagem (ex: "lembra a Milena de pagar amanhã às 10h", "avisa o cliente Carlos que a reunião é sexta", "manda um lembrete pra equipe às 9h", "lembra o João de ligar pro fornecedor"), inclua "reminder.recipientName" com o nome citado (ex: "Milena", "Carlos", "equipe", "João"). Sem menção a outra pessoa, NÃO inclua "recipientName" — o lembrete é pra quem está mandando a mensagem, como sempre.
+- reminder_set: criar lembrete agendado. ⚠️ Se a mensagem pedir pra avisar/lembrar OUTRA PESSOA em vez de quem está mandando a mensagem (ex: "lembra a Milena de pagar amanhã às 10h", "avisa o cliente Carlos que a reunião é sexta", "manda um lembrete pra equipe às 9h", "lembra o João de ligar pro fornecedor"), inclua "reminder.recipientName" com o nome citado (ex: "Milena", "Carlos", "equipe", "João"). Sem menção a outra pessoa, NÃO inclua "recipientName" — o lembrete é pra quem está mandando a mensagem, como sempre. Se a mensagem TAMBÉM citar um número de telefone explícito pra essa pessoa (ex: "lembra o João, número 5544999999999, de pagar o boleto amanhã às 10h", "avisa a Maria no 44988887777 que a entrega chegou"), inclua "reminder.recipientPhone" com só os dígitos informados (com DDD, e código do país se a pessoa disser) — isso permite criar o lembrete pra alguém que ainda não está cadastrado como cliente/funcionário/número da família. Sem número explícito na mensagem, NÃO inclua "recipientPhone".
 - reminder_list: listar lembretes ativos ("meus lembretes", "quais lembretes eu tenho", "o que eu tenho agendado pra me avisar")
 - reminder_update: editar um lembrete existente — mensagem, data/hora ou repetição ("muda o lembrete do remédio pra 8h", "troca o lembrete da conta de luz pra todo dia 5"). Use "keyword" com o termo de busca e "reminder" com os novos valores (só os campos que mudaram).
 - reminder_delete: cancelar/apagar um lembrete ("cancela o lembrete do remédio", "apaga o lembrete da reunião", "não precisa mais me lembrar disso"). Use "keyword" com o termo de busca.
@@ -642,6 +643,19 @@ OU para lembrete pra OUTRA pessoa ("lembra a Milena de pagar amanhã às 10h"):
     "scheduledAt": "2026-07-06T10:00:00",
     "repeat": "none",
     "recipientName": "Milena"
+  }
+}
+
+OU para lembrete pra OUTRA pessoa com telefone citado explicitamente ("lembra o João, número 5544999999999, de pagar o boleto amanhã às 10h"):
+{
+  "intent": "reminder_set",
+  "confidence": 0.9,
+  "reminder": {
+    "message": "Pagar o boleto",
+    "scheduledAt": "2026-07-06T10:00:00",
+    "repeat": "none",
+    "recipientName": "João",
+    "recipientPhone": "5544999999999"
   }
 }
 
