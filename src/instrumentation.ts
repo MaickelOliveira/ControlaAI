@@ -75,14 +75,14 @@ export async function register() {
               : locale === "pt-PT"
               ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`
               : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_empresarial", texto, { lembrete: r.message }, locale);
+            ok = await sendReminderTemplate(r.phone, "lbt_empresarial", texto, { nome: owner?.name || "cliente", lembrete: r.message }, locale);
           } else {
             const texto = locale === "es"
               ? `🔔 Zelo — Recordatorio que configuraste\n\nNecesitas: ${r.message}\n\nRecordatorio personal agendado por ti en Zelo.`
               : locale === "pt-PT"
               ? `🔔 Zelo — Lembrete que configuraste\n\nPrecisas de: ${r.message}\n\nLembrete pessoal agendado por ti no Zelo.`
               : `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message }, locale);
+            ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { nome: owner?.name || "cliente", lembrete: r.message }, locale);
           }
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) await markReminderSent(r.id, r.repeat);
@@ -122,9 +122,9 @@ export async function register() {
               const phones = (await getPhonesForUser(user.id)).map(link => link.phone);
               const msg = buildRecurringNotification(rec, user.locale);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
-              const params = { descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
+              const params = { nome: user.name, descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
               for (const phone of phones) {
-                const ok = await sendReminderTemplate(phone, "cobranca_recorrente", msg, params, user.locale);
+                const ok = await sendReminderTemplate(phone, "cbr_recorrente", msg, params, user.locale);
                 if (ok) {
                   await markNotified(rec.id);
                   await setPendingAction(phone, {
