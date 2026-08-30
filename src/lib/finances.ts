@@ -16,6 +16,42 @@ export const CATEGORIES_INCOME = [
   "Serviços", "Reembolso", "Outros",
 ];
 
+// Traduções apenas de EXIBIÇÃO das categorias padrão (mesma ordem/índice de
+// CATEGORIES_EXPENSE/CATEGORIES_INCOME acima) — o valor gravado em
+// Finance.category continua sempre em português (é o que a IA classifica e o
+// que o dashboard usa pra agrupar/filtrar); só o texto mostrado ao usuário
+// es/pt-PT muda. Categoria customizada (fora dessas listas) não tem como
+// traduzir — mantém como o usuário cadastrou.
+const CATEGORIES_EXPENSE_ES = [
+  "Alimentación", "Transporte", "Vivienda", "Salud", "Educación",
+  "Ocio", "Ropa", "Tecnología", "Servicios", "Impuestos",
+  "Empleados", "Marketing", "Proveedores", "Otros",
+];
+const CATEGORIES_EXPENSE_PTPT = [
+  "Alimentação", "Transporte", "Habitação", "Saúde", "Educação",
+  "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos",
+  "Funcionários", "Marketing", "Fornecedores", "Outros",
+];
+const CATEGORIES_INCOME_ES = [
+  "Salario", "Freelance", "Ventas", "Inversiones", "Alquiler",
+  "Servicios", "Reembolso", "Otros",
+];
+const CATEGORIES_INCOME_PTPT = [
+  "Salário", "Freelance", "Vendas", "Investimentos", "Renda",
+  "Serviços", "Reembolso", "Outros",
+];
+
+export function translateCategory(category: string, type: FinanceType, locale?: string): string {
+  if (locale !== "es" && locale !== "pt-PT") return category;
+  const source = type === "expense" ? CATEGORIES_EXPENSE : CATEGORIES_INCOME;
+  const idx = source.indexOf(category);
+  if (idx === -1) return category;
+  const target = locale === "es"
+    ? (type === "expense" ? CATEGORIES_EXPENSE_ES : CATEGORIES_INCOME_ES)
+    : (type === "expense" ? CATEGORIES_EXPENSE_PTPT : CATEGORIES_INCOME_PTPT);
+  return target[idx] ?? category;
+}
+
 export type Finance = {
   id: string;
   userId: string;

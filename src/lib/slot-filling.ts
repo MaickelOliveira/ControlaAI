@@ -15,9 +15,9 @@ import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchas
 import { createEmployee } from "./employees";
 import { createCustomer } from "./customers";
 import {
-  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated,
+  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyGoalCreated,
 } from "./bot-replies";
-import { formatCurrency, addFinance } from "./finances";
+import { addFinance } from "./finances";
 
 /**
  * Motor genérico de "perguntar o que falta" (slot-filling), usado quando uma
@@ -453,9 +453,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         status: "active",
       });
       const pct = getGoalProgress(goal);
-      const currentLine = goal.currentAmount > 0 ? `\n💵 Já guardado: ${formatCurrency(goal.currentAmount)}` : "";
-      const deadlineLine = goal.deadline ? `\n📅 Prazo: ${new Date(goal.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : "";
-      return `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoria: ${goal.category}${deadlineLine}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`;
+      return replyGoalCreated(goal, pct, ctx.user.locale);
     },
 
     giveUp: () => `❌ Não consegui criar a meta — faltou o nome ou o valor. Tente de novo, ex: _"quero guardar 3000 para viagem"_.`,

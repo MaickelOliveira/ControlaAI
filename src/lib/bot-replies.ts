@@ -3,7 +3,8 @@ import type { Task } from "./tasks";
 import type { Reminder } from "./reminders";
 import { type RecurringTransaction, recurringRemaining } from "./recurring";
 import type { Appointment } from "./agenda";
-import { formatCurrency } from "./finances";
+import type { Goal } from "./goals";
+import { formatCurrency, translateCategory } from "./finances";
 import { PRIORITY_LABEL, formatDueDate } from "./tasks";
 import type { UserMode } from "./users";
 import { formatDateBR, formatDateTimeBR } from "./date-br";
@@ -36,7 +37,8 @@ export function replyFinanceRegistered(f: Finance, balance: number, locale?: str
   const verbo = isEs(locale) ? "Anotado" : isPtPt(locale) ? "Registado" : "Anotado";
   const saldoLbl = isEs(locale) ? "Saldo" : "Saldo";
   const dateStr = new Date(f.date + "T12:00:00").toLocaleDateString(dateLocale(locale));
-  return `${verbo}. ${emoji} *${formatCurrency(f.amount)}* — ${f.category} (${tipo})\n📝 ${f.description}\n📅 ${dateStr}\n\n${saldoLbl} ${modeLabel}: *${formatCurrency(balance)}*`;
+  const categoria = translateCategory(f.category, f.type, locale);
+  return `${verbo}. ${emoji} *${formatCurrency(f.amount)}* — ${categoria} (${tipo})\n📝 ${f.description}\n📅 ${dateStr}\n\n${saldoLbl} ${modeLabel}: *${formatCurrency(balance)}*`;
 }
 
 export function replyBalance(personal: { income: number; expense: number; balance: number }, business?: { income: number; expense: number; balance: number }, personName?: string, periodLabel?: string, locale?: string): string {
@@ -600,6 +602,25 @@ export function replyRecurringCreated(r: RecurringTransaction, locale?: string):
   }
   const termLine = r.totalInstallments ? ` · ${r.totalInstallments} vezes` : "";
   return `Cadastrado. Fico de olho nos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso você às 20h de cada vencimento.`;
+}
+
+export function replyGoalCreated(goal: Goal, pct: number, locale?: string): string {
+  const category = goal.category === "Geral" && isEs(locale) ? "General" : goal.category;
+  const deadlineStr = goal.deadline ? new Date(goal.deadline + "T12:00:00").toLocaleDateString(dateLocale(locale)) : undefined;
+
+  if (isEs(locale)) {
+    const currentLine = goal.currentAmount > 0 ? `\n💵 Ya ahorrado: ${formatCurrency(goal.currentAmount)}` : "";
+    const deadlineLine = deadlineStr ? `\n📅 Plazo: ${deadlineStr}` : "";
+    return `✅ *¡Meta creada con éxito!*\n\n🎯 *${goal.title}*\n💰 Objetivo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoría: ${category}${deadlineLine}\n📊 Progreso: ${pct}%\n\nSíguela en el panel → Metas 🚀`;
+  }
+  if (isPtPt(locale)) {
+    const currentLine = goal.currentAmount > 0 ? `\n💵 Já poupado: ${formatCurrency(goal.currentAmount)}` : "";
+    const deadlineLine = deadlineStr ? `\n📅 Prazo: ${deadlineStr}` : "";
+    return `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoria: ${category}${deadlineLine}\n📊 Progresso: ${pct}%\n\nAcompanha no painel → Metas 🚀`;
+  }
+  const currentLine = goal.currentAmount > 0 ? `\n💵 Já guardado: ${formatCurrency(goal.currentAmount)}` : "";
+  const deadlineLine = deadlineStr ? `\n📅 Prazo: ${deadlineStr}` : "";
+  return `✅ *Meta criada com sucesso!*\n\n🎯 *${goal.title}*\n💰 Alvo: ${formatCurrency(goal.targetAmount)}${currentLine}\n📁 Categoria: ${category}${deadlineLine}\n📊 Progresso: ${pct}%\n\nAcompanhe no dashboard → Metas 🚀`;
 }
 
 export function replyRecurringList(items: RecurringTransaction[], locale?: string): string {

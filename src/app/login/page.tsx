@@ -30,6 +30,12 @@ export default function LoginPage() {
       });
       const data = await response.json();
       if (!response.ok) { setError(data.error || "Não foi possível entrar"); return; }
+      // Marca a conta como "pt-BR" ao entrar por esta versão do login — sem
+      // isso, quem tinha trocado pra "es"/"pt-PT" (via /es/login ou
+      // /pt/login) ficava preso nesse idioma pra sempre, já que só as
+      // versões /es e /pt fazem esse PATCH; esta é a versão que volta pro
+      // padrão. Best-effort: não bloqueia o login se falhar.
+      await fetch("/api/account/locale", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale: "pt-BR" }) }).catch(() => {});
       router.push("/dashboard");
     } catch { setError("Não foi possível conectar. Tente novamente."); }
     finally { setLoading(false); }
