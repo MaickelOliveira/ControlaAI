@@ -4,7 +4,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
@@ -2066,6 +2066,35 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "help": {
         await wppSend(from, replyHelp(user.locale));
+        break;
+      }
+
+      case "category_create": {
+        const categoryName = ai.categoryName?.trim();
+        if (!categoryName) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
+
+        // Ação de 1 passo só: por padrão cria pros dois tipos ao mesmo tempo
+        // (sem perguntar), só restringe se a IA identificou um tipo explícito.
+        const targets: Array<"expense" | "income"> = ai.financeType ? [ai.financeType] : ["expense", "income"];
+        const added: string[] = [];
+        const already: string[] = [];
+
+        for (const type of targets) {
+          const defaults = type === "expense" ? CATEGORIES_EXPENSE : CATEGORIES_INCOME;
+          const existing = type === "expense" ? (user.customCategoriesExpense || []) : (user.customCategoriesIncome || []);
+          const exists = [...defaults, ...existing].some(c => c.toLowerCase() === categoryName.toLowerCase());
+          if (exists) { already.push(type); continue; }
+          const updated = [...existing, categoryName];
+          if (type === "expense") await updateUser(user.id, { customCategoriesExpense: updated });
+          else await updateUser(user.id, { customCategoriesIncome: updated });
+          added.push(type);
+        }
+
+        const typeLabel = (t: string) => t === "expense" ? "despesa" : "receita";
+        let msg = "";
+        if (added.length) msg += `✅ Categoria *${categoryName}* criada para ${added.map(typeLabel).join(" e ")}.`;
+        if (already.length) msg += `${msg ? "\n" : ""}ℹ️ Já existia pra ${already.map(typeLabel).join(" e ")}.`;
+        await wppSend(from, msg.trim());
         break;
       }
 

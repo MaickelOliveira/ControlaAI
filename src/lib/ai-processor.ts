@@ -64,6 +64,7 @@ export type Intent =
   | "customer_deactivate"
   | "how_to"
   | "help"
+  | "category_create"
   | "unknown";
 
 export type GoalData = {
@@ -241,7 +242,7 @@ export type AIResult = {
   employee?: EmployeeData;
   customer?: CustomerData;
   mode?: UserMode;
-  financeType?: "income" | "expense"; // para finance_detail/finance_query: qual tipo mostrar (padrão "expense")
+  financeType?: "income" | "expense"; // para finance_detail/finance_query: qual tipo mostrar (padrão "expense"); para category_create: restringe a categoria a só esse tipo (padrão: ambos)
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
   personName?: string; // nome OU vínculo (ex: "esposa", "filho") de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou", "quanto minha esposa gastou")
   category?: string; // categoria específica perguntada em finance_query/balance_query (ex: "quanto gastei com comida" → "Alimentação")
@@ -254,6 +255,7 @@ export type AIResult = {
   // "apaga esses lançamentos"), pra aplicar em TODOS eles de uma vez (1 ou
   // vários) em vez de buscar/escolher um por um.
   bulkCorrectLastBatch?: boolean;
+  categoryName?: string; // category_create: nome exato da categoria a criar
   confidence: number;
 };
 
@@ -451,6 +453,7 @@ INTENÇÕES POSSÍVEIS:
   1) Cadastrar como registro no painel, SEM a pessoa poder falar com o bot (funcionário: "cadastra a Ana como vendedora, salário 2000"; cliente: "cadastra o cliente Pedro, telefone 11999999999"; participante de reunião/Meet: ao criar o Meet, junto com o convite; lembrete pra outra pessoa: "lembra a Milena de pagar amanhã às 10h").
   2) Vincular o WhatsApp de outra pessoa (funcionário, sócio, familiar) pra ela poder conversar com o bot como se fosse a própria conta: a pessoa (ou o dono da conta, se estiver com o número dela em mãos) digita "vincular número" aqui no chat OU acessa Configurações → "Vincular WhatsApp" no painel — isso gera um código de 4 dígitos válido por 10 minutos; a pessoa manda esse código PARA ESTE MESMO NÚMERO do Zelo no WhatsApp dela, e o bot pergunta o nome, o vínculo (ex: "funcionário", "sócio") e o tipo de acesso (pessoal/empresa/ambos) — depois disso ela já pode registrar gastos, tarefas etc. direto pelo WhatsApp dela.
 - help: pedir lista de comandos ("ajuda", "help", "o que você faz")
+- category_create: criar uma categoria personalizada de despesa/receita ("cria a categoria Nubank", "adiciona categoria Consórcio", "nova categoria Investimentos"). Use "categoryName" com o nome exato dito. ⚠️ AÇÃO DE 1 PASSO SÓ, sem perguntar nada: por padrão cria a categoria pra despesa E receita ao mesmo tempo — só restrinja a um tipo só se o usuário disser explicitamente ("categoria de receita chamada X", "só pra despesa"), usando "financeType" ("expense"/"income") nesse caso. NÃO existe limite/meta de orçamento por categoria no sistema — nunca pergunte sobre isso nem sobre mais configurações.
 - unknown: não identificado
 
 ⚠️ REGRA CRÍTICA — tipo income vs expense:
@@ -1438,7 +1441,8 @@ Instruções:
 - Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.
 - Se a mensagem for vaga/sem relação clara com nada acima, faça 1 pergunta objetiva e específica ao que ela disse pra entender a intenção (não uma lista de todos os comandos possíveis).
 - No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
-- Nunca invente que o sistema tem uma funcionalidade que não está na lista acima.`;
+- ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade — se o pedido não estiver claramente coberto pela lista, diga com naturalidade que isso não é algo que você sabe fazer por aqui (sem inventar o motivo) e, se fizer sentido, aponte pro painel do site. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
+- Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
