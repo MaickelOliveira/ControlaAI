@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseYesNo, parseAmountBR, choiceIndexByLabels } from "./pending-actions";
+import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseFinanceChoiceMulti } from "./pending-actions";
 
 describe("parseYesNo", () => {
   it("recognizes affirmative answers", () => {
@@ -42,6 +42,63 @@ describe("parseAmountBR", () => {
 
   it("returns null for zero or negative", () => {
     expect(parseAmountBR("0")).toBeNull();
+  });
+});
+
+describe("parseFinanceChoiceMulti", () => {
+  const mk = (n: number) => Array.from({ length: n }, (_, i) => ({
+    id: `id${i + 1}`, description: `Item ${i + 1}`, amount: 10, date: "2026-08-01", category: "Outros", mode: "personal",
+  }));
+  const items5 = mk(5);
+  const items130 = mk(130);
+
+  it("resolves a single 1-based number", () => {
+    expect(parseFinanceChoiceMulti("3", items5)).toEqual([2]);
+  });
+
+  it("resolves a range with 'a'", () => {
+    expect(parseFinanceChoiceMulti("1 a 5", items130)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("resolves a large range with 'ao' (o cenário do print: 'do 1 ao 130')", () => {
+    expect(parseFinanceChoiceMulti("1 ao 130", items130)).toHaveLength(130);
+  });
+
+  it("resolves a range with 'até' and with '-'", () => {
+    expect(parseFinanceChoiceMulti("1 até 3", items5)).toEqual([0, 1, 2]);
+    expect(parseFinanceChoiceMulti("1-3", items5)).toEqual([0, 1, 2]);
+  });
+
+  it("resolves a comma/e/ou separated list without merging into a range", () => {
+    expect(parseFinanceChoiceMulti("1, 2 e 5", items5)).toEqual([0, 1, 4]);
+    expect(parseFinanceChoiceMulti("1 ou 3", items5)).toEqual([0, 2]);
+  });
+
+  it("keeps 'e' as a separator instead of swallowing it into a range token", () => {
+    // "1 e 15" não pode virar o intervalo 1-15 — são duas escolhas distintas
+    expect(parseFinanceChoiceMulti("1 e 15", items130)).toEqual([0, 14]);
+  });
+
+  it("combines ranges and single numbers in one message", () => {
+    expect(parseFinanceChoiceMulti("1 a 3 e 5", items5)).toEqual([0, 1, 2, 4]);
+  });
+
+  it("resolves 'todos'/'tudo' to every candidate", () => {
+    expect(parseFinanceChoiceMulti("todos", items5)).toEqual([0, 1, 2, 3, 4]);
+    expect(parseFinanceChoiceMulti("tudo", items5)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("dedupes overlapping ranges/numbers", () => {
+    expect(parseFinanceChoiceMulti("1 a 3, 2 e 3", items5)).toEqual([0, 1, 2]);
+  });
+
+  it("ignores out-of-range numbers instead of throwing", () => {
+    expect(parseFinanceChoiceMulti("1 a 10", items5)).toEqual([0, 1, 2, 3, 4]);
+    expect(parseFinanceChoiceMulti("99", items5)).toEqual([]);
+  });
+
+  it("returns [] for free text unrelated to a selection", () => {
+    expect(parseFinanceChoiceMulti("mains nao falei vivo", items5)).toEqual([]);
   });
 });
 

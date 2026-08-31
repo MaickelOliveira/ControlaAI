@@ -2,16 +2,25 @@ import { getSupabase } from "./supabase";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string };
 
+export type LastFinanceBatchItem = { id: string; description: string; amount: number; type: "income" | "expense" };
+type LastFinanceBatch = { items: LastFinanceBatchItem[]; mode: "personal" | "business"; ts: number };
+
 type Conversation = {
   messages: ChatMessage[];
   contactName?: string | null;
   lastActivity: number;
   unread?: boolean;
   aiPaused?: boolean;
+  lastFinanceBatch?: LastFinanceBatch;
 };
 
 const MAX_MESSAGES = 200;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+// Janela em que "tá errado, são despesas" (sem citar um lançamento
+// específico) ainda é entendido como correção do que acabou de ser
+// registrado — depois disso, é seguro demais assumir que a pessoa ainda
+// está falando do mesmo lançamento/lote.
+const LAST_FINANCE_BATCH_TTL_MS = 30 * 60 * 1000;
 
 /** Normaliza telefone gerando variantes (com/sem 55, com/sem 9º dígito) pra
  *  busca fuzzy — o Zelo é single-tenant, então a chave do store é só o
@@ -112,6 +121,25 @@ export async function markAsRead(phone: string) {
     found.conv.unread = false;
     await saveConversation(found.key, found.conv);
   }
+}
+
+/** Grava o(s) lançamento(s) que acabaram de ser registrados (1 ou vários de
+ *  uma vez) — permite corrigir com uma frase curta e sem citar cada um
+ *  ("tá errado, são despesas") logo depois de registrar, tanto pra um
+ *  lançamento único quanto pra um lote inteiro. */
+export async function setLastFinanceBatch(phone: string, items: LastFinanceBatchItem[], mode: "personal" | "business") {
+  const found = await findConversation(phone);
+  const key = found?.key ?? phone;
+  const conv: Conversation = found?.conv ?? { messages: [], lastActivity: 0 };
+  conv.lastFinanceBatch = { items, mode, ts: Date.now() };
+  await saveConversation(key, conv);
+}
+
+export async function getLastFinanceBatch(phone: string): Promise<LastFinanceBatch | null> {
+  const found = await findConversation(phone);
+  const batch = found?.conv.lastFinanceBatch;
+  if (!batch || Date.now() - batch.ts > LAST_FINANCE_BATCH_TTL_MS) return null;
+  return batch;
 }
 
 export async function setAiPaused(phone: string, paused: boolean) {

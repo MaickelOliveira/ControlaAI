@@ -18,7 +18,7 @@ import {
 } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseAppointmentChoice, parseFinanceChoice, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
@@ -27,7 +27,7 @@ import { isConnected } from "@/lib/google-oauth";
 import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { getConfig } from "@/lib/whatsapp-config";
-import { addMessage, getAiPaused, getHistory } from "@/lib/conversations";
+import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, formatDateTimeBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
@@ -665,63 +665,100 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     if (pending?.type === "finance_select" && pending.userId === user.id) {
       const hasPatch = !!(pending.patch && Object.keys(pending.patch).length > 0);
 
-      // Já sabemos QUAL lançamento (etapa anterior escolheu 1) e só falta o que
-      // mudar — interpreta a mensagem atual como o novo valor/categoria, não
-      // como uma escolha de número.
-      if (pending.action === "edit" && !hasPatch && pending.candidates.length === 1) {
+      // Já sabemos QUAIS lançamentos (etapa anterior já escolheu 1 ou
+      // vários) e só falta o que mudar — interpreta a mensagem atual como o
+      // novo valor/categoria, não como uma escolha de número, e aplica em
+      // todos os candidatos guardados.
+      if (pending.action === "edit" && !hasPatch && pending.awaitingPatch) {
         const patch = parseFinancePatchFromText(messageText);
         if (Object.keys(patch).length === 0) {
           await wppSend(from, `❓ Não entendi o que alterar. Ex: _"80 reais"_ ou _"categoria Lazer"_`);
           return;
         }
         await clearPendingAction(from);
-        const chosen = pending.candidates[0];
-        const updated = await updateFinance(chosen.id, user.id, patch as Parameters<typeof updateFinance>[2]);
-        if (updated) {
-          const bal = await getBalance(user.id, updated.mode as "personal" | "business", year, month);
-          const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
-          await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+        const updatedItems = [];
+        for (const c of pending.candidates) {
+          const updated = await updateFinance(c.id, user.id, patch as Parameters<typeof updateFinance>[2]);
+          if (updated) updatedItems.push(updated);
+        }
+        if (updatedItems.length > 0) {
+          const bal = await getBalance(user.id, updatedItems[0].mode as "personal" | "business", year, month);
+          const modeLabel = updatedItems[0].mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+          if (updatedItems.length === 1) {
+            const updated = updatedItems[0];
+            await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+          } else {
+            await wppSend(from, `✏️ *${updatedItems.length} lançamentos atualizados!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+          }
         }
         return;
       }
 
-      const choiceIdx = parseFinanceChoice(messageText, pending.candidates);
-      if (choiceIdx >= 0) {
-        const chosen = pending.candidates[choiceIdx];
+      // Aceita número único ("5"), intervalo ("1 a 10", "1 ao 130"), lista
+      // ("1, 2 e 5") ou "todos" — sempre separando "e"/"ou" além de vírgula
+      // pra não confundir números que a pessoa quis dizer separadamente.
+      const choiceIndices = parseFinanceChoiceMulti(messageText, pending.candidates);
+      if (choiceIndices.length > 0) {
+        const chosen = choiceIndices.map(i => pending.candidates[i]);
 
-        // Editar mas ainda não sabemos o que mudar → guarda só esse alvo e pergunta
+        // Editar mas ainda não sabemos o que mudar → guarda os escolhidos (1
+        // ou vários) e pergunta o que muda em todos eles de uma vez.
         if (pending.action === "edit" && !hasPatch) {
           await setPendingAction(from, {
             type: "finance_select", userId: user.id,
             action: "edit",
-            candidates: [chosen],
+            candidates: chosen,
+            awaitingPatch: true,
           });
-          await wppSend(from, `🔍 Encontrei: *${chosen.description}* — ${formatCurrency(chosen.amount)} (${chosen.category}) · ${modeLabelFull(chosen.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          if (chosen.length === 1) {
+            const c = chosen[0];
+            await wppSend(from, `🔍 Encontrei: *${c.description}* — ${formatCurrency(c.amount)} (${c.category}) · ${modeLabelFull(c.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          } else {
+            await wppSend(from, `🔍 Selecionados *${chosen.length} lançamentos*.\n\nO que deseja alterar em todos eles? Ex:\n• _"muda categoria para Lazer"_\n• _"marca como a receber"_`);
+          }
           return;
         }
 
         await clearPendingAction(from);
         if (pending.action === "edit" && hasPatch) {
-          const updated = await updateFinance(chosen.id, user.id, pending.patch as Parameters<typeof updateFinance>[2]);
-          if (updated) {
-            const bal = await getBalance(user.id, updated.mode as "personal" | "business", year, month);
-            const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
-            await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+          const updatedItems = [];
+          for (const c of chosen) {
+            const updated = await updateFinance(c.id, user.id, pending.patch as Parameters<typeof updateFinance>[2]);
+            if (updated) updatedItems.push(updated);
+          }
+          if (updatedItems.length > 0) {
+            const bal = await getBalance(user.id, updatedItems[0].mode as "personal" | "business", year, month);
+            const modeLabel = updatedItems[0].mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+            if (updatedItems.length === 1) {
+              const updated = updatedItems[0];
+              await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+            } else {
+              await wppSend(from, `✏️ *${updatedItems.length} lançamentos atualizados!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+            }
           }
         } else if (pending.action === "delete") {
-          const delOk = await deleteFinance(chosen.id, user.id);
-          if (delOk) {
-            const delBal = await getBalance(user.id, chosen.mode as "personal" | "business", year, month);
-            await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${chosen.description} — ${formatCurrency(chosen.amount)}\n📅 ${new Date(chosen.date + "T12:00:00").toLocaleDateString("pt-BR")}\n${modeLabelFull(chosen.mode)}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+          let deletedCount = 0;
+          for (const c of chosen) {
+            if (await deleteFinance(c.id, user.id)) deletedCount++;
+          }
+          if (deletedCount > 0) {
+            const delBal = await getBalance(user.id, chosen[0].mode as "personal" | "business", year, month);
+            const modeLabel = modeLabelFull(chosen[0].mode);
+            if (chosen.length === 1) {
+              const c = chosen[0];
+              await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${c.description} — ${formatCurrency(c.amount)}\n📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+            } else {
+              await wppSend(from, `🗑️ *${deletedCount} lançamentos excluídos!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+            }
           }
         }
         return;
       }
-      // Resposta não é um número/data válido pra essa lista — em vez de
-      // repetir a mesma pergunta pra sempre (a pessoa pode ter desistido,
-      // corrigido o pedido, ou a busca nem era o que ela queria), cancela
-      // essa seleção e deixa a mensagem seguir pro fluxo normal (IA), em
-      // vez de travar quem responde qualquer coisa que não seja 1-5/data.
+      // Resposta não é um número/intervalo/data válido pra essa lista — em
+      // vez de repetir a mesma pergunta pra sempre (a pessoa pode ter
+      // desistido, corrigido o pedido, ou a busca nem era o que ela queria),
+      // cancela essa seleção e deixa a mensagem seguir pro fluxo normal
+      // (IA), em vez de travar quem responde qualquer coisa fora do formato.
       await clearPendingAction(from);
     }
 
@@ -873,6 +910,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             status: isPending ? "pending" : "posted", autoPost,
             registeredBy: from, accountId, cardInvoiceId,
           });
+          await setLastFinanceBatch(from, [{ id: f.id, description: f.description, amount: f.amount, type: f.type }], financeMode);
           const bal = await getBalance(user.id, financeMode, year, month);
           const modeSuffix = ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_`;
           const typeLabel = fd.type === "income" ? "Receita" : "Despesa";
@@ -906,6 +944,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             registered.push({ ...f, pending: isPending, autoPost });
           }
           const primaryMode = (financeItems[0].mode || "personal") as "personal" | "business";
+          await setLastFinanceBatch(from, registered.map(f => ({ id: f.id, description: f.description, amount: f.amount, type: f.type })), primaryMode);
           const bal = await getBalance(user.id, primaryMode, year, month);
           const posted = registered.filter(f => !f.pending);
           const scheduled = registered.filter(f => f.pending && f.autoPost);
@@ -950,6 +989,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.finance?.amount && ai.finance.amount > 0) editPatch.amount = ai.finance.amount;
         if (ai.finance?.category) editPatch.category = ai.finance.category;
         if (ai.finance?.date) editPatch.date = ai.finance.date;
+        if (ai.finance?.type) editPatch.type = ai.finance.type;
         if (ai.newDescription) editPatch.description = ai.newDescription;
         // Correção "isso na verdade é a receber/a pagar" num lançamento já
         // contabilizado — tira do saldo sem apagar (mesma regra de
@@ -957,6 +997,33 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.finance?.pending === true) {
           editPatch.status = "pending";
           editPatch.autoPost = !!ai.finance.date;
+        }
+
+        // Correção curta e genérica ("tá errado, são despesas") logo depois
+        // de um registro — corrige TODOS os lançamentos daquele registro
+        // (1 ou vários) de uma vez, sem precisar buscar por nome.
+        if (ai.bulkCorrectLastBatch && Object.keys(editPatch).length > 0) {
+          const lastBatch = await getLastFinanceBatch(from);
+          if (lastBatch && lastBatch.items.length > 0) {
+            const updatedItems = [];
+            for (const item of lastBatch.items) {
+              const updated = await updateFinance(item.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
+              if (updated) updatedItems.push(updated);
+            }
+            if (updatedItems.length > 0) {
+              const bal = await getBalance(user.id, lastBatch.mode, year, month);
+              const modeLabel = lastBatch.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+              if (updatedItems.length === 1) {
+                const updated = updatedItems[0];
+                await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+              } else {
+                await wppSend(from, `✏️ *${updatedItems.length} lançamentos corrigidos!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+              }
+            }
+            break;
+          }
+          // Sem lote recente pra corrigir (expirou ou não achou) — cai no
+          // fluxo normal abaixo (busca por keyword / lista do mês).
         }
 
         // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
@@ -987,6 +1054,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             type: "finance_select", userId: user.id,
             action: "edit",
             candidates: [{ id: editTarget.id, description: editTarget.description, amount: editTarget.amount, date: editTarget.date, category: editTarget.category, mode: editTarget.mode }],
+            awaitingPatch: true,
           });
           await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} (${editTarget.category}) · ${modeLabelFull(editTarget.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
           break;
@@ -1003,7 +1071,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             candidates: editCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
             patch: editPatch,
           });
-          await wppSend(from, `✏️ Encontrei *${editCandidates.length} lançamentos* com *"${keyword}"*:\n\n${list}\n\nQual deles deseja alterar? Responda com o número ou a data (ex: *1* ou *04/07*).`);
+          await wppSend(from, `✏️ Encontrei *${editCandidates.length} lançamentos* com *"${keyword}"*:\n\n${list}\n\nQual deles deseja alterar? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
           break;
         }
 
@@ -1024,13 +1092,39 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
           patch: editPatch,
         });
-        await wppSend(from, `✏️ ${keyword ? `Não encontrei nada com *"${keyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja alterar? Responda com o número ou a data (ex: *1* ou *04/07*).`);
+        await wppSend(from, `✏️ ${keyword ? `Não encontrei nada com *"${keyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja alterar? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
         break;
       }
 
       case "finance_delete": {
         const delKeyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
         console.log(`[bot] finance_delete keyword="${delKeyword}"`);
+
+        // Pedido curto e genérico ("apaga isso", "apaga esses lançamentos")
+        // logo depois de um registro — apaga TODOS os lançamentos daquele
+        // registro (1 ou vários) de uma vez, sem precisar buscar por nome.
+        if (ai.bulkCorrectLastBatch) {
+          const lastBatch = await getLastFinanceBatch(from);
+          if (lastBatch && lastBatch.items.length > 0) {
+            let deletedCount = 0;
+            for (const item of lastBatch.items) {
+              if (await deleteFinance(item.id, user.id)) deletedCount++;
+            }
+            if (deletedCount > 0) {
+              const delBal = await getBalance(user.id, lastBatch.mode, year, month);
+              const modeLabel = lastBatch.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+              if (lastBatch.items.length === 1) {
+                const item = lastBatch.items[0];
+                await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${item.description} — ${formatCurrency(item.amount)}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+              } else {
+                await wppSend(from, `🗑️ *${deletedCount} lançamentos excluídos!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
+              }
+            }
+            break;
+          }
+          // Sem lote recente pra apagar (expirou ou não achou) — cai no
+          // fluxo normal abaixo (busca por keyword / lista do mês).
+        }
 
         const delCandidates = delKeyword ? await findFinanceByDescription(user.id, null, delKeyword) : [];
         console.log(`[bot] finance_delete encontrados por palavra-chave=${delCandidates.length}`);
@@ -1056,7 +1150,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             action: "delete",
             candidates: delCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
           });
-          await wppSend(from, `🗑️ Encontrei *${delCandidates.length} lançamentos* com *"${delKeyword}"*:\n\n${delList}\n\nQual deles deseja excluir? Responda com o número ou a data (ex: *1* ou *04/07*).`);
+          await wppSend(from, `🗑️ Encontrei *${delCandidates.length} lançamentos* com *"${delKeyword}"*:\n\n${delList}\n\nQual deles deseja excluir? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
           break;
         }
 
@@ -1076,7 +1170,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           action: "delete",
           candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
         });
-        await wppSend(from, `🗑️ ${delKeyword ? `Não encontrei nada com *"${delKeyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja excluir? Responda com o número ou a data (ex: *1* ou *04/07*).`);
+        await wppSend(from, `🗑️ ${delKeyword ? `Não encontrei nada com *"${delKeyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja excluir? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
         break;
       }
 

@@ -271,7 +271,7 @@ export async function deleteFinance(id: string, userId: string): Promise<boolean
   return !error && !!count && count > 0;
 }
 
-export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost">>): Promise<Finance | null> {
+export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost" | "type">>): Promise<Finance | null> {
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
   if (patch.category !== undefined) rowPatch.category = patch.category;
@@ -279,6 +279,7 @@ export async function updateFinance(id: string, userId: string, patch: Partial<P
   if (patch.date !== undefined) rowPatch.date = patch.date;
   if (patch.status !== undefined) rowPatch.pending = patch.status === "pending";
   if (patch.autoPost !== undefined) rowPatch.auto_post = patch.autoPost;
+  if (patch.type !== undefined) rowPatch.type = patch.type;
   const { data, error } = await getSupabase().from("finances").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);

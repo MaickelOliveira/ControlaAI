@@ -85,6 +85,12 @@ export type PendingFinanceSelect = {
   action: "edit" | "delete";
   candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string }>;
   patch?: Record<string, unknown>; // usado só em "edit"
+  // true = "candidates" já é a seleção final (1 ou vários), só falta a
+  // pessoa dizer o que mudar — sem isso, "candidates" é a LISTA pra
+  // escolher ainda. Substitui o antigo atalho "candidates.length === 1",
+  // que não dava pra distinguir "escolhi 1 de vários" de "ainda escolhendo
+  // entre vários" depois que seleção múltipla passou a existir.
+  awaitingPatch?: boolean;
   expiresAt: string;
 };
 
@@ -350,6 +356,44 @@ export function parseFinanceChoice(
   }
 
   return -1;
+}
+
+/** Interpreta a resposta do usuário como escolha de MÚLTIPLOS lançamentos
+ *  de uma lista — número único ("5"), intervalo ("1 a 10", "1 ao 10", "1
+ *  até 10", "1-10") ou combinação separada por vírgula/"e"/"ou" ("1, 2 e
+ *  5", "1 a 5 e 10 a 15"), e "todos"/"tudo" pra lista inteira. Sempre separa
+ *  por "e"/"ou" além de vírgula, pra não juntar dois números que a pessoa
+ *  quis dizer separadamente (ex: "1 e 15" não pode virar o intervalo 1-15).
+ *  Retorna os índices (0-based, sem duplicar, em ordem) ou [] se nada bater
+ *  — nesse caso o chamador cai no parseFinanceChoice (data, "último" etc.)
+ *  pra manter compatibilidade com o que já funcionava antes da seleção
+ *  múltipla existir. */
+export function parseFinanceChoiceMulti(
+  text: string,
+  candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string }>
+): number[] {
+  const t = text.trim().toLowerCase();
+  if (/^(todos|tudo|all)$/.test(t)) return candidates.map((_, i) => i);
+
+  const tokens = t.split(/\s*,\s*|\s+e\s+|\s+ou\s+/).map(s => s.trim()).filter(Boolean);
+  const indices = new Set<number>();
+  for (const token of tokens) {
+    const rangeMatch = token.match(/^(\d+)\s*(?:a|ao|até|ate|-)\s*(\d+)$/);
+    if (rangeMatch) {
+      let start = parseInt(rangeMatch[1], 10);
+      let end = parseInt(rangeMatch[2], 10);
+      if (start > end) [start, end] = [end, start];
+      for (let n = start; n <= end; n++) {
+        if (n >= 1 && n <= candidates.length) indices.add(n - 1);
+      }
+      continue;
+    }
+    if (/^\d+$/.test(token)) {
+      const n = parseInt(token, 10);
+      if (n >= 1 && n <= candidates.length) indices.add(n - 1);
+    }
+  }
+  return [...indices].sort((a, b) => a - b);
 }
 
 /** Extrai um valor em reais de um texto livre (ex: "80 reais", "R$ 80,50").
