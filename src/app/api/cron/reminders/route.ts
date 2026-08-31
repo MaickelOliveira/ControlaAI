@@ -44,15 +44,11 @@ async function runCron() {
         const remetente = owner?.name || "alguém";
         ok = await sendReminderTemplate(r.phone, "lembrete_assessor", `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`, { remetente, lembrete: r.message });
       } else if (r.mode === "business") {
-        const owner = await getUserById(r.userId);
-        const nome = owner?.name || "cliente";
         const texto = `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-        ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { nome, lembrete: r.message });
+        ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message });
       } else {
-        const owner = await getUserById(r.userId);
-        const nome = owner?.name || "cliente";
         const texto = `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
-        ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { nome, lembrete: r.message });
+        ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { texto: r.message });
       }
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
       if (ok) await markReminderSent(r.id, r.repeat);
