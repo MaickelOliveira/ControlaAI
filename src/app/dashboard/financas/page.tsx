@@ -78,6 +78,9 @@ export default function FinancasPage() {
   const [editRecForm, setEditRecForm] = useState({ amount: "", description: "", category: "", dayOfMonth: "", repeatUnit: "monthly" as Recurring["repeatUnit"] });
 
   const [deleteTarget, setDeleteTarget] = useState<Finance | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [cancellingRec, setCancellingRec] = useState<string | null>(null);
   const [confirmingPending, setConfirmingPending] = useState<string | null>(null);
@@ -256,6 +259,30 @@ export default function FinancasPage() {
     loadAll(mode);
   }
 
+  function toggleSelectMode() {
+    setSelectMode(s => !s);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0 || bulkDeleting) return;
+    if (!window.confirm(`Excluir ${selectedIds.size} lançamento(s) selecionado(s)? Essa ação não pode ser desfeita.`)) return;
+    setBulkDeleting(true);
+    await Promise.all([...selectedIds].map(id => fetch(`/api/finances/${id}`, { method: "DELETE" })));
+    setBulkDeleting(false);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    loadAll(mode);
+  }
+
   async function handleMarkPaid(rec: Recurring) {
     setMarkingPaid(rec.id);
     await fetch(`/api/recurring/${rec.id}/confirm`, { method: "POST" });
@@ -325,6 +352,10 @@ export default function FinancasPage() {
   // Finanças pendentes (data futura, status pending) separadas das confirmadas
   const pendingFinances = filteredFinances.filter(f => f.status === "pending");
   const postedFinances = filteredFinances.filter(f => f.status !== "pending");
+  // Só os lançamentos que aparecem na tela têm checkbox — "selecionar tudo"
+  // não pode marcar o que nem está visível (postedFinances é limitado a 50).
+  const selectableFinances = [...pendingFinances, ...postedFinances.slice(0, 50)];
+  const allSelected = selectableFinances.length > 0 && selectableFinances.every(f => selectedIds.has(f.id));
 
   const incomeTotal = postedFinances.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
   const expenseTotal = postedFinances.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
@@ -426,7 +457,30 @@ export default function FinancasPage() {
 
         {/* Extrato unificado */}
         <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <h3 className="font-semibold text-slate-800 mb-4 text-sm">📋 Extrato</h3>
+          <div className="flex items-center justify-between mb-4 gap-2">
+            <h3 className="font-semibold text-slate-800 text-sm">📋 Extrato</h3>
+            {selectableFinances.length > 0 && (
+              <button onClick={toggleSelectMode}
+                className={clsx("text-xs font-medium px-2.5 py-1 rounded-lg transition shrink-0",
+                  selectMode ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100")}>
+                {selectMode ? "Cancelar seleção" : "Selecionar"}
+              </button>
+            )}
+          </div>
+          {selectMode && (
+            <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
+              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                <input type="checkbox" checked={allSelected}
+                  onChange={() => setSelectedIds(allSelected ? new Set() : new Set(selectableFinances.map(f => f.id)))}
+                  className="w-4 h-4 accent-slate-800" />
+                {selectedIds.size > 0 ? `${selectedIds.size} selecionado(s)` : "Selecionar tudo"}
+              </label>
+              <button onClick={handleBulkDelete} disabled={selectedIds.size === 0 || bulkDeleting}
+                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition disabled:opacity-40 disabled:hover:bg-red-50 shrink-0">
+                {bulkDeleting ? "Excluindo..." : "🗑️ Excluir selecionados"}
+              </button>
+            </div>
+          )}
           {loading ? <p className="text-slate-400 text-sm">Carregando...</p> :
             (postedFinances.length === 0 && recs.length === 0 && pendingFinances.length === 0) ? (
               <div className="text-center py-16 text-slate-400">
@@ -487,6 +541,10 @@ export default function FinancasPage() {
                   return (
                     <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition border border-dashed border-slate-200">
                       <div className="flex items-center gap-3 min-w-0">
+                        {selectMode && (
+                          <input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => toggleSelected(f.id)}
+                            className="w-4 h-4 accent-slate-800 shrink-0" />
+                        )}
                         <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
                           {f.type === "income" ? "↑" : "↓"}
                         </div>
@@ -530,6 +588,10 @@ export default function FinancasPage() {
                 {postedFinances.slice(0, 50).map(f => (
                   <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition">
                     <div className="flex items-center gap-3 min-w-0">
+                      {selectMode && (
+                        <input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => toggleSelected(f.id)}
+                          className="w-4 h-4 accent-slate-800 shrink-0" />
+                      )}
                       <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
                         {f.type === "income" ? "↑" : "↓"}
                       </div>
