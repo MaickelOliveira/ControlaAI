@@ -61,3 +61,14 @@ export function formatTimeBR(utcISO: string): string {
 export function monthLabelBR(): string {
   return new Date().toLocaleDateString("pt-BR", { timeZone: TZ, month: "long", year: "numeric" });
 }
+
+/** Segunda a sexta, 9h-18h em SP (usado pelo chat de suporte in-app). */
+export function isBusinessHours(): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ, weekday: "short", hour: "numeric", hour12: false,
+  }).formatToParts(new Date());
+  const weekday = parts.find(p => p.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find(p => p.type === "hour")?.value ?? "0");
+  const isWeekday = !["Sat", "Sun"].includes(weekday);
+  return isWeekday && hour >= 9 && hour < 18;
+}

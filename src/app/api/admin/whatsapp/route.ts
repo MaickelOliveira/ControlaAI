@@ -115,9 +115,10 @@ export async function POST(req: NextRequest) {
     const { template, phone } = body as { template?: string; phone?: string };
     if (!phone) return NextResponse.json({ error: "Informe um telefone" }, { status: 400 });
     const testParams: Record<string, Record<string, string>> = {
-      lembrete_pessoal: { lembrete: "Teste de disparo do Zelo 🔔" },
+      lbt_pessoal: { nome: "Teste", lembrete: "Teste de disparo do Zelo 🔔" },
       lembrete_compromisso: { compromisso: "Compromisso de teste", horario: "14:30" },
-      cobranca_recorrente: { descricao: "Teste de cobrança", valor: "R$ 99,90", data: new Date().toLocaleDateString("pt-BR") },
+      lembrete_compromisso15: { compromisso: "Compromisso de teste", horario: "14:30" },
+      cbr_recorrente: { nome: "Teste", descricao: "Teste de cobrança", valor: "R$ 99,90", data: new Date().toLocaleDateString("pt-BR") },
     };
     const params = template ? testParams[template] : undefined;
     if (!params) return NextResponse.json({ error: "Template inválido" }, { status: 400 });

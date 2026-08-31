@@ -68,6 +68,21 @@ html {
   animation: blink-cursor 1s step-start infinite;
 }
 
+/* Bolha do widget de suporte (src/components/SupportWidget.tsx): a cada 5s
+   o rótulo "Suporte" aparece ao lado do ícone por um instante e recolhe de
+   novo, pra sinalizar o que é sem ficar poluindo a tela o tempo todo. */
+@keyframes support-bubble-hint {
+  0%, 60%, 100% { max-width: 0; opacity: 0; }
+  15%, 45% { max-width: 90px; opacity: 1; }
+}
+.support-bubble-label {
+  display: inline-block;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  animation: support-bubble-hint 5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after {

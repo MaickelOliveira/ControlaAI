@@ -62,11 +62,15 @@ export async function register() {
             const texto = `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
             ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message });
           } else if (r.mode === "business") {
+            const owner = usersModuleForReminders ? await usersModuleForReminders.getUserById(r.userId) : null;
+            const nome = owner?.name || "cliente";
             const texto = `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_empresarial", texto, { lembrete: r.message });
+            ok = await sendReminderTemplate(r.phone, "lbt_empresarial", texto, { nome, lembrete: r.message });
           } else {
+            const owner = usersModuleForReminders ? await usersModuleForReminders.getUserById(r.userId) : null;
+            const nome = owner?.name || "cliente";
             const texto = `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_pessoal", texto, { lembrete: r.message });
+            ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { nome, lembrete: r.message });
           }
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) await markReminderSent(r.id, r.repeat);
@@ -106,9 +110,9 @@ export async function register() {
               const phones = (await getPhonesForUser(user.id)).map(link => link.phone);
               const msg = buildRecurringNotification(rec);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
-              const params = { descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
+              const params = { nome: user.name, descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
               for (const phone of phones) {
-                const ok = await sendReminderTemplate(phone, "cobranca_recorrente", msg, params);
+                const ok = await sendReminderTemplate(phone, "cbr_recorrente", msg, params);
                 if (ok) {
                   await markNotified(rec.id);
                   await setPendingAction(phone, {
@@ -190,7 +194,7 @@ export async function register() {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser) continue;
               const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
-              const msg = replyAppointmentReminder(apt);
+              const msg = replyAppointmentReminder(apt, "2 horas");
               const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;
               for (const phone of phones) {
@@ -205,6 +209,49 @@ export async function register() {
         }
       } catch (e) {
         console.error("[cron] Erro no bloco de lembrete de compromissos:", e);
+      }
+
+      // ── Lembrete de compromissos que começam em até 15min — independente
+      // do de 2h acima (coluna própria: reminder_15min_sent_at), então os
+      // dois disparam separadamente pro mesmo compromisso. Usa um template
+      // WABA dedicado ("lembrete_compromisso15") em vez de reaproveitar
+      // "lembrete_compromisso" — o texto de um template aprovado pela Meta é
+      // fixo, então usar o mesmo template continuaria dizendo "daqui a 2
+      // horas" mesmo faltando só 15min. ──
+      try {
+        const agendaModule = await import("./lib/agenda").catch(() => null);
+        const usersModule = await import("./lib/users").catch(() => null);
+        const phoneLinksModule = await import("./lib/wpp-phone-links").catch(() => null);
+        const repliesModule = await import("./lib/bot-replies").catch(() => null);
+        const dateBrModule = await import("./lib/date-br").catch(() => null);
+        if (agendaModule && usersModule && phoneLinksModule && repliesModule && dateBrModule) {
+          const { getAppointmentsNeeding15MinReminder, updateAppointment } = agendaModule;
+          const { getUserById } = usersModule;
+          const { getPhonesForUser } = phoneLinksModule;
+          const { replyAppointmentReminder } = repliesModule;
+          const { formatTimeBR } = dateBrModule;
+          const dueSoon15 = await getAppointmentsNeeding15MinReminder();
+          if (dueSoon15.length > 0) console.log(`[cron] ${dueSoon15.length} compromisso(s) a lembrar (15min)`);
+          for (const apt of dueSoon15) {
+            try {
+              const aptUser = await getUserById(apt.userId);
+              if (!aptUser) continue;
+              const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
+              const msg = replyAppointmentReminder(apt, "15 minutos");
+              const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
+              let sentToAny = false;
+              for (const phone of phones) {
+                const ok = await sendReminderTemplate(phone, "lembrete_compromisso15", msg, params);
+                if (ok) sentToAny = true;
+              }
+              if (sentToAny) await updateAppointment(apt.id, apt.userId, { reminder15MinSentAt: new Date().toISOString() });
+            } catch (e) {
+              console.error("[cron] Erro ao enviar lembrete de compromisso (15min):", e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[cron] Erro no bloco de lembrete de compromissos (15min):", e);
       }
     } catch (e) {
       console.error("[cron] Erro no tick:", e);

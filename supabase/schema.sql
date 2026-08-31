@@ -102,6 +102,11 @@ create table if not exists finances (
   mode text not null default 'personal',
   date date not null,
   pending boolean not null default false,
+  -- false = "a receber"/pendente sem data de recebimento conhecida — não
+  -- deve ser postado automaticamente quando date<=hoje (ver migração
+  -- 20260830000000). true (default) preserva o comportamento de sempre:
+  -- lançamento agendado que posta sozinho quando a data chega.
+  auto_post boolean not null default true,
   source text,
   registered_by text,
   -- nullable: lançamento antigo ou usuário sem conta cadastrada fica sem
@@ -194,6 +199,7 @@ create table if not exists appointments (
   ata_content text,
   ata_notified_at timestamptz,
   reminder_sent_at timestamptz,
+  reminder_15min_sent_at timestamptz,
   created_at timestamptz not null default now()
 );
 create index if not exists appointments_user_idx on appointments(user_id);
@@ -375,6 +381,14 @@ create index if not exists drive_files_user_idx on drive_files(user_id);
 create table if not exists conversations (
   phone text primary key,
   data jsonb not null default '{"messages":[],"lastActivity":0}'
+);
+
+-- Chat de suporte in-app (widget dentro do painel logado) — canal separado
+-- do Inbox acima (que é só WhatsApp/telefone); aqui a chave é o usuário
+-- logado da plataforma.
+create table if not exists support_conversations (
+  user_id uuid primary key references users(id) on delete cascade,
+  data jsonb not null default '{"messages":[],"lastActivity":0,"status":"none"}'
 );
 
 create table if not exists pending_actions (
