@@ -4,7 +4,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
@@ -717,12 +717,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         return;
       }
-      // Resposta inválida: lista novamente
-      const list = pending.candidates.map((c, i) =>
-        `${i + 1}️⃣ ${formatCurrency(c.amount)} · ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
-      ).join("\n");
-      await wppSend(from, `❓ Não entendi. Responda com o número ou a data:\n\n${list}\n\nEx: *1* ou *04/07*`);
-      return;
+      // Resposta não é um número/data válido pra essa lista — em vez de
+      // repetir a mesma pergunta pra sempre (a pessoa pode ter desistido,
+      // corrigido o pedido, ou a busca nem era o que ela queria), cancela
+      // essa seleção e deixa a mensagem seguir pro fluxo normal (IA), em
+      // vez de travar quem responde qualquer coisa que não seja 1-5/data.
+      await clearPendingAction(from);
     }
 
     // ── Confirmação de Meet (sim/não) ──
@@ -1007,11 +1007,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           break;
         }
 
-        // Sem palavra-chave, ou palavra-chave não achou nada → lista os últimos
-        // 5 dias de gastos/receitas pra escolher, em vez de um beco sem saída
-        const recentCandidates = await getFinancesLastDays(user.id, null, 5);
+        // Sem palavra-chave, ou palavra-chave não achou nada → lista todos os
+        // lançamentos do mês vigente pra escolher, em vez de um beco sem saída
+        const [editMonthFrom, editMonthTo] = monthBounds(year, month);
+        const recentCandidates = await getFinancesInRange(user.id, undefined, editMonthFrom, editMonthTo);
         if (!recentCandidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento nos últimos 5 dias${keyword ? ` com *"${keyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
+          await wppSend(from, `❓ Não encontrei nenhum lançamento esse mês${keyword ? ` com *"${keyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
           break;
         }
         const recentList = recentCandidates.map((c, i) =>
@@ -1023,7 +1024,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
           patch: editPatch,
         });
-        await wppSend(from, `✏️ ${keyword ? `Não encontrei nada com *"${keyword}"*, mas aqui` : "Aqui"} estão os lançamentos dos últimos 5 dias:\n\n${recentList}\n\nQual deles deseja alterar? Responda com o número ou a data (ex: *1* ou *04/07*).`);
+        await wppSend(from, `✏️ ${keyword ? `Não encontrei nada com *"${keyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja alterar? Responda com o número ou a data (ex: *1* ou *04/07*).`);
         break;
       }
 
@@ -1059,11 +1060,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           break;
         }
 
-        // Sem palavra-chave, ou palavra-chave não achou nada → lista os últimos
-        // 5 dias de gastos/receitas pra escolher, em vez de um beco sem saída
-        const recentCandidates = await getFinancesLastDays(user.id, null, 5);
+        // Sem palavra-chave, ou palavra-chave não achou nada → lista todos os
+        // lançamentos do mês vigente pra escolher, em vez de um beco sem saída
+        const [delMonthFrom, delMonthTo] = monthBounds(year, month);
+        const recentCandidates = await getFinancesInRange(user.id, undefined, delMonthFrom, delMonthTo);
         if (!recentCandidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento nos últimos 5 dias${delKeyword ? ` com *"${delKeyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
+          await wppSend(from, `❓ Não encontrei nenhum lançamento esse mês${delKeyword ? ` com *"${delKeyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
           break;
         }
         const recentList = recentCandidates.map((c, i) =>
@@ -1074,7 +1076,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           action: "delete",
           candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode })),
         });
-        await wppSend(from, `🗑️ ${delKeyword ? `Não encontrei nada com *"${delKeyword}"*, mas aqui` : "Aqui"} estão os lançamentos dos últimos 5 dias:\n\n${recentList}\n\nQual deles deseja excluir? Responda com o número ou a data (ex: *1* ou *04/07*).`);
+        await wppSend(from, `🗑️ ${delKeyword ? `Não encontrei nada com *"${delKeyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja excluir? Responda com o número ou a data (ex: *1* ou *04/07*).`);
         break;
       }
 
