@@ -1,7 +1,7 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesLastDays, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances } from "@/lib/finances";
@@ -27,7 +27,7 @@ import { isConnected } from "@/lib/google-oauth";
 import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as wppSend, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { getConfig } from "@/lib/whatsapp-config";
-import { addMessage, getAiPaused } from "@/lib/conversations";
+import { addMessage, getAiPaused, getHistory } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, formatDateTimeBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
@@ -818,7 +818,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     }
 
     // ── Processa com IA ──
-    const ai = await processMessage(messageText, { user });
+    // A mensagem atual já foi gravada em addMessage() acima (linha ~179),
+    // então o histórico já vem com ela como último item — removemos antes
+    // de passar pro classificador pra não duplicar com "Mensagem do
+    // usuário" no prompt.
+    const recentHistory = (await getHistory(from))
+      .slice(-16, -1)
+      .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
+    const ai = await processMessage(messageText, { user, history: recentHistory });
     console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
 
     // Confiança baixa — pede esclarecimento antes de agir
@@ -851,47 +858,58 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           // Lançamento único
           const fd = financeItems[0];
           const financeMode = (fd.mode || "personal") as "personal" | "business";
+          const hasExplicitDate = !!fd.date;
           const financeDate = fd.date || today;
-          const isPending = financeDate > today;
+          const isPending = fd.pending === true || financeDate > today;
+          // autoPost=false só quando a IA marcou "pending" (ex: "a receber") sem
+          // nenhuma data — sem isso o cron posta sozinho no próximo tick, já que
+          // financeDate cai em "hoje" (ver migração 20260830000000).
+          const autoPost = !(fd.pending === true && !hasExplicitDate);
           const { accountId, cardInvoiceId } = await resolveAccountFields(user.id, financeMode, fd.accountHint, financeDate);
           const f = await addFinance({
             userId: user.id, type: fd.type, amount: fd.amount,
             category: cap(fd.category) || "Outros", description: cap(fd.description),
             date: financeDate, mode: financeMode, source: "whatsapp",
-            status: isPending ? "pending" : "posted",
+            status: isPending ? "pending" : "posted", autoPost,
             registeredBy: from, accountId, cardInvoiceId,
           });
           const bal = await getBalance(user.id, financeMode, year, month);
           const modeSuffix = ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_`;
-          if (isPending) {
+          const typeLabel = fd.type === "income" ? "Receita" : "Despesa";
+          const typeEmoji = fd.type === "income" ? "💰" : "💸";
+          if (isPending && autoPost) {
             const dtFormatted = new Date(financeDate + "T12:00:00").toLocaleDateString("pt-BR");
-            const typeLabel = fd.type === "income" ? "Receita" : "Despesa";
-            const typeEmoji = fd.type === "income" ? "💰" : "💸";
             await wppSend(from, `⏳ *${typeLabel} agendada!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 Será contabilizada em *${dtFormatted}*\n\n_Lançamentos futuros não entram no saldo até a data chegar._`);
+          } else if (isPending) {
+            const label = fd.type === "income" ? "a receber" : "a pagar";
+            await wppSend(from, `⏳ *Marcado como ${label}!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n\n_Não entra no saldo. Quando ${fd.type === "income" ? "cair" : "for pago"}, me avisa (ex: "recebi o ${f.description}") que eu confirmo._`);
           } else {
             await wppSend(from, replyFinanceRegistered(f, bal.balance, user.locale));
           }
         } else {
           // Múltiplos lançamentos — registra todos e exibe resumo
-          const registered: Array<Awaited<ReturnType<typeof addFinance>> & { pending: boolean }> = [];
+          const registered: Array<Awaited<ReturnType<typeof addFinance>> & { pending: boolean; autoPost: boolean }> = [];
           for (const fd of financeItems) {
             const financeMode = (fd.mode || "personal") as "personal" | "business";
+            const hasExplicitDate = !!fd.date;
             const financeDate = fd.date || today;
-            const isPending = financeDate > today;
+            const isPending = fd.pending === true || financeDate > today;
+            const autoPost = !(fd.pending === true && !hasExplicitDate);
             const { accountId, cardInvoiceId } = await resolveAccountFields(user.id, financeMode, fd.accountHint, financeDate);
             const f = await addFinance({
               userId: user.id, type: fd.type, amount: fd.amount,
               category: cap(fd.category) || "Outros", description: cap(fd.description),
               date: financeDate, mode: financeMode, source: "whatsapp",
-              status: isPending ? "pending" : "posted",
+              status: isPending ? "pending" : "posted", autoPost,
               registeredBy: from, accountId, cardInvoiceId,
             });
-            registered.push({ ...f, pending: isPending });
+            registered.push({ ...f, pending: isPending, autoPost });
           }
           const primaryMode = (financeItems[0].mode || "personal") as "personal" | "business";
           const bal = await getBalance(user.id, primaryMode, year, month);
           const posted = registered.filter(f => !f.pending);
-          const pending = registered.filter(f => f.pending);
+          const scheduled = registered.filter(f => f.pending && f.autoPost);
+          const receivable = registered.filter(f => f.pending && !f.autoPost);
           const totalIncome = posted.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
           const totalExpense = posted.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
           const modeLabel = primaryMode === "business" ? "🏢 Empresa" : "👤 Pessoal";
@@ -900,13 +918,21 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const emoji = f.type === "income" ? "💰" : "💸";
             msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)}\n`;
           }
-          if (pending.length > 0) {
+          if (scheduled.length > 0) {
             msg += `\n⏳ *Agendados (data futura):*\n`;
-            for (const f of pending) {
+            for (const f of scheduled) {
               const emoji = f.type === "income" ? "💰" : "💸";
               const dt = new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR");
               msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)} _(${dt})_\n`;
             }
+          }
+          if (receivable.length > 0) {
+            msg += `\n⏳ *A receber/a pagar (sem previsão, não entra no saldo):*\n`;
+            for (const f of receivable) {
+              const emoji = f.type === "income" ? "💰" : "💸";
+              msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)}\n`;
+            }
+            msg += `_Me avisa quando cada um cair/for pago que eu confirmo._\n`;
           }
           if (totalIncome > 0) msg += `\n💰 *Total receitas: ${formatCurrency(totalIncome)}*`;
           if (totalExpense > 0) msg += `\n💸 *Total despesas: ${formatCurrency(totalExpense)}*`;
@@ -925,6 +951,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.finance?.category) editPatch.category = ai.finance.category;
         if (ai.finance?.date) editPatch.date = ai.finance.date;
         if (ai.newDescription) editPatch.description = ai.newDescription;
+        // Correção "isso na verdade é a receber/a pagar" num lançamento já
+        // contabilizado — tira do saldo sem apagar (mesma regra de
+        // autoPost do finance_register: sem data nova, não posta sozinho).
+        if (ai.finance?.pending === true) {
+          editPatch.status = "pending";
+          editPatch.autoPost = !!ai.finance.date;
+        }
 
         // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
         let editCandidates = keyword ? await findFinanceByDescription(user.id, null, keyword) : [];
@@ -1961,7 +1994,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             await wppSend(from, msg.trim());
           }
         } else {
-          await wppSend(from, replyUnknown(messageText, user.locale));
+          const fallback = await generateFallbackResponse(messageText, recentHistory);
+          await wppSend(from, fallback || replyUnknown(messageText, user.locale));
         }
       }
     }
@@ -1970,7 +2004,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
   } catch (e) {
     console.error("[message-handler]", e);
     if (from) {
-      try { await wppSend(from, "❌ Ocorreu um erro interno. Tente novamente em instantes."); } catch { /* ignora */ }
+      try { await wppSend(from, "Ops, deu um problema aqui do meu lado tentando processar isso. 🙏 Pode mandar de novo? Se continuar acontecendo, me avisa que eu confirmo se ficou registrado do jeito certo."); } catch { /* ignora */ }
     }
     return;
   }

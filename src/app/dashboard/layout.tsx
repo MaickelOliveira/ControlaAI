@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
+import SupportWidget from "@/components/SupportWidget";
 
 const Icons = {
   home: (
@@ -316,6 +317,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </div>
       </div>
+
+      {user && <SupportWidget />}
     </div>
   );
 }

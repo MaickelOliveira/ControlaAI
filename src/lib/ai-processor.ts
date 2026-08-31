@@ -92,6 +92,11 @@ export type FinanceData = {
   date: string;
   mode?: "personal" | "business"; // detectado automaticamente
   accountHint?: string; // nome da conta/cartão mencionado, ex: "no Nubank", "cartão Inter" — ausente = usa a conta padrão
+  // true SE E SOMENTE SE a mensagem indicar explicitamente que o valor
+  // ainda NÃO foi recebido/pago de fato (é uma expectativa, não algo que já
+  // aconteceu) — ver REGRA "A RECEBER"/PENDENTE abaixo. Sem essa indicação
+  // explícita, NÃO inclua o campo.
+  pending?: boolean;
 };
 
 export type AccountData = {
@@ -248,6 +253,13 @@ export type AIResult = {
 
 export type AiContext = {
   user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome" | "locale">;
+  // Últimas mensagens da conversa (mais antiga primeiro), sem incluir a
+  // mensagem atual — dá ao classificador memória de curto prazo pra
+  // resolver respostas curtas que só fazem sentido junto da pergunta
+  // anterior (ex: bot pergunta "qual tipo de pessoa?" e o usuário responde
+  // só "participante"). Sem isso o classificador trata cada mensagem como
+  // se fosse a primeira da conversa.
+  history?: { role: "user" | "assistant"; content: string }[];
 };
 
 // Instrução curta de idioma/tom — usada tanto no classificador (volátil, pra
@@ -330,6 +342,12 @@ function buildVolatileContext(ctx?: AiContext): string {
     : "";
   const localeLine = localeInstruction(ctx?.user.locale) ? `\n${localeInstruction(ctx?.user.locale)}` : "";
 
+  const historyBlock = ctx?.history?.length
+    ? `\n\nHISTÓRICO RECENTE DA CONVERSA (mais antiga primeiro — a mensagem atual do usuário vem separada, no final desta mensagem):\n${ctx.history
+        .map(h => `${h.role === "user" ? "Usuário" : "Você"}: ${h.content}`)
+        .join("\n")}\n⚠️ Use esse histórico pra entender o contexto: se a mensagem atual parecer curta demais ou incompleta sozinha (ex: responde uma pergunta que VOCÊ fez na última mensagem, corrige algo que acabou de ser registrado, ou continua um assunto em aberto), interprete-a à luz do que já foi dito — não trate a conversa como se começasse do zero a cada mensagem.`
+    : "";
+
   return `Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).${localeLine}
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 
@@ -341,7 +359,7 @@ ${periodsRef}
 
 CATEGORIAS DE DESPESA: ${expenseCats.join(", ")}
 CATEGORIAS DE RECEITA: ${incomeCats.join(", ")}
-CATEGORIAS DE SUPERMERCADO (para grocery.items[].category): ${GROCERY_CATEGORIES.join(", ")}${modeLine}`;
+CATEGORIAS DE SUPERMERCADO (para grocery.items[].category): ${GROCERY_CATEGORIES.join(", ")}${modeLine}${historyBlock}`;
 }
 
 /** Parte do prompt que NÃO muda entre chamadas — vai no systemInstruction
@@ -356,14 +374,14 @@ As categorias válidas, a data de hoje, o calendário e os períodos pré-calcul
 
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular).
-- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original.
+- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X")
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
   ⚠️ DISTINÇÃO IMPORTANTE — categoria genérica vs comerciante/app específico:
   • CATEGORIA/ASSUNTO amplo (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"): inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA (no início da mensagem) (ex: "comida"/"mercado"/"restaurante" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte").
   • COMERCIANTE/APP/MARCA específico (ex: "quanto gastei com ifood", "gastos no aiqfome", "quanto gastei no 99", "gasto com uber eats", "quanto gastei na farmácia X"): inclua "keyword" com o nome do comerciante (NÃO use "category" nesse caso — a descrição do lançamento pode estar abreviada, ex: "IFD" em vez de "iFood", e o sistema já sabe expandir essas variantes a partir do "keyword").
   Em ambos os casos, inclua "financeType" com "expense" ou "income" conforme o verbo da REGRA CRÍTICA abaixo (padrão "expense"). ⚠️ Se a pergunta mencionar um PERÍODO diferente do mês atual (ex: "mês passado", "semana passada", "essa semana", "primeira semana do mês", "esse ano"), inclua "period" usando EXATAMENTE os valores da lista de períodos pré-calculados no início de cada mensagem — NUNCA calcule essas datas você mesmo. Sem período mencionado, não inclua "period" (o sistema usa o mês atual por padrão).
-- finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
+- finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa", "cria uma planilha", "manda minha planilha", "quero uma planilha das entradas/saídas", "envia o extrato", "me manda um relatório". ⚠️ O sistema não gera arquivo de planilha (.xlsx/.csv) — quando o pedido usar a palavra "planilha", ainda assim use finance_detail (o sistema manda a lista de lançamentos em texto), NUNCA responda how_to/unknown só porque a palavra usada foi "planilha" em vez de "extrato". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
 - finance_confirm_pending: confirmar/antecipar um lançamento AGENDADO (data futura, ainda não contabilizado) antes da data chegar sozinha ("já paguei aquela conta que agendei", "confirma o pagamento do aluguel que tá agendado", "antecipa o lançamento de X"). Use "keyword" com o termo de busca do lançamento.
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
@@ -421,7 +439,10 @@ INTENÇÕES POSSÍVEIS:
 - customer_update: alterar dados de um cliente existente ("muda o telefone do Pedro", "atualiza o email da Maria"). Use "keyword" com o nome e "customer" com os campos novos.
 - customer_deactivate: desativar/remover um cliente ("remove o cliente Pedro", "esse cliente não compra mais comigo"). Use "keyword" com o nome.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
-- how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos"). Nesse caso, escreva uma explicação clara e amigável no campo "response".
+- how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos ou funcionalidades que não existem).
+  ⚠️ Pergunta sobre "adicionar/incluir uma pessoa" é ambígua e o sistema tem DUAS coisas diferentes pra isso — explique as duas, deixando claro que são coisas distintas:
+  1) Cadastrar como registro no painel, SEM a pessoa poder falar com o bot (funcionário: "cadastra a Ana como vendedora, salário 2000"; cliente: "cadastra o cliente Pedro, telefone 11999999999"; participante de reunião/Meet: ao criar o Meet, junto com o convite; lembrete pra outra pessoa: "lembra a Milena de pagar amanhã às 10h").
+  2) Vincular o WhatsApp de outra pessoa (funcionário, sócio, familiar) pra ela poder conversar com o bot como se fosse a própria conta: a pessoa (ou o dono da conta, se estiver com o número dela em mãos) digita "vincular número" aqui no chat OU acessa Configurações → "Vincular WhatsApp" no painel — isso gera um código de 4 dígitos válido por 10 minutos; a pessoa manda esse código PARA ESTE MESMO NÚMERO do Zelo no WhatsApp dela, e o bot pergunta o nome, o vínculo (ex: "funcionário", "sócio") e o tipo de acesso (pessoal/empresa/ambos) — depois disso ela já pode registrar gastos, tarefas etc. direto pelo WhatsApp dela.
 - help: pedir lista de comandos ("ajuda", "help", "o que você faz")
 - unknown: não identificado
 
@@ -432,6 +453,12 @@ Se a mensagem contém "recebi", "ganhei" ou "entrou" → type DEVE ser "income",
 Exemplo: "recebi 500 de vendas" → type: "income", category: "Vendas"
 Exemplo: "vendas do mês foram 2000" → type: "income", category: "Vendas"
 Exemplo: "gastei 500 com vendedor" → type: "expense", category: "Outros"
+
+⚠️ REGRA CRÍTICA — "a receber"/"a pagar" (pending), NÃO confundir com já recebido/pago:
+Se a mensagem disser explicitamente que o valor está "a receber", "à receber", "contas a receber", "recebimento futuro", "ainda vou receber", "falta receber", "a pagar" (ainda não pago) — inclua "pending": true nesse(s) item(ns) de "finances"/"finance". Isso é DIFERENTE de "recebi"/"paguei" (que é o oposto: já aconteceu, não é pending) e também diferente de uma data futura já preenchida no campo "date" (que o sistema já trata como agendado automaticamente, sem precisar de "pending"). Uma lista colada com cabeçalho "À Receber"/"A Receber" ANTES dos itens significa que TODOS os itens daquela lista são "pending": true, mesmo que cada linha individual não repita a palavra.
+Exemplo: "À Receber:\n10.119,00 Geo ch\n43.796,00 Rafael mcv" → dois finances, ambos com type: "income", pending: true.
+Exemplo: "recebi 500 do cliente" → type: "income", SEM "pending" (já recebido).
+Exemplo: "vou receber 2000 do aluguel semana que vem" → type: "income", pending: true.
 
 As categorias válidas (incluindo as personalizadas do usuário, se houver) vêm no início da mensagem, em CATEGORIAS DE DESPESA/CATEGORIAS DE RECEITA.
 
@@ -1369,6 +1396,52 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   } catch (e) {
     console.error("[ai-processor] Erro Gemini:", String(e));
     return { intent: "unknown", confidence: 0 };
+  }
+}
+
+/** Chamada só no caminho de fallback (classificador não reconheceu a
+ *  intenção) — troca o template fixo de replyUnknown() por uma pergunta de
+ *  esclarecimento específica pro que a pessoa disse, usando o histórico
+ *  recente pra soar como assessor de verdade em vez de "não entendi" toda
+ *  vez. Retorna null se a chamada falhar (chamador cai pro template fixo). */
+export async function generateFallbackResponse(
+  message: string,
+  history: { role: "user" | "assistant"; content: string }[]
+): Promise<string | null> {
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  const historyText = history.length
+    ? history.map(h => `${h.role === "user" ? "Usuário" : "Você"}: ${h.content}`).join("\n")
+    : "(sem mensagens anteriores)";
+
+  const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Tom caloroso, direto e seguro, como alguém de confiança que cuida da vida financeira/organização da pessoa.
+
+O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Sua única tarefa aqui é responder de um jeito humano e específico ao que ela disse, para entender o que ela precisa — nunca confirme que algo foi feito/registrado/agendado, porque NADA foi executado ainda.
+
+HISTÓRICO RECENTE DA CONVERSA:
+${historyText}
+
+MENSAGEM ATUAL QUE NÃO FOI ENTENDIDA: "${message}"
+
+O que você sabe fazer (só pra te orientar, não repita essa lista pronta): registrar/editar/apagar despesas e receitas (inclusive marcar algo como "a receber"/"a pagar" ainda não recebido), ver saldo e extrato, tarefas, lembretes (inclusive pra outra pessoa), metas financeiras, gastos de veículo, contas recorrentes/parceladas, funcionários e clientes (cadastro no painel), lista de compras de mercado, agenda/reuniões no Google Meet, vincular o WhatsApp de outra pessoa à conta (código de 4 dígitos via "vincular número" ou em Configurações).
+
+Instruções:
+- Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.
+- Se a mensagem for vaga/sem relação clara com nada acima, faça 1 pergunta objetiva e específica ao que ela disse pra entender a intenção (não uma lista de todos os comandos possíveis).
+- No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
+- Nunca invente que o sistema tem uma funcionalidade que não está na lista acima.`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    return text || null;
+  } catch (e) {
+    console.error("[ai-processor] Erro generateFallbackResponse:", e);
+    return null;
   }
 }
 

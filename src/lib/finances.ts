@@ -63,6 +63,11 @@ export type Finance = {
   mode: FinanceMode;
   source: FinanceSource;
   status?: FinanceStatus; // undefined = posted (retrocompatível)
+  // Só importa quando status é "pending". true (padrão) = lançamento agendado
+  // com data futura conhecida, posta sozinho quando a data chegar. false =
+  // pendente SEM data conhecida (ex: "a receber" sem previsão) — nunca é
+  // postado automaticamente, só via confirmação manual (finance_confirm_pending).
+  autoPost?: boolean;
   registeredBy?: string; // número de WhatsApp de quem registrou (para contas com vários números vinculados)
   accountId?: string; // conta bancária/cartão associada (src/lib/accounts.ts) — ausente em lançamentos antigos ou quem não cadastrou conta
   cardInvoiceId?: string; // só quando accountId aponta pra um cartão — a fatura do ciclo em que a despesa caiu
@@ -77,7 +82,7 @@ export function isPostedFinance(f: Finance): boolean {
 type Row = {
   id: string; user_id: string; type: FinanceType; amount: number; category: string;
   description: string; date: string; mode: FinanceMode; source: FinanceSource;
-  pending: boolean; registered_by: string | null; created_at: string;
+  pending: boolean; auto_post: boolean; registered_by: string | null; created_at: string;
   account_id: string | null; card_invoice_id: string | null;
 };
 
@@ -85,7 +90,7 @@ function fromRow(r: Row): Finance {
   return {
     id: r.id, userId: r.user_id, type: r.type, amount: Number(r.amount), category: r.category,
     description: r.description, date: r.date, mode: r.mode, source: r.source,
-    status: r.pending ? "pending" : "posted", registeredBy: r.registered_by ?? undefined, createdAt: r.created_at,
+    status: r.pending ? "pending" : "posted", autoPost: r.auto_post, registeredBy: r.registered_by ?? undefined, createdAt: r.created_at,
     accountId: r.account_id ?? undefined, cardInvoiceId: r.card_invoice_id ?? undefined,
   };
 }
@@ -113,6 +118,7 @@ export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promi
     id: randomUUID(), user_id: data.userId, type: data.type, amount: data.amount,
     category: data.category, description: data.description, date: data.date,
     mode: data.mode, source: data.source, pending: data.status === "pending",
+    auto_post: data.autoPost !== false,
     registered_by: data.registeredBy,
     account_id: data.accountId ?? null, card_invoice_id: data.cardInvoiceId ?? null,
   };
@@ -265,13 +271,14 @@ export async function deleteFinance(id: string, userId: string): Promise<boolean
   return !error && !!count && count > 0;
 }
 
-export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status">>): Promise<Finance | null> {
+export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost">>): Promise<Finance | null> {
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
   if (patch.category !== undefined) rowPatch.category = patch.category;
   if (patch.description !== undefined) rowPatch.description = patch.description;
   if (patch.date !== undefined) rowPatch.date = patch.date;
   if (patch.status !== undefined) rowPatch.pending = patch.status === "pending";
+  if (patch.autoPost !== undefined) rowPatch.auto_post = patch.autoPost;
   const { data, error } = await getSupabase().from("finances").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);
@@ -345,6 +352,7 @@ export async function autoPostPendingFinances(todayStr: string): Promise<Finance
     .from("finances")
     .update({ pending: false })
     .eq("pending", true)
+    .eq("auto_post", true)
     .lte("date", todayStr)
     .select("*");
   if (error) { console.error("[finances] autoPostPendingFinances erro:", error.message); return []; }
