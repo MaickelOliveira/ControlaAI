@@ -65,6 +65,7 @@ export type Intent =
   | "how_to"
   | "help"
   | "category_create"
+  | "finance_clear_history"
   | "unknown";
 
 export type GoalData = {
@@ -454,6 +455,7 @@ INTENÇÕES POSSÍVEIS:
   2) Vincular o WhatsApp de outra pessoa (funcionário, sócio, familiar) pra ela poder conversar com o bot como se fosse a própria conta: a pessoa (ou o dono da conta, se estiver com o número dela em mãos) digita "vincular número" aqui no chat OU acessa Configurações → "Vincular WhatsApp" no painel — isso gera um código de 4 dígitos válido por 10 minutos; a pessoa manda esse código PARA ESTE MESMO NÚMERO do Zelo no WhatsApp dela, e o bot pergunta o nome, o vínculo (ex: "funcionário", "sócio") e o tipo de acesso (pessoal/empresa/ambos) — depois disso ela já pode registrar gastos, tarefas etc. direto pelo WhatsApp dela.
 - help: pedir lista de comandos ("ajuda", "help", "o que você faz")
 - category_create: criar uma categoria personalizada de despesa/receita ("cria a categoria Nubank", "adiciona categoria Consórcio", "nova categoria Investimentos"). Use "categoryName" com o nome exato dito. ⚠️ AÇÃO DE 1 PASSO SÓ, sem perguntar nada: por padrão cria a categoria pra despesa E receita ao mesmo tempo — só restrinja a um tipo só se o usuário disser explicitamente ("categoria de receita chamada X", "só pra despesa"), usando "financeType" ("expense"/"income") nesse caso. NÃO existe limite/meta de orçamento por categoria no sistema — nunca pergunte sobre isso nem sobre mais configurações.
+- finance_clear_history: apagar/limpar/zerar TODO o histórico financeiro de uma vez — não é apagar 1 lançamento específico (isso é finance_delete), é remover TUDO ("apaga todo o histórico", "limpa tudo", "zera meus registros financeiros", "apaga todas as despesas e receitas"). Se a mensagem disser claramente "pessoal", "empresa" ou "os dois"/"tudo", inclua "mode" ("personal"/"business" — se for os dois, deixe "mode" vazio, o sistema pergunta). ⚠️ Essa intent SÓ inicia a confirmação — o sistema mostra quantos lançamentos seriam apagados e pede uma confirmação forte antes de executar de verdade; você nunca confirma nem executa a exclusão sozinho no campo "response" ou em texto livre.
 - unknown: não identificado
 
 ⚠️ REGRA CRÍTICA — tipo income vs expense:

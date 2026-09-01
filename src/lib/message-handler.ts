@@ -4,7 +4,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
@@ -659,6 +659,21 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       } else {
         await clearPendingAction(from);
       }
+    }
+
+    // ── Confirmação de "apagar todo o histórico" (ação irreversível — exige
+    // uma frase exata, não um "sim" qualquer, pra reduzir confirmação acidental) ──
+    if (pending?.type === "confirm_clear_history" && pending.userId === user.id) {
+      const confirmed = messageText.trim().toLowerCase() === "apagar tudo";
+      await clearPendingAction(from);
+      if (confirmed) {
+        const deleted = await deleteAllFinances(user.id, pending.mode);
+        const modeLabel = pending.mode === "personal" ? "pessoal" : pending.mode === "business" ? "empresarial" : "pessoal e empresarial";
+        await wppSend(from, `🗑️ Pronto. Apaguei ${deleted} lançamento${deleted === 1 ? "" : "s"} do histórico ${modeLabel}. Não tem como desfazer isso.`);
+      } else {
+        await wppSend(from, "Ok, não apaguei nada. Se quiser tentar de novo, é só pedir.");
+      }
+      return;
     }
 
     // ── Seleção de lançamento financeiro (editar/excluir com múltiplos resultados) ──
@@ -2095,6 +2110,33 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (added.length) msg += `✅ Categoria *${categoryName}* criada para ${added.map(typeLabel).join(" e ")}.`;
         if (already.length) msg += `${msg ? "\n" : ""}ℹ️ Já existia pra ${already.map(typeLabel).join(" e ")}.`;
         await wppSend(from, msg.trim());
+        break;
+      }
+
+      case "finance_clear_history": {
+        // Ação irreversível — nunca decide sozinho o modo por engano.
+        // Sem sinal explícito na mensagem (nem da IA, nem no texto cru),
+        // pergunta em vez de assumir "os dois" ou só um dos modos.
+        const lowerMsg = messageText.toLowerCase();
+        let clearMode: "personal" | "business" | "both" | null = ai.mode ?? null;
+        if (!clearMode) {
+          if (/\bpessoal\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b/.test(lowerMsg)) clearMode = "personal";
+          else if (/\bempresa(rial)?\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b/.test(lowerMsg)) clearMode = "business";
+          else if (/\bos dois\b|\btudo\b|\bambos\b/.test(lowerMsg)) clearMode = "both";
+        }
+        if (!clearMode) {
+          await wppSend(from, "❓ Isso vai apagar seu histórico financeiro. É do modo *pessoal*, *empresa*, ou *os dois*?");
+          break;
+        }
+
+        const count = await countFinances(user.id, clearMode);
+        if (count === 0) {
+          await wppSend(from, "Não encontrei nenhum lançamento pra apagar nesse modo.");
+          break;
+        }
+        const modeLabel = clearMode === "personal" ? "pessoal" : clearMode === "business" ? "empresarial" : "pessoal e empresarial";
+        await setPendingAction(from, { type: "confirm_clear_history", userId: user.id, mode: clearMode, count });
+        await wppSend(from, `⚠️ Isso vai apagar *${count} lançamento${count === 1 ? "" : "s"}* do histórico ${modeLabel} — despesas e receitas, de vez, sem como desfazer.\n\nSe tiver certeza, responda exatamente *apagar tudo*. Qualquer outra coisa cancela.`);
         break;
       }
 

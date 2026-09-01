@@ -46,6 +46,15 @@ export type PendingRecurringConfirmation = {
   expiresAt: string;
 };
 
+export type PendingClearHistory = {
+  type: "confirm_clear_history";
+  phone: string;
+  userId: string;
+  mode: "personal" | "business" | "both";
+  count: number; // quantos lançamentos seriam apagados — só informativo, recontado na hora de executar
+  expiresAt: string;
+};
+
 export type PendingMeetAta = {
   type: "meet_ata";
   phone: string;
@@ -202,7 +211,7 @@ export type PendingAccountSelection = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect | PendingAccountSelection;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect | PendingAccountSelection | PendingClearHistory;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -227,7 +236,8 @@ type PendingActionInput =
   | Omit<PendingInvoiceImport, "phone" | "expiresAt">
   | Omit<PendingSlotFill, "phone" | "expiresAt">
   | Omit<PendingEmployeePaymentSelect, "phone" | "expiresAt">
-  | Omit<PendingAccountSelection, "phone" | "expiresAt">;
+  | Omit<PendingAccountSelection, "phone" | "expiresAt">
+  | Omit<PendingClearHistory, "phone" | "expiresAt">;
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   recurring_confirmation: TTL_RECURRING_MS,

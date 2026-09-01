@@ -271,6 +271,29 @@ export async function deleteFinance(id: string, userId: string): Promise<boolean
   return !error && !!count && count > 0;
 }
 
+/** Conta quantos lançamentos seriam afetados por "apaga todo o histórico"
+ *  ANTES de executar — usado só pra montar a mensagem de confirmação, nunca
+ *  pra decidir se apaga (a contagem real é recontada na hora de apagar de
+ *  verdade, ver deleteAllFinances). */
+export async function countFinances(userId: string, mode: FinanceMode | "both"): Promise<number> {
+  let query = getSupabase().from("finances").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  if (mode !== "both") query = query.eq("mode", mode);
+  const { count, error } = await query;
+  return error ? 0 : (count ?? 0);
+}
+
+/** Apaga TODOS os lançamentos do usuário (num modo, ou nos dois) — ação
+ *  irreversível, só deve ser chamada depois de confirmação explícita e
+ *  forte do usuário (ver "confirm_clear_history" em message-handler.ts).
+ *  Retorna quantos foram apagados de fato. */
+export async function deleteAllFinances(userId: string, mode: FinanceMode | "both"): Promise<number> {
+  let query = getSupabase().from("finances").delete({ count: "exact" }).eq("user_id", userId);
+  if (mode !== "both") query = query.eq("mode", mode);
+  const { error, count } = await query;
+  if (error) { console.error("[finances] deleteAllFinances falhou:", error.message); return 0; }
+  return count ?? 0;
+}
+
 export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost" | "type">>): Promise<Finance | null> {
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
