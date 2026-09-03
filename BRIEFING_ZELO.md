@@ -151,7 +151,7 @@ Os modos preservam saldos, categorias, metas e relatórios separados. A troca po
 ### Limites de comunicação importantes
 
 - As atas não devem ser anunciadas como gravação ou transcrição automática da reunião. O fluxo atual solicita ao usuário um áudio ou texto após a reunião e então organiza o resumo, as decisões e as tarefas.
-- O módulo de contas bancárias e cartões existe tecnicamente, mas está marcado como “em espera” na navegação. Não deve ser destaque de campanha até a experiência estar oficialmente liberada.
+- Contas bancárias e cartões não estão disponíveis para os clientes. O Zelo não oferece conexão, sincronização ou importação automática por Open Finance/Open Banking. A IA nunca deve inventar menus ou passos para isso; deve orientar o cliente a abrir o **Suporte** dentro da plataforma.
 - A comunicação pode afirmar que os dados são isolados por conta. Não deve prometer certificações, criptografia específica ou conformidade regulatória que não estejam documentadas.
 - “100% pelo WhatsApp” funciona melhor como “o dia a dia acontece pelo WhatsApp”, porque o painel web também faz parte da experiência.
 
@@ -789,7 +789,7 @@ A landing sugere geração automática, enquanto o fluxo conversacional pede que
 
 ### 4. Contas bancárias e cartões
 
-O módulo técnico está marcado como em espera no painel. Evitar promovê-lo como funcionalidade principal até liberação oficial e testes completos.
+O módulo não está disponível aos clientes. Não comunicar cadastro ou conexão de contas/cartões e não prometer Open Finance/Open Banking. Quando surgir uma dúvida sobre essa área, orientar o cliente a abrir o **Suporte** no canto inferior direito da plataforma.
 
 ### 5. “Ilimitado”
 
@@ -853,4 +853,3 @@ O público mais promissor é quem vive entre duas rotinas — a pessoal e a empr
 - `public/ads/zelo-growth-test/` — conceitos iniciais de aquisição.
 - `public/ads/zelo-andromeda-premium/` — variações criativas premium.
 - `supabase/` — estrutura de dados e integrações do produto.
-

@@ -1,8 +1,14 @@
 import { getSupabase } from "./supabase";
 import { isBusinessHours, todayStrBR } from "./date-br";
+import type { SupportImageAttachment } from "./support-attachments";
 
 export type SupportSender = "user" | "admin" | "system";
-export type SupportMessage = { sender: SupportSender; text: string; ts: number };
+export type SupportMessage = {
+  sender: SupportSender;
+  text: string;
+  ts: number;
+  attachment?: SupportImageAttachment;
+};
 export type SupportStatus = "none" | "needs_attention" | "attended";
 
 type SupportConversation = {
@@ -28,7 +34,8 @@ async function findConversation(userId: string): Promise<SupportConversation | n
 }
 
 async function saveConversation(userId: string, conv: SupportConversation) {
-  await getSupabase().from("support_conversations").upsert({ user_id: userId, data: conv });
+  const { error } = await getSupabase().from("support_conversations").upsert({ user_id: userId, data: conv });
+  if (error) throw new Error(`Falha ao salvar conversa de suporte: ${error.message}`);
 }
 
 function pushMessage(conv: SupportConversation, msg: SupportMessage) {
@@ -65,7 +72,7 @@ export async function setSupportStatus(userId: string, status: SupportStatus) {
 }
 
 export async function sendAdminSupportMessage(userId: string, text: string) {
-  const conv = (await findConversation(userId)) ?? { ...EMPTY };
+  const conv = (await findConversation(userId)) ?? { ...EMPTY, messages: [] };
   pushMessage(conv, { sender: "admin", text, ts: Date.now() });
   conv.unreadUser = true;
   await saveConversation(userId, conv);
@@ -75,10 +82,14 @@ export async function sendAdminSupportMessage(userId: string, text: string) {
  *  precisa responder automaticamente (fora de horário / pergunta inicial /
  *  aviso de espera) e devolve as mensagens do sistema geradas, na ordem —
  *  o caller (rota da API) devolve elas pro widget junto da confirmação. */
-export async function postUserSupportMessage(userId: string, text: string): Promise<SupportMessage[]> {
+export async function postUserSupportMessage(
+  userId: string,
+  text: string,
+  attachment?: SupportImageAttachment,
+): Promise<SupportMessage[]> {
   const conv = (await findConversation(userId)) ?? { ...EMPTY, messages: [] };
 
-  pushMessage(conv, { sender: "user", text, ts: Date.now() });
+  pushMessage(conv, { sender: "user", text, ts: Date.now(), ...(attachment ? { attachment } : {}) });
   conv.unreadAdmin = true;
 
   const systemReplies: SupportMessage[] = [];

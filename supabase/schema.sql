@@ -391,6 +391,22 @@ create table if not exists support_conversations (
   data jsonb not null default '{"messages":[],"lastActivity":0,"status":"none"}'
 );
 
+-- Imagens enviadas pelo cliente no chat de suporte. O bucket é privado:
+-- somente as rotas autenticadas do app, usando a service role, entregam
+-- o arquivo ao próprio cliente ou a um administrador.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'support-attachments',
+  'support-attachments',
+  false,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
 create table if not exists pending_actions (
   phone text primary key,
   data jsonb not null,

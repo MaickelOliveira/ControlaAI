@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { clsx } from "clsx";
+import Image from "next/image";
 
 type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image" };
 type ConversationSummary = {
@@ -13,7 +14,12 @@ type ConversationSummary = {
   messageCount: number;
 };
 
-type SupportMessage = { sender: "user" | "admin" | "system"; text: string; ts: number };
+type SupportMessage = {
+  sender: "user" | "admin" | "system";
+  text: string;
+  ts: number;
+  attachment?: { type: "image"; fileName: string; mimeType: string; size: number };
+};
 type SupportStatus = "none" | "needs_attention" | "attended";
 type SupportSummary = {
   userId: string;
@@ -267,7 +273,7 @@ export default function AdminInboxPage() {
           <div className={clsx("w-full sm:w-80 border-r border-slate-200 flex flex-col shrink-0", selected && "hidden sm:flex")}>
             <div className="p-4 border-b border-slate-200">
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome ou telefone..."
-                className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
             </div>
             <div className="flex-1 overflow-y-auto">
               {filtered.length === 0 && (
@@ -344,7 +350,7 @@ export default function AdminInboxPage() {
                   <input value={input} onChange={e => setInput(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                     placeholder="Digite uma mensagem..."
-                    className="flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+                    className="flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
                   <button onClick={send} disabled={!input.trim() || sending}
                     className="bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40">
                     Enviar
@@ -360,7 +366,7 @@ export default function AdminInboxPage() {
           <div className={clsx("w-full sm:w-80 border-r border-slate-200 flex flex-col shrink-0", supportSelected && "hidden sm:flex")}>
             <div className="p-4 border-b border-slate-200">
               <input value={supportSearch} onChange={e => setSupportSearch(e.target.value)} placeholder="Buscar por nome..."
-                className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-500 transition" />
+                className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
             </div>
             <div className="flex-1 overflow-y-auto">
               {supportFiltered.length === 0 && (
@@ -383,7 +389,7 @@ export default function AdminInboxPage() {
                     <div className="flex items-center justify-between gap-2 mt-0.5">
                       <p className="text-xs text-slate-400 truncate">
                         {c.lastMessage?.sender === "admin" && <span className="text-amber-600">✓✓ </span>}
-                        {(c.lastMessage?.text ?? "").slice(0, 50)}
+                        {(c.lastMessage?.text || (c.lastMessage?.attachment ? "📷 Foto" : "")).slice(0, 50)}
                       </p>
                       <SupportStatusBadge status={c.status} />
                     </div>
@@ -430,7 +436,25 @@ export default function AdminInboxPage() {
                       <div key={i} className={clsx("flex", m.sender === "admin" ? "justify-end" : "justify-start")}>
                         <div className={clsx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words",
                           m.sender === "admin" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-white text-slate-800 rounded-bl-sm border border-slate-200")}>
-                          {m.text}
+                          {m.attachment?.type === "image" && supportSelected && (
+                            <a
+                              href={`/api/admin/support/attachments/${encodeURIComponent(supportSelected)}/${encodeURIComponent(m.attachment.fileName)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block"
+                              title="Abrir imagem"
+                            >
+                              <Image
+                                src={`/api/admin/support/attachments/${encodeURIComponent(supportSelected)}/${encodeURIComponent(m.attachment.fileName)}`}
+                                alt="Imagem enviada pelo cliente"
+                                width={420}
+                                height={315}
+                                unoptimized
+                                className="max-h-80 w-auto max-w-full rounded-lg object-contain"
+                              />
+                            </a>
+                          )}
+                          {m.text && <span className={clsx("block", m.attachment && "mt-1.5")}>{m.text}</span>}
                           <div className={clsx("text-[10px] mt-1 flex items-center gap-1 justify-end", m.sender === "admin" ? "text-emerald-100" : "text-slate-400")}>
                             {formatFullTime(m.ts)}
                             {m.sender === "admin" && <span>✓✓</span>}
@@ -446,7 +470,7 @@ export default function AdminInboxPage() {
                   <input value={supportInput} onChange={e => setSupportInput(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendSupport(); } }}
                     placeholder="Digite uma mensagem..."
-                    className="flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+                    className="flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
                   <button onClick={sendSupport} disabled={!supportInput.trim() || supportSending}
                     className="bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40">
                     Enviar

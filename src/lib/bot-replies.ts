@@ -872,7 +872,7 @@ export function replyUnknown(originalMsg?: string, locale?: string): string {
 🎯 *Meta:* _"meta: ahorrar 5000 para un viaje"_
 📊 *Saldo:* _"mi saldo"_ o _"movimientos"_
 
-O escribe *ayuda* para ver todo lo que sé hacer.`;
+O escribe *ayuda* para ver todo lo que sé hacer. Si tu duda es sobre una función que no aparece aquí, entra al panel de Zelo y abre *Suporte* en la esquina inferior derecha.`;
   }
   if (isPtPt(locale)) {
     const quote = originalMsg ? `\n\n> _"${originalMsg}"_\n` : "\n";
@@ -886,7 +886,7 @@ Podes contar-me de outra forma? Por exemplo:
 🎯 *Meta:* _"meta: poupar 5000 para uma viagem"_
 📊 *Saldo:* _"o meu saldo"_ ou _"extrato"_
 
-Ou escreve *ajuda* para ver tudo o que sei fazer.`;
+Ou escreve *ajuda* para ver tudo o que sei fazer. Se a tua dúvida for sobre uma função que não aparece aqui, entra no painel do Zelo e abre o *Suporte* no canto inferior direito.`;
   }
   const quote = originalMsg ? `\n\n> _"${originalMsg}"_\n` : "\n";
   return `Não peguei bem o que você precisa.${quote}
@@ -899,7 +899,7 @@ Pode me contar de outro jeito? Por exemplo:
 🎯 *Meta:* _"meta: guardar 5000 para viagem"_
 📊 *Saldo:* _"meu saldo"_ ou _"extrato"_
 
-Ou digite *ajuda* pra ver tudo que eu sei fazer.`;
+Ou digite *ajuda* pra ver tudo que eu sei fazer. Se a dúvida for sobre uma função que não aparece aqui, acesse o painel do Zelo e abra o *Suporte* no canto inferior direito.`;
 }
 
 export function replyLowConfidence(intent: string, details: string, originalMsg: string, locale?: string): string {

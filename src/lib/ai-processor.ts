@@ -286,6 +286,65 @@ function localeInstruction(locale?: string): string {
   return "";
 }
 
+function normalizeCapabilityText(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function supportInsidePlatformLine(locale?: string): string {
+  if (locale === "es") {
+    return "Si necesitas ayuda, entra al panel de Zelo y abre *Suporte* en la esquina inferior derecha.";
+  }
+  if (locale === "pt-PT") {
+    return "Se precisares de ajuda, entra no painel do Zelo e abre o *Suporte* no canto inferior direito.";
+  }
+  return "Se precisar de ajuda, acesse o painel do Zelo e abra o *Suporte* no canto inferior direito.";
+}
+
+/** Resposta determinística para impedir que o modelo invente conexão
+ * bancária, menus ou um fluxo de Open Finance que o produto não oferece. */
+export function getUnsupportedBankConnectionResponse(
+  message: string,
+  locale?: string,
+  history: { role: "user" | "assistant"; content: string }[] = [],
+): string | null {
+  const current = normalizeCapabilityText(message);
+  const recent = normalizeCapabilityText(history.slice(-6).map(item => item.content).join(" "));
+  const context = `${recent} ${current}`;
+
+  const mentionsOpenFinance = /\bopen\s*(finance|banking)\b/.test(context);
+  const mentionsBankAccount = /\bcontas?\s+bancari[ao]s?\b/.test(context);
+  const mentionsBankOrCard = /\b(bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?)\b/.test(context);
+  const setupVerb = /\b(conect\w*|integr\w*|vincul\w*|sincron\w*|acess\w*|adicion\w*|cadastr\w*)\b/;
+  const asksForSetup = setupVerb.test(current);
+  const cannotFindSetup = /\b(nao\s+encontr\w*|onde|local)\b/.test(current)
+    && (setupVerb.test(context) || mentionsBankAccount);
+  const priorBankSetup = (mentionsBankAccount || mentionsBankOrCard) && setupVerb.test(recent);
+  const shortFollowUp = current.length <= 100
+    && /\b(onde|como|isso|faco|acesso|opcao|menu)\b/.test(current);
+  const genericAccountSetup = current.length <= 100
+    && /\bcontas?\b/.test(current)
+    && setupVerb.test(current)
+    && !/\b(luz|agua|internet|boleto|pagar|recorrente|despesa|gasto)\b/.test(current);
+
+  if (
+    !mentionsOpenFinance
+    && !(mentionsBankAccount && (asksForSetup || cannotFindSetup))
+    && !(mentionsBankOrCard && asksForSetup)
+    && !(priorBankSetup && shortFollowUp)
+    && !genericAccountSetup
+  ) {
+    return null;
+  }
+
+  const limitation = locale === "es"
+    ? "Por el momento, no es posible registrar ni conectar cuentas bancarias o tarjetas en Zelo. Zelo no utiliza Open Finance ni Open Banking."
+    : locale === "pt-PT"
+      ? "Neste momento, não é possível registar nem ligar contas bancárias ou cartões no Zelo. O Zelo não utiliza Open Finance nem Open Banking."
+      : "No momento, não é possível cadastrar nem conectar contas bancárias ou cartões no Zelo. O Zelo não utiliza Open Finance nem Open Banking.";
+
+  return `${limitation}\n\n${supportInsidePlatformLine(locale)}`;
+}
+
 /** Parte do prompt que muda a cada chamada (data, calendário, períodos
  *  pré-calculados, categorias do usuário — incluindo as personalizadas,
  *  invisíveis pra IA antes disso — e modo ativo). Fica no início da
@@ -452,6 +511,8 @@ INTENÇÕES POSSÍVEIS:
 - customer_deactivate: desativar/remover um cliente ("remove o cliente Pedro", "esse cliente não compra mais comigo"). Use "keyword" com o nome.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa", "como acesso o painel/site", "qual o site/link do Zelo", "estou conectado no Google", "como conecto o Google", "verificar conexão do Google"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos, funcionalidades ou endereços/links que não existem). ⚠️ Se a resposta precisar citar o endereço do painel, use EXATAMENTE o "Endereço do painel web" informado no início da mensagem — nunca invente um domínio diferente.
+  ⚠️ LIMITES DO PRODUTO: neste momento NÃO é possível cadastrar, acessar, conectar ou sincronizar contas bancárias/cartões no Zelo. O Zelo NÃO usa e NÃO oferecerá instruções de Open Finance/Open Banking. Nunca mande procurar menus como "Conexões", "Integrações Bancárias" ou "Minhas Contas" e nunca crie um passo a passo bancário. Para esse pedido, informe a indisponibilidade e oriente: "Acesse o painel do Zelo e abra o *Suporte* no canto inferior direito."
+  ⚠️ Se o usuário perguntar sobre qualquer funcionalidade que não esteja descrita nestas instruções, ou se você não tiver informação confirmada para responder, NÃO improvise. Diga que não consegue confirmar por ali e oriente a acessar o painel do Zelo e abrir o *Suporte* no canto inferior direito.
   ⚠️ Pergunta sobre "adicionar/incluir uma pessoa" é ambígua e o sistema tem DUAS coisas diferentes pra isso — explique as duas, deixando claro que são coisas distintas:
   1) Cadastrar como registro no painel, SEM a pessoa poder falar com o bot (funcionário: "cadastra a Ana como vendedora, salário 2000"; cliente: "cadastra o cliente Pedro, telefone 11999999999"; participante de reunião/Meet: ao criar o Meet, junto com o convite; lembrete pra outra pessoa: "lembra a Milena de pagar amanhã às 10h").
   2) Vincular o WhatsApp de outra pessoa (funcionário, sócio, familiar) pra ela poder conversar com o bot como se fosse a própria conta: a pessoa (ou o dono da conta, se estiver com o número dela em mãos) digita "vincular número" aqui no chat OU acessa Configurações → "Vincular WhatsApp" no painel — isso gera um código de 4 dígitos válido por 10 minutos; a pessoa manda esse código PARA ESTE MESMO NÚMERO do Zelo no WhatsApp dela, e o bot pergunta o nome, o vínculo (ex: "funcionário", "sócio") e o tipo de acesso (pessoal/empresa/ambos) — depois disso ela já pode registrar gastos, tarefas etc. direto pelo WhatsApp dela.
@@ -1377,6 +1438,15 @@ OU genérico:
 }
 
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  const unsupportedBankConnection = getUnsupportedBankConnectionResponse(
+    message,
+    ctx?.user.locale,
+    ctx?.history,
+  );
+  if (unsupportedBankConnection) {
+    return { intent: "how_to", confidence: 1, response: unsupportedBankConnection };
+  }
+
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
 
@@ -1421,7 +1491,8 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
  *  vez. Retorna null se a chamada falhar (chamador cai pro template fixo). */
 export async function generateFallbackResponse(
   message: string,
-  history: { role: "user" | "assistant"; content: string }[]
+  history: { role: "user" | "assistant"; content: string }[],
+  locale?: string,
 ): Promise<string | null> {
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
@@ -1433,7 +1504,7 @@ export async function generateFallbackResponse(
 
   const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Tom caloroso, direto e seguro, como alguém de confiança que cuida da vida financeira/organização da pessoa.
 
-O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Sua única tarefa aqui é responder de um jeito humano e específico ao que ela disse, para entender o que ela precisa — nunca confirme que algo foi feito/registrado/agendado, porque NADA foi executado ainda.
+O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Sua única tarefa aqui é responder de um jeito humano e específico ao que ela disse, para entender o que ela precisa — nunca confirme que algo foi feito/registrado/agendado, porque NADA foi executado ainda.${localeInstruction(locale) ? `\n${localeInstruction(locale)}` : ""}
 
 HISTÓRICO RECENTE DA CONVERSA:
 ${historyText}
@@ -1446,7 +1517,8 @@ Instruções:
 - Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.
 - Se a mensagem for vaga/sem relação clara com nada acima, faça 1 pergunta objetiva e específica ao que ela disse pra entender a intenção (não uma lista de todos os comandos possíveis).
 - No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
-- ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade — se o pedido não estiver claramente coberto pela lista, diga com naturalidade que isso não é algo que você sabe fazer por aqui (sem inventar o motivo) e, se fizer sentido, aponte pro painel do site. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
+- ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Se o pedido não estiver claramente coberto pela lista ou faltar informação confirmada, diga isso com naturalidade e oriente a pessoa a entrar no painel do Zelo e abrir o *Suporte* no canto inferior direito. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
+- ⚠️ Não existe conexão/cadastro de contas bancárias ou cartões e não existe Open Finance/Open Banking no Zelo. Nunca invente menus ou instruções para essas funcionalidades.
 - Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
 
   try {
@@ -1454,7 +1526,9 @@ Instruções:
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    return text || null;
+    if (!text) return null;
+    if (/\b(suporte|support|soporte)\b/i.test(text)) return text;
+    return `${text}\n\n${supportInsidePlatformLine(locale)}`;
   } catch (e) {
     console.error("[ai-processor] Erro generateFallbackResponse:", e);
     return null;

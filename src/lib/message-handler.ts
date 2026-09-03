@@ -2161,7 +2161,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             await wppSend(from, msg.trim());
           }
         } else {
-          const fallback = await generateFallbackResponse(messageText, recentHistory);
+          const fallback = await generateFallbackResponse(messageText, recentHistory, user.locale);
           await wppSend(from, fallback || replyUnknown(messageText, user.locale));
         }
       }
