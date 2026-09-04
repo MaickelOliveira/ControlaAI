@@ -81,8 +81,13 @@ export type PendingAppointmentSelection = {
   type: "appointment_selection";
   phone: string;
   userId: string;
-  action: "update" | "delete" | "done" | "add_meet";
+  action: "update" | "delete" | "done" | "add_meet" | "set_reminder";
   patch?: Record<string, unknown>; // usado só em "update"
+  /** Após escolher qual compromisso editar, ainda pode faltar dizer o que
+   *  muda. Esse estado impede uma atualização vazia seguida de silêncio. */
+  awaitingPatch?: boolean;
+  reminderOffsetMinutes?: number;
+  mode?: "personal" | "business";
   appointments: Array<{ id: string; title: string; startAt: string; location?: string }>;
   expiresAt: string;
 };
@@ -251,12 +256,15 @@ export async function setPendingAction(phone: string, action: PendingActionInput
   const ttl = TTL_BY_TYPE[action.type] ?? TTL_MS;
   const full = { ...action, phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
   const { error } = await getSupabase().from("pending_actions").upsert({ phone, data: full, updated_at: new Date().toISOString() });
-  if (error) console.error("[pending-actions] falha ao gravar:", error.message);
+  if (error) throw new Error(`[pending-actions] falha ao gravar: ${error.message}`);
 }
 
 export async function getPendingAction(phone: string): Promise<PendingAction | null> {
   const { data, error } = await getSupabase().from("pending_actions").select("data").eq("phone", phone).maybeSingle();
-  if (error || !data) return null;
+  if (error) {
+    throw new Error(`[pending-actions] falha ao consultar: ${error.message}`);
+  }
+  if (!data) return null;
   const action = (data as { data: PendingAction }).data;
   if (new Date(action.expiresAt).getTime() < Date.now()) {
     await clearPendingAction(phone);
@@ -266,7 +274,8 @@ export async function getPendingAction(phone: string): Promise<PendingAction | n
 }
 
 export async function clearPendingAction(phone: string): Promise<void> {
-  await getSupabase().from("pending_actions").delete().eq("phone", phone);
+  const { error } = await getSupabase().from("pending_actions").delete().eq("phone", phone);
+  if (error) throw new Error(`[pending-actions] falha ao limpar: ${error.message}`);
 }
 
 /** Base compartilhada de todo "escolha da lista" por número ou por texto:

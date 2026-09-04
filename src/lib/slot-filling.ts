@@ -10,6 +10,8 @@ import {
 import { createRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
 import { createAppointment } from "./agenda";
+import { createReminder } from "./reminders";
+import { appointmentReminderAt, formatReminderOffset } from "./appointment-reminders";
 import { todayStrBR, spToUTC } from "./date-br";
 import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchaseFinanceId, type GroceryPurchaseItem } from "./grocery";
 import { createEmployee } from "./employees";
@@ -169,11 +171,11 @@ export async function beginSlotFill(
   const queue = flow.missing(draft, ctx);
 
   if (queue.length === 0) {
-    clearPendingAction(ctx.phone);
+    await clearPendingAction(ctx.phone);
     return { reply: await flow.finalize(draft, ctx) };
   }
 
-  setPendingAction(ctx.phone, {
+  await setPendingAction(ctx.phone, {
     type: "slot_fill", userId: ctx.userId, intent, draft, missing: queue, asked: 0, mode: ctx.mode, originalText,
   });
   return { reply: askWithTtl(flow.slots[queue[0]], draft, ctx) };
@@ -187,14 +189,14 @@ export async function runSlotFillTurn(
   ctx: SlotCtx
 ): Promise<{ reply?: string; fallThrough: boolean }> {
   const flow = FLOWS[pending.intent];
-  if (!flow) { clearPendingAction(ctx.phone); return { reply: undefined, fallThrough: true }; }
+  if (!flow) { await clearPendingAction(ctx.phone); return { reply: undefined, fallThrough: true }; }
   const slot = flow.slots[pending.missing[0]];
   const draft: Draft = { ...pending.draft };
   const queue = [...pending.missing];
   const trimmed = text.trim();
 
   if (isCancelWord(trimmed)) {
-    clearPendingAction(ctx.phone);
+    await clearPendingAction(ctx.phone);
     return { reply: "Cancelado — não registrei nada. 👍", fallThrough: false };
   }
 
@@ -208,10 +210,10 @@ export async function runSlotFillTurn(
     } else {
       const abandoning = looksLikeNewCommand(trimmed) || pending.asked >= MAX_ASK;
       if (!abandoning) {
-        setPendingAction(ctx.phone, reconstruct(pending, { draft, missing: queue, asked: pending.asked + 1 }));
+        await setPendingAction(ctx.phone, reconstruct(pending, { draft, missing: queue, asked: pending.asked + 1 }));
         return { reply: slot.reask ? slot.reask(draft, ctx, pending.asked) : defaultReask(slot, draft, ctx), fallThrough: false };
       }
-      clearPendingAction(ctx.phone);
+      await clearPendingAction(ctx.phone);
       const result = await finalizeWithDefaults(flow, draft, queue, ctx);
       return { reply: result ?? flow.giveUp(draft, ctx), fallThrough: looksLikeNewCommand(trimmed) };
     }
@@ -221,10 +223,10 @@ export async function runSlotFillTurn(
   (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
 
   if (queue.length === 0) {
-    clearPendingAction(ctx.phone);
+    await clearPendingAction(ctx.phone);
     return { reply: await flow.finalize(draft, ctx), fallThrough: false };
   }
-  setPendingAction(ctx.phone, reconstruct(pending, { draft, missing: queue, asked: 0 }));
+  await setPendingAction(ctx.phone, reconstruct(pending, { draft, missing: queue, asked: 0 }));
   return { reply: askWithTtl(flow.slots[queue[0]], draft, ctx), fallThrough: false };
 }
 
@@ -472,6 +474,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         endTime: d?.endTime,
         allDay: d?.allDay ?? false,
         repeat: d?.repeat ?? "none",
+        reminderMinutesBefore: d?.reminderMinutesBefore,
       } satisfies Draft;
     },
 
@@ -530,7 +533,26 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         status: "scheduled",
         source: "whatsapp",
       });
-      return replyAgendaCreated(apt, ctx.user.locale);
+      let reply = replyAgendaCreated(apt, ctx.user.locale);
+      const reminderMinutesBefore = draft.reminderMinutesBefore as number | undefined;
+      if (reminderMinutesBefore && reminderMinutesBefore > 0) {
+        const scheduledAt = appointmentReminderAt(apt.startAt, reminderMinutesBefore);
+        if (new Date(scheduledAt).getTime() > Date.now()) {
+          await createReminder({
+            userId: ctx.userId,
+            message: `Compromisso: ${apt.title}`,
+            phone: ctx.phone,
+            scheduledAt,
+            repeat: "none",
+            mode: ctx.mode,
+            recipientType: "self",
+          });
+          reply += `\n🔔 Vou avisar ${formatReminderOffset(reminderMinutesBefore)} antes.`;
+        } else {
+          reply += `\n⚠️ O horário pedido para o lembrete já passou, então não consegui programar o aviso.`;
+        }
+      }
+      return reply;
     },
 
     giveUp: () => `❌ Não consegui agendar — faltou o título ou a data. Tente de novo, ex: _"agendar reunião amanhã às 14h"_.`,

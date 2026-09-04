@@ -150,6 +150,9 @@ export type AgendaData = {
   endTime?: string;
   allDay?: boolean;
   repeat?: "none" | "daily" | "weekly" | "monthly" | "yearly";
+  /** Pedido explícito como "me avisa uma hora antes". O handler também
+   *  preenche este campo deterministicamente para não depender da IA. */
+  reminderMinutesBefore?: number;
 };
 
 export type RecurringData = {
