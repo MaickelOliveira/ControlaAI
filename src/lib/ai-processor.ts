@@ -300,6 +300,54 @@ function supportInsidePlatformLine(locale?: string): string {
   return "Se precisar de ajuda, acesse o painel do Zelo e abra o *Suporte* no canto inferior direito.";
 }
 
+function addDaysToBRDate(days: number): string {
+  const [year, month, day] = todayStrBR().split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Atalho determinístico para o formato explícito "Tarefa: ...". Além de
+ * reduzir latência, garante que esse comando básico continue funcionando
+ * mesmo se o provedor de IA estiver indisponível ou se houver outro assunto
+ * no histórico. Formatos mais ambíguos continuam sendo classificados pela IA. */
+export function getExplicitTaskCreateResult(message: string): AIResult | null {
+  const match = message.trim().match(/^tarefa\s*(?:[:.\-–—]\s*|\s+)(.+)$/i);
+  if (!match) return null;
+
+  const body = match[1].trim();
+  if (!body || /\b(conclu\w*|complet\w*|finaliz\w*|feit[ao]s?|apag\w*|exclu\w*|remov\w*|list\w*|minhas?)\b/i.test(body)) {
+    return null;
+  }
+
+  const normalized = normalizeCapabilityText(body);
+  let dueDate: string | undefined;
+  if (/\bamanha\b/.test(normalized)) dueDate = addDaysToBRDate(1);
+  else if (/\bhoje\b/.test(normalized)) dueDate = addDaysToBRDate(0);
+  else if (/\b(segunda|terca|quarta|quinta|sexta|sabado|domingo)(?:-feira)?\b|\bdia\s+\d{1,2}\b|\b\d{1,2}\/\d{1,2}\b/.test(normalized)) {
+    return null;
+  }
+
+  const title = body
+    .replace(/^(?:tem\s+que|preciso(?:\s+de)?|devo)\s+/i, "")
+    .replace(/\s*(?:,\s*)?(?:(?:para|at[eé])\s+)?(?:hoje|amanh[ãa])\s*[.!?]*$/i, "")
+    .trim()
+    .replace(/[.!?]+$/, "");
+  if (!title) return null;
+
+  const priority = /\b(urgente|importante|prioridade|quanto antes)\b/.test(normalized)
+    ? "high"
+    : /\b(sem pressa|quando der|nao urgente)\b/.test(normalized)
+      ? "low"
+      : "medium";
+
+  return {
+    intent: "task_create",
+    confidence: 1,
+    task: { title, priority, ...(dueDate ? { dueDate } : {}) },
+  };
+}
+
 /** Resposta determinística para impedir que o modelo invente conexão
  * bancária, menus ou um fluxo de Open Finance que o produto não oferece. */
 export function getUnsupportedBankConnectionResponse(
@@ -308,19 +356,30 @@ export function getUnsupportedBankConnectionResponse(
   history: { role: "user" | "assistant"; content: string }[] = [],
 ): string | null {
   const current = normalizeCapabilityText(message);
-  const recent = normalizeCapabilityText(history.slice(-6).map(item => item.content).join(" "));
-  const context = `${recent} ${current}`;
+  // O histórico serve apenas para reconhecer uma continuação curta como
+  // "e onde faço isso?". Nunca misture todo o histórico com a mensagem
+  // atual: a própria resposta do Zelo cita "Open Finance" e, se essa frase
+  // entrar na detecção direta, todos os turnos seguintes ficam presos na
+  // mesma resposta — inclusive pedidos válidos de tarefa, agenda e ajuda.
+  const lastUserMessage = [...history].reverse().find(item => item.role === "user")?.content ?? "";
+  const previousUser = normalizeCapabilityText(lastUserMessage);
 
-  const mentionsOpenFinance = /\bopen\s*(finance|banking)\b/.test(context);
-  const mentionsBankAccount = /\bcontas?\s+bancari[ao]s?\b/.test(context);
-  const mentionsBankOrCard = /\b(bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?)\b/.test(context);
+  const mentionsOpenFinance = /\bopen\s*(finance|banking)\b/.test(current);
+  const mentionsBankAccount = /\bcontas?\s+bancari[ao]s?\b/.test(current);
+  const mentionsBankOrCard = /\b(bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?)\b/.test(current);
   const setupVerb = /\b(conect\w*|integr\w*|vincul\w*|sincron\w*|acess\w*|adicion\w*|cadastr\w*)\b/;
   const asksForSetup = setupVerb.test(current);
   const cannotFindSetup = /\b(nao\s+encontr\w*|onde|local)\b/.test(current)
-    && (setupVerb.test(context) || mentionsBankAccount);
-  const priorBankSetup = (mentionsBankAccount || mentionsBankOrCard) && setupVerb.test(recent);
+    && (asksForSetup || mentionsBankAccount || mentionsBankOrCard);
+  const priorBankSetup = /\bopen\s*(finance|banking)\b/.test(previousUser)
+    || (/\b(contas?\s+bancari[ao]s?|bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?)\b/.test(previousUser)
+      && setupVerb.test(previousUser));
+  const followUpText = current.replace(/[?!.,;:]+/g, " ").replace(/\s+/g, " ").trim();
   const shortFollowUp = current.length <= 100
-    && /\b(onde|como|isso|faco|acesso|opcao|menu)\b/.test(current);
+    && (
+      /^(?:e\s+)?(?:onde|como)(?:\s+eu)?(?:\s+(?:faco|acho|encontro|acesso|ativo|conecto|adiciono|cadastro|fica))?(?:\s+para\s+(?:fazer|acessar|ativar|conectar|adicionar|cadastrar))?(?:\s+(?:isso|essa\s+opcao|esse\s+menu|essa\s+funcao|la))?$/.test(followUpText)
+      || /^(?:e\s+)?nao\s+(?:encontrei|achei)(?:\s+(?:isso|essa\s+opcao|esse\s+menu|essa\s+funcao))?$/.test(followUpText)
+    );
   const genericAccountSetup = current.length <= 100
     && /\bcontas?\b/.test(current)
     && setupVerb.test(current)
@@ -1438,6 +1497,9 @@ OU genérico:
 }
 
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  const explicitTask = getExplicitTaskCreateResult(message);
+  if (explicitTask) return explicitTask;
+
   const unsupportedBankConnection = getUnsupportedBankConnectionResponse(
     message,
     ctx?.user.locale,

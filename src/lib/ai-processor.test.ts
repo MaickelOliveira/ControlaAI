@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { getUnsupportedBankConnectionResponse, processMessage } from "./ai-processor";
+import { getExplicitTaskCreateResult, getUnsupportedBankConnectionResponse, processMessage } from "./ai-processor";
+
+describe("getExplicitTaskCreateResult", () => {
+  it("creates the reported task even when the previous conversation was about banking", async () => {
+    const result = await processMessage(
+      "Tarefa. Tem que entregar a guitarra da Mariana amanhã.",
+      {
+        user: { activeMode: "personal", customCategoriesExpense: [], customCategoriesIncome: [], locale: "pt-BR" },
+        history: [
+          { role: "user", content: "Quero conectar minha conta bancária." },
+          { role: "assistant", content: "O Zelo não utiliza Open Finance nem Open Banking." },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({
+      intent: "task_create",
+      confidence: 1,
+      task: { title: "entregar a guitarra da Mariana", priority: "medium" },
+    });
+    expect(result.task?.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("leaves task updates and ambiguous weekday dates for the full classifier", () => {
+    expect(getExplicitTaskCreateResult("Tarefa 2 concluída")).toBeNull();
+    expect(getExplicitTaskCreateResult("Tarefa: entregar a guitarra na sexta-feira")).toBeNull();
+  });
+});
 
 describe("getUnsupportedBankConnectionResponse", () => {
   it("blocks invented bank connection instructions and points to in-app support", () => {
@@ -36,6 +63,23 @@ describe("getUnsupportedBankConnectionResponse", () => {
     );
 
     expect(response).toContain("não é possível cadastrar nem conectar contas bancárias");
+  });
+
+  it("does not let an old bank question hijack a new task or help request", () => {
+    const bankHistory = [
+      { role: "user" as const, content: "Quero conectar minha conta bancária." },
+      { role: "assistant" as const, content: "O Zelo não utiliza Open Finance nem Open Banking." },
+    ];
+
+    expect(getUnsupportedBankConnectionResponse(
+      "Tarefa: entregar a guitarra da Mariana amanhã.",
+      "pt-BR",
+      bankHistory,
+    )).toBeNull();
+    expect(getUnsupportedBankConnectionResponse("Ajuda", "pt-BR", bankHistory)).toBeNull();
+    expect(getUnsupportedBankConnectionResponse("Onde encontro minhas tarefas?", "pt-BR", bankHistory)).toBeNull();
+    expect(getUnsupportedBankConnectionResponse("Como conecto o Google Agenda?", "pt-BR", bankHistory)).toBeNull();
+    expect(getUnsupportedBankConnectionResponse("Como acesso o painel?", "pt-BR", bankHistory)).toBeNull();
   });
 
   it("does not block normal financial records or Google integration help", () => {
