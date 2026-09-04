@@ -18,6 +18,7 @@ type Reminder = {
 };
 
 type Contact = { id: string; name: string; phone?: string };
+type LinkedPhone = { phone: string; name?: string; relation?: string; access: "personal" | "business" | "both" };
 
 const RECIPIENT_LABEL: Record<RecipientType, string> = {
   self: "👤 Tú",
@@ -54,6 +55,13 @@ function isOverdue(iso: string) {
   return new Date(iso) < new Date();
 }
 
+function formatPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55")) return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  if (digits.length === 12 && digits.startsWith("55")) return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  return `+${digits}`;
+}
+
 export default function LembretesPageEs() {
   const [mode, setMode] = useState<string>("personal");
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -68,8 +76,12 @@ export default function LembretesPageEs() {
   const [recipientId, setRecipientId] = useState("");
   const [recipientLabel, setRecipientLabel] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
+  const [selfPhone, setSelfPhone] = useState("");
+  const [linkedPhones, setLinkedPhones] = useState<LinkedPhone[]>([]);
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [employees, setEmployees] = useState<Contact[]>([]);
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   function load(m: string) {
     setLoading(true);
@@ -86,6 +98,14 @@ export default function LembretesPageEs() {
   }
 
   useEffect(() => {
+    fetch("/api/dashboard/wpp-link")
+      .then(r => r.json())
+      .then(d => {
+        const phones = Array.isArray(d.phones) ? d.phones : [];
+        setLinkedPhones(phones);
+        if (phones.length === 1) setSelfPhone(phones[0].phone);
+      })
+      .catch(() => setLinkedPhones([]));
     fetchDashboardMe()
       .then(d => {
         const m = d.user?.activeMode || "personal";
@@ -104,6 +124,8 @@ export default function LembretesPageEs() {
     setRecipientId("");
     setRecipientLabel("");
     setRecipientPhone("");
+    setSelfPhone(linkedPhones.length === 1 ? linkedPhones[0].phone : "");
+    setFormError("");
   }
 
   function openNew() {
@@ -129,39 +151,57 @@ export default function LembretesPageEs() {
       repeat: r.repeat,
     });
     setRecipientType(r.recipientType || "self");
+    setSelfPhone((r.recipientType || "self") === "self" ? r.phone : "");
     if (r.recipientType === "customer") setRecipientId(customers.find(c => c.name === r.recipientName)?.id || "");
     else if (r.recipientType === "employee") setRecipientId(employees.find(c => c.name === r.recipientName)?.id || "");
     else setRecipientId("");
     setRecipientLabel(r.recipientType === "other" ? (r.recipientName || "") : "");
     setRecipientPhone(r.recipientType === "other" ? r.phone : "");
     setEditingId(r.id);
+    setFormError("");
     setShowForm(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError("");
+    if (recipientType === "self" && !selfPhone) {
+      setFormError(linkedPhones.length ? "Selecciona el número que debe recibir el recordatorio." : "Vincula un WhatsApp en Configuración antes de crear el recordatorio.");
+      return;
+    }
     const scheduledAt = new Date(`${form.date}T${form.time}:00`).toISOString();
 
     const recipientPayload = recipientType === "self"
-      ? { recipientType: "self" as const }
+      ? (() => { const p = linkedPhones.find(x => x.phone === selfPhone); return { recipientType: "self" as const, recipientName: p?.name || p?.relation, phone: selfPhone }; })()
       : recipientType === "customer"
       ? (() => { const c = customers.find(x => x.id === recipientId); return { recipientType: "customer" as const, recipientName: c?.name, phone: c?.phone }; })()
       : recipientType === "employee"
       ? (() => { const e = employees.find(x => x.id === recipientId); return { recipientType: "employee" as const, recipientName: e?.name, phone: e?.phone }; })()
       : { recipientType: "other" as const, recipientName: recipientLabel, phone: recipientPhone };
 
-    if (editingId) {
-      await fetch("/api/admin/reminders", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingId, message: form.message, scheduledAt, repeat: form.repeat, ...recipientPayload }),
-      });
-    } else {
-      await fetch("/api/admin/reminders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: form.message, scheduledAt, repeat: form.repeat, mode, ...recipientPayload }),
-      });
+    setSaving(true);
+    try {
+      const response = editingId
+        ? await fetch("/api/admin/reminders", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingId, message: form.message, scheduledAt, repeat: form.repeat, ...recipientPayload }),
+        })
+        : await fetch("/api/admin/reminders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: form.message, scheduledAt, repeat: form.repeat, mode, ...recipientPayload }),
+        });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFormError(result.error || "No fue posible guardar el recordatorio. Inténtalo de nuevo.");
+        return;
+      }
+    } catch {
+      setFormError("No fue posible guardar el recordatorio. Comprueba tu conexión e inténtalo de nuevo.");
+      return;
+    } finally {
+      setSaving(false);
     }
     setShowForm(false);
     setEditingId(null);
@@ -303,7 +343,7 @@ export default function LembretesPageEs() {
                         : "bg-slate-50 text-slate-400 border-slate-200"
                     )}>
                       {r.recipientType === "self" || !r.recipientType
-                        ? RECIPIENT_LABEL.self
+                        ? `${RECIPIENT_LABEL.self} · ${r.recipientName || linkedPhones.find(p => p.phone === r.phone)?.name || linkedPhones.find(p => p.phone === r.phone)?.relation || formatPhone(r.phone)}`
                         : `${RECIPIENT_LABEL[r.recipientType]}${r.recipientName ? ` · ${r.recipientName}` : ""}`}
                     </span>
                     {!r.sent && r.failedAttempts > 0 && (
@@ -381,7 +421,7 @@ export default function LembretesPageEs() {
                     : (["self", "other"] as const)
                   ).map(t => (
                     <button key={t} type="button"
-                      onClick={() => { setRecipientType(t); setRecipientId(""); setRecipientLabel(""); setRecipientPhone(""); }}
+                      onClick={() => { setRecipientType(t); setRecipientId(""); setRecipientLabel(""); setRecipientPhone(""); setSelfPhone(t === "self" && linkedPhones.length === 1 ? linkedPhones[0].phone : ""); setFormError(""); }}
                       className={clsx("py-2 rounded-xl text-xs font-medium border transition text-center",
                         recipientType === t
                           ? "bg-violet-600 text-white border-violet-600"
@@ -390,6 +430,34 @@ export default function LembretesPageEs() {
                     </button>
                   ))}
                 </div>
+
+                {recipientType === "self" && (
+                  <div className="mt-2 space-y-2">
+                    {linkedPhones.length === 0 ? (
+                      <p className="text-xs text-amber-700 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                        Ningún WhatsApp vinculado. Vincula un número en <strong>Configuración</strong>.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-500">Elige solo un número para recibir:</p>
+                        {linkedPhones.map(phone => (
+                          <label key={phone.phone} className={clsx(
+                            "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition",
+                            selfPhone === phone.phone ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-slate-50 hover:border-violet-200",
+                          )}>
+                            <input type="radio" name="selfPhone" value={phone.phone} checked={selfPhone === phone.phone}
+                              onChange={() => { setSelfPhone(phone.phone); setFormError(""); }} required
+                              className="h-4 w-4 accent-violet-600" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-slate-700">{phone.name || "Sin nombre"}{phone.relation ? ` · ${phone.relation}` : ""}</span>
+                              <span className="block text-xs text-slate-500">{formatPhone(phone.phone)}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {recipientType === "customer" && (
                   <select value={recipientId} onChange={e => setRecipientId(e.target.value)} required
@@ -450,14 +518,16 @@ export default function LembretesPageEs() {
                 </div>
               </div>
 
+              {formError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{formError}</p>}
+
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }}
                   className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">
                   Cancelar
                 </button>
-                <button type="submit"
-                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition">
-                  {editingId ? "Guardar" : "Crear recordatorio"}
+                <button type="submit" disabled={saving || (recipientType === "self" && !selfPhone)}
+                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:cursor-not-allowed disabled:opacity-50">
+                  {saving ? "Guardando..." : editingId ? "Guardar" : "Crear recordatorio"}
                 </button>
               </div>
             </form>

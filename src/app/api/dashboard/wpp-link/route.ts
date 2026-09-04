@@ -3,6 +3,21 @@ import { getSession } from "@/lib/auth";
 import { getUserById, generateWppVerifyCode, getMaxWppPhones } from "@/lib/users";
 import { getPhonesForUser, unlinkPhone, setPhoneName, setPhoneRelation, setPhoneAccess } from "@/lib/wpp-phone-links";
 
+export async function GET() {
+  const session = await getSession();
+  if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  const phones = await getPhonesForUser(session.sub);
+  return NextResponse.json({
+    phones: phones.map(link => ({
+      phone: link.phone,
+      name: link.name,
+      relation: link.relation,
+      access: link.access,
+    })),
+  });
+}
+
 export async function POST() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });

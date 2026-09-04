@@ -1,5 +1,5 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
-import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser } from "@/lib/wpp-phone-links";
+import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
@@ -133,7 +133,11 @@ async function scheduleAppointmentReminder(
     return;
   }
   const message = `Compromisso: ${appointment.title}`;
-  await createReminder({ userId, message, phone: from, scheduledAt, repeat: "none", mode, recipientType: "self" });
+  const requester = (await getPhonesForUser(userId)).find(link => phoneMatches(link.phone, from));
+  await createReminder({
+    userId, message, phone: from, scheduledAt, repeat: "none", mode, recipientType: "self",
+    recipientName: requester?.name || requester?.relation,
+  });
   await wppSend(from, `${replyReminderSet(message, scheduledAt, "none", undefined, locale)}\n\n⏰ Isso corresponde a ${formatReminderOffset(offsetMinutes)} antes do compromisso.`);
 }
 
@@ -1559,10 +1563,22 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             await wppSend(from, `❓ Não encontrei *${cap(recipientQuery)}* com telefone cadastrado. Cadastre o contato (cliente, funcionário ou número da família), ou diga o número dele direto (ex: "lembra o ${cap(recipientQuery)}, número 5544999999999, de..."), ou peça de novo sem citar ninguém pra lembrar você mesmo.`);
             break;
           }
+        } else {
+          // Quando o próprio usuário pede o lembrete, grava explicitamente o
+          // WhatsApp que originou a conversa. Assim, em contas com dois ou mais
+          // números vinculados, o disparo fica restrito a quem fez o pedido.
+          const requester = (await getPhonesForUser(user.id)).find(link => phoneMatches(link.phone, from));
+          recipientName = requester?.name || requester?.relation;
         }
 
         await createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: targetPhone, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none", mode: ai.reminder.mode || mode, recipientType, recipientName });
-        await wppSend(from, replyReminderSet(ai.reminder.message, scheduledUTC, ai.reminder.repeat || "none", recipientName, user.locale));
+        await wppSend(from, replyReminderSet(
+          ai.reminder.message,
+          scheduledUTC,
+          ai.reminder.repeat || "none",
+          recipientType === "self" ? undefined : recipientName,
+          user.locale,
+        ));
         break;
       }
 
