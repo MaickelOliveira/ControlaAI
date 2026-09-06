@@ -3,6 +3,7 @@ import {
   localizedTemplateName,
   localizedTemplateParams,
   SPANISH_TEMPLATE_NAMES,
+  SPANISH_WELCOME_TEMPLATE_TEXT,
 } from "./whatsapp";
 
 describe("Spanish WhatsApp templates", () => {
@@ -38,5 +39,12 @@ describe("Spanish WhatsApp templates", () => {
       importe: "R$ 450,00",
       fecha: "06/09/2026",
     });
+  });
+
+  it("instructs the customer how to connect WhatsApp after account activation", () => {
+    expect(SPANISH_WELCOME_TEMPLATE_TEXT).toContain(
+      "entra en zelogestaointeligente.com.br, inicia sesión, abre Configuración",
+    );
+    expect(SPANISH_WELCOME_TEMPLATE_TEXT).toContain("sección WhatsApp");
   });
 });

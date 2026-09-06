@@ -89,9 +89,15 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
  *  manda o link de "criar senha" aqui (esse foi rejeitado pela Meta, provável
  *  padrão de phishing "clique pra criar sua senha" + link). O link já foi
  *  mandado por e-mail (sendFirstAccessLinkEmail em brevo.ts, mesmo gatilho);
- *  esta mensagem só avisa que ele está lá, com um contato de suporte de
- *  fallback. Corpo 100% estático — sem variável nenhuma — pra reduzir risco
- *  de rejeição de novo. */
+ *  esta mensagem avisa que ele está lá e orienta como conectar o WhatsApp,
+ *  com um contato de suporte de fallback. Corpo 100% estático — sem variável
+ *  nenhuma — pra reduzir risco de rejeição de novo. */
+export const SPANISH_WELCOME_TEMPLATE_TEXT =
+  "¡Hola! Tu pago fue confirmado y tu cuenta de Zelo ya está activa.\n\n" +
+  "Las instrucciones para crear tu contraseña fueron enviadas a tu correo electrónico.\n\n" +
+  "Para conectar tu WhatsApp con la inteligencia artificial de Zelo, entra en zelogestaointeligente.com.br, inicia sesión, abre Configuración y sigue las instrucciones de la sección WhatsApp.\n\n" +
+  "Si no encuentras el correo o necesitas ayuda, escribe a contato@zelogestaointeligente.com.br.";
+
 export async function sendWelcomeTemplate(to: string, locale?: string): Promise<boolean> {
   const provider = (await getConfig()).provider;
   const texts: Record<string, string> = {
@@ -107,10 +113,7 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
       "O link para criares a tua senha de acesso está no e-mail que te enviámos agora — é só abrir a caixa de entrada.\n\n" +
       "Para configurares o WhatsApp com a inteligência artificial da Zelo, é só entrar em zelogestaointeligente.com.br, aceder a Configurações e seguir o passo a passo simples.\n\n" +
       "Não encontraste o e-mail? Envia uma mensagem para contato@zelogestaointeligente.com.br que nós ajudamos-te.",
-    es:
-      "¡Hola! Tu pago fue confirmado y tu cuenta de Zelo ya está activa.\n\n" +
-      "Las instrucciones para crear tu contraseña fueron enviadas a tu correo electrónico.\n\n" +
-      "Si no encuentras el correo, escribe a contato@zelogestaointeligente.com.br.",
+    es: SPANISH_WELCOME_TEMPLATE_TEXT,
   };
   const renderedText = texts[locale ?? "pt-BR"] ?? texts["pt-BR"];
   let ok: boolean;
