@@ -13,7 +13,7 @@ import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesBy
 import {
   addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore,
   findOrCreateStore, addPurchase, setPurchaseFinanceId, getPriceComparison, getStorePriceRanking,
-  getSuggestedListItems, categoryForTemplateKey, getPurchasesInRange, clearShoppingList,
+  getSuggestedListItems, categoryForTemplateKey, getPurchasesInRange, findLatestPurchaseByStoreName, clearShoppingList,
   removeShoppingItem, updateShoppingItem,
   type GroceryPurchaseItem, type GroceryCategory,
 } from "@/lib/grocery";
@@ -1145,7 +1145,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const isReadOnlyIntent = [
       "finance_query", "finance_upcoming", "daily_summary", "weekly_summary", "balance_query", "finance_detail", "finance_analysis",
       "task_query", "reminder_list", "goal_query", "recurring_query", "agenda_list", "vehicle_query",
-      "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking",
+      "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking", "grocery_last_purchase_query",
       "grocery_history_query", "employee_list", "customer_list", "customer_query",
     ].includes(ai.intent);
     if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent && !isReadOnlyIntent) {
@@ -2235,6 +2235,52 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           else notFound.push(name);
         }
         await wppSend(from, replyGroceryItemChecked(checked, notFound, user.locale));
+        break;
+      }
+
+      case "grocery_last_purchase_query": {
+        const requestedStore = ai.grocery?.storeName?.trim();
+        if (!requestedStore) {
+          await wppSend(from, user.locale === "es" ? "❓ ¿De qué supermercado quieres consultar la última compra?" : "❓ De qual mercado deseja consultar a última compra?");
+          break;
+        }
+        const latestPurchase = findLatestPurchaseByStoreName(await getPurchasesInRange(user.id), requestedStore);
+        if (!latestPurchase) {
+          await wppSend(from, user.locale === "es"
+            ? `❓ No encontré ninguna compra registrada en *${requestedStore}*.`
+            : `❓ Não encontrei nenhuma compra registrada no *${requestedStore}*.`);
+          break;
+        }
+        const dateLocale = user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR";
+        const purchaseDate = new Date(`${latestPurchase.date}T12:00:00`).toLocaleDateString(dateLocale);
+        if (ai.grocery?.queryDetail !== "items") {
+          await wppSend(from, user.locale === "es"
+            ? `🧾 En tu última compra en *${latestPurchase.storeName}*, el ${purchaseDate}, gastaste *${formatCurrency(latestPurchase.total)}* en ${latestPurchase.items.length} ${latestPurchase.items.length === 1 ? "artículo" : "artículos"}.`
+            : `🧾 Na sua última compra no *${latestPurchase.storeName}*, em ${purchaseDate}, você gastou *${formatCurrency(latestPurchase.total)}* em ${latestPurchase.items.length} ${latestPurchase.items.length === 1 ? "item" : "itens"}.`);
+          break;
+        }
+        let purchaseMessage = user.locale === "es"
+          ? `🧾 *Última compra en ${latestPurchase.storeName}*\n📅 ${purchaseDate}\n\n`
+          : `🧾 *Última compra no ${latestPurchase.storeName}*\n📅 ${purchaseDate}\n\n`;
+        if (!latestPurchase.items.length) {
+          purchaseMessage += user.locale === "es"
+            ? "• Esta compra no tiene artículos detallados registrados.\n"
+            : "• Esta compra não tem itens detalhados registrados.\n";
+        } else {
+          latestPurchase.items.forEach(item => {
+            const simpleUnit = /^(?:un|und|unidad(?:es)?)$/i.test(item.unit || "");
+            const quantity = item.quantity === 1 && item.unit && !simpleUnit ? item.unit : `${item.quantity}${item.unit ? ` ${item.unit}` : ""}`;
+            const estimated = item.priceEstimated ? " (estimado)" : "";
+            purchaseMessage += `• ${item.productName} — ${quantity} × ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}${estimated}\n`;
+          });
+          if (latestPurchase.items.some(item => item.priceEstimated)) {
+            purchaseMessage += user.locale === "es"
+              ? "\nℹ️ Los valores por artículo son estimados a partir del total informado.\n"
+              : "\nℹ️ Os valores por item são estimados a partir do total informado.\n";
+          }
+        }
+        purchaseMessage += `\n💰 *Total: ${formatCurrency(latestPurchase.total)}*`;
+        await wppSend(from, purchaseMessage);
         break;
       }
 

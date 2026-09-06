@@ -3,6 +3,7 @@ import {
   getExplicitDailySummaryResult,
   getExplicitGroceryListAddResult,
   getExplicitGroceryListManagementResult,
+  getExplicitLastGroceryPurchaseResult,
   getExplicitRelativePeriod,
   getExplicitTaskCreateResult,
   getExplicitUpcomingFinanceQueryResult,
@@ -177,6 +178,17 @@ describe("getExplicitGroceryListManagementResult", () => {
       .toMatchObject({ intent: "grocery_list_edit", grocery: { itemNames: ["leite"], newQuantity: "3 caixas" } });
     expect(getExplicitGroceryListManagementResult("mude a categoria do sabonete para higiene na lista"))
       .toMatchObject({ intent: "grocery_list_edit", grocery: { itemNames: ["sabonete"], newCategory: "Higiene" } });
+  });
+});
+
+describe("getExplicitLastGroceryPurchaseResult", () => {
+  it("distinguishes the total from the itemized last purchase", () => {
+    expect(getExplicitLastGroceryPurchaseResult("quanto gastei na minha última compra do Muffatto?"))
+      .toMatchObject({ intent: "grocery_last_purchase_query", grocery: { storeName: "Muffatto", queryDetail: "total" } });
+    expect(getExplicitLastGroceryPurchaseResult("o que eu comprei no Muffato última vez?"))
+      .toMatchObject({ intent: "grocery_last_purchase_query", grocery: { storeName: "Muffato", queryDetail: "items" } });
+    expect(getExplicitLastGroceryPurchaseResult("¿qué compré en Muffato la última vez?"))
+      .toMatchObject({ intent: "grocery_last_purchase_query", grocery: { storeName: "Muffato", queryDetail: "items" } });
   });
 });
 

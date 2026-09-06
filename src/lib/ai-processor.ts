@@ -61,6 +61,7 @@ export type Intent =
   | "grocery_price_compare"
   | "grocery_store_ranking"
   | "grocery_history_query"
+  | "grocery_last_purchase_query"
   | "grocery_spend_query"
   | "employee_create"
   | "employee_list"
@@ -237,6 +238,9 @@ export type GroceryData = {
   /** grocery_history_query: período perguntado, mesmo padrão de FinanceData.period
    *  — SEMPRE usar os valores pré-calculados do início da mensagem, nunca calcular */
   period?: { from?: string; to?: string };
+  /** grocery_last_purchase_query: controla se a resposta mostra apenas o
+   * total ou também todos os itens da compra mais recente. */
+  queryDetail?: "total" | "items";
 };
 
 export type EmployeeData = {
@@ -588,6 +592,31 @@ export function getExplicitGroceryListManagementResult(message: string): AIResul
   const showList = /^(?:(?:por\s+favor[, ]*|pode\s+|puedes?\s+)?(?:mostre|mostrar|mostra|mande|mandar|envie|enviar|me\s+(?:manda|mande|envie|mostre|muestra|ensena)|muestra|mostrar|ensena|quiero\s+ver|quero\s+ver|qual|quais|o\s+que\s+tem|que\s+tem|como\s+esta)|(?:minha|mi)\s+lista|lista\s+(?:de|do|da|del)\s+(?:compras?|supermercado|mercado))\b/.test(normalized)
     || /\bo\s+que\s+(?:falta|preciso)\s+comprar\b|\bque\s+(?:falta|necesito)\s+comprar\b/.test(normalized);
   return showList ? { intent: "grocery_list_show", confidence: 1 } : null;
+}
+
+/** Consulta direta da compra mais recente em um mercado específico. Evita
+ * responder com o gasto acumulado quando a pessoa pergunta "a última vez". */
+export function getExplicitLastGroceryPurchaseResult(message: string): AIResult | null {
+  const text = message.trim().replace(/[?!.,;:]+$/, "");
+  const normalized = normalizeCapabilityText(text);
+  const asksLatest = /\bultima\s+(?:compra|vez)\b|\b(?:compra|vez)\s+mais\s+recente\b/.test(normalized);
+  const hasPurchaseQuestion = /\b(gastei|paguei|comprei|compra|itens?|produtos?|articulos?|compre)\b/.test(normalized);
+  if (!asksLatest || !hasPurchaseQuestion) return null;
+
+  const storeName = text.match(/(?:[úu]ltima\s+compra|compra\s+mais\s+recente)\s+(?:do|da|no|na|em|del|en)\s+(.+)$/i)?.[1]
+    || text.match(/(?:gastei|paguei|comprei|compre)\s+(?:no|na|do|da|em|del|en)\s+(.+?)\s+(?:na\s+|da\s+|la\s+)?[úu]ltima\s+vez$/i)?.[1]
+    || text.match(/(?:no|na|do|da|em|del|en)\s+(.+?)\s+(?:na\s+|da\s+|la\s+)?[úu]ltima\s+vez$/i)?.[1];
+  const cleanStore = storeName?.replace(/^(?:minha|mi)\s+/i, "").trim();
+  if (!cleanStore) return null;
+
+  const queryDetail: "total" | "items" = /\b(o\s+que|quais?|itens?|produtos?|comprei|compre|articulos?)\b/.test(normalized)
+    ? "items"
+    : "total";
+  return {
+    intent: "grocery_last_purchase_query",
+    confidence: 1,
+    grocery: { storeName: cleanStore, queryDetail },
+  };
 }
 
 /** "Resumo da semana" é um briefing transversal do assessor (agenda +
@@ -1020,6 +1049,7 @@ INTENÇÕES POSSÍVEIS:
 - grocery_price_compare: perguntar o preço de UM produto específico entre os mercados que a pessoa já comprou ("quanto pago no detergente", "onde o leite tá mais barato", "qual o preço do arroz nos mercados que comprei"). Use "grocery.productName" com o nome do produto perguntado. ⚠️ DIFERENTE de grocery_spend_query: aqui é sobre o PREÇO de um item específico comparado entre lojas, não sobre gasto total/mercado favorito.
 - grocery_store_ranking: perguntar qual mercado é mais barato NO GERAL, considerando os itens comprados em comum entre eles ("qual mercado é mais barato pra mim", "onde compensa mais eu comprar", "ranking dos mercados que eu compro")
 - grocery_history_query: listar as COMPRAS de mercado de fato (itens + valor), opcionalmente filtrado por categoria e/ou período ("o que comprei no mercado esse mês", "qual carne comprei semana passada", "minhas compras de mercado", "resumo das compras do mês", "o que comprei de limpeza esse mês"). ⚠️ DIFERENTE de grocery_spend_query (que só dá o total por mercado, sem listar item) e de grocery_price_compare (preço de 1 item específico entre lojas) — aqui é "o que eu comprei", com os itens de verdade. Se mencionar uma categoria (carne, limpeza, bebida, etc.), inclua "grocery.category" com uma das categorias válidas (Carnes, Mercearia, Hortifruti, Laticínios, Padaria, Bebidas, Limpeza, Higiene, Outros). Se mencionar um período diferente do mês atual ("semana passada", "mês passado"), inclua "grocery.period" com os valores pré-calculados do início da mensagem (mesma regra de finance_query — NUNCA calcule a data por conta própria).
+- grocery_last_purchase_query: consultar a compra MAIS RECENTE num mercado específico ("quanto gastei na minha última compra do Muffato", "o que comprei no Muffato última vez"). Use "grocery.storeName" e "grocery.queryDetail": "total" quando pedir quanto gastou, ou "items" quando pedir o que comprou — nesse caso o sistema mostra todos os itens, quantidades, preços e total.
 - grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito de mercado, SEM listar os itens comprados ("quanto gastei no mercado esse mês", "qual mercado eu gasto mais", "quantas vezes fui no Assaí")
 - employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
@@ -1644,6 +1674,13 @@ OU para listar todas as compras do mês, sem filtro ("o que comprei no mercado e
   "grocery": {}
 }
 
+OU para consultar a última compra de um mercado ("o que comprei no Muffato última vez"):
+{
+  "intent": "grocery_last_purchase_query",
+  "confidence": 0.95,
+  "grocery": { "storeName": "Muffato", "queryDetail": "items" }
+}
+
 OU para cadastrar funcionário ("cadastra a Ana como vendedora, salário 2000"):
 {
   "intent": "employee_create",
@@ -2041,6 +2078,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitGroceryListManagement = getExplicitGroceryListManagementResult(message);
   if (explicitGroceryListManagement) return explicitGroceryListManagement;
+
+  const explicitLastGroceryPurchase = getExplicitLastGroceryPurchaseResult(message);
+  if (explicitLastGroceryPurchase) return explicitLastGroceryPurchase;
 
   const explicitWeeklySummary = getExplicitWeeklySummaryResult(message);
   if (explicitWeeklySummary) return explicitWeeklySummary;

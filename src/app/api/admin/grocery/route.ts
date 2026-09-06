@@ -106,7 +106,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "list_from_template") {
-    const added = await addFromTemplate(session.sub, body.template);
+    const selectedNames = Array.isArray(body.selectedNames)
+      ? body.selectedNames.filter((name: unknown): name is string => typeof name === "string")
+      : undefined;
+    const added = await addFromTemplate(session.sub, body.template, selectedNames);
     return NextResponse.json({ ok: true, added });
   }
 

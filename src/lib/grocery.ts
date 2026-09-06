@@ -238,6 +238,46 @@ export async function getPurchasesInRange(
     .filter(p => !category || p.items.length > 0);
 }
 
+function storeSearchName(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function editDistance(left: string, right: string): number {
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i++) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= right.length; j++) {
+      const current = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (left[i - 1] === right[j - 1] ? 0 : 1));
+      previous = current;
+    }
+  }
+  return row[right.length];
+}
+
+/** Encontra a compra mais recente mesmo com uma pequena variação de escrita
+ * no mercado (por exemplo, "Muffatto" em vez de "Muffato"). */
+export function findLatestPurchaseByStoreName(purchases: GroceryPurchase[], storeName: string): GroceryPurchase | null {
+  const query = storeSearchName(storeName);
+  if (!query) return null;
+  const genericStoreWords = new Set(["mercado", "supermercado", "super", "hipermercado", "hiper"]);
+  const meaningfulTokens = (value: string) => value.split(" ").filter(token => token && !genericStoreWords.has(token));
+  const queryTokens = meaningfulTokens(query);
+  const matches = purchases.filter(purchase => {
+    const candidate = storeSearchName(purchase.storeName);
+    if (candidate === query || candidate.includes(query) || query.includes(candidate)) return true;
+    if (query.length < 3) return false;
+    const candidateTokens = meaningfulTokens(candidate);
+    return queryTokens.some(queryToken => candidateTokens.some(candidateToken => {
+      const distance = editDistance(queryToken, candidateToken);
+      const allowedDistance = Math.max(1, Math.floor(Math.max(queryToken.length, candidateToken.length) * 0.2));
+      return distance <= allowedDistance;
+    }));
+  });
+  return matches.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+}
+
 /** Único ponto de gravação de itens de compra — cada item passa por
  *  findOrCreateProduct antes de inserir, então tanto o fluxo de foto quanto
  *  o de texto (slot-filling) ganham cadastro automático de catálogo sem
@@ -467,8 +507,9 @@ export function categoryForTemplateKey(key: string): GroceryCategory | undefined
 
 /** Popula a lista de compras a partir de um template pronto (ex: "mercearia")
  *  — usado pelo painel e pelo bot, pra não duplicar o loop nos dois lugares. */
-export async function addFromTemplate(userId: string, templateKey: string): Promise<number> {
-  const items = LIST_TEMPLATES[templateKey] ?? [];
+export async function addFromTemplate(userId: string, templateKey: string, selectedNames?: string[]): Promise<number> {
+  const selected = selectedNames ? new Set(selectedNames.map(normalizeProductName)) : null;
+  const items = (LIST_TEMPLATES[templateKey] ?? []).filter(item => !selected || selected.has(normalizeProductName(item.name)));
   for (const item of items) await addToShoppingList(userId, item.name, item.category, item.quantity);
   return items.length;
 }

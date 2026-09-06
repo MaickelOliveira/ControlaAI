@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
+import { GroceryTemplatePicker } from "@/components/GroceryTemplatePicker";
 
 type ShoppingItem = { id: string; name: string; category: string; quantity: string; checked: boolean };
 type PriceComp = { productName: string; category: string; prices: Array<{ storeName: string; price: number; date: string }> };
@@ -56,6 +57,7 @@ export default function SupermercadoPagePt() {
   const [overview, setOverview] = useState<{ totalSpent: number; purchasesCount: number; topStore: SpendByStore | null; shoppingListCount: number } | null>(null);
 
   const [showAddItem, setShowAddItem] = useState(false);
+  const [templatePicker, setTemplatePicker] = useState<{ key: string; label: string } | null>(null);
   const [newItem, setNewItem] = useState({ name: "", category: "Mercearia", quantity: "1" });
   const [showAddPurchase, setShowAddPurchase] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
@@ -120,10 +122,6 @@ export default function SupermercadoPagePt() {
   }
   async function clearChecked() {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_clear_checked" }) });
-    loadList(tab === "whatsapp" ? undefined : listFilter); loadOverview();
-  }
-  async function addFromTemplate(key: string) {
-    await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_from_template", template: key }) });
     loadList(tab === "whatsapp" ? undefined : listFilter); loadOverview();
   }
   async function addItem(e: React.FormEvent) {
@@ -271,23 +269,27 @@ export default function SupermercadoPagePt() {
       {tab === "lista" && (
         <div className="space-y-4">
           {/* Filtros de categoria */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {LIST_FILTER_CATS.map(f => (
-              <button key={f.value} onClick={() => setListFilter(f.value)}
-                className={clsx("px-3 py-1.5 rounded-xl text-xs font-semibold transition border shrink-0",
-                  listFilter === f.value ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50")}>
-                {f.label}
-              </button>
-            ))}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2">Filtrar os itens que já estão na tua lista</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {LIST_FILTER_CATS.map(f => (
+                <button key={f.value} onClick={() => setListFilter(f.value)}
+                  className={clsx("px-3 py-1.5 rounded-xl text-xs font-semibold transition border shrink-0",
+                    listFilter === f.value ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50")}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Templates */}
           {!listFilter && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-              <p className="text-sm font-semibold text-slate-700 mb-3">Gerar lista por categoria</p>
+              <p className="text-sm font-semibold text-slate-700">Escolhe produtos por categoria</p>
+              <p className="text-xs text-slate-400 mt-1 mb-3">Abre uma categoria, marca os produtos pretendidos e confirma. Nada é adicionado automaticamente.</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {LIST_TEMPLATES.map(t => (
-                  <button key={t.key} onClick={() => addFromTemplate(t.key)}
+                  <button key={t.key} onClick={() => setTemplatePicker({ key: t.key, label: t.label })}
                     className="flex flex-col items-start gap-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-left hover:bg-amber-50 hover:border-amber-200 transition">
                     <span className="font-semibold text-xs text-slate-800">{t.label}</span>
                     <span className="text-slate-400 text-[11px] leading-snug">{t.desc}</span>
@@ -540,6 +542,21 @@ export default function SupermercadoPagePt() {
             </div>
           )}
         </div>
+      )}
+
+      {templatePicker && (
+        <GroceryTemplatePicker
+          templateKey={templatePicker.key}
+          templateLabel={templatePicker.label}
+          existingNames={list.map(item => item.name)}
+          locale="pt-PT"
+          onClose={() => setTemplatePicker(null)}
+          onAdded={() => {
+            setTemplatePicker(null);
+            loadList(listFilter);
+            loadOverview();
+          }}
+        />
       )}
 
       {/* Modal: adicionar item */}
