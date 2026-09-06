@@ -1,4 +1,5 @@
 import { getConfig } from "@/lib/whatsapp-config";
+import { normalizeWhatsAppPhone } from "@/lib/phone";
 
 async function base(): Promise<string> {
   return ((await getConfig()).evolution?.server || "").replace(/\/$/, "");
@@ -151,23 +152,14 @@ export async function getInstancePhone(): Promise<string | null> {
   } catch { return null; }
 }
 
-function normalizePhone(to: string): string {
-  const raw = to.trim();
-  if (raw.includes("@")) return raw;
-  const digits = raw.replace(/\D/g, "");
-  if (digits.startsWith("55") && digits.length >= 12) return digits;
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  return digits;
-}
-
-export async function sendText(to: string, message: string): Promise<boolean> {
+export async function sendText(to: string, message: string, countryIso?: string): Promise<boolean> {
   const b = await base();
   if (!b) { console.warn("[evolution] não configurado"); return false; }
   try {
     const res = await fetch(`${b}/message/sendText/${await instanceName()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: await apiKey() },
-      body: JSON.stringify({ number: normalizePhone(to), text: message }),
+      body: JSON.stringify({ number: to.includes("@") ? to.trim() : normalizeWhatsAppPhone(to, countryIso), text: message }),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
@@ -187,11 +179,11 @@ function mediaTypeFor(mimeType: string): "image" | "video" | "document" {
   return "document";
 }
 
-export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
+export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string, countryIso?: string): Promise<boolean> {
   const b = await base();
   if (!b) { console.warn("[evolution] não configurado"); return false; }
   try {
-    const number = normalizePhone(to);
+    const number = to.includes("@") ? to.trim() : normalizeWhatsAppPhone(to, countryIso);
     if (mimeType.startsWith("audio/")) {
       const res = await fetch(`${b}/message/sendWhatsAppAudio/${await instanceName()}`, {
         method: "POST",

@@ -5,6 +5,7 @@ import { getUserByEmail, activateUser, createPaidUser, deactivateUser, updateUse
 import { createPasswordSetupLink } from "./password-reset";
 import { sendFirstAccessLinkEmail } from "./brevo";
 import { sendWelcomeTemplate } from "./whatsapp";
+import { normalizeWhatsAppPhone } from "./phone";
 
 /** Recebe webhooks de plataforma de venda (Hotmart, Kiwify, etc.) e ativa/
  *  desativa/troca o plano do cliente correspondente automaticamente. Como
@@ -183,7 +184,10 @@ export const BILLING_WEBHOOK_PRESETS: Record<string, Omit<BillingWebhookConfig, 
     planPath: "data.product.id",
     planMap: {},
     localePath: "data.product.id",
-    localeMap: {},
+    localeMap: {
+      "107497176": "es",
+      "T107497176B": "es",
+    },
   },
   kiwify: {
     label: "Kiwify",
@@ -213,6 +217,73 @@ function firstString(body: unknown, paths: string[]): string | undefined {
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+function firstScalarString(body: unknown, paths: string[]): string | undefined {
+  for (const path of paths) {
+    const value = getByPath(body, path);
+    if ((typeof value === "string" || typeof value === "number") && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return undefined;
+}
+
+const SPANISH_HOTMART_PRODUCT_IDS = new Set(["107497176", "t107497176b"]);
+const SPANISH_HOTMART_OFFER_CODES = new Set(["nhj4i7mi", "yzqph7pa", "zcsygj89"]);
+
+/** Garante que as três ofertas da página /es criem a conta em espanhol,
+ * inclusive em integrações Hotmart já salvas no banco antes de o localeMap
+ * padrão existir. */
+export function inferCheckoutLocale(body: unknown): UserLocale | undefined {
+  const product = firstScalarString(body, ["data.product.id", "product.id", "prod"]);
+  const offer = firstScalarString(body, ["data.purchase.offer.code", "data.offer.code", "off"]);
+  const normalizedProduct = product?.toLowerCase();
+  const normalizedOffer = offer?.toLowerCase();
+
+  if ((normalizedProduct && SPANISH_HOTMART_PRODUCT_IDS.has(normalizedProduct))
+    || (normalizedOffer && SPANISH_HOTMART_OFFER_CODES.has(normalizedOffer))) {
+    return "es";
+  }
+  return undefined;
+}
+
+/** Extrai e normaliza o telefone do checkout para E.164. A Hotmart informa
+ * o DDI em vendas internacionais; se alguma plataforma mandar só o número
+ * local, o país ISO do checkout completa o DDI sem presumir Brasil. */
+export function normalizedCheckoutPhone(body: unknown): string | undefined {
+  let phone = firstScalarString(body, [
+    "data.buyer.checkout_phone",
+    "data.buyer.phone",
+    "Customer.mobile",
+    "Customer.phone",
+    "phone_checkout_number",
+    "phone_number",
+  ]);
+  if (!phone) return undefined;
+
+  const countryIso = firstScalarString(body, [
+    "data.buyer.address.country_iso",
+    "data.purchase.checkout_country.iso",
+    "data.checkout_country.iso",
+    "address_country_ISO",
+    "Customer.address.country_iso",
+  ]);
+
+  // Na Hotmart, o DDD brasileiro pode vir separado do telefone.
+  if (countryIso?.toUpperCase() === "BR") {
+    const areaCode = firstScalarString(body, [
+      "data.buyer.checkout_phone_code",
+      "phone_checkout_local_code",
+      "phone_local_code",
+    ]);
+    const phoneDigits = phone.replace(/\D/g, "");
+    const areaDigits = areaCode?.replace(/\D/g, "") ?? "";
+    if (areaDigits && phoneDigits.length <= 9) phone = `${areaDigits}${phoneDigits}`;
+  }
+
+  const normalized = normalizeWhatsAppPhone(phone, countryIso);
+  return normalized || undefined;
 }
 
 export type BillingWebhookResult =
@@ -256,13 +327,14 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     const localeRaw = getByPath(body, cfg.localePath);
     mappedLocale = typeof localeRaw === "string" || typeof localeRaw === "number" ? cfg.localeMap[String(localeRaw)] : undefined;
   }
+  mappedLocale ??= inferCheckoutLocale(body);
 
   let user = await getUserByEmail(email);
   if (!user && !isActivate) return { ok: true, action: "ignored", email, detail: "cliente ainda não possui conta" };
   if (!user && dryRun) return { ok: true, action: "activated", email, detail: "conta paga seria criada e o acesso enviado por e-mail" };
   if (!user) {
     const name = firstString(body, ["data.buyer.name", "data.buyer.first_name", "data.subscriber.name", "Customer.full_name", "Customer.first_name"]) || email.split("@")[0];
-    const phone = firstString(body, ["data.buyer.checkout_phone", "data.buyer.phone", "Customer.mobile", "Customer.phone"]);
+    const phone = normalizedCheckoutPhone(body);
     user = await createPaidUser({ name, email, phone, plan: mappedPlan, locale: mappedLocale });
     let setupId: string | undefined;
     try {
@@ -284,7 +356,13 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     return { ok: true, action: "activated", email, detail: "conta paga criada e acesso enviado por e-mail" };
   }
 
-  if (mappedPlan && !dryRun) await updateUser(user.id, { plan: mappedPlan });
+  if ((mappedPlan || mappedLocale) && !dryRun) {
+    const updated = await updateUser(user.id, {
+      ...(mappedPlan ? { plan: mappedPlan } : {}),
+      ...(mappedLocale ? { locale: mappedLocale } : {}),
+    });
+    if (updated) user = updated;
+  }
   if (mappedPlan && dryRun) return { ok: true, action: "plan_changed", email, detail: `plano seria trocado pra "${mappedPlan}"` };
 
   if (isActivate) {

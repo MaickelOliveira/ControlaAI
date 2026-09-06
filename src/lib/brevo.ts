@@ -8,6 +8,12 @@ function htmlLang(locale?: string): string {
   return "pt-BR";
 }
 
+export function localizedAccountPath(path: "/primeiro-acesso" | "/esqueci-senha", locale?: string): string {
+  if (locale === "es") return `/es${path}`;
+  if (locale === "pt-PT") return `/pt${path}`;
+  return path;
+}
+
 export async function sendPasswordResetEmail(input: { email: string; name: string; code: string; resetId: string; welcome?: boolean; locale?: string }): Promise<void> {
   const apiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.BREVO_SENDER_EMAIL;
@@ -51,7 +57,7 @@ export async function sendPasswordResetEmail(input: { email: string; name: strin
   // gruda nesse domínio pro resto da navegação dentro do app (é exatamente
   // isso que já aconteceu na prática).
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br";
-  const recoveryUrl = `${appUrl.replace(/\/$/, "")}/esqueci-senha?rid=${encodeURIComponent(input.resetId)}&email=${encodeURIComponent(input.email)}`;
+  const recoveryUrl = `${appUrl.replace(/\/$/, "")}${localizedAccountPath("/esqueci-senha", input.locale)}?rid=${encodeURIComponent(input.resetId)}&email=${encodeURIComponent(input.email)}`;
   const intro = input.welcome ? t.welcomeIntro : t.resetIntro;
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -93,7 +99,7 @@ export async function sendFirstAccessLinkEmail(input: { email: string; name: str
   // gruda nesse domínio pro resto da navegação dentro do app (é exatamente
   // isso que já aconteceu na prática).
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br";
-  const setupUrl = `${appUrl.replace(/\/$/, "")}/primeiro-acesso?token=${encodeURIComponent(input.setupId)}`;
+  const setupUrl = `${appUrl.replace(/\/$/, "")}${localizedAccountPath("/primeiro-acesso", input.locale)}?token=${encodeURIComponent(input.setupId)}`;
 
   const texts: Record<string, { subject: string; title: string; intro: string; button: string; security: string; footer: string }> = {
     "pt-BR": {

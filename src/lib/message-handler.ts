@@ -31,7 +31,7 @@ import { isConnected } from "@/lib/google-oauth";
 import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { getConfig } from "@/lib/whatsapp-config";
-import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch } from "@/lib/conversations";
+import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
@@ -48,13 +48,17 @@ import {
 } from "@/lib/bot-replies";
 
 export function phoneMatches(stored: string, incoming: string): boolean {
-  const s = stored.replace(/\D/g, "");
-  const i = incoming.replace(/\D/g, "");
-  if (!s || !i) return false;
-  if (s === i) return true;
-  if (i.length >= 9 && s.length >= 9 && (i.endsWith(s.slice(-9)) || s.endsWith(i.slice(-9)))) return true;
-  if (i.length >= 11 && s.length >= 11 && (i.endsWith(s.slice(-11)) || s.endsWith(i.slice(-11)))) return true;
-  return false;
+  const storedVariants = phoneVariants(stored);
+  const incomingVariants = new Set(phoneVariants(incoming));
+  return storedVariants.some(value => incomingVariants.has(value));
+}
+
+export function parseLinkedPhoneAccess(value: string): "personal" | "business" | "both" | null {
+  const normalized = value.trim().toLowerCase();
+  if (/^1\b|pessoal|personal/.test(normalized)) return "personal";
+  if (/^2\b|empresa|empresarial|negocio/.test(normalized)) return "business";
+  if (/^3\b|ambos|os dois|los dos|todo|todos/.test(normalized)) return "both";
+  return null;
 }
 
 async function getUserByWppPhone(phone: string) {
@@ -518,14 +522,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
       const codeUser = await getUserByWppCode(codeMatch[1]);
       if (codeUser) {
+        const isSpanish = codeUser.locale === "es";
         const linkedCount = await countPhonesForUser(codeUser.id);
         if (linkedCount >= getMaxWppPhones(codeUser)) {
-          await wppSend(from, `❌ Esta conta já atingiu o limite de ${getMaxWppPhones(codeUser)} número(s) vinculado(s).`);
+          await wppSend(from, isSpanish
+            ? `❌ Esta cuenta ya alcanzó el límite de ${getMaxWppPhones(codeUser)} número(s) vinculado(s).`
+            : `❌ Esta conta já atingiu o limite de ${getMaxWppPhones(codeUser)} número(s) vinculado(s).`);
           return;
         }
         await updateUser(codeUser.id, { wppVerifyCode: undefined, wppVerifyExpires: undefined });
         await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: codeUser.id, step: "name" });
-        await wppSend(from, `✅ Código confirmado!\n\nAntes de vincular, preciso saber quem vai usar esse número.\n\nComo posso te chamar?`);
+        await wppSend(from, isSpanish
+          ? "✅ ¡Código confirmado!\n\nAntes de vincular el número, necesito saber quién lo va a usar.\n\n¿Cómo puedo llamarte?"
+          : "✅ Código confirmado!\n\nAntes de vincular, preciso saber quem vai usar esse número.\n\nComo posso te chamar?");
         return;
       }
     }
@@ -534,41 +543,51 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     //    ANTES de identificar usuário pelo telefone, pelo mesmo motivo acima ──
     const linkPending = await getPendingAction(from);
     if (linkPending?.type === "awaiting_wpp_link_info") {
+      const linkOwner = await getUserById(linkPending.userId);
+      const isSpanish = linkOwner?.locale === "es";
       if (linkPending.step === "name") {
-        const name = cap(messageText.trim().slice(0, 40)) || "Sem nome";
+        const name = cap(messageText.trim().slice(0, 40)) || (isSpanish ? "Sin nombre" : "Sem nome");
         await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "relation", name });
-        await wppSend(from, `Prazer, ${name}! 👋\n\nQual seu vínculo com a conta? _(ex: esposa, marido, filho, sócio, tia...)_`);
+        await wppSend(from, isSpanish
+          ? `¡Mucho gusto, ${name}! 👋\n\n¿Cuál es tu relación con la cuenta? _(ej.: esposa, esposo, hijo, socio, tía...)_`
+          : `Prazer, ${name}! 👋\n\nQual seu vínculo com a conta? _(ex: esposa, marido, filho, sócio, tia...)_`);
         return;
       }
       if (linkPending.step === "relation") {
-        const relation = cap(messageText.trim().slice(0, 30)) || "Outro";
+        const relation = cap(messageText.trim().slice(0, 30)) || (isSpanish ? "Otro" : "Outro");
         await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "access", name: linkPending.name, relation });
-        await wppSend(from, `Certo. E qual modo você pode acessar?\n\n1️⃣ Só pessoal\n2️⃣ Só empresarial\n3️⃣ Os dois\n\nResponda o número ou a palavra.`);
+        await wppSend(from, isSpanish
+          ? "De acuerdo. ¿A qué modo puedes acceder?\n\n1️⃣ Solo personal\n2️⃣ Solo empresarial\n3️⃣ Los dos\n\nResponde con el número o la palabra."
+          : "Certo. E qual modo você pode acessar?\n\n1️⃣ Só pessoal\n2️⃣ Só empresarial\n3️⃣ Os dois\n\nResponda o número ou a palavra.");
         return;
       }
       if (linkPending.step === "access") {
-        const t = messageText.trim().toLowerCase();
-        const access: "personal" | "business" | "both" | null =
-          /^1\b|pessoal/.test(t) ? "personal" :
-          /^2\b|empresa/.test(t) ? "business" :
-          /^3\b|ambos|os dois|tudo/.test(t) ? "both" : null;
+        const access = parseLinkedPhoneAccess(messageText);
         if (!access) {
-          await wppSend(from, `❓ Não entendi. Responda *1* (só pessoal), *2* (só empresarial) ou *3* (os dois).`);
+          await wppSend(from, isSpanish
+            ? "❓ No entendí. Responde *1* (solo personal), *2* (solo empresarial) o *3* (los dos)."
+            : "❓ Não entendi. Responda *1* (só pessoal), *2* (só empresarial) ou *3* (os dois).");
           return;
         }
         await clearPendingAction(from);
-        const linkName = linkPending.name || "Sem nome";
-        const linkRelation = linkPending.relation || "Outro";
+        const linkName = linkPending.name || (isSpanish ? "Sin nombre" : "Sem nome");
+        const linkRelation = linkPending.relation || (isSpanish ? "Otro" : "Outro");
         const linkResult = await linkPhone(linkPending.userId, from);
         if (linkResult === "already_linked_elsewhere") {
-          await wppSend(from, "❌ Este número já está vinculado a outra conta. Desvincule-o antes de tentar novamente.");
+          await wppSend(from, isSpanish
+            ? "❌ Este número ya está vinculado a otra cuenta. Desvincúlalo antes de intentarlo de nuevo."
+            : "❌ Este número já está vinculado a outra conta. Desvincule-o antes de tentar novamente.");
           return;
         }
         await setPhoneName(linkPending.userId, from, linkName);
         await setPhoneRelation(linkPending.userId, from, linkRelation);
         await setPhoneAccess(linkPending.userId, from, access);
-        const accessLabel = access === "personal" ? "modo pessoal" : access === "business" ? "modo empresarial" : "os dois modos";
-        await wppSend(from, `✅ *WhatsApp vinculado com sucesso!*\n\n${linkName} (${linkRelation}) já pode usar o Zelo por aqui, com acesso a ${accessLabel}.`);
+        const accessLabel = isSpanish
+          ? (access === "personal" ? "modo personal" : access === "business" ? "modo empresarial" : "los dos modos")
+          : (access === "personal" ? "modo pessoal" : access === "business" ? "modo empresarial" : "os dois modos");
+        await wppSend(from, isSpanish
+          ? `✅ *¡WhatsApp vinculado correctamente!*\n\n${linkName} (${linkRelation}) ya puede usar Zelo por aquí, con acceso a ${accessLabel}.`
+          : `✅ *WhatsApp vinculado com sucesso!*\n\n${linkName} (${linkRelation}) já pode usar o Zelo por aqui, com acesso a ${accessLabel}.`);
         return;
       }
     }
@@ -577,7 +596,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const user = await getUserByWppPhone(from);
 
     if (!user) {
-      await wppSend(from, "Olá! Sou o Zelo, mas ainda não encontrei seu número na minha lista de clientes.\n\nSe você já tem conta, acesse *Configurações* no painel e clique em *Vincular WhatsApp* para gerar seu código.\n\nPara conhecer o Zelo: zelogestaointeligente.com.br");
+      await wppSend(from, "Olá / ¡Hola! Sou o Zelo, mas ainda não encontrei seu número. / Soy Zelo, pero todavía no encontré tu número.\n\nSe você já tem uma conta, acesse *Configurações → Vincular WhatsApp*. / Si ya tienes una cuenta, abre *Configuración → Vincular WhatsApp*.\n\nPortuguês: zelogestaointeligente.com.br\nEspañol: zelogestaointeligente.com.br/es");
       return;
     }
 
@@ -598,7 +617,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const month = now.getMonth() + 1;
 
     // ── Comando para (re)definir o nome de quem usa este número ──
-    const nameCmdMatch = messageText.trim().match(/^(?:meu nome (?:é|e)|me chamo)\s+(.{2,40})$/i);
+    const nameCmdMatch = messageText.trim().match(/^(?:meu nome (?:é|e)|me chamo|mi nombre es|me llamo)\s+(.{2,40})$/i);
     if (nameCmdMatch) {
       const name = cap(nameCmdMatch[1].trim());
       await setPhoneName(user.id, from, name);
@@ -609,11 +628,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // ── Comando para (re)definir o vínculo de quem usa este número ──
     // Frase específica de propósito (igual "meu nome é X") — evita casar com
     // mensagens comuns que começam com "sou" por acaso.
-    const relationCmdMatch = messageText.trim().match(/^meu v[íi]nculo (?:é|e)\s+(.{2,30})$/i);
+    const relationCmdMatch = messageText.trim().match(/^(?:meu v[íi]nculo (?:é|e)|mi relaci[oó]n (?:es|con la cuenta es))\s+(.{2,30})$/i);
     if (relationCmdMatch) {
       const relation = cap(relationCmdMatch[1].trim());
       await setPhoneRelation(user.id, from, relation);
-      await wppSend(from, `Combinado, você é *${relation}* nessa conta. 👍`);
+      await wppSend(from, user.locale === "es"
+        ? `De acuerdo, tu relación en esta cuenta es *${relation}*. 👍`
+        : `Combinado, você é *${relation}* nessa conta. 👍`);
       return;
     }
 
@@ -621,17 +642,21 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     //    WhatsApp — antes só dava pra gerar entrando no painel web, o que
     //    trava quem só usa o bot pelo celular. Mesma função que o botão
     //    "Vincular mais um número" do painel usa (generateWppVerifyCode). ──
-    const linkCodeCmdMatch = /vincular.*n[uú]mero|n[uú]mero.*vincular|c[oó]digo de vincula[çc][ãa]o/i.test(messageText.trim());
+    const linkCodeCmdMatch = /(?:vincular|conectar).*n[uú]mero|n[uú]mero.*(?:vincular|conectar)|c[oó]digo de (?:vincula[çc][ãa]o|vinculaci[oó]n|conexi[oó]n)/i.test(messageText.trim());
     if (linkCodeCmdMatch) {
       const linkedCount = await countPhonesForUser(user.id);
       const max = getMaxWppPhones(user);
       if (linkedCount >= max) {
-        await wppSend(from, `❌ Esta conta já atingiu o limite de ${max} número(s) vinculado(s).`);
+        await wppSend(from, user.locale === "es"
+          ? `❌ Esta cuenta ya alcanzó el límite de ${max} número(s) vinculado(s).`
+          : `❌ Esta conta já atingiu o limite de ${max} número(s) vinculado(s).`);
         return;
       }
       const code = await generateWppVerifyCode(user.id);
       const botNumber = (await getConfig()).wppBotNumber;
-      await wppSend(from, `📲 *Código de vinculação:* ${code}\n\nPeça para a pessoa salvar${botNumber ? ` o número *${botNumber}*` : " este número do Zelo"} e mandar esse código por aqui — o bot vai perguntar o nome dela, o vínculo e o modo (pessoal/empresa/os dois) que ela pode acessar.\n\n⏱ Válido por 10 minutos.`);
+      await wppSend(from, user.locale === "es"
+        ? `📲 *Código de vinculación:* ${code}\n\nPídele a la persona que guarde${botNumber ? ` el número *${botNumber}*` : " este número de Zelo"} y envíe este código por aquí. Zelo le preguntará su nombre, relación y el modo (personal/empresarial/los dos) al que puede acceder.\n\n⏱ Válido durante 10 minutos.`
+        : `📲 *Código de vinculação:* ${code}\n\nPeça para a pessoa salvar${botNumber ? ` o número *${botNumber}*` : " este número do Zelo"} e mandar esse código por aqui — o bot vai perguntar o nome dela, o vínculo e o modo (pessoal/empresa/os dois) que ela pode acessar.\n\n⏱ Válido por 10 minutos.`);
       return;
     }
 

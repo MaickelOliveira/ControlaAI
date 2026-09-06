@@ -28,8 +28,8 @@ export default function ForgotPasswordPageEs() {
     try {
       const response = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
       const data = await response.json();
-      if (!response.ok) { setError(data.error || "No fue posible enviar el código"); return; }
-      setRequestId(data.requestId); setMessage(data.message); setStep("code");
+      if (!response.ok) { setError(response.status === 429 ? "Demasiados intentos. Espera unos minutos." : "No fue posible enviar el código."); return; }
+      setRequestId(data.requestId); setMessage("Si el correo está registrado, enviaremos un código de recuperación."); setStep("code");
     } catch { setError("Error de conexión. Intenta de nuevo."); } finally { setLoading(false); }
   }
 
@@ -39,8 +39,7 @@ export default function ForgotPasswordPageEs() {
     setLoading(true);
     try {
       const response = await fetch("/api/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId, code, newPassword: password }) });
-      const data = await response.json();
-      if (!response.ok) { setError(data.error || "No fue posible cambiar la contraseña"); return; }
+      if (!response.ok) { setError(response.status === 429 ? "Demasiados intentos. Solicita un nuevo código." : "El código no es válido o ya venció."); return; }
       setStep("done");
     } catch { setError("Error de conexión. Intenta de nuevo."); } finally { setLoading(false); }
   }

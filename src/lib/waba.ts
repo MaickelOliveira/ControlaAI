@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { getConfig } from "@/lib/whatsapp-config";
+import { normalizeWhatsAppPhone } from "@/lib/phone";
 
-const GRAPH_VERSION = "v19.0";
+// v19.0 expirou em 21/05/2026. Mantemos a integração da Cloud API na versão
+// estável atual para que envios de texto, template e mídia continuem ativos.
+const GRAPH_VERSION = "v25.0";
 
 async function phoneNumberId(): Promise<string> {
   return (await getConfig()).waba?.phoneNumberId || "";
@@ -33,14 +36,7 @@ export async function isWabaConfigured(): Promise<boolean> {
   return !!(await phoneNumberId() && await accessToken());
 }
 
-function normalizePhone(to: string): string {
-  const digits = to.replace(/\D/g, "");
-  if (digits.startsWith("55") && digits.length >= 12) return digits;
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  return digits;
-}
-
-export async function sendText(to: string, message: string): Promise<boolean> {
+export async function sendText(to: string, message: string, countryIso?: string): Promise<boolean> {
   const pnid = await phoneNumberId();
   const token = await accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return false; }
@@ -50,7 +46,7 @@ export async function sendText(to: string, message: string): Promise<boolean> {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to: normalizePhone(to),
+        to: normalizeWhatsAppPhone(to, countryIso),
         type: "text",
         text: { body: message },
       }),
@@ -72,7 +68,7 @@ export async function sendText(to: string, message: string): Promise<boolean> {
  *  aprovado — sendText silenciosamente falha nesse caso. Os templates atuais
  *  usam parâmetros NOMEADOS (ex: {{compromisso}}), não posicionais ({{1}}),
  *  então cada parâmetro do body leva parameter_name além de type/text. */
-export async function sendTemplate(to: string, templateName: string, languageCode: string, params: Record<string, string>): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+export async function sendTemplate(to: string, templateName: string, languageCode: string, params: Record<string, string>, countryIso?: string): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   const pnid = await phoneNumberId();
   const token = await accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return { ok: false, error: "WABA não configurado (Phone Number ID / Access Token)" }; }
@@ -83,7 +79,7 @@ export async function sendTemplate(to: string, templateName: string, languageCod
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to: normalizePhone(to),
+        to: normalizeWhatsAppPhone(to, countryIso),
         type: "template",
         template: {
           name: templateName,
@@ -114,7 +110,7 @@ function wabaMediaType(mimeType: string): "image" | "video" | "audio" | "documen
  *  (que só manda link público), o Zelo não tem um host público de arquivos,
  *  então precisa do fluxo de upload da Graph API: sobe o buffer, recebe um
  *  media_id, e só então manda a mensagem referenciando esse id. */
-export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
+export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string, countryIso?: string): Promise<boolean> {
   const pnid = await phoneNumberId();
   const token = await accessToken();
   if (!pnid || !token) { console.warn("[waba] não configurado"); return false; }
@@ -145,7 +141,7 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to: normalizePhone(to),
+        to: normalizeWhatsAppPhone(to, countryIso),
         type,
         [type]: mediaPayload,
       }),

@@ -27,6 +27,15 @@ export function languageCodeFor(locale?: string): string {
   return "pt_BR";
 }
 
+function defaultCountryIsoFor(locale?: string): string | undefined {
+  const validatedLocale = validatedTemplateLocale(locale);
+  if (validatedLocale === "pt-BR") return "BR";
+  if (validatedLocale === "pt-PT") return "PT";
+  // Espanhol atende vários países. O número deve chegar normalizado pelo
+  // checkout ou já conter seu próprio DDI; nunca presumir Espanha (+34).
+  return undefined;
+}
+
 /** Nomes espanhóis são deliberadamente diferentes dos modelos brasileiros
  * já cadastrados — não são simples sufixos "_es". O mapa precisa coincidir
  * exatamente com o nome aprovado no Meta Business Manager. */
@@ -101,13 +110,14 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
       localizedName,
       languageCodeFor(locale),
       localizedTemplateParams(templateName, params, locale),
+      defaultCountryIsoFor(locale),
     );
     ok = result.ok;
     // wamid aqui é o único jeito de casar esse envio com o evento de status
     // (sent/delivered/read/failed) que chega depois, assíncrono, no webhook.
     if (ok) console.log(`[whatsapp] template ${localizedName} aceito, msg=${result.messageId}`);
   } else {
-    ok = await evolution.sendText(to, renderedText);
+    ok = await evolution.sendText(to, renderedText, defaultCountryIsoFor(locale));
   }
   if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
   return ok;
@@ -147,11 +157,11 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
   let ok: boolean;
   if (provider === "waba") {
     const templateName = localizedTemplateName("boas_vindas_cadastro2", locale);
-    const result = await waba.sendTemplate(to, templateName, languageCodeFor(locale), {});
+    const result = await waba.sendTemplate(to, templateName, languageCodeFor(locale), {}, defaultCountryIsoFor(locale));
     ok = result.ok;
     if (ok) console.log(`[whatsapp] template ${templateName} aceito, msg=${result.messageId}`);
   } else {
-    ok = await evolution.sendText(to, renderedText);
+    ok = await evolution.sendText(to, renderedText, defaultCountryIsoFor(locale));
   }
   if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
   return ok;

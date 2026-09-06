@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase";
+import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string };
 
@@ -22,11 +23,18 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 // está falando do mesmo lançamento/lote.
 const LAST_FINANCE_BATCH_TTL_MS = 30 * 60 * 1000;
 
-/** Normaliza telefone gerando variantes (com/sem 55, com/sem 9º dígito) pra
- *  busca fuzzy — o Zelo é single-tenant, então a chave do store é só o
- *  telefone (sem prefixo de cliente/conexão como no trafegopagoplataforma). */
+/** Normaliza telefone gerando variantes brasileiras legadas (com/sem 55 e
+ *  com/sem 9º dígito), mas preserva números internacionais já completos.
+ *  Isso impede, por exemplo, que +34 da Espanha seja confundido com +55. */
 export function phoneVariants(phone: string): string[] {
   const digits = phone.replace(/\D/g, "");
+  if (!digits) return [];
+
+  const international = parsePhoneNumberFromString(`+${digits}`);
+  if (international?.isPossible() && international.country && international.country !== "BR") {
+    return [international.number.slice(1)];
+  }
+
   const local = digits.startsWith("55") && digits.length >= 12 ? digits.slice(2) : digits;
   const variants: string[] = [];
 
@@ -45,8 +53,14 @@ export function phoneVariants(phone: string): string[] {
       variants.push(com9);
     }
   } else {
-    variants.push("55" + local);
-    variants.push(local);
+    // Um número já prefixado com +55, mas fora dos comprimentos nacionais
+    // legados esperados, fica exato. Remover o DDI aqui poderia fazê-lo
+    // colidir com um número internacional válido (por exemplo, +34).
+    if (digits.startsWith("55")) variants.push(digits);
+    else {
+      variants.push("55" + local);
+      variants.push(local);
+    }
   }
 
   return [...new Set([...variants, digits])];

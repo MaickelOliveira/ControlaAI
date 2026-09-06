@@ -1033,9 +1033,9 @@ function HowItWorks() {
   );
 }
 
-// ⚠️ Mesmos links de checkout da versão pt-BR — ainda não existe produto/
-// oferta separado em espanhol na Hotmart. Trocar aqui quando o produto em
-// espanhol existir, senão a compra continua indo pro checkout em português.
+// Ofertas internacionais da Hotmart, configuradas em USD. O checkout pode
+// converter a exibição para a moeda local do comprador; por isso a landing
+// informa o preço-base e não inventa o valor de cada parcela.
 const PLAN_OPTIONS = [
   {
     id: "monthly",
@@ -1052,11 +1052,11 @@ const PLAN_OPTIONS = [
   {
     id: "semiannual",
     label: "Semestral",
-    pricePrefix: "6x",
-    price: "36",
-    cents: "96",
-    priceSuffix: "",
-    total: "o R$ 197,00 de una vez",
+    pricePrefix: null,
+    price: "197",
+    cents: "00",
+    priceSuffix: "/semestre",
+    total: "Puedes pagar hasta en 6 cuotas en el checkout",
     totalValue: 197,
     checkoutUrl: "https://pay.hotmart.com/T107497176B?off=yzqph7pa&bid=1788729318758",
     badge: "Más popular",
@@ -1064,11 +1064,11 @@ const PLAN_OPTIONS = [
   {
     id: "annual",
     label: "Anual",
-    pricePrefix: "12x",
-    price: "30",
-    cents: "72",
-    priceSuffix: "",
-    total: "o R$ 297,00 de una vez",
+    pricePrefix: null,
+    price: "297",
+    cents: "00",
+    priceSuffix: "/año",
+    total: "Puedes pagar hasta en 12 cuotas en el checkout",
     totalValue: 297,
     checkoutUrl: "https://pay.hotmart.com/T107497176B?off=zcsygj89&bid=1788729347182",
     badge: "Mejor precio",
@@ -1120,7 +1120,7 @@ function PlanChoice() {
               <h3 className={`${heading.className} mt-2 text-center text-2xl font-extrabold text-slate-950`}>{option.label}</h3>
               <div className="mt-7 flex items-end justify-center text-slate-950">
                 {option.pricePrefix && <span className={`${heading.className} mb-1.5 mr-2 text-2xl font-extrabold`}>{option.pricePrefix}</span>}
-                <span className="mb-2 text-xl font-extrabold">R$</span>
+                <span className="mb-2 mr-1 text-xl font-extrabold">US$</span>
                 <span className={`${heading.className} text-6xl font-extrabold tracking-tight`}>{option.price}</span>
                 <span className="mb-2 text-lg font-bold">,{option.cents}{option.priceSuffix}</span>
               </div>
@@ -1145,7 +1145,7 @@ function PlanChoice() {
             </article>
           ))}
         </div>
-        <p className="mt-7 text-center text-xs text-slate-400">Podrás elegir entre uso personal o empresarial al crear la cuenta. Las funciones son las mismas en todos los períodos.</p>
+        <p className="mt-7 text-center text-xs text-slate-400">Precios base en dólares estadounidenses (USD). La Hotmart puede mostrar el equivalente en la moneda local y las opciones disponibles según el país y el método de pago. Podrás elegir entre uso personal o empresarial al crear la cuenta.</p>
       </div>
     </section>
   );

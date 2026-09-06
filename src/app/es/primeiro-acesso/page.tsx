@@ -26,7 +26,7 @@ export default function FirstAccessPageEs() {
     try {
       const response = await fetch("/api/auth/first-access-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ setupId }) });
       const data = await response.json();
-      if (!response.ok) { setError(data.error || "No fue posible validar el link"); return; }
+      if (!response.ok) { setError(response.status === 429 ? "Demasiados intentos. Espera unos minutos." : "No fue posible validar el enlace o ya venció."); return; }
       setRequestId(data.requestId); setMaskedEmail(data.maskedEmail); setStep("password");
     } catch { setError("Error de conexión. Intenta de nuevo."); } finally { setLoading(false); }
   }
@@ -37,8 +37,7 @@ export default function FirstAccessPageEs() {
     setLoading(true);
     try {
       const response = await fetch("/api/auth/complete-first-access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ setupId, requestId, code, newPassword: password }) });
-      const data = await response.json();
-      if (!response.ok) { setError(data.error || "No fue posible crear tu contraseña"); return; }
+      if (!response.ok) { setError(response.status === 429 ? "Demasiados intentos. Solicita un nuevo código." : "El código o el enlace no es válido o ya venció."); return; }
       setStep("done");
     } catch { setError("Error de conexión. Intenta de nuevo."); } finally { setLoading(false); }
   }
