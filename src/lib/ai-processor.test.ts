@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { getExplicitTaskCreateResult, getUnsupportedBankConnectionResponse, processMessage } from "./ai-processor";
+import {
+  getExplicitDailySummaryResult,
+  getExplicitGroceryListAddResult,
+  getExplicitTaskCreateResult,
+  getExplicitUpcomingFinanceQueryResult,
+  getExplicitVehicleCrudResult,
+  getExplicitWeeklySummaryResult,
+  getUnsupportedBankConnectionResponse,
+  processMessage,
+} from "./ai-processor";
 
 describe("getExplicitTaskCreateResult", () => {
   it("creates the reported task even when the previous conversation was about banking", async () => {
@@ -25,6 +34,68 @@ describe("getExplicitTaskCreateResult", () => {
   it("leaves task updates and ambiguous weekday dates for the full classifier", () => {
     expect(getExplicitTaskCreateResult("Tarefa 2 concluída")).toBeNull();
     expect(getExplicitTaskCreateResult("Tarefa: entregar a guitarra na sexta-feira")).toBeNull();
+  });
+});
+
+describe("getExplicitUpcomingFinanceQueryResult", () => {
+  it("separates upcoming expenses from the historical monthly summary", async () => {
+    const result = await processMessage("quais são as próximas despesas para pagar esse mês?");
+
+    expect(result).toMatchObject({
+      intent: "finance_upcoming",
+      confidence: 1,
+      financeType: "expense",
+    });
+  });
+
+  it("recognizes the same request in Spanish", () => {
+    expect(getExplicitUpcomingFinanceQueryResult("¿Cuáles son los próximos gastos por pagar este mes?"))
+      .toMatchObject({ intent: "finance_upcoming", confidence: 1, financeType: "expense" });
+    expect(getExplicitUpcomingFinanceQueryResult("¿Qué ingresos tengo por cobrar este mes?"))
+      .toMatchObject({ intent: "finance_upcoming", confidence: 1, financeType: "income" });
+  });
+
+  it("keeps mutations and specific relative periods in the full classifier", () => {
+    expect(getExplicitUpcomingFinanceQueryResult("registre uma conta para pagar")).toBeNull();
+    expect(getExplicitUpcomingFinanceQueryResult("que contas tenho para pagar na semana que vem?")).toBeNull();
+  });
+});
+
+describe("advisor summary classification", () => {
+  it("treats a weekly summary as agenda, tasks and upcoming finances", async () => {
+    expect(await processMessage("Resumo da semana")).toMatchObject({ intent: "weekly_summary", confidence: 1 });
+    expect(getExplicitWeeklySummaryResult("Resumen de la semana"))
+      .toMatchObject({ intent: "weekly_summary", confidence: 1 });
+  });
+
+  it("treats a daily summary the same way and preserves explicitly financial summaries", async () => {
+    expect(await processMessage("Resumo do dia")).toMatchObject({ intent: "daily_summary", confidence: 1 });
+    expect(getExplicitDailySummaryResult("Resumen de hoy"))
+      .toMatchObject({ intent: "daily_summary", confidence: 1 });
+    expect(getExplicitWeeklySummaryResult("Resumo financeiro da semana")).toBeNull();
+    expect(getExplicitDailySummaryResult("Resumo financeiro do dia")).toBeNull();
+  });
+});
+
+describe("getExplicitGroceryListAddResult", () => {
+  it("extracts items added to a supermarket list in Portuguese", async () => {
+    expect(await processMessage("Adicione arroz, feijão e 2 leites na lista do supermercado"))
+      .toMatchObject({
+        intent: "grocery_list_add",
+        confidence: 1,
+        grocery: { items: [{ productName: "arroz" }, { productName: "feijão" }, { productName: "leites", quantity: 2 }] },
+      });
+  });
+
+  it("supports Spanish and ready-made category lists", () => {
+    expect(getExplicitGroceryListAddResult("Agrega arroz y leche a mi lista de compras"))
+      .toMatchObject({ intent: "grocery_list_add", grocery: { items: [{ productName: "arroz" }, { productName: "leche" }] } });
+    expect(getExplicitGroceryListAddResult("Põe a lista de limpeza na lista de compras"))
+      .toMatchObject({ intent: "grocery_list_add", grocery: { template: "limpeza" } });
+  });
+
+  it("does not confuse viewing the list with adding an item", () => {
+    expect(getExplicitGroceryListAddResult("O que tem na lista do supermercado?")).toBeNull();
   });
 });
 
@@ -87,5 +158,42 @@ describe("getUnsupportedBankConnectionResponse", () => {
     expect(getUnsupportedBankConnectionResponse("Como conecto o Google Agenda?")).toBeNull();
     expect(getUnsupportedBankConnectionResponse("Como registrar a conta de luz?"))
       .toBeNull();
+  });
+});
+
+describe("getExplicitVehicleCrudResult", () => {
+  it("classifies a natural vehicle registration and extracts its main fields", () => {
+    expect(getExplicitVehicleCrudResult("Cadastre um veículo Volkswagen Gol 2020 flex placa ABC1D23 com 45.000 km"))
+      .toMatchObject({
+        intent: "vehicle_create", confidence: 1,
+        vehicle: {
+          brand: "Volkswagen", model: "Gol", year: 2020, fuelType: "flex",
+          plate: "ABC1D23", currentKm: 45000,
+        },
+      });
+  });
+
+  it("keeps a generic update actionable instead of returning silence", () => {
+    expect(getExplicitVehicleCrudResult("Quero alterar meu veículo"))
+      .toMatchObject({ intent: "vehicle_update", confidence: 1, vehicle: {} });
+  });
+
+  it("does not confuse the fuel type with an expense", () => {
+    expect(getExplicitVehicleCrudResult("Cadastre um caminhão Volvo FH 2023 diesel"))
+      .toMatchObject({ intent: "vehicle_create", vehicle: { brand: "Volvo", model: "FH", fuelType: "diesel" } });
+  });
+
+  it("extracts the target and new plate from an update", () => {
+    expect(getExplicitVehicleCrudResult("Altere a placa do Gol para ABC1D23"))
+      .toMatchObject({ intent: "vehicle_update", keyword: "Gol", vehicle: { plate: "ABC1D23" } });
+  });
+
+  it("extracts a vehicle deletion target", () => {
+    expect(getExplicitVehicleCrudResult("Exclua o veículo Gol"))
+      .toMatchObject({ intent: "vehicle_delete", keyword: "Gol", confidence: 1 });
+  });
+
+  it("does not confuse a vehicle expense with registration", () => {
+    expect(getExplicitVehicleCrudResult("Registre um gasto de gasolina no carro")).toBeNull();
   });
 });

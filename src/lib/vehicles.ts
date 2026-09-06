@@ -30,6 +30,10 @@ export type Vehicle = {
   createdAt: string;
 };
 
+export type VehicleUpdateInput = Partial<Pick<Vehicle,
+  "plate" | "brand" | "model" | "year" | "fuelType" | "currentKm" | "mode" | "notes"
+>>;
+
 type Row = {
   id: string; user_id: string; plate: string; brand: string; model: string; year: number;
   fuel_type: FuelType; current_km: number; mode: VehicleMode; expenses: VehicleExpense[];
@@ -61,6 +65,36 @@ export async function getVehiclesByUser(userId: string, mode?: VehicleMode): Pro
   const { data, error } = await query;
   if (error) { console.error("[vehicles] getVehiclesByUser erro:", error.message); return []; }
   return (data as Row[]).map(fromRow);
+}
+
+/** Atualiza somente os campos informados e sempre restringe a operação ao
+ * dono do veículo. O mapeamento explícito impede que propriedades extras
+ * vindas da IA sejam repassadas ao banco. */
+export async function updateVehicle(vehicleId: string, userId: string, patch: VehicleUpdateInput): Promise<Vehicle | null> {
+  const rowPatch: Partial<Row> = {};
+  if (patch.plate !== undefined) rowPatch.plate = patch.plate;
+  if (patch.brand !== undefined) rowPatch.brand = patch.brand;
+  if (patch.model !== undefined) rowPatch.model = patch.model;
+  if (patch.year !== undefined) rowPatch.year = patch.year;
+  if (patch.fuelType !== undefined) rowPatch.fuel_type = patch.fuelType;
+  if (patch.currentKm !== undefined) rowPatch.current_km = patch.currentKm;
+  if (patch.mode !== undefined) rowPatch.mode = patch.mode;
+  if (patch.notes !== undefined) rowPatch.notes = patch.notes;
+  if (!Object.keys(rowPatch).length) return null;
+
+  const { data, error } = await getSupabase().from("vehicles").update(rowPatch)
+    .eq("id", vehicleId).eq("user_id", userId).select("*").maybeSingle();
+  if (error) throw new Error(`[vehicles] updateVehicle falhou: ${error.message}`);
+  return data ? fromRow(data as Row) : null;
+}
+
+/** Exclui o cadastro e seus gastos internos. Os lançamentos que já foram
+ * espelhados em Finanças são preservados como histórico contábil. */
+export async function deleteVehicle(vehicleId: string, userId: string): Promise<boolean> {
+  const { data, error } = await getSupabase().from("vehicles").delete()
+    .eq("id", vehicleId).eq("user_id", userId).select("id").maybeSingle();
+  if (error) throw new Error(`[vehicles] deleteVehicle falhou: ${error.message}`);
+  return Boolean(data);
 }
 
 async function getVehicleRow(vehicleId: string, userId: string): Promise<Row | null> {
@@ -134,10 +168,37 @@ export async function updateVehicleKm(vehicleId: string, userId: string, km: num
 }
 
 export async function findVehicleByName(userId: string, name: string, mode?: VehicleMode): Promise<Vehicle | null> {
-  const lower = name.toLowerCase();
-  return (await getVehiclesByUser(userId, mode)).find(v =>
-    v.model.toLowerCase().includes(lower) || v.brand.toLowerCase().includes(lower) || v.plate.toLowerCase().includes(lower)
-  ) ?? null;
+  return (await findVehiclesByName(userId, name, mode))[0] ?? null;
+}
+
+function normalizeVehicleSearch(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\b(meu|minha|o|a|do|da|veiculo|carro|moto|caminhao)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Retorna todos os candidatos, priorizando correspondência exata. Isso é
+ * essencial para alterações/exclusões: nunca escolher silenciosamente o
+ * primeiro veículo quando dois cadastros combinam com o mesmo texto. */
+export async function findVehiclesByName(userId: string, name: string, mode?: VehicleMode): Promise<Vehicle[]> {
+  const vehicles = await getVehiclesByUser(userId, mode);
+  const query = normalizeVehicleSearch(name);
+  if (!query) return vehicles;
+  const compactQuery = query.replace(/\s+/g, "");
+
+  const exact = vehicles.filter(v => {
+    const fields = [v.model, v.brand, v.plate, `${v.brand} ${v.model}`, `${v.brand} ${v.model} ${v.year}`]
+      .map(normalizeVehicleSearch);
+    return fields.some(field => field === query || field.replace(/\s+/g, "") === compactQuery);
+  });
+  if (exact.length) return exact;
+
+  return vehicles.filter(v => {
+    const searchable = normalizeVehicleSearch(`${v.brand} ${v.model} ${v.year} ${v.plate}`);
+    const compactSearchable = searchable.replace(/\s+/g, "");
+    return searchable.includes(query) || query.includes(searchable)
+      || compactSearchable.includes(compactQuery) || compactQuery.includes(compactSearchable);
+  });
 }
 
 export function getVehicleTotalExpenses(vehicle: Vehicle): number {

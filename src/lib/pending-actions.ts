@@ -1,5 +1,5 @@
 import { getSupabase } from "./supabase";
-import { VehicleExpenseType } from "./vehicles";
+import { VehicleExpenseType, type VehicleUpdateInput } from "./vehicles";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
 import type { RecurringData } from "./ai-processor";
 
@@ -12,14 +12,19 @@ export type PendingVehicleSelection = {
   phone: string;
   userId: string;
   mode: string;
-  expenseData: {
+  /** Ausente em registros antigos significa "expense", por compatibilidade. */
+  action?: "expense" | "update" | "delete";
+  expenseData?: {
     amount: number;
     expenseType: VehicleExpenseType;
     description: string;
     km?: number;
     date: string;
   };
-  vehicles: Array<{ id: string; brand: string; model: string; year: number }>;
+  patch?: VehicleUpdateInput;
+  /** Em update, indica que o veículo já foi escolhido e falta dizer o campo. */
+  awaitingPatch?: boolean;
+  vehicles: Array<{ id: string; brand: string; model: string; year: number; plate?: string }>;
   expiresAt: string;
 };
 
@@ -461,7 +466,47 @@ export function parseYesNo(text: string): boolean | null {
  *  Aceita: "1", "2", nome do modelo, nome da marca. Retorna índice (0-based) ou -1. */
 export function parseVehicleChoice(
   text: string,
-  vehicles: Array<{ id: string; brand: string; model: string; year: number }>
+  vehicles: Array<{ id: string; brand: string; model: string; year: number; plate?: string }>
 ): number {
-  return choiceIndexByLabels(text, vehicles, v => [v.model, v.brand]);
+  const byLabel = choiceIndexByLabels(text, vehicles, v => [v.model, v.brand, v.plate || "", `${v.brand} ${v.model}`]);
+  if (byLabel >= 0) return byLabel;
+  const compact = text.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return vehicles.findIndex(v => Boolean(v.plate) && v.plate!.replace(/[^a-z0-9]/gi, "").toLowerCase() === compact);
+}
+
+/** Interpreta a resposta à pergunta "o que deseja alterar?" sem precisar
+ * chamar novamente o classificador. Só aceita campos reconhecidos para não
+ * transformar uma mensagem qualquer em atualização de veículo. */
+export function parseVehiclePatchFromText(text: string): VehicleUpdateInput {
+  const patch: VehicleUpdateInput = {};
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  const plate = text.match(/\b(?:placa)(?:\s+(?:para|pra|é|e|:))?\s*([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i)?.[1];
+  if (plate) patch.plate = plate.replace(/[- ]/g, "").toUpperCase();
+
+  const brand = text.match(/\bmarca(?:\s+(?:para|pra|é|e|:))?\s+([^,;]+)$/i)?.[1]?.trim();
+  if (brand) patch.brand = brand;
+
+  const model = text.match(/\bmodelo(?:\s+(?:para|pra|é|e|:))?\s+([^,;]+)$/i)?.[1]?.trim();
+  if (model) patch.model = model;
+
+  const year = text.match(/\bano(?:\s+(?:para|pra|é|e|:))?\s+((?:19|20)\d{2})\b/i)?.[1];
+  if (year) patch.year = Number(year);
+
+  const km = text.match(/\b(?:km|quilometragem|hod[oô]metro)(?:\s+(?:para|pra|é|e|:))?\s+([\d.]+)\b/i)?.[1];
+  if (km) patch.currentKm = Number(km.replace(/\./g, ""));
+
+  const notes = text.match(/\b(?:nota|notas|observa[çc][ãa]o|observa[çc][õo]es)(?:\s+(?:para|pra|é|e|:))?\s+(.+)$/i)?.[1]?.trim();
+  if (notes) patch.notes = notes;
+
+  if (/\beletric[oa]\b/.test(normalized)) patch.fuelType = "electric";
+  else if (/\bdiesel\b/.test(normalized)) patch.fuelType = "diesel";
+  else if (/\betanol|alcool\b/.test(normalized)) patch.fuelType = "ethanol";
+  else if (/\bgasolina\b/.test(normalized)) patch.fuelType = "gasoline";
+  else if (/\bflex\b/.test(normalized)) patch.fuelType = "flex";
+
+  if (/\b(modo\s+)?empresa|empresarial\b/.test(normalized)) patch.mode = "business";
+  else if (/\b(modo\s+)?pessoal\b/.test(normalized)) patch.mode = "personal";
+
+  return patch;
 }

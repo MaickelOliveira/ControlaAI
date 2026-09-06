@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseFinanceChoiceMulti } from "./pending-actions";
+import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseFinanceChoiceMulti, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
 
 describe("parseYesNo", () => {
   it("recognizes affirmative answers", () => {
@@ -116,5 +116,28 @@ describe("choiceIndexByLabels", () => {
 
   it("returns -1 when nothing matches", () => {
     expect(choiceIndexByLabels("fusca", items, labels)).toBe(-1);
+  });
+});
+
+describe("vehicle follow-up parsing", () => {
+  const vehicles = [
+    { id: "1", brand: "Volkswagen", model: "Gol", year: 2020, plate: "ABC1D23" },
+    { id: "2", brand: "Honda", model: "Civic", year: 2022, plate: "DEF4G56" },
+  ];
+
+  it("selects by plate as well as model", () => {
+    expect(parseVehicleChoice("DEF4G56", vehicles)).toBe(1);
+    expect(parseVehicleChoice("Gol", vehicles)).toBe(0);
+    expect(parseVehicleChoice("ABC-1D23", vehicles)).toBe(0);
+  });
+
+  it("parses supported vehicle changes from a short answer", () => {
+    expect(parseVehiclePatchFromText("placa para xyz9a87")).toEqual({ plate: "XYZ9A87" });
+    expect(parseVehiclePatchFromText("km para 45.000")).toEqual({ currentKm: 45000 });
+    expect(parseVehiclePatchFromText("combustível para diesel")).toEqual({ fuelType: "diesel" });
+  });
+
+  it("does not produce a patch from an unrelated command", () => {
+    expect(parseVehiclePatchFromText("mostre minhas tarefas")).toEqual({});
   });
 });

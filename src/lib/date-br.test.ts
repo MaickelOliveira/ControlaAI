@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { spToUTC, formatDateBR, formatTimeBR } from "./date-br";
+import { spToUTC, formatDateBR, formatTimeBR, weekBoundsBR } from "./date-br";
 
 describe("spToUTC", () => {
   it("converts a naive SP datetime (UTC-3) to UTC", () => {
@@ -28,5 +28,12 @@ describe("formatDateBR", () => {
 describe("formatTimeBR", () => {
   it("formats a UTC ISO string as HH:MM in the São Paulo timezone", () => {
     expect(formatTimeBR("2026-07-04T11:00:00.000Z")).toBe("08:00");
+  });
+});
+
+describe("weekBoundsBR", () => {
+  it("uses Monday through Sunday, including when the anchor is Sunday", () => {
+    expect(weekBoundsBR(new Date(2026, 8, 6, 12))).toEqual(["2026-08-31", "2026-09-06"]);
+    expect(weekBoundsBR(new Date(2026, 8, 7, 12))).toEqual(["2026-09-07", "2026-09-13"]);
   });
 });

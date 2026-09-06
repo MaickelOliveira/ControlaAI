@@ -8,9 +8,12 @@ import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
 export type Intent =
   | "finance_register"
   | "finance_query"
+  | "finance_upcoming"
   | "finance_edit"
   | "finance_delete"
   | "finance_analysis"
+  | "daily_summary"
+  | "weekly_summary"
   | "task_create"
   | "task_update"
   | "task_query"
@@ -26,6 +29,9 @@ export type Intent =
   | "goal_query"
   | "goal_complete"
   | "goal_cancel"
+  | "vehicle_create"
+  | "vehicle_update"
+  | "vehicle_delete"
   | "vehicle_expense"
   | "vehicle_query"
   | "recurring_create"
@@ -79,6 +85,15 @@ export type GoalData = {
 
 export type VehicleData = {
   name?: string;
+  plate?: string;
+  brand?: string;
+  model?: string;
+  year?: number;
+  fuelType?: "gasoline" | "ethanol" | "diesel" | "electric" | "flex";
+  currentKm?: number;
+  notes?: string;
+  /** Novo modo solicitado numa alteração; "mode" identifica o contexto atual. */
+  newMode?: "personal" | "business";
   expenseType?: "fuel" | "maintenance" | "insurance" | "tax" | "other";
   amount?: number;
   km?: number;
@@ -246,12 +261,12 @@ export type AIResult = {
   employee?: EmployeeData;
   customer?: CustomerData;
   mode?: UserMode;
-  financeType?: "income" | "expense"; // para finance_detail/finance_query: qual tipo mostrar (padrão "expense"); para category_create: restringe a categoria a só esse tipo (padrão: ambos)
+  financeType?: "income" | "expense"; // para finance_detail/finance_query/finance_upcoming: qual tipo mostrar (padrão "expense"); para category_create: restringe a categoria a só esse tipo (padrão: ambos)
   keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
   personName?: string; // nome OU vínculo (ex: "esposa", "filho") de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou", "quanto minha esposa gastou")
   category?: string; // categoria específica perguntada em finance_query/balance_query (ex: "quanto gastei com comida" → "Alimentação")
   newDescription?: string; // finance_edit: novo texto da descrição, quando o usuário quer RENOMEAR o lançamento. Distinto de finance.description, que ecoa o lançamento encontrado e serve de busca.
-  period?: { from?: string; to?: string }; // intervalo de datas (YYYY-MM-DD) para finance_query/balance_query/finance_detail/finance_analysis quando o período não é o mês atual (ex: "mês passado", "semana passada")
+  period?: { from?: string; to?: string }; // intervalo de datas (YYYY-MM-DD) para finance_query/finance_upcoming/balance_query/finance_detail/finance_analysis quando o período não é o mês atual (ex: "mês passado", "semana passada")
   response?: string; // resposta direta para how_to
   // finance_edit/finance_delete: true quando o pedido é sobre o(s)
   // lançamento(s) que acabaram de ser registrados (mensagem curta, sem
@@ -291,6 +306,112 @@ function localeInstruction(locale?: string): string {
 
 function normalizeCapabilityText(text: string): string {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** Atalho determinístico para perguntas sobre contas futuras. Essa intenção
+ * precisa vencer o resumo financeiro genérico: "quais despesas vou pagar"
+ * pede uma lista de vencimentos, não quanto já entrou e saiu. Inclui as
+ * formas equivalentes em espanhol porque o mesmo classificador atende os
+ * três idiomas da plataforma. */
+export function getExplicitUpcomingFinanceQueryResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const hasFinancialSubject = /\b(contas?|despesas?|gastos?|boletos?|parcelas?|pagamentos?|receitas?|recebimentos?|cobrancas?|cuentas?|facturas?|cuotas?|pagos?|ingresos?|cobros?)\b/.test(normalized);
+  const hasUpcomingSignal = /\bproxim[oa]s?\b|\b(a|por)\s+pagar\b|\b(a\s+receber|por\s+cobrar)\b|\bpendentes?\b|\bpendientes?\b|\bvenc\w*/.test(normalized);
+  const hasQuerySignal = /\b(quais?|quanto|quantas?|o\s+que|liste|listar|mostre|mostrar|tenho|minhas?|meus?|cuales?|cuanto|cuantas?|que|lista|listar|muestra|mostrar|tengo|mis)\b/.test(normalized);
+  const isMutation = /\b(registr|cadastr|agend|anot|cri[ae]|adicion|inclu|cancel|apag|exclu|delet|edit|alter|corrig|paguei|recebi|recibi)\w*/.test(normalized);
+  // Períodos mais específicos precisam passar pelo classificador completo,
+  // que recebe do sistema as datas exatas de "semana que vem", "amanhã",
+  // "mês passado" etc. O atalho cobre o caso comum do mês atual sem inventar
+  // datas por conta própria.
+  const hasSpecificPeriod = /\b(hoje|amanha|ontem|semana|proximo\s+mes|mes\s+que\s+vem|mes\s+passado|ano|hoy|manana|ayer|proximo\s+mes|mes\s+pasado)\b/.test(normalized);
+
+  if (!hasFinancialSubject || !hasUpcomingSignal || !hasQuerySignal || isMutation || hasSpecificPeriod) return null;
+
+  const financeType: "income" | "expense" = /\b(receitas?|recebimentos?|ingresos?|cobros?)\b|\ba\s+receber\b|\bpor\s+cobrar\b/.test(normalized)
+    ? "income"
+    : "expense";
+  const mode: UserMode | undefined = /\b(empresa|empresarial|negocio)\b/.test(normalized)
+    ? "business"
+    : /\b(pessoal|personal)\b/.test(normalized)
+      ? "personal"
+      : undefined;
+
+  return {
+    intent: "finance_upcoming",
+    confidence: 1,
+    financeType,
+    ...(mode ? { mode } : {}),
+  };
+}
+
+/** Reconhece os comandos cotidianos de adicionar itens à lista sem depender
+ * da variação do modelo externo. O fluxo aceita português e espanhol e deixa
+ * perguntas sobre a lista ("o que tem na lista?") seguirem para a intenção
+ * de consulta normal. */
+export function getExplicitGroceryListAddResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const action = /^(?:(?:por\s+favor|por\s+favor,|quero|pode|preciso|quiero|puedes?)\s+)?(?:adicione|adiciona|adicionar|coloque|coloca|poe|ponha|bota|inclua|inclui|agrega|agregue|anade|pon)\b/i;
+  const listTarget = /\blista\b.*\b(compras?|supermercado|mercado)\b|\blista\b\s*$/i;
+  if (!action.test(normalized) || !listTarget.test(normalized)) return null;
+
+  const templateAliases: Array<[RegExp, string]> = [
+    [/\b(?:mercearia|abarrotes)\b/, "mercearia"],
+    [/\bcarnes?\b/, "carnes"],
+    [/\b(?:hortifruti|frutas?\s+e\s+verduras?|frutas?\s+y\s+verduras?)\b/, "hortifruti"],
+    [/\b(?:laticinios|lacteos)\b/, "laticinios"],
+    [/\b(?:padaria|panaderia)\b/, "padaria"],
+    [/\bbebidas?\b/, "bebidas"],
+    [/\b(?:higiene|aseo)\b/, "higiene"],
+    [/\b(?:limpeza|limpieza)\b/, "limpeza"],
+  ];
+  const asksForReadyList = /\b(?:a|uma|la|una)\s+lista\s+(?:de|da|do)\b/.test(normalized);
+  if (asksForReadyList) {
+    const template = templateAliases.find(([pattern]) => pattern.test(normalized))?.[1];
+    if (template) return { intent: "grocery_list_add", confidence: 1, grocery: { template } };
+  }
+
+  const verb = "(?:adicione|adiciona|adicionar|coloque|coloca|põe|poe|ponha|bota|inclua|inclui|agrega|agregue|añade|anade|pon)";
+  const beforeList = text.match(new RegExp(`${verb}\\s+(.+?)\\s+(?:na|à|a)\\s+(?:minha\\s+|mi\\s+)?lista(?:\\s+(?:de|do|da|del)\\s+(?:compras?|supermercado|mercado))?`, "i"))?.[1];
+  const afterList = text.match(new RegExp(`${verb}\\s+(?:na|à|a)\\s+(?:minha\\s+|mi\\s+)?lista(?:\\s+(?:de|do|da|del)\\s+(?:compras?|supermercado|mercado))?[:,]?\\s+(.+)$`, "i"))?.[1];
+  const rawItems = (beforeList || afterList || "").trim();
+  if (!rawItems) return null;
+
+  const items = rawItems
+    .split(/\s*,\s*|\s+(?:e|y)\s+/i)
+    .map(raw => raw.trim().replace(/^(?:o|a|os|as|um|uma|el|la|los|las|un|una)\s+/i, ""))
+    .filter(Boolean)
+    .map(raw => {
+      const quantityMatch = raw.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/);
+      return quantityMatch
+        ? { productName: quantityMatch[2].trim(), quantity: Number(quantityMatch[1].replace(",", ".")) }
+        : { productName: raw };
+    });
+  if (!items.length) return null;
+
+  return { intent: "grocery_list_add", confidence: 1, grocery: { items } };
+}
+
+/** "Resumo da semana" é um briefing transversal do assessor (agenda +
+ * compromissos financeiros futuros), não sinônimo de extrato. Pedidos que
+ * dizem explicitamente "financeiro" continuam no classificador de finanças. */
+export function getExplicitWeeklySummaryResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const asksWeeklySummary = /\bresumo\s+(?:da|desta)\s+semana\b|\bresumo\s+semanal\b|\bresumen\s+(?:de\s+la|de\s+esta)\s+semana\b|\bresumen\s+semanal\b/.test(normalized);
+  const explicitlyFinancialOnly = /\b(financeir\w*|finanz\w*|so\s+(?:de\s+)?(?:dinheiro|gastos?|despesas?|ingresos?))\b/.test(normalized);
+  if (!asksWeeklySummary || explicitlyFinancialOnly) return null;
+  return { intent: "weekly_summary", confidence: 1 };
+}
+
+/** Mesmo briefing transversal para o dia atual. Datas diferentes de hoje
+ * passam pelo classificador completo para ele usar a data pré-calculada. */
+export function getExplicitDailySummaryResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const asksDailySummary = /\bresumo\s+(?:do\s+dia|de\s+hoje|diario)\b|\bresumen\s+(?:del\s+dia|de\s+hoy|diario)\b/.test(normalized);
+  const anotherDay = /\b(ontem|amanha|ayer|manana)\b/.test(normalized);
+  const explicitlyFinancialOnly = /\b(financeir\w*|finanz\w*|so\s+(?:de\s+)?(?:dinheiro|gastos?|despesas?|ingresos?))\b/.test(normalized);
+  if (!asksDailySummary || anotherDay || explicitlyFinancialOnly) return null;
+  return { intent: "daily_summary", confidence: 1 };
 }
 
 function supportInsidePlatformLine(locale?: string): string {
@@ -349,6 +470,117 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
     confidence: 1,
     task: { title, priority, ...(dueDate ? { dueDate } : {}) },
   };
+}
+
+const VEHICLE_NOUN_RE = /\b(ve[ií]culo|carro|moto|caminh[ãa]o|van)\b/i;
+const VEHICLE_EXPENSE_RE = /\b(gasto|despesa|abastec|paguei|comprei|troca|manuten[çc][ãa]o|revis[ãa]o|conserto|oficina|ipva|imposto|[óo]leo|pneu)\b/i;
+
+function parseFuelType(text: string): VehicleData["fuelType"] | undefined {
+  const normalized = normalizeCapabilityText(text);
+  if (/\beletric[oa]\b/.test(normalized)) return "electric";
+  if (/\bdiesel\b/.test(normalized)) return "diesel";
+  if (/\betanol|alcool\b/.test(normalized)) return "ethanol";
+  if (/\bgasolina\b/.test(normalized)) return "gasoline";
+  if (/\bflex\b/.test(normalized)) return "flex";
+  return undefined;
+}
+
+function cleanVehicleTarget(value?: string): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value
+    .replace(/\b(meu|minha|o|a|um|uma|ve[ií]culo|carro|moto|caminh[ãa]o|van)\b/gi, " ")
+    .replace(/\s+/g, " ").trim().replace(/[.,;:!?]+$/, "");
+  return cleaned || undefined;
+}
+
+/** Atalho para comandos explícitos de CRUD de veículo. Além de reduzir a
+ * dependência do classificador externo, garante que frases básicas como
+ * "quero alterar meu veículo" nunca terminem sem resposta. Os dados que não
+ * forem encontrados serão coletados pelo fluxo conversacional. */
+export function getExplicitVehicleCrudResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const hasVehicleContext = VEHICLE_NOUN_RE.test(text)
+    || /\b(placa|quilometragem|hodometro)\b/.test(normalized);
+  if (!hasVehicleContext) return null;
+
+  const isDelete = /\b(excluir|exclua|apagar|apague|remover|remova|deletar|delete)\b/.test(normalized);
+  if (isDelete) {
+    const afterNoun = text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van)\b\s+(.+)$/i)?.[1];
+    const keyword = cleanVehicleTarget(afterNoun);
+    return { intent: "vehicle_delete", confidence: 1, ...(keyword ? { keyword } : {}) };
+  }
+
+  const isUpdate = /\b(alterar|altere|editar|edite|mudar|mude|atualizar|atualize|corrigir|corrija)\b/.test(normalized);
+  if (isUpdate) {
+    const vehicle: VehicleData = {};
+    const plateChange = text.match(/placa\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i);
+    const brandChange = text.match(/marca\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([^,;]+)$/i);
+    const modelChange = text.match(/modelo\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([^,;]+)$/i);
+    const yearChange = text.match(/ano\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+((?:19|20)\d{2})\b/i);
+    const kmChange = text.match(/(?:km|quilometragem|hod[oô]metro)\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([\d.]+)\s*(?:km)?\b/i);
+    if (plateChange) vehicle.plate = plateChange[2].replace(/[- ]/g, "").toUpperCase();
+    if (brandChange) vehicle.brand = brandChange[2].trim();
+    if (modelChange) vehicle.model = modelChange[2].trim();
+    if (yearChange) vehicle.year = Number(yearChange[2]);
+    if (kmChange) vehicle.currentKm = Number(kmChange[2].replace(/\./g, ""));
+    const fuelType = parseFuelType(
+      text.match(/(?:combust[ií]vel|motoriza[çc][ãa]o).*(?:para|pra)\s+(.+)$/i)?.[1]
+      || text.match(/(?:para|pra)\s+(gasolina|etanol|[áa]lcool|diesel|el[eé]tric[oa]|flex)\b/i)?.[1]
+      || "",
+    );
+    if (fuelType) vehicle.fuelType = fuelType;
+    if (/\bpara\s+(?:o\s+)?(?:modo\s+)?empresa\b|\bpara\s+empresarial\b/.test(normalized)) vehicle.newMode = "business";
+    if (/\bpara\s+(?:o\s+)?modo\s+pessoal\b/.test(normalized)) vehicle.newMode = "personal";
+
+    const target = plateChange?.[1] || brandChange?.[1] || modelChange?.[1] || yearChange?.[1] || kmChange?.[1]
+      || text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van)\b\s+(.+?)(?:\s+(?:para|pra|com)\b|$)/i)?.[1];
+    const keyword = cleanVehicleTarget(target);
+    const mentionsSpecificField = /\b(placa|marca|modelo|ano|km|quilometragem|hodometro|combustivel|motorizacao)\b/.test(normalized);
+    // Ordem/frase complexa: deixa o classificador completo extrair os campos
+    // em vez de interceptar e devolver uma alteração vazia.
+    if (mentionsSpecificField && !Object.keys(vehicle).length) return null;
+    return { intent: "vehicle_update", confidence: 1, vehicle, ...(keyword ? { keyword } : {}) };
+  }
+
+  const isCreate = /\b(cadastrar|cadastre|registrar|registre|adicionar|adicione|incluir|inclua|novo|nova)\b/.test(normalized);
+  if (!isCreate || VEHICLE_EXPENSE_RE.test(text)) return null;
+
+  const vehicle: VehicleData = {};
+  const brand = text.match(/\bmarca\s+([^,;]+?)(?=\s+modelo\b|\s+ano\b|\s+placa\b|$)/i)?.[1]?.trim();
+  const model = text.match(/\bmodelo\s+([^,;]+?)(?=\s+marca\b|\s+ano\b|\s+placa\b|$)/i)?.[1]?.trim();
+  const year = text.match(/\b(?:ano\s+)?((?:19|20)\d{2})\b/)?.[1];
+  const plate = text.match(/\bplaca\s+([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i)?.[1];
+  const km = text.match(/\b([\d.]+)\s*(?:km|quil[oô]metros?)\b/i)?.[1];
+  if (brand) vehicle.brand = brand;
+  if (model) vehicle.model = model;
+  if (year) vehicle.year = Number(year);
+  if (plate) vehicle.plate = plate.replace(/[- ]/g, "").toUpperCase();
+  if (km) vehicle.currentKm = Number(km.replace(/\./g, ""));
+  const fuelType = parseFuelType(text);
+  if (fuelType) vehicle.fuelType = fuelType;
+  if (/\b(empresa|empresarial)\b/.test(normalized)) vehicle.mode = "business";
+  else if (/\bpessoal\b/.test(normalized)) vehicle.mode = "personal";
+
+  // Formato natural sem rótulos: "cadastre um Volkswagen Gol 2020".
+  if (!vehicle.brand && !vehicle.model) {
+    const free = text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van)\b\s+(.+)$/i)?.[1]
+      ?.replace(/\b(?:ano|placa)\s+/gi, "")
+      .replace(/\b(?:19|20)\d{2}\b/g, "")
+      .replace(/\b[A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}\b/gi, "")
+      .replace(/\b[\d.]+\s*(?:km|quil[oô]metros?)\b/gi, "")
+      .replace(/\b(gasolina|etanol|[áa]lcool|diesel|el[eé]tric[oa]|flex|pessoal|empresa|empresarial)\b/gi, "")
+      .replace(/\b(com|de|do|da)\b/gi, "")
+      .replace(/\s+/g, " ").trim();
+    const parts = free?.split(" ").filter(Boolean) || [];
+    if (parts.length === 1) vehicle.model = parts[0];
+    else if (parts.length > 1) {
+      vehicle.brand = parts.shift();
+      vehicle.model = parts.join(" ");
+    }
+  }
+
+  return { intent: "vehicle_create", confidence: 1, vehicle };
 }
 
 /** Resposta determinística para impedir que o modelo invente conexão
@@ -484,7 +716,7 @@ Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:S
 Calendário dos próximos dias (use para resolver dias da semana sem errar):
 ${nextDays.join("\n")}
 
-⚠️ Períodos relativos JÁ CALCULADOS — use EXATAMENTE esses valores no campo "period" quando a mensagem mencionar o período correspondente (finance_query, balance_query, finance_detail, finance_analysis). NUNCA calcule essas datas por conta própria:
+⚠️ Períodos relativos JÁ CALCULADOS — use EXATAMENTE esses valores no campo "period" quando a mensagem mencionar o período correspondente (finance_query, finance_upcoming, daily_summary, weekly_summary, balance_query, finance_detail, finance_analysis). NUNCA calcule essas datas por conta própria:
 ${periodsRef}
 
 CATEGORIAS DE DESPESA: ${expenseCats.join(", ")}
@@ -504,6 +736,12 @@ Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 As categorias válidas, a data de hoje, o calendário e os períodos pré-calculados vêm no início da mensagem do usuário a cada chamada — use sempre os valores de lá, nunca invente.
 
+PRIORIDADE DE INTERPRETAÇÃO:
+1. Obedeça primeiro ao pedido explícito da mensagem ATUAL.
+2. Use o histórico somente para resolver referências como "isso", "ela" ou uma resposta curta a uma pergunta anterior.
+3. Nunca troque um comando atual por outro apenas porque o histórico estava falando de um assunto relacionado.
+4. Escolha a intenção mais específica disponível. Por exemplo, valores ainda a pagar/receber são finance_upcoming, não um resumo genérico finance_query.
+
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular).
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Se o usuário disser que o TIPO está errado — era despesa, não receita, ou vice-versa (ex: "isso é despesa, não receita", "errei, é gasto"), inclua "finance.type" com o tipo certo ("income" ou "expense"). Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
@@ -514,6 +752,9 @@ INTENÇÕES POSSÍVEIS:
   • CATEGORIA/ASSUNTO amplo (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"): inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA (no início da mensagem) (ex: "comida"/"mercado"/"restaurante" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte").
   • COMERCIANTE/APP/MARCA específico (ex: "quanto gastei com ifood", "gastos no aiqfome", "quanto gastei no 99", "gasto com uber eats", "quanto gastei na farmácia X"): inclua "keyword" com o nome do comerciante (NÃO use "category" nesse caso — a descrição do lançamento pode estar abreviada, ex: "IFD" em vez de "iFood", e o sistema já sabe expandir essas variantes a partir do "keyword").
   Em ambos os casos, inclua "financeType" com "expense" ou "income" conforme o verbo da REGRA CRÍTICA abaixo (padrão "expense"). ⚠️ Se a pergunta mencionar um PERÍODO diferente do mês atual (ex: "mês passado", "semana passada", "essa semana", "primeira semana do mês", "esse ano"), inclua "period" usando EXATAMENTE os valores da lista de períodos pré-calculados no início de cada mensagem — NUNCA calcule essas datas você mesmo. Sem período mencionado, não inclua "period" (o sistema usa o mês atual por padrão).
+- finance_upcoming: listar valores que AINDA precisam ser pagos ou recebidos, com vencimentos e previsão de saldo ("quais são as próximas despesas para pagar esse mês?", "que contas tenho a pagar?", "o que vence esta semana?", "próximas receitas a receber", em espanhol: "gastos por pagar", "cuentas pendientes", "ingresos por cobrar"). Use "financeType": "expense" para contas/despesas a pagar e "income" para receitas/valores a receber. Não confunda com finance_query: finance_query resume o que JÁ aconteceu; finance_upcoming mostra pendências, parcelas e recorrentes que AINDA vão impactar o saldo. Se o usuário especificar empresa ou pessoal, inclua "mode". Se mencionar período diferente do mês atual, use "period" com os valores pré-calculados.
+- weekly_summary: briefing geral quando a pessoa disser "resumo da semana", "resumo semanal", "resumen de la semana" ou equivalente. Esta intenção reúne compromissos/reuniões, contas a pagar, valores a receber e previsão de saldo; NÃO use finance_query, pois um simples resumo de dinheiro está incompleto. Se disser explicitamente "resumo financeiro da semana", aí use finance_query. Para semana passada ou outra semana, inclua "period" com os valores pré-calculados.
+- daily_summary: o mesmo briefing geral para "resumo do dia", "resumo de hoje", "resumen del día" ou equivalente: compromissos/reuniões, contas a pagar, valores a receber e previsão de saldo daquele dia. NÃO use finance_query. Se pedir outro dia (ontem/amanhã/data), inclua "period" com from e to iguais à data correta do calendário.
 - finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa", "cria uma planilha", "manda minha planilha", "quero uma planilha das entradas/saídas", "envia o extrato", "me manda um relatório". ⚠️ O sistema não gera arquivo de planilha (.xlsx/.csv) — quando o pedido usar a palavra "planilha", ainda assim use finance_detail (o sistema manda a lista de lançamentos em texto), NUNCA responda how_to/unknown só porque a palavra usada foi "planilha" em vez de "extrato". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
 - finance_confirm_pending: confirmar/antecipar um lançamento AGENDADO (data futura, ainda não contabilizado) antes da data chegar sozinha ("já paguei aquela conta que agendei", "confirma o pagamento do aluguel que tá agendado", "antecipa o lançamento de X"). Use "keyword" com o termo de busca do lançamento.
@@ -550,7 +791,10 @@ INTENÇÕES POSSÍVEIS:
 - agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "apaga o compromisso de sexta" extraia keyword: "compromisso", NÃO "compromisso de sexta"; de "cancelar a reunião de amanhã" extraia "reunião", NÃO "reunião de amanhã").
 - agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com APENAS o nome/assunto do compromisso, sem dia/data/hora. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
 - meet_create: criar uma reunião do Google Meet ("criar meet amanhã às 14h", "meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). Diferente de agenda_create — esse cria um link real do Google Meet.
-- vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros.
+- vehicle_create: cadastrar um veículo novo ("cadastre meu carro", "adiciona uma moto", "novo veículo Volkswagen Gol 2020"). Use "vehicle.brand", "vehicle.model", "vehicle.year", "vehicle.plate", "vehicle.fuelType" e "vehicle.currentKm" quando informados. Marca, modelo e ano são coletados depois se faltarem. NÃO use para gasto/abastecimento/manutenção.
+- vehicle_update: alterar os dados de um veículo existente ("altere a placa do Gol para ABC1D23", "muda o km da moto para 35000", "quero alterar meu veículo"). Use "keyword" com marca, modelo ou placa do veículo original e em "vehicle" SOMENTE os novos campos. Para mudar entre pessoal e empresa, use "vehicle.newMode". Se a pessoa só disser que quer alterar, sem dizer o campo, deixe os novos campos vazios: o sistema perguntará.
+- vehicle_delete: excluir um veículo ("exclua o Gol", "remova minha moto"). Use "keyword" com marca, modelo ou placa quando houver. Se não identificar qual, o sistema mostrará a lista.
+- vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros. NÃO confunda com vehicle_create/update/delete.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - grocery_list_add: adicionar item(ns) à lista de compras de mercado ("põe arroz na lista", "adiciona leite e ovos na lista de compras", "preciso comprar detergente"). Use "grocery.items" com productName (e category se der pra inferir). ⚠️ Se pedir uma lista PRONTA por categoria ("põe a lista de mercearia", "quero a lista de carnes", "adiciona os itens de limpeza"), use "grocery.template" com a chave em minúsculo sem acento (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) em vez de "items".
 - grocery_list_show: ver a lista de compras ("o que tem na lista de compras", "minha lista do mercado", "o que falta comprar")
@@ -600,7 +844,7 @@ Exemplo: "vou receber 2000 do aluguel semana que vem" → type: "income", pendin
 
 As categorias válidas (incluindo as personalizadas do usuário, se houver) vêm no início da mensagem, em CATEGORIAS DE DESPESA/CATEGORIAS DE RECEITA.
 
-MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, finance_edit, task_create, goal_create, vehicle_expense, recurring_create, recurring_edit, reminder_set. Sempre que a intenção criar/editar algo, tente identificar o campo "mode":
+MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, finance_edit, task_create, goal_create, vehicle_create, vehicle_update, vehicle_expense, recurring_create, recurring_edit, reminder_set. Sempre que a intenção criar/editar algo, tente identificar o campo "mode":
 1. PRIORIDADE MÁXIMA — pedido explícito: se a mensagem disser "modo empresa"/"empresarial"/"para empresa"/"na empresa" → mode: "business". Se disser "modo pessoal"/"pessoal" → mode: "personal". Isso vale mesmo que o conteúdo pareça sugerir o modo contrário — o pedido explícito do usuário sempre vence.
 2. Sem pedido explícito, infira pelo CONTEÚDO/CONTEXTO:
    - business: menções a FGTS, INSS, funcionário(s), salário de funcionário, folha, fornecedor, marketing, nota fiscal, cliente, faturamento, ou nome de projeto/cliente que soe como trabalho (ex: "construir site [nome de cliente]", "reunião com [cliente]", "entregar proposta para [empresa]"), ou categoria Funcionários/Marketing/Fornecedores/Impostos de empresa
@@ -994,6 +1238,35 @@ OU para gasto de veículo (vehicle_expense) — SEMPRE inclua "amount" com o val
     "description": "combustível",
     "name": ""
   }
+}
+
+OU para cadastrar veículo ("cadastre meu Volkswagen Gol 2020, placa ABC1D23"):
+{
+  "intent": "vehicle_create",
+  "confidence": 0.95,
+  "vehicle": {
+    "brand": "Volkswagen",
+    "model": "Gol",
+    "year": 2020,
+    "plate": "ABC1D23"
+  }
+}
+
+OU para alterar veículo ("mude a quilometragem do Gol para 45000"):
+{
+  "intent": "vehicle_update",
+  "confidence": 0.95,
+  "keyword": "Gol",
+  "vehicle": {
+    "currentKm": 45000
+  }
+}
+
+OU para excluir veículo ("exclua o Gol"):
+{
+  "intent": "vehicle_delete",
+  "confidence": 0.95,
+  "keyword": "Gol"
 }
 
 Exemplo manutenção ("gastei 300 de revisão no Gol"):
@@ -1502,6 +1775,21 @@ OU genérico:
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
   const explicitTask = getExplicitTaskCreateResult(message);
   if (explicitTask) return explicitTask;
+
+  const explicitVehicle = getExplicitVehicleCrudResult(message);
+  if (explicitVehicle) return explicitVehicle;
+
+  const explicitUpcomingFinance = getExplicitUpcomingFinanceQueryResult(message);
+  if (explicitUpcomingFinance) return explicitUpcomingFinance;
+
+  const explicitGroceryListAdd = getExplicitGroceryListAddResult(message);
+  if (explicitGroceryListAdd) return explicitGroceryListAdd;
+
+  const explicitWeeklySummary = getExplicitWeeklySummaryResult(message);
+  if (explicitWeeklySummary) return explicitWeeklySummary;
+
+  const explicitDailySummary = getExplicitDailySummaryResult(message);
+  if (explicitDailySummary) return explicitDailySummary;
 
   const unsupportedBankConnection = getUnsupportedBankConnectionResponse(
     message,

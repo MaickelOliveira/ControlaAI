@@ -184,3 +184,17 @@ export async function getUpcomingAppointments(userId: string, days: number = 7):
   if (error || !data) return [];
   return (data as Row[]).map(fromRow).sort((a, b) => a.startAt.localeCompare(b.startAt));
 }
+
+/** Compromissos agendados dentro de um intervalo de dias de São Paulo.
+ * Diferente de getUpcomingAppointments, permite montar resumo do dia e da
+ * semana civil sem avançar para dias fora do período solicitado. */
+export async function getAppointmentsInRange(userId: string, from: string, to: string): Promise<Appointment[]> {
+  const start = new Date(`${from}T00:00:00-03:00`);
+  const endExclusive = new Date(`${to}T00:00:00-03:00`);
+  endExclusive.setDate(endExclusive.getDate() + 1);
+  const { data, error } = await getSupabase()
+    .from("appointments").select("*").eq("user_id", userId).eq("status", "scheduled")
+    .gte("start_at", start.toISOString()).lt("start_at", endExclusive.toISOString());
+  if (error || !data) return [];
+  return (data as Row[]).map(fromRow).sort((a, b) => a.startAt.localeCompare(b.startAt));
+}

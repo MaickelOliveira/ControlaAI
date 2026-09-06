@@ -12,6 +12,20 @@ export function todayStrBR(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(new Date());
 }
 
+/** Segunda a domingo da semana que contém a data informada. O parâmetro
+ * facilita testes e mantém todos os resumos semanais na mesma regra usada
+ * pelo calendário apresentado à IA. */
+export function weekBoundsBR(anchor: Date = nowBR()): [string, string] {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const toYmd = (value: Date) => `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  const day = anchor.getDay();
+  const monday = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 12, 0, 0);
+  monday.setDate(monday.getDate() + (day === 0 ? -6 : 1 - day));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return [toYmd(monday), toYmd(sunday)];
+}
+
 /** Horário atual em SP no formato HH:MM */
 export function nowTimeBR(): string {
   return new Date().toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });

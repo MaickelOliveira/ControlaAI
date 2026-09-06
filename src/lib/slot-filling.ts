@@ -16,6 +16,7 @@ import { todayStrBR, spToUTC } from "./date-br";
 import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchaseFinanceId, type GroceryPurchaseItem } from "./grocery";
 import { createEmployee } from "./employees";
 import { createCustomer } from "./customers";
+import { createVehicle, FUEL_TYPE_LABEL, type FuelType } from "./vehicles";
 import {
   replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyGoalCreated,
 } from "./bot-replies";
@@ -556,6 +557,76 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
     },
 
     giveUp: () => `❌ Não consegui agendar — faltou o título ou a data. Tente de novo, ex: _"agendar reunião amanhã às 14h"_.`,
+  },
+
+  vehicle_create: {
+    seed(ai, ctx) {
+      const v = ai.vehicle;
+      return {
+        brand: v?.brand ? cap(v.brand.trim()) : "",
+        model: v?.model ? cap(v.model.trim()) : "",
+        year: v?.year,
+        plate: v?.plate?.replace(/[^a-z0-9]/gi, "").toUpperCase(),
+        fuelType: v?.fuelType,
+        currentKm: v?.currentKm,
+        notes: v?.notes,
+        mode: v?.mode ?? ctx.mode,
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      const q: string[] = [];
+      if (!draft.brand) q.push("brand");
+      if (!draft.model) q.push("model");
+      if (!(typeof draft.year === "number" && draft.year >= 1886)) q.push("year");
+      return q;
+    },
+
+    slots: {
+      brand: {
+        key: "brand", label: "marca", parse: slotText(2),
+        ask: () => `🚗 Qual é a marca do veículo? _(ex: Volkswagen, Honda)_`,
+      },
+      model: {
+        key: "model", label: "modelo", parse: slotText(1),
+        ask: () => `🚘 Qual é o modelo? _(ex: Gol, Civic)_`,
+      },
+      year: {
+        key: "year", label: "ano",
+        parse: (text) => {
+          const match = text.match(/\b((?:19|20)\d{2})\b/);
+          if (!match) return { ok: false };
+          const year = Number(match[1]);
+          return year >= 1886 && year <= new Date().getFullYear() + 1
+            ? { ok: true, value: year }
+            : { ok: false };
+        },
+        ask: () => `📅 Qual é o ano do veículo? _(ex: 2020)_`,
+      },
+    },
+
+    async finalize(draft, ctx) {
+      const vehicle = await createVehicle({
+        userId: ctx.userId,
+        brand: cap(draft.brand as string),
+        model: cap(draft.model as string),
+        year: draft.year as number,
+        plate: (draft.plate as string) || "",
+        fuelType: (draft.fuelType as FuelType) || "flex",
+        currentKm: typeof draft.currentKm === "number" ? draft.currentKm : 0,
+        notes: (draft.notes as string) || "",
+        mode: (draft.mode as "personal" | "business") || ctx.mode,
+      });
+      return `✅ *Veículo cadastrado!*
+
+🚗 ${vehicle.brand} ${vehicle.model} (${vehicle.year})
+🔖 Placa: ${vehicle.plate || "não informada"}
+⛽ Combustível: ${FUEL_TYPE_LABEL[vehicle.fuelType]}
+🛣️ Km atual: ${vehicle.currentKm.toLocaleString("pt-BR")}
+${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
+    },
+
+    giveUp: () => `❌ Não consegui cadastrar o veículo — faltaram marca, modelo ou ano. Tente de novo, ex: _"cadastre um Volkswagen Gol 2020"_.`,
   },
 
   grocery_purchase: {

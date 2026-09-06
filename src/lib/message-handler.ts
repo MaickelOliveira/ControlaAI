@@ -4,12 +4,12 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, type FinanceMode } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
-import { getVehiclesByUser, addVehicleExpense, findVehicleByName, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY } from "@/lib/vehicles";
+import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
 import {
   addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore,
   findOrCreateStore, addPurchase, setPurchaseFinanceId, getPriceComparison, getStorePriceRanking,
@@ -18,10 +18,12 @@ import {
 } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
-import { createAppointment, getUpcomingAppointments, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
+import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
+import { replyAdvisorSummary } from "@/lib/advisor-summary";
+import { createAppointment, getUpcomingAppointments, getAppointmentsInRange, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
 import { appointmentReminderAt, formatReminderOffset, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
 import { createMeetEvent } from "@/lib/google-meet";
 import { isConnected } from "@/lib/google-oauth";
@@ -29,7 +31,7 @@ import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch } from "@/lib/conversations";
-import { nowBR, spToUTC, todayStrBR, formatDateTimeBR } from "@/lib/date-br";
+import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
@@ -89,6 +91,53 @@ async function askWhichAppointment(
   matches.forEach((a, i) => { msg += `*${i + 1}.* ${a.title} — ${formatDateTimeBR(a.startAt)}\n`; });
   msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
   await wppSend(from, msg);
+}
+
+function vehiclePatchFromAi(ai: AIResult): VehicleUpdateInput {
+  const v = ai.vehicle;
+  const patch: VehicleUpdateInput = {};
+  if (v?.plate !== undefined) patch.plate = v.plate.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  if (v?.brand) patch.brand = cap(v.brand.trim());
+  if (v?.model) patch.model = cap(v.model.trim());
+  if (v?.year && v.year >= 1886 && v.year <= new Date().getFullYear() + 1) patch.year = v.year;
+  if (v?.fuelType) patch.fuelType = v.fuelType;
+  if (v?.currentKm !== undefined && v.currentKm >= 0) patch.currentKm = v.currentKm;
+  if (v?.notes !== undefined) patch.notes = v.notes;
+  if (v?.newMode) patch.mode = v.newMode;
+  return patch;
+}
+
+function pendingVehicleRows(vehicles: Vehicle[]) {
+  return vehicles.map(v => ({ id: v.id, brand: v.brand, model: v.model, year: v.year, plate: v.plate }));
+}
+
+function vehicleIdentity(vehicle: { brand: string; model: string; year: number; plate?: string }): string {
+  return `${vehicle.brand} ${vehicle.model} (${vehicle.year})${vehicle.plate ? ` — ${vehicle.plate}` : ""}`;
+}
+
+async function askWhichVehicle(
+  from: string, userId: string, vehicles: Vehicle[], action: "update" | "delete",
+  mode: "personal" | "business", patch?: VehicleUpdateInput,
+): Promise<void> {
+  await setPendingAction(from, {
+    type: "vehicle_selection", userId, mode, action, patch, vehicles: pendingVehicleRows(vehicles),
+  });
+  let msg = `🚗 Encontrei ${vehicles.length} veículos. Qual deseja ${action === "delete" ? "excluir" : "alterar"}?\n\n`;
+  vehicles.forEach((v, i) => { msg += `*${i + 1}.* ${vehicleIdentity(v)}\n`; });
+  msg += `\nResponda com o número, modelo, marca ou placa. ⏱ _Válido por 5 min._`;
+  await wppSend(from, msg);
+}
+
+async function askVehiclePatch(from: string, userId: string, vehicle: Vehicle, mode: "personal" | "business"): Promise<void> {
+  await setPendingAction(from, {
+    type: "vehicle_selection", userId, mode, action: "update", awaitingPatch: true,
+    vehicles: pendingVehicleRows([vehicle]),
+  });
+  await wppSend(from, `✏️ O que deseja alterar no *${vehicle.brand} ${vehicle.model}*?\n\nExemplos:\n• _placa para ABC1D23_\n• _km para 45.000_\n• _ano para 2022_\n• _combustível para flex_`);
+}
+
+async function sendVehicleUpdated(from: string, vehicle: Vehicle): Promise<void> {
+  await wppSend(from, `✅ *Veículo atualizado!*\n\n🚗 ${vehicleIdentity(vehicle)}\n⛽ ${FUEL_TYPE_LABEL[vehicle.fuelType]}\n🛣️ ${vehicle.currentKm.toLocaleString("pt-BR")} km\n${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`);
 }
 
 function localDatePart(iso: string): string {
@@ -177,6 +226,15 @@ function modeLabelFull(m: string): string {
   return m === "business" ? "🏢 Empresa" : "👤 Pessoal";
 }
 
+function replyModeAccessDenied(access: FinanceMode, locale?: string): string {
+  const allowed = access === "business"
+    ? (locale === "es" ? "empresarial" : "empresarial")
+    : (locale === "es" ? "personal" : "pessoal");
+  if (locale === "es") return `Este número solo tiene acceso al modo *${allowed}*. Pide al titular que cambie el permiso en Configuración para consultar el otro modo.`;
+  if (locale === "pt-PT") return `Este número só tem acesso ao modo *${allowed}*. Pede ao titular para alterar a permissão nas Configurações para consultar o outro modo.`;
+  return `Este número só tem acesso ao modo *${allowed}*. Peça ao titular para alterar a permissão nas Configurações para consultar o outro modo.`;
+}
+
 // Intervalo YYYY-MM-DD do mês informado — usado como período padrão quando a
 // IA não identifica um período relativo ("mês passado" etc.) na pergunta.
 function monthBounds(year: number, month: number): [string, string] {
@@ -189,14 +247,15 @@ function monthBounds(year: number, month: number): [string, string] {
 
 // Rótulo textual do período pra usar nas respostas ("julho de 2026" pro mês
 // atual, ou "01/07/2026 a 15/07/2026" pra um intervalo customizado pedido pela IA).
-function periodLabelFor(period: { from?: string; to?: string } | undefined, fallbackDate: Date): string {
+function periodLabelFor(period: { from?: string; to?: string } | undefined, fallbackDate: Date, locale?: string): string {
+  const dateLocale = locale === "es" ? "es-419" : locale === "pt-PT" ? "pt-PT" : "pt-BR";
   if (!period?.from && !period?.to) {
-    return fallbackDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    return fallbackDate.toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
   }
-  const fmt = (s: string) => new Date(s + "T12:00:00").toLocaleDateString("pt-BR");
-  if (period.from && period.to) return `${fmt(period.from)} a ${fmt(period.to)}`;
-  if (period.from) return `a partir de ${fmt(period.from)}`;
-  return `até ${fmt(period.to!)}`;
+  const fmt = (s: string) => new Date(s + "T12:00:00").toLocaleDateString(dateLocale);
+  if (period.from && period.to) return locale === "es" ? `${fmt(period.from)} al ${fmt(period.to)}` : `${fmt(period.from)} a ${fmt(period.to)}`;
+  if (period.from) return locale === "es" ? `a partir del ${fmt(period.from)}` : `a partir de ${fmt(period.from)}`;
+  return locale === "es" ? `hasta el ${fmt(period.to!)}` : `até ${fmt(period.to!)}`;
 }
 
 /** Resolve accountId/cardInvoiceId pra um lançamento de finanças a partir de
@@ -630,25 +689,67 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     }
 
     if (pending?.type === "vehicle_selection" && pending.userId === user.id) {
-      const choiceIdx = parseVehicleChoice(messageText, pending.vehicles);
-      if (choiceIdx >= 0) {
-        await clearPendingAction(from);
-        const chosen = pending.vehicles[choiceIdx];
-        const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
-        const exp = await addVehicleExpense(chosen.id, user.id, { date: pending.expenseData.date, km: pending.expenseData.km, type: pending.expenseData.expenseType, amount: pending.expenseData.amount, description: pending.expenseData.description });
-        if (exp) {
-          const newExp = exp.expenses[exp.expenses.length - 1];
-          const f = await addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: VEHICLE_FINANCE_CATEGORY[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp", registeredBy: from });
-          await setExpenseFinanceId(chosen.id, newExp.id, f.id);
-          const total = getVehicleTotalExpenses(exp);
-          await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
-        } else {
-          await wppSend(from, "❌ Não consegui registrar o gasto no veículo agora. Nada foi lançado; tente novamente.");
+      const vehicleAction = pending.action || "expense";
+
+      if (vehicleAction === "update" && pending.awaitingPatch && pending.vehicles.length === 1) {
+        const patch = parseVehiclePatchFromText(messageText);
+        if (Object.keys(patch).length > 0) {
+          await clearPendingAction(from);
+          const updated = await updateVehicle(pending.vehicles[0].id, user.id, patch);
+          if (updated) await sendVehicleUpdated(from, updated);
+          else await wppSend(from, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.");
+          return;
         }
-        return;
-      } else {
-        // não é uma resposta de veículo — limpa pendência e processa normalmente
+        // Não prende outros comandos na pergunta pendente. Se a resposta não
+        // contém um campo de veículo reconhecido, limpa e deixa a IA tratar.
         await clearPendingAction(from);
+      } else {
+        const choiceIdx = parseVehicleChoice(messageText, pending.vehicles);
+        if (choiceIdx >= 0) {
+          await clearPendingAction(from);
+          const chosen = pending.vehicles[choiceIdx];
+
+          if (vehicleAction === "delete") {
+            const deleted = await deleteVehicle(chosen.id, user.id);
+            await wppSend(from, deleted
+              ? `🗑️ *Veículo excluído!*\n\n🚗 ${vehicleIdentity(chosen)}\n\n_Os lançamentos já registrados em Finanças foram mantidos no histórico._`
+              : "❌ Não consegui excluir esse veículo agora. Nada foi modificado; tente novamente.");
+            return;
+          }
+
+          if (vehicleAction === "update") {
+            if (pending.patch && Object.keys(pending.patch).length > 0) {
+              const updated = await updateVehicle(chosen.id, user.id, pending.patch);
+              if (updated) await sendVehicleUpdated(from, updated);
+              else await wppSend(from, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.");
+            } else {
+              const fullVehicle = (await getVehiclesByUser(user.id)).find(v => v.id === chosen.id);
+              if (fullVehicle) await askVehiclePatch(from, user.id, fullVehicle, pending.mode as "personal" | "business");
+              else await wppSend(from, "❌ Esse veículo não está mais cadastrado.");
+            }
+            return;
+          }
+
+          if (!pending.expenseData) {
+            await wppSend(from, "❌ Não encontrei os dados do gasto. Envie o valor novamente.");
+            return;
+          }
+          const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
+          const exp = await addVehicleExpense(chosen.id, user.id, { date: pending.expenseData.date, km: pending.expenseData.km, type: pending.expenseData.expenseType, amount: pending.expenseData.amount, description: pending.expenseData.description });
+          if (exp) {
+            const newExp = exp.expenses[exp.expenses.length - 1];
+            const f = await addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: VEHICLE_FINANCE_CATEGORY[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp", registeredBy: from });
+            await setExpenseFinanceId(chosen.id, newExp.id, f.id);
+            const total = getVehicleTotalExpenses(exp);
+            await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
+          } else {
+            await wppSend(from, "❌ Não consegui registrar o gasto no veículo agora. Nada foi lançado; tente novamente.");
+          }
+          return;
+        } else {
+          // não é uma resposta de veículo — limpa pendência e processa normalmente
+          await clearPendingAction(from);
+        }
       }
     }
 
@@ -1036,10 +1137,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
-    // Confiança baixa — pede esclarecimento antes de agir
-    // Edit/delete são isentos: têm segurança embutida (só age se encontrar o lançamento)
+    // Confiança baixa — pede esclarecimento antes de agir. Consultas são
+    // seguras para executar e devem responder diretamente; pedir "confirma"
+    // para uma simples pergunta de saldo soa robótico e não cria valor.
     const isEditIntent = ai.intent === "finance_edit" || ai.intent === "finance_delete";
-    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent) {
+    const isReadOnlyIntent = [
+      "finance_query", "finance_upcoming", "daily_summary", "weekly_summary", "balance_query", "finance_detail", "finance_analysis",
+      "task_query", "reminder_list", "goal_query", "recurring_query", "agenda_list", "vehicle_query",
+      "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking",
+      "grocery_history_query", "employee_list", "customer_list", "customer_query",
+    ].includes(ai.intent);
+    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent && !isReadOnlyIntent) {
       const details = ai.finance
         ? `💰 Valor: ${formatCurrency(ai.finance.amount)}\n🏷️ Categoria: ${ai.finance.category}\n📝 Descrição: ${ai.finance.description}`
         : ai.task
@@ -1060,12 +1168,20 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           : (ai.finance ? [ai.finance] : []);
         if (!financeItems.length) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
 
+        const unauthorizedMode = phoneAccess !== "both"
+          ? financeItems.find(item => item.mode && item.mode !== mode)?.mode
+          : undefined;
+        if (unauthorizedMode) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          break;
+        }
+
         const today = todayStrBR();
 
         if (financeItems.length === 1) {
           // Lançamento único
           const fd = financeItems[0];
-          const financeMode = (fd.mode || "personal") as "personal" | "business";
+          const financeMode = (fd.mode || mode) as "personal" | "business";
           const hasExplicitDate = !!fd.date;
           const financeDate = fd.date || today;
           const isPending = fd.pending === true || financeDate > today;
@@ -1099,7 +1215,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           // Múltiplos lançamentos — registra todos e exibe resumo
           const registered: Array<Awaited<ReturnType<typeof addFinance>> & { pending: boolean; autoPost: boolean }> = [];
           for (const fd of financeItems) {
-            const financeMode = (fd.mode || "personal") as "personal" | "business";
+            const financeMode = (fd.mode || mode) as "personal" | "business";
             const hasExplicitDate = !!fd.date;
             const financeDate = fd.date || today;
             const isPending = fd.pending === true || financeDate > today;
@@ -1114,7 +1230,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             });
             registered.push({ ...f, pending: isPending, autoPost });
           }
-          const primaryMode = (financeItems[0].mode || "personal") as "personal" | "business";
+          const primaryMode = (financeItems[0].mode || mode) as "personal" | "business";
           await setLastFinanceBatch(from, registered.map(f => ({ id: f.id, description: f.description, amount: f.amount, type: f.type })), primaryMode);
           const bal = await getBalance(user.id, primaryMode, year, month);
           const posted = registered.filter(f => !f.pending);
@@ -1435,6 +1551,118 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "daily_summary":
+      case "weekly_summary": {
+        const requestedMode = ai.mode as FinanceMode | undefined;
+        if (phoneAccess !== "both" && requestedMode && requestedMode !== mode) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          break;
+        }
+
+        const queryMode = phoneAccess === "both" ? requestedMode : mode;
+        const today = todayStrBR();
+        const defaultPeriod: [string, string] = ai.intent === "daily_summary"
+          ? [today, today]
+          : weekBoundsBR(now);
+        const periodFrom = ai.period?.from || defaultPeriod[0];
+        const periodTo = ai.period?.to || defaultPeriod[1];
+        // Num resumo em andamento interessam os compromissos que ainda vão
+        // acontecer. Resumos de períodos passados mantêm o intervalo inteiro.
+        const appointmentFrom = periodFrom < today && periodTo >= today ? today : periodFrom;
+
+        const [pendingFinances, recurringTransactions, appointments, allTasks] = await Promise.all([
+          getPendingFinances(user.id, queryMode),
+          getRecurringByUser(user.id, queryMode, "active"),
+          getAppointmentsInRange(user.id, appointmentFrom, periodTo),
+          getPendingTasks(user.id, queryMode),
+        ]);
+        const upcomingItems = collectUpcomingFinanceItems(pendingFinances, recurringTransactions, {
+          from: periodFrom,
+          to: periodTo,
+          mode: queryMode,
+          includeUndated: ai.intent === "weekly_summary",
+        });
+        const summaryTasks = allTasks.filter(task => {
+          if (!task.dueDate) return ai.intent === "weekly_summary";
+          // Mantém atrasadas visíveis e inclui tudo que vence no período.
+          return task.dueDate < today || (task.dueDate >= periodFrom && task.dueDate <= periodTo);
+        });
+
+        const forecastModes: FinanceMode[] = queryMode ? [queryMode] : ["personal", "business"];
+        const balanceThrough = periodTo < today ? periodTo : today;
+        const forecasts = await Promise.all(forecastModes.map(async forecastMode => {
+          const current = periodFrom <= balanceThrough
+            ? await getBalanceInRange(user.id, forecastMode, periodFrom, balanceThrough)
+            : { income: 0, expense: 0, balance: 0 };
+          return buildBalanceForecast(forecastMode, current.balance, upcomingItems);
+        }));
+
+        const dateLocale = user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR";
+        const summaryPeriodLabel = periodFrom === periodTo
+          ? new Date(`${periodFrom}T12:00:00`).toLocaleDateString(dateLocale, { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })
+          : periodLabelFor({ from: periodFrom, to: periodTo }, now, user.locale);
+        await wppSend(from, replyAdvisorSummary(
+          ai.intent === "daily_summary" ? "daily" : "weekly",
+          summaryPeriodLabel,
+          appointments,
+          summaryTasks,
+          upcomingItems,
+          forecasts,
+          today,
+          user.locale,
+        ));
+        break;
+      }
+
+      case "finance_upcoming": {
+        const requestedMode = ai.mode as FinanceMode | undefined;
+        if (phoneAccess !== "both" && requestedMode && requestedMode !== mode) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          break;
+        }
+
+        // Quem tem acesso aos dois modos vê a visão completa quando não
+        // especifica "pessoal" ou "empresa". Em número restrito, a consulta
+        // nunca atravessa a permissão daquele WhatsApp.
+        const queryMode = phoneAccess === "both" ? requestedMode : mode;
+        const [defaultFrom, defaultTo] = monthBounds(year, month);
+        const periodFrom = ai.period?.from || defaultFrom;
+        const periodTo = ai.period?.to || defaultTo;
+        const today = todayStrBR();
+
+        const [pendingFinances, recurringTransactions] = await Promise.all([
+          getPendingFinances(user.id, queryMode),
+          getRecurringByUser(user.id, queryMode, "active"),
+        ]);
+        const upcomingItems = collectUpcomingFinanceItems(pendingFinances, recurringTransactions, {
+          // Inclui atrasadas ainda pendentes dentro do período; uma conta
+          // vencida continua sendo algo que o cliente precisa pagar.
+          from: periodFrom,
+          to: periodTo,
+          mode: queryMode,
+          includeUndated: true,
+        });
+
+        const forecastModes: FinanceMode[] = queryMode ? [queryMode] : ["personal", "business"];
+        const balanceThrough = periodTo < today ? periodTo : today;
+        const forecasts = await Promise.all(forecastModes.map(async forecastMode => {
+          const current = periodFrom <= balanceThrough
+            ? await getBalanceInRange(user.id, forecastMode, periodFrom, balanceThrough)
+            : { income: 0, expense: 0, balance: 0 };
+          return buildBalanceForecast(forecastMode, current.balance, upcomingItems);
+        }));
+
+        await wppSend(from, replyUpcomingFinances(
+          upcomingItems,
+          ai.financeType === "income" ? "income" : "expense",
+          forecasts,
+          periodLabelFor(ai.period, now, user.locale),
+          today,
+          user.locale,
+        ));
+        break;
+      }
+
       case "finance_query":
       case "balance_query": {
         const [pFrom, pTo] = ai.period?.from || ai.period?.to
@@ -1714,6 +1942,65 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "vehicle_create": {
+        const { reply } = await beginSlotFill("vehicle_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, reply);
+        break;
+      }
+
+      case "vehicle_update": {
+        const vehicleKeyword = ai.keyword || ai.vehicle?.name || "";
+        const allVehicles = await getVehiclesByUser(user.id);
+        if (!allVehicles.length) {
+          await wppSend(from, `🚗 Você ainda não tem veículos cadastrados.\n\nCadastre por aqui, por exemplo: _"cadastre um Volkswagen Gol 2020"_.`);
+          break;
+        }
+
+        const candidates = vehicleKeyword
+          ? await findVehiclesByName(user.id, vehicleKeyword)
+          : allVehicles;
+        if (!candidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum veículo com *"${vehicleKeyword}"*.\n\nDigite *meus veículos* para conferir a lista.`);
+          break;
+        }
+
+        const patch = vehiclePatchFromAi(ai);
+        if (candidates.length > 1) {
+          await askWhichVehicle(from, user.id, candidates, "update", mode, patch);
+        } else if (!Object.keys(patch).length) {
+          await askVehiclePatch(from, user.id, candidates[0], candidates[0].mode);
+        } else {
+          const updated = await updateVehicle(candidates[0].id, user.id, patch);
+          if (updated) await sendVehicleUpdated(from, updated);
+          else await wppSend(from, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.");
+        }
+        break;
+      }
+
+      case "vehicle_delete": {
+        const vehicleKeyword = ai.keyword || ai.vehicle?.name || "";
+        const allVehicles = await getVehiclesByUser(user.id);
+        if (!allVehicles.length) {
+          await wppSend(from, "🚗 Você não tem veículos cadastrados para excluir.");
+          break;
+        }
+
+        const candidates = vehicleKeyword
+          ? await findVehiclesByName(user.id, vehicleKeyword)
+          : allVehicles;
+        if (!candidates.length) {
+          await wppSend(from, `❓ Não encontrei nenhum veículo com *"${vehicleKeyword}"*.\n\nDigite *meus veículos* para conferir a lista.`);
+        } else if (candidates.length > 1) {
+          await askWhichVehicle(from, user.id, candidates, "delete", mode);
+        } else {
+          const deleted = await deleteVehicle(candidates[0].id, user.id);
+          await wppSend(from, deleted
+            ? `🗑️ *Veículo excluído!*\n\n🚗 ${vehicleIdentity(candidates[0])}\n\n_Os lançamentos já registrados em Finanças foram mantidos no histórico._`
+            : "❌ Não consegui excluir esse veículo agora. Nada foi modificado; tente novamente.");
+        }
+        break;
+      }
+
       case "vehicle_expense": {
         const vAmount = ai.vehicle?.amount || ai.finance?.amount || 0;
         const vType = ai.vehicle?.expenseType || "other";
@@ -1734,7 +2021,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (allVehicles.length === 0) {
           const f = await addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
           const bal = (await getBalance(user.id, vehicleMode, year, month)).balance;
-          await wppSend(from, `${replyFinanceRegistered(f, bal, user.locale)}\n\n💡 _Dica: Cadastre seu veículo no dashboard → Veículos para controlar gastos separadamente!_`);
+          await wppSend(from, `${replyFinanceRegistered(f, bal, user.locale)}\n\n💡 _Dica: cadastre por aqui dizendo "cadastre um Volkswagen Gol 2020" para controlar os gastos separadamente._`);
           break;
         }
 
@@ -1762,8 +2049,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
         // Múltiplos veículos → pergunta qual
         const expenseData = { amount: vAmount, expenseType: vType, description: vDesc, km: vKm, date: vDate };
-        const vehicleList = allVehicles.map(v => ({ id: v.id, brand: v.brand, model: v.model, year: v.year }));
-        await setPendingAction(from, { type: "vehicle_selection", userId: user.id, mode: vehicleMode, expenseData, vehicles: vehicleList });
+        const vehicleList = pendingVehicleRows(allVehicles);
+        await setPendingAction(from, { type: "vehicle_selection", userId: user.id, mode: vehicleMode, action: "expense", expenseData, vehicles: vehicleList });
 
         let msg = `🚗 Você tem ${allVehicles.length} veículos cadastrados. Em qual registrar *${formatCurrency(vAmount)}* de ${vDesc}?\n\n`;
         allVehicles.forEach((v, i) => { msg += `*${i + 1}.* ${v.brand} ${v.model} (${v.year})${v.plate ? ` — ${v.plate}` : ""}\n`; });
@@ -1775,7 +2062,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "vehicle_query": {
         const vehicles = await getVehiclesByUser(user.id, mode);
         if (!vehicles.length) {
-          await wppSend(from, "🚗 Sem veículos cadastrados. Adicione em Veículos no dashboard.");
+          await wppSend(from, `🚗 Sem veículos cadastrados.\n\nCadastre por aqui, por exemplo: _"cadastre um Volkswagen Gol 2020"_.`);
         } else {
           let msg = `🚗 *Seus veículos:*\n\n`;
           vehicles.forEach(v => {
@@ -1789,15 +2076,27 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "grocery_list_add": {
         const g = ai.grocery;
+        const before = await getShoppingList(user.id);
         if (g?.template) {
-          const added = await addFromTemplate(user.id, g.template);
-          await wppSend(from, replyGroceryListAdded(added, g.template, user.locale));
+          await addFromTemplate(user.id, g.template);
         } else if (g?.items?.length) {
           for (const i of g.items) await addToShoppingList(user.id, cap(i.productName), i.category ?? "Outros", i.quantity ? String(i.quantity) : "1");
-          await wppSend(from, replyGroceryListAdded(g.items.length, undefined, user.locale));
         } else {
           await wppSend(from, replyGroceryListAdded(0, undefined, user.locale));
+          break;
         }
+
+        const updatedList = await getShoppingList(user.id);
+        const previousIds = new Set(before.map(item => item.id));
+        const added = updatedList.filter(item => !previousIds.has(item.id)).length;
+        const confirmation = added > 0
+          ? replyGroceryListAdded(added, g.template, user.locale)
+          : user.locale === "es"
+            ? "🛒 Esos artículos ya estaban en tu lista."
+            : user.locale === "pt-PT"
+              ? "🛒 Esses itens já estavam na tua lista."
+              : "🛒 Esses itens já estavam na sua lista.";
+        await wppSend(from, `${confirmation}\n\n${replyGroceryList(updatedList, user.locale)}`);
         break;
       }
 
