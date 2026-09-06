@@ -44,7 +44,7 @@ describe("Spanish WhatsApp templates", () => {
     expect(localizedTemplateParams("lbte_empresarial", {
       lembrete: "Revisar el flujo de caja de la empresa",
     }, "es")).toEqual({
-      tarea: "Revisar el flujo de caja de la empresa",
+      aviso: "Revisar el flujo de caja de la empresa",
     });
   });
 

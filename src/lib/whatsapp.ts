@@ -33,7 +33,7 @@ export const SPANISH_TEMPLATE_NAMES: Record<string, string> = {
 
 const SPANISH_PARAM_NAMES: Record<string, Record<string, string>> = {
   lembrete_assessor: { remetente: "remitente", lembrete: "aviso" },
-  lbte_empresarial: { lembrete: "tarea" },
+  lbte_empresarial: { lembrete: "aviso" },
   lbt_pessoal: { texto: "aviso" },
   cbr_recorrente: { descricao: "concepto", valor: "importe", data: "fecha" },
   lembrete_compromisso: { compromisso: "evento", horario: "hora" },

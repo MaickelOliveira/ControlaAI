@@ -76,7 +76,7 @@ export async function register() {
             ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, locale);
           } else if (r.mode === "business") {
             const texto = locale === "es"
-              ? `✅ Seguimiento de tarea solicitado\n\nLa siguiente tarea empresarial sigue pendiente:\n${r.message}\n\nRecibes esta actualización porque solicitaste su seguimiento en Zelo.`
+              ? `🔔 Aviso empresarial\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
               : locale === "pt-PT"
               ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`
               : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
