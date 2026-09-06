@@ -20,7 +20,14 @@ import {
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
-import { beginSlotFill, runSlotFillTurn } from "@/lib/slot-filling";
+import { beginSlotFill, hasMissingSlotFields, runSlotFillTurn } from "@/lib/slot-filling";
+import {
+  buildActionContinuationMessage,
+  getMissingActionQuestion,
+  isActionContinuationCancel,
+  isClearlyNewActionDuringContinuation,
+  mergeActionContinuation,
+} from "@/lib/action-completion";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
@@ -662,6 +669,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
     // ── Verifica ação pendente (ex: seleção de veículo) ──
     const pending = await getPendingAction(from);
+    let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
 
     // ── Aguardando confirmação de guardar comprovante (foto/documento) no Drive ──
     if (pending?.type === "receipt_save" && pending.userId === user.id) {
@@ -1129,6 +1137,28 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
+    // ── Continuação de uma ação que ainda precisava de algum dado ──
+    // Mantém a intenção e os campos já extraídos. Assim uma resposta curta
+    // como "amanhã", "100 reais" ou "o arroz" conclui o pedido anterior.
+    if (pending?.type === "action_continuation" && pending.userId === user.id) {
+      if (isActionContinuationCancel(messageText)) {
+        await clearPendingAction(from);
+        await wppSend(from, user.locale === "es" ? "Acción cancelada; no cambié nada. 👍" : "Ação cancelada — não alterei nada. 👍");
+        return;
+      }
+      await clearPendingAction(from);
+      if (!isClearlyNewActionDuringContinuation(messageText)) {
+        actionContinuation = {
+          originalText: pending.originalText,
+          answers: [...pending.answers, messageText],
+          partial: pending.partial,
+        };
+        messageText = buildActionContinuationMessage(actionContinuation.originalText, actionContinuation.answers);
+      }
+      // Se for claramente outro comando, a pendência é abandonada e a
+      // mensagem atual segue normalmente para o classificador.
+    }
+
     // ── Preenchimento de campos faltantes (slot filling genérico) ──
     // Precisa estar depois de getPendingAction e antes de processMessage:
     // uma resposta como "12" ou "dia 10" nunca pode chegar ao classificador.
@@ -1153,7 +1183,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
-    const ai = await processMessage(messageText, { user, history: recentHistory });
+    const classifiedAi = await processMessage(messageText, { user, history: recentHistory });
+    const ai = actionContinuation
+      ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
+      : classifiedAi;
     console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
 
     // Pedido relativo a compromisso ("me avisa 1 hora antes da reunião"):
@@ -1183,6 +1216,27 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
+    // Validação central antes de qualquer mutação: se uma ação ainda não tem
+    // todos os dados indispensáveis, guarda o que já entendeu e pergunta só
+    // o próximo campo. A resposta retoma a mesma intent no turno seguinte.
+    const missingActionQuestion = getMissingActionQuestion(ai, user.locale, messageText);
+    if (missingActionQuestion) {
+      await setPendingAction(from, {
+        type: "action_continuation",
+        userId: user.id,
+        intent: ai.intent,
+        partial: ai,
+        originalText: actionContinuation?.originalText ?? msg.text,
+        answers: actionContinuation?.answers ?? [],
+        mode,
+      });
+      const ttl = user.locale === "es"
+        ? "⏱ _Válido durante 10 minutos. Responde *cancelar* para desistir._"
+        : "⏱ _Válido por 10 min. Responda *cancelar* para desistir._";
+      await wppSend(from, `${missingActionQuestion}\n\n${ttl}`);
+      return;
+    }
+
     // Confiança baixa — pede esclarecimento antes de agir. Consultas são
     // seguras para executar e devem responder diretamente; pedir "confirma"
     // para uma simples pergunta de saldo soa robótico e não cria valor.
@@ -1193,7 +1247,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking", "grocery_last_purchase_query",
       "grocery_history_query", "employee_list", "customer_list", "customer_query",
     ].includes(ai.intent);
-    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent && !isReadOnlyIntent) {
+    const shouldCollectMissingSlots = hasMissingSlotFields(ai, { user, userId: user.id, phone: from, mode });
+    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent && !isReadOnlyIntent && !shouldCollectMissingSlots) {
       const details = ai.finance
         ? `💰 Valor: ${formatCurrency(ai.finance.amount)}\n🏷️ Categoria: ${ai.finance.category}\n📝 Descrição: ${ai.finance.description}`
         : ai.task
@@ -1816,58 +1871,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "reminder_set": {
-        if (!ai.reminder?.message || !ai.reminder?.scheduledAt) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
-        // Converte horário SP (gerado pela IA) para UTC antes de salvar
-        const scheduledUTC = spToUTC(ai.reminder.scheduledAt);
-
-        let targetPhone = from;
-        let recipientType: "self" | "customer" | "employee" | "other" = "self";
-        let recipientName: string | undefined;
-
-        const recipientQuery = ai.reminder.recipientName;
-        const explicitPhone = ai.reminder.recipientPhone?.replace(/\D/g, "");
-
-        if (explicitPhone && explicitPhone.length >= 10) {
-          // Número citado direto na mensagem (ex: "lembra o João, número
-          // 5544999999999, de pagar amanhã") — mesmo caminho que o dashboard
-          // já permite pra "outra pessoa" via campo livre de telefone, sem
-          // exigir cadastro prévio como cliente/funcionário/número da família.
-          targetPhone = explicitPhone; recipientType = "other"; recipientName = recipientQuery;
-        } else if (recipientQuery) {
-          // Assessor notifica por você: se o pedido citar outra pessoa sem
-          // telefone explícito, resolve o telefone real dela (cliente →
-          // funcionário → número da família já vinculado) antes de agendar —
-          // sem isso, todo lembrete ia sempre pro número de quem mandou a mensagem.
-          const customer = await findCustomerByName(user.id, recipientQuery);
-          const employee = await findEmployeeByName(user.id, recipientQuery);
-          const linkedPhone = await findPhoneByName(user.id, recipientQuery);
-
-          if (customer?.phone) {
-            targetPhone = customer.phone; recipientType = "customer"; recipientName = customer.name;
-          } else if (employee?.phone) {
-            targetPhone = employee.phone; recipientType = "employee"; recipientName = employee.name;
-          } else if (linkedPhone) {
-            targetPhone = linkedPhone; recipientType = "other"; recipientName = recipientQuery;
-          } else {
-            await wppSend(from, `❓ Não encontrei *${cap(recipientQuery)}* com telefone cadastrado. Cadastre o contato (cliente, funcionário ou número da família), ou diga o número dele direto (ex: "lembra o ${cap(recipientQuery)}, número 5544999999999, de..."), ou peça de novo sem citar ninguém pra lembrar você mesmo.`);
-            break;
-          }
-        } else {
-          // Quando o próprio usuário pede o lembrete, grava explicitamente o
-          // WhatsApp que originou a conversa. Assim, em contas com dois ou mais
-          // números vinculados, o disparo fica restrito a quem fez o pedido.
-          const requester = (await getPhonesForUser(user.id)).find(link => phoneMatches(link.phone, from));
-          recipientName = requester?.name || requester?.relation;
-        }
-
-        await createReminder({ userId: user.id, message: cap(ai.reminder.message), phone: targetPhone, scheduledAt: scheduledUTC, repeat: ai.reminder.repeat || "none", mode: ai.reminder.mode || mode, recipientType, recipientName });
-        await wppSend(from, replyReminderSet(
-          ai.reminder.message,
-          scheduledUTC,
-          ai.reminder.repeat || "none",
-          recipientType === "self" ? undefined : recipientName,
-          user.locale,
-        ));
+        const { reply } = await beginSlotFill("reminder_set", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, reply);
         break;
       }
 
@@ -2555,11 +2560,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "recurring_create": {
-        if (!ai.recurring) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
-
         // Pagamento de funcionário: precisa saber QUAL antes de criar o
         // recorrente, pra não ficar com descrição genérica "Funcionário".
-        if (ai.recurring.employeePayment) {
+        if (ai.recurring?.employeePayment) {
           const activeEmployees = await getEmployeesByUser(user.id, "active");
           if (activeEmployees.length === 0) {
             await wppSend(from, `👥 Você ainda não tem funcionários cadastrados.\n\nPara registrar esse pagamento, primeiro cadastre o funcionário — me diga o nome, cargo e salário. Ex:\n_"cadastra a Ana como vendedora, salário 2000"_`);

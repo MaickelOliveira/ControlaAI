@@ -8,11 +8,48 @@ import {
   getExplicitRelativePeriod,
   getExplicitTaskCreateResult,
   getExplicitUpcomingFinanceQueryResult,
+  getExplicitUnscheduledReminderResult,
   getExplicitVehicleCrudResult,
   getExplicitWeeklySummaryResult,
   getUnsupportedBankConnectionResponse,
   processMessage,
 } from "./ai-processor";
+
+describe("getExplicitUnscheduledReminderResult", () => {
+  const request = "Me lembra depois de comprar o suporte de escova de dente, a luminária para pôr no portão, para ver o interfone que tá assim, e marcar de fazer a limpeza do, do sistema de freio do carro da Deborah.";
+
+  it("preserves a multi-action reminder and leaves only its schedule missing", () => {
+    const result = getExplicitUnscheduledReminderResult(request);
+
+    expect(result).toMatchObject({ intent: "reminder_set", confidence: 1 });
+    expect(result?.reminder?.scheduledAt).toBeUndefined();
+    expect(result?.reminder?.message).toContain("• Comprar o suporte de escova de dente");
+    expect(result?.reminder?.message).toContain("• Comprar a luminária para pôr no portão");
+    expect(result?.reminder?.message).toContain("• Ver o interfone que tá assim");
+    expect(result?.reminder?.message).toContain("• Marcar de fazer a limpeza do sistema de freio do carro da Deborah");
+  });
+
+  it("recovers the original reminder after a short clarification", () => {
+    const result = getExplicitUnscheduledReminderResult(
+      "Ah, preciso de um lembrete de tarefas, por favor.",
+      [
+        { role: "user", content: request },
+        { role: "assistant", content: "Não entendi exatamente." },
+      ],
+    );
+
+    expect(result?.intent).toBe("reminder_set");
+    expect(result?.reminder?.message).toContain("carro da Deborah");
+  });
+
+  it("supports Spanish and does not intercept a reminder that already has a schedule", () => {
+    expect(getExplicitUnscheduledReminderResult("Recuérdame comprar pan"))
+      .toMatchObject({ intent: "reminder_set", reminder: { message: "comprar pan" } });
+    expect(getExplicitUnscheduledReminderResult("Recuérdame comprar pan, llamar a María y pagar la luz")?.reminder?.message)
+      .toBe("Tareas:\n• Comprar pan\n• Llamar a María\n• Pagar la luz");
+    expect(getExplicitUnscheduledReminderResult("Me lembra amanhã às 9 de ligar para João")).toBeNull();
+  });
+});
 
 describe("getExplicitTaskCreateResult", () => {
   it("creates the reported task even when the previous conversation was about banking", async () => {

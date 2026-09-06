@@ -1,7 +1,7 @@
 import { getSupabase } from "./supabase";
 import { VehicleExpenseType, type VehicleUpdateInput } from "./vehicles";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
-import type { RecurringData } from "./ai-processor";
+import type { AIResult, RecurringData } from "./ai-processor";
 
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
 const TTL_RECURRING_MS = 12 * 60 * 60 * 1000; // 12 horas
@@ -163,6 +163,7 @@ export type PendingInvoiceImport = {
 /** Intents que podem abrir um fluxo de perguntas (slot-filling) quando a
  *  mensagem original não trouxer todos os campos que mudam comportamento. */
 export type SlotFillIntent =
+  | "reminder_set"
   | "recurring_create"
   | "goal_create"
   | "agenda_create"
@@ -189,6 +190,22 @@ export type PendingSlotFill = {
   mode: "personal" | "business";
   /** mensagem que abriu o fluxo — usada em mensagens de desistência */
   originalText: string;
+  expiresAt: string;
+};
+
+/** Continuação genérica para ações que já foram identificadas, mas ainda
+ * precisam de um dado obrigatório. Guarda a intenção e os campos extraídos
+ * para que respostas curtas ("amanhã", "100 reais", "o arroz") completem o
+ * pedido anterior em vez de virarem um comando novo. */
+export type PendingActionContinuation = {
+  type: "action_continuation";
+  phone: string;
+  userId: string;
+  intent: AIResult["intent"];
+  partial: AIResult;
+  originalText: string;
+  answers: string[];
+  mode: "personal" | "business";
   expiresAt: string;
 };
 
@@ -221,7 +238,7 @@ export type PendingAccountSelection = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingEmployeePaymentSelect | PendingAccountSelection | PendingClearHistory;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingAccountSelection | PendingClearHistory;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -245,6 +262,7 @@ type PendingActionInput =
   | Omit<PendingReceiptSave, "phone" | "expiresAt">
   | Omit<PendingInvoiceImport, "phone" | "expiresAt">
   | Omit<PendingSlotFill, "phone" | "expiresAt">
+  | Omit<PendingActionContinuation, "phone" | "expiresAt">
   | Omit<PendingEmployeePaymentSelect, "phone" | "expiresAt">
   | Omit<PendingAccountSelection, "phone" | "expiresAt">
   | Omit<PendingClearHistory, "phone" | "expiresAt">;
@@ -254,6 +272,7 @@ const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   meet_ata: TTL_MEET_ATA_MS,
   invoice_import: TTL_INVOICE_MS,
   slot_fill: TTL_SLOT_FILL_MS,
+  action_continuation: TTL_SLOT_FILL_MS,
 };
 
 export async function setPendingAction(phone: string, action: PendingActionInput): Promise<void> {

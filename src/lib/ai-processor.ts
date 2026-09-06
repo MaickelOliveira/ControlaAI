@@ -827,6 +827,65 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
   };
 }
 
+const REMINDER_ACTION_VERBS = "comprar|ver|marcar|fazer|hacer|ligar|llamar|levar|llevar|buscar|pegar|recoger|enviar|mandar|pagar|agendar|programar|limpar|limpiar|trocar|cambiar|consertar|arreglar|revisar";
+
+function reminderChecklist(body: string, language: "pt" | "es" = "pt"): string {
+  const cleaned = body
+    .replace(/\b(do|da|de|o|a)\s*,\s*\1\b/gi, "$1")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/, "");
+  if (!cleaned) return "";
+
+  const chunks = cleaned
+    .split(new RegExp(`\\s*;\\s*|\\s*,\\s*|\\s+(?:e|y)\\s+(?=(?:${REMINDER_ACTION_VERBS})\\b)`, "i"))
+    .map(part => part.replace(/^(?:(?:e|y)\s+|para\s+)/i, "").trim())
+    .filter(Boolean);
+  if (chunks.length <= 1) return cleaned;
+
+  const inheritedVerb = chunks[0].match(new RegExp(`^(${REMINDER_ACTION_VERBS})\\b`, "i"))?.[1];
+  const tasks = chunks.map((part, index) => {
+    const hasActionVerb = new RegExp(`^(?:${REMINDER_ACTION_VERBS})\\b`, "i").test(part);
+    const withVerb = index > 0 && !hasActionVerb && inheritedVerb?.toLowerCase() === "comprar"
+      ? `comprar ${part}`
+      : part;
+    return withVerb ? withVerb.charAt(0).toUpperCase() + withVerb.slice(1) : withVerb;
+  });
+  return `${language === "es" ? "Tareas" : "Tarefas"}:\n${tasks.map(task => `• ${task}`).join("\n")}`;
+}
+
+/** Pedido de lembrete sem data não deve cair em fallback nem ser confundido
+ * com consulta de tarefas. Preserva o conteúdo e deixa o motor de campos
+ * faltantes perguntar apenas quando deve avisar. */
+export function getExplicitUnscheduledReminderResult(
+  message: string,
+  history: { role: "user" | "assistant"; content: string }[] = [],
+): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const hasConcreteSchedule = /\b(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo|hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|todo\s+dia|toda\s+semana|todo\s+mes|daqui\s+a\s+\d+|dentro\s+de\s+\d+)\b|\b(?:dia|el\s+dia)\s+\d{1,2}\b|\b\d{1,2}\s+de\s+(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|enero|febrero|marzo|mayo|junio|julio|septiembre|octubre|noviembre|diciembre)\b|\b(?:as|a\s+las)\s+\d{1,2}\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/.test(normalized);
+
+  const directPt = text.match(/^(?:(?:por\s+favor|favor)[, ]*)?(?:me\s+)?(?:lembra|lembre)(?:-me)?\s+(?:depois\s+)?(?:de\s+)?(.*)$/i);
+  const directEs = text.match(/^(?:por\s+favor[, ]*)?(?:recu[eé]rdame|recordarme)\s+(?:m[aá]s\s+tarde\s+)?(?:que\s+|de\s+)?(.*)$/i);
+  const direct = directPt ?? directEs;
+  if (direct && !hasConcreteSchedule) {
+    const reminderMessage = reminderChecklist(direct[1] || "", directEs ? "es" : "pt");
+    return { intent: "reminder_set", confidence: 1, reminder: { ...(reminderMessage ? { message: reminderMessage } : {}) } };
+  }
+
+  const isTaskReminderClarification = /^(?:ah[, ]*)?(?:eu\s+)?(?:preciso|quero|gostaria)\s+(?:de\s+)?(?:um\s+)?lembrete\s+(?:de|das?)\s+tarefas(?:[, ]*por\s+favor)?[.!?]*$/i.test(text)
+    || /^(?:ah[, ]*)?(?:necesito|quiero)\s+(?:un\s+)?recordatorio\s+de\s+tareas(?:[, ]*por\s+favor)?[.!?]*$/i.test(text);
+  if (!isTaskReminderClarification) return null;
+
+  for (const previous of [...history].reverse()) {
+    if (previous.role !== "user") continue;
+    const recovered = getExplicitUnscheduledReminderResult(previous.content);
+    if (recovered?.reminder?.message) return recovered;
+  }
+
+  return { intent: "reminder_set", confidence: 1, reminder: {} };
+}
+
 const VEHICLE_NOUN_RE = /\b(ve[ií]culo|carro|moto|caminh[ãa]o|van)\b/i;
 const VEHICLE_EXPENSE_RE = /\b(gasto|despesa|abastec|paguei|comprei|troca|manuten[çc][ãa]o|revis[ãa]o|conserto|oficina|ipva|imposto|[óo]leo|pneu)\b/i;
 
@@ -1110,6 +1169,9 @@ PRIORIDADE DE INTERPRETAÇÃO:
 2. Use o histórico somente para resolver referências como "isso", "ela" ou uma resposta curta a uma pergunta anterior.
 3. Nunca troque um comando atual por outro apenas porque o histórico estava falando de um assunto relacionado.
 4. Escolha a intenção mais específica disponível. Por exemplo, valores ainda a pagar/receber são finance_upcoming, não um resumo genérico finance_query.
+5. Se o usuário pediu uma AÇÃO, mas não informou todos os dados necessários, mantenha a intenção dessa ação e retorne os campos que conseguiu extrair. NÃO transforme em "unknown", consulta ou lista e NÃO invente o que faltou: o sistema perguntará somente os campos ausentes e continuará a mesma ação na resposta seguinte.
+
+⚠️ CONTINUAÇÃO DE AÇÃO: quando a mensagem vier no formato "Pedido original" + "Informação complementar", una todas as partes como um único comando. A informação complementar responde à pergunta feita pelo sistema; preserve a intenção original e complete somente os campos novos.
 
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular).
@@ -2207,6 +2269,9 @@ OU genérico:
 }
 
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  const explicitUnscheduledReminder = getExplicitUnscheduledReminderResult(message, ctx?.history);
+  if (explicitUnscheduledReminder) return explicitUnscheduledReminder;
+
   const explicitTask = getExplicitTaskCreateResult(message);
   if (explicitTask) return explicitTask;
 
