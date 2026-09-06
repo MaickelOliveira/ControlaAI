@@ -4,6 +4,7 @@ import {
   formatReminderOffset,
   parseAppointmentReminderRequest,
 } from "./appointment-reminders";
+import { replyAppointmentReminder } from "./bot-replies";
 
 describe("parseAppointmentReminderRequest", () => {
   it("understands the exact reported one-hour reminder", () => {
@@ -48,5 +49,31 @@ describe("appointment reminder scheduling", () => {
     expect(formatReminderOffset(15)).toBe("15 minutos");
     expect(formatReminderOffset(60)).toBe("1 hora");
     expect(formatReminderOffset(90)).toBe("1h30");
+  });
+});
+
+describe("Spanish appointment template text", () => {
+  const appointment = {
+    id: "appointment-1",
+    userId: "user-1",
+    title: "Reunión con el contador",
+    startAt: "2026-09-06T17:30:00.000Z",
+    allDay: false,
+    repeat: "none" as const,
+    status: "scheduled" as const,
+    source: "whatsapp" as const,
+    createdAt: "2026-09-01T12:00:00.000Z",
+  };
+
+  it("matches the two-hour Spanish Meta template", () => {
+    expect(replyAppointmentReminder(appointment, "2 horas", "es")).toBe(
+      "📅 Evento próximo\n\nReunión con el contador comenzará en aproximadamente 2 horas, a las 14:30.\n\nEste aviso corresponde a un evento registrado previamente en tu agenda de Zelo.",
+    );
+  });
+
+  it("matches the fifteen-minute Spanish Meta template", () => {
+    expect(replyAppointmentReminder(appointment, "15 minutos", "es")).toBe(
+      "⏰ Evento en breve\n\nReunión con el contador comenzará en aproximadamente 15 minutos, a las 14:30.\n\nEste aviso corresponde a un evento registrado previamente en tu agenda de Zelo.",
+    );
   });
 });

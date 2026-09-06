@@ -525,11 +525,7 @@ export function buildRecurringNotification(r: RecurringTransaction, locale?: str
   const dueDateStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString(dateLocale(locale));
   const typeEmoji = r.type === "income" ? "💰" : "💸";
   if (isEs(locale)) {
-    const accion = r.type === "income" ? "recibido" : "pagado";
-    if (r.recurrenceType === "installment") {
-      return `Pasando para recordarte: la cuota ${r.paidInstallments + 1}/${r.totalInstallments} vence hoy.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n📅 ${dueDateStr}\n\n¿Ya fue ${accion}? Respóndeme *sí* o *no*.`;
-    }
-    return `Pasando para recordarte la cuenta de hoy:\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n📅 ${dueDateStr}\n\n¿Ya fue ${accion}? Respóndeme *sí* o *no*.`;
+    return `💳 Movimiento financiero programado\n\nConcepto: ${r.description}\nImporte: ${fmt(r.amount)}\nFecha: ${dueDateStr}\n\nEste movimiento fue registrado previamente en Zelo. Responde “sí” si ya fue realizado o “no” si todavía está pendiente.`;
   }
   if (isPtPt(locale)) {
     const acao = r.type === "income" ? "recebida" : "paga";
@@ -785,7 +781,18 @@ export function replyAppointmentReminder(a: Appointment, quando: string, locale?
   const dateTime = formatDateTimeBR(a.startAt);
   const locationLine = a.location ? `\n📍 ${a.location}` : "";
   const meetLine = a.meetLink ? `\n🔗 ${a.meetLink}` : "";
-  if (isEs(locale)) return `⏰ Pasando para recordarte — en ${quando} tienes:\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}${meetLine}`;
+  if (isEs(locale)) {
+    const time = new Date(a.startAt).toLocaleTimeString(dateLocale(locale), {
+      timeZone: TZ,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    if (quando === "15 minutos") {
+      return `⏰ Evento en breve\n\n${a.title} comenzará en aproximadamente 15 minutos, a las ${time}.\n\nEste aviso corresponde a un evento registrado previamente en tu agenda de Zelo.`;
+    }
+    return `📅 Evento próximo\n\n${a.title} comenzará en aproximadamente 2 horas, a las ${time}.\n\nEste aviso corresponde a un evento registrado previamente en tu agenda de Zelo.`;
+  }
   if (isPtPt(locale)) return `⏰ A passar para lembrar — daqui a ${quando} tens:\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}${meetLine}`;
   return `⏰ Passando para lembrar — daqui a ${quando} você tem:\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}${meetLine}`;
 }

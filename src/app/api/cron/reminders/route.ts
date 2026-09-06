@@ -48,13 +48,20 @@ async function runCron() {
       let ok: boolean;
       if (r.recipientType !== "self") {
         const remetente = owner.name || "alguém";
-        ok = await sendReminderTemplate(r.phone, "lembrete_assessor", `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`, { remetente, lembrete: r.message });
+        const texto = owner.locale === "es"
+          ? `🔔 Aviso programado por ${remetente}\n\n${r.message}\n\nEste aviso fue solicitado previamente en Zelo.`
+          : `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
+        ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, owner.locale);
       } else if (r.mode === "business") {
-        const texto = `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-        ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message });
+        const texto = owner.locale === "es"
+          ? `🔔 Aviso empresarial\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
+          : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
+        ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message }, owner.locale);
       } else {
-        const texto = `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
-        ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { texto: r.message });
+        const texto = owner.locale === "es"
+          ? `🔔 Aviso personal\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
+          : `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
+        ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { texto: r.message }, owner.locale);
       }
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
       if (ok) await markReminderSent(r.id, r.repeat);

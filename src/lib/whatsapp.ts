@@ -18,16 +18,38 @@ function languageCodeFor(locale?: string): string {
   return "pt_BR";
 }
 
-/** Cada idioma precisa do PRÓPRIO template aprovado no Meta Business Manager
- *  (o texto de um template aprovado é fixo, não dá pra reaproveimar o mesmo
- *  nome com texto diferente por idioma) — convenção: sufixo "_es"/"_pt" no
- *  nome, pt-BR sem sufixo (é o que já está registrado hoje). Só funciona
- *  depois que a versão de cada idioma for registrada/aprovada no Meta —
- *  ver lista entregue ao final da Fase 1 de multi-idioma. */
-function localizedTemplateName(base: string, locale?: string): string {
-  if (locale === "es") return `${base}_es`;
+/** Nomes espanhóis são deliberadamente diferentes dos modelos brasileiros
+ * já cadastrados — não são simples sufixos "_es". O mapa precisa coincidir
+ * exatamente com o nome aprovado no Meta Business Manager. */
+export const SPANISH_TEMPLATE_NAMES: Record<string, string> = {
+  lembrete_assessor: "aviso_programado_por_contacto",
+  lbte_empresarial: "gestion_empresa_pendiente",
+  lbt_pessoal: "nota_personal_pendiente",
+  cbr_recorrente: "movimiento_financiero_del_dia",
+  lembrete_compromisso: "agenda_evento_proximo",
+  lembrete_compromisso15: "agenda_evento_en_breve",
+  boas_vindas_cadastro2: "acceso_confirmado_zelo",
+};
+
+const SPANISH_PARAM_NAMES: Record<string, Record<string, string>> = {
+  lembrete_assessor: { remetente: "remitente", lembrete: "aviso" },
+  lbte_empresarial: { lembrete: "aviso" },
+  lbt_pessoal: { texto: "aviso" },
+  cbr_recorrente: { descricao: "concepto", valor: "importe", data: "fecha" },
+  lembrete_compromisso: { compromisso: "evento", horario: "hora" },
+  lembrete_compromisso15: { compromisso: "evento", horario: "hora" },
+};
+
+export function localizedTemplateName(base: string, locale?: string): string {
+  if (locale === "es") return SPANISH_TEMPLATE_NAMES[base] ?? base;
   if (locale === "pt-PT") return `${base}_pt`;
   return base;
+}
+
+export function localizedTemplateParams(base: string, params: Record<string, string>, locale?: string): Record<string, string> {
+  if (locale !== "es") return params;
+  const names = SPANISH_PARAM_NAMES[base] ?? {};
+  return Object.fromEntries(Object.entries(params).map(([key, value]) => [names[key] ?? key, value]));
 }
 
 export async function sendText(to: string, message: string): Promise<boolean> {
@@ -45,11 +67,17 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
   const provider = (await getConfig()).provider;
   let ok: boolean;
   if (provider === "waba") {
-    const result = await waba.sendTemplate(to, localizedTemplateName(templateName, locale), languageCodeFor(locale), params);
+    const localizedName = localizedTemplateName(templateName, locale);
+    const result = await waba.sendTemplate(
+      to,
+      localizedName,
+      languageCodeFor(locale),
+      localizedTemplateParams(templateName, params, locale),
+    );
     ok = result.ok;
     // wamid aqui é o único jeito de casar esse envio com o evento de status
     // (sent/delivered/read/failed) que chega depois, assíncrono, no webhook.
-    if (ok) console.log(`[whatsapp] template ${templateName} aceito, msg=${result.messageId}`);
+    if (ok) console.log(`[whatsapp] template ${localizedName} aceito, msg=${result.messageId}`);
   } else {
     ok = await evolution.sendText(to, renderedText);
   }
@@ -80,11 +108,9 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
       "Para configurares o WhatsApp com a inteligência artificial da Zelo, é só entrar em zelogestaointeligente.com.br, aceder a Configurações e seguir o passo a passo simples.\n\n" +
       "Não encontraste o e-mail? Envia uma mensagem para contato@zelogestaointeligente.com.br que nós ajudamos-te.",
     es:
-      "¡Hola! 👋 Soy Zelo, tu asistente financiero y de tareas directo por WhatsApp.\n\n" +
-      "Tu pago fue confirmado y tu cuenta ya está lista.\n\n" +
-      "El link para crear tu contraseña de acceso está en el correo que te enviamos ahora — solo abre tu bandeja de entrada.\n\n" +
-      "Para configurar WhatsApp con la inteligencia artificial de Zelo, solo entra a zelogestaointeligente.com.br, ve a Configuración y sigue los pasos simples.\n\n" +
-      "¿No encontraste el correo? Escríbenos a contato@zelogestaointeligente.com.br que te ayudamos.",
+      "¡Hola! Tu pago fue confirmado y tu cuenta de Zelo ya está activa.\n\n" +
+      "Las instrucciones para crear tu contraseña fueron enviadas a tu correo electrónico.\n\n" +
+      "Si no encuentras el correo, escribe a contato@zelogestaointeligente.com.br.",
   };
   const renderedText = texts[locale ?? "pt-BR"] ?? texts["pt-BR"];
   let ok: boolean;

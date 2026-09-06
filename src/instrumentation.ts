@@ -69,21 +69,21 @@ export async function register() {
             // como melhor sinal disponível.
             const remetente = owner?.name || (locale === "es" ? "alguien" : "alguém");
             const texto = locale === "es"
-              ? `🔔 Recordatorio de ${remetente}: ${r.message} — Zelo Asesor`
+              ? `🔔 Aviso programado por ${remetente}\n\n${r.message}\n\nEste aviso fue solicitado previamente en Zelo.`
               : locale === "pt-PT"
               ? `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`
               : `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
             ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, locale);
           } else if (r.mode === "business") {
             const texto = locale === "es"
-              ? `🔔 Zelo — Recordatorio empresarial configurado\n\nTu empresa necesita: ${r.message}\n\nRecordatorio empresarial agendado en Zelo.`
+              ? `🔔 Aviso empresarial\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
               : locale === "pt-PT"
               ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`
               : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
             ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message }, locale);
           } else {
             const texto = locale === "es"
-              ? `🔔 Zelo — Recordatorio que configuraste\n\nNecesitas: ${r.message}\n\nRecordatorio personal agendado por ti en Zelo.`
+              ? `🔔 Aviso personal\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
               : locale === "pt-PT"
               ? `🔔 Zelo — Lembrete que configuraste\n\nPrecisas de: ${r.message}\n\nLembrete pessoal agendado por ti no Zelo.`
               : `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
