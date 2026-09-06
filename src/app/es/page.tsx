@@ -1046,7 +1046,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "/mes",
     total: "Pago mensual",
     totalValue: 47,
-    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=00zzvpfa&checkoutMode=6",
+    checkoutUrl: "https://pay.hotmart.com/T107497176B?off=nhj4i7mi&bid=1788729261163",
     badge: null,
   },
   {
@@ -1058,7 +1058,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "",
     total: "o R$ 197,00 de una vez",
     totalValue: 197,
-    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=gbxytpij&checkoutMode=6&bid=1786344680923",
+    checkoutUrl: "https://pay.hotmart.com/T107497176B?off=yzqph7pa&bid=1788729318758",
     badge: "Más popular",
   },
   {
@@ -1070,7 +1070,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "",
     total: "o R$ 297,00 de una vez",
     totalValue: 297,
-    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=zyi6wlxp&checkoutMode=6",
+    checkoutUrl: "https://pay.hotmart.com/T107497176B?off=zcsygj89&bid=1788729347182",
     badge: "Mejor precio",
   },
 ] as const;
