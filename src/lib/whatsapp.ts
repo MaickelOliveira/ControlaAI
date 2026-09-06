@@ -23,7 +23,7 @@ function languageCodeFor(locale?: string): string {
  * exatamente com o nome aprovado no Meta Business Manager. */
 export const SPANISH_TEMPLATE_NAMES: Record<string, string> = {
   lembrete_assessor: "aviso_programado_por_contacto",
-  lbte_empresarial: "gestion_empresa_pendiente",
+  lbte_empresarial: "seguimiento_tarea_solicitada",
   lbt_pessoal: "nota_personal_pendiente",
   cbr_recorrente: "movimiento_financiero_del_dia",
   lembrete_compromisso: "agenda_evento_proximo",
@@ -33,7 +33,7 @@ export const SPANISH_TEMPLATE_NAMES: Record<string, string> = {
 
 const SPANISH_PARAM_NAMES: Record<string, Record<string, string>> = {
   lembrete_assessor: { remetente: "remitente", lembrete: "aviso" },
-  lbte_empresarial: { lembrete: "aviso" },
+  lbte_empresarial: { lembrete: "tarea" },
   lbt_pessoal: { texto: "aviso" },
   cbr_recorrente: { descricao: "concepto", valor: "importe", data: "fecha" },
   lembrete_compromisso: { compromisso: "evento", horario: "hora" },

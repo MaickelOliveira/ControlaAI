@@ -14,6 +14,7 @@ describe("Spanish WhatsApp templates", () => {
     expect(new Set(names).size).toBe(names.length);
     expect(names.every((name) => !name.endsWith("_es"))).toBe(true);
     expect(localizedTemplateName("lembrete_assessor", "es")).toBe("aviso_programado_por_contacto");
+    expect(localizedTemplateName("lbte_empresarial", "es")).toBe("seguimiento_tarea_solicitada");
     expect(localizedTemplateName("boas_vindas_cadastro2", "es")).toBe("acceso_confirmado_zelo");
   });
 
@@ -38,6 +39,12 @@ describe("Spanish WhatsApp templates", () => {
       concepto: "Cuota del vehículo",
       importe: "R$ 450,00",
       fecha: "06/09/2026",
+    });
+
+    expect(localizedTemplateParams("lbte_empresarial", {
+      lembrete: "Revisar el flujo de caja de la empresa",
+    }, "es")).toEqual({
+      tarea: "Revisar el flujo de caja de la empresa",
     });
   });
 

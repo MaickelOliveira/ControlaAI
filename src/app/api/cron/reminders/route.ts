@@ -54,7 +54,7 @@ async function runCron() {
         ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, owner.locale);
       } else if (r.mode === "business") {
         const texto = owner.locale === "es"
-          ? `🔔 Aviso empresarial\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
+          ? `✅ Seguimiento de tarea solicitado\n\nLa siguiente tarea empresarial sigue pendiente:\n${r.message}\n\nRecibes esta actualización porque solicitaste su seguimiento en Zelo.`
           : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
         ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message }, owner.locale);
       } else {
