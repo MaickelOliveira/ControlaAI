@@ -437,6 +437,26 @@ export async function removeShoppingItem(id: string, userId: string): Promise<vo
   await getSupabase().from("grocery_shopping_list_items").delete().eq("id", id).eq("user_id", userId);
 }
 
+export async function clearShoppingList(userId: string): Promise<number> {
+  const { data, error } = await getSupabase().from("grocery_shopping_list_items")
+    .delete().eq("user_id", userId).select("id");
+  if (error) throw new Error(`[grocery] clearShoppingList falhou: ${error.message}`);
+  return data?.length ?? 0;
+}
+
+export async function updateShoppingItem(
+  id: string,
+  userId: string,
+  patch: { name?: string; category?: GroceryCategory; quantity?: string },
+): Promise<ShoppingListItem | null> {
+  const changes = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+  if (!Object.keys(changes).length) return null;
+  const { data, error } = await getSupabase().from("grocery_shopping_list_items")
+    .update(changes).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  if (error) throw new Error(`[grocery] updateShoppingItem falhou: ${error.message}`);
+  return data ? listItemFromRow(data as ListRow) : null;
+}
+
 /** Converte uma chave de LIST_TEMPLATES (ex: "carnes") na categoria de
  *  exibição correspondente (ex: "Carnes") — usado quando a IA extrai
  *  categorias como chave de template, mas getSuggestedListItems precisa do

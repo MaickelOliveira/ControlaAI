@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   getExplicitDailySummaryResult,
   getExplicitGroceryListAddResult,
+  getExplicitGroceryListManagementResult,
+  getExplicitRelativePeriod,
   getExplicitTaskCreateResult,
   getExplicitUpcomingFinanceQueryResult,
   getExplicitVehicleCrudResult,
@@ -75,6 +77,31 @@ describe("advisor summary classification", () => {
     expect(getExplicitWeeklySummaryResult("Resumo financeiro da semana")).toBeNull();
     expect(getExplicitDailySummaryResult("Resumo financeiro do dia")).toBeNull();
   });
+
+  it("uses the next calendar week in Portuguese and Spanish", () => {
+    const sunday = new Date(2026, 8, 6, 12, 0, 0);
+    const expected = { from: "2026-09-07", to: "2026-09-13" };
+
+    expect(getExplicitWeeklySummaryResult("Resumo da semana que vem", sunday))
+      .toMatchObject({ intent: "weekly_summary", period: expected });
+    expect(getExplicitWeeklySummaryResult("Resumen de la próxima semana", sunday))
+      .toMatchObject({ intent: "weekly_summary", period: expected });
+  });
+
+  it("resolves common relative periods from the São Paulo reference date", () => {
+    const sunday = new Date(2026, 8, 6, 12, 0, 0);
+
+    expect(getExplicitRelativePeriod("quanto gastei semana passada?", sunday))
+      .toEqual({ from: "2026-08-24", to: "2026-08-30" });
+    expect(getExplicitRelativePeriod("quanto vou gastar no mês que vem?", sunday))
+      .toEqual({ from: "2026-10-01", to: "2026-10-31" });
+    expect(getExplicitRelativePeriod("o que recebi ontem?", sunday))
+      .toEqual({ from: "2026-09-05", to: "2026-09-05" });
+    expect(getExplicitRelativePeriod("gastos deste ano", sunday))
+      .toEqual({ from: "2026-01-01", to: "2026-09-06" });
+    expect(getExplicitDailySummaryResult("Resumo do dia de amanhã", sunday))
+      .toMatchObject({ intent: "daily_summary", period: { from: "2026-09-07", to: "2026-09-07" } });
+  });
 });
 
 describe("getExplicitGroceryListAddResult", () => {
@@ -123,6 +150,33 @@ describe("getExplicitGroceryListAddResult", () => {
         ],
       },
     });
+  });
+});
+
+describe("getExplicitGroceryListManagementResult", () => {
+  it("shows and clears the WhatsApp shopping list without using the AI fallback", async () => {
+    expect(await processMessage("minha lista de compras"))
+      .toMatchObject({ intent: "grocery_list_show", confidence: 1 });
+    expect(await processMessage("limpe minha lista de compras"))
+      .toMatchObject({ intent: "grocery_list_clear", confidence: 1 });
+    expect(getExplicitGroceryListManagementResult("vaciar mi lista del supermercado"))
+      .toMatchObject({ intent: "grocery_list_clear", confidence: 1 });
+  });
+
+  it("removes one or more named items", () => {
+    expect(getExplicitGroceryListManagementResult("remova arroz e leite da minha lista de compras"))
+      .toMatchObject({ intent: "grocery_list_remove", grocery: { itemNames: ["arroz", "leite"] } });
+    expect(getExplicitGroceryListManagementResult("elimina pan de mi lista del supermercado"))
+      .toMatchObject({ intent: "grocery_list_remove", grocery: { itemNames: ["pan"] } });
+  });
+
+  it("renames items and changes quantities or categories", () => {
+    expect(getExplicitGroceryListManagementResult("mude arroz para arroz integral na lista de compras"))
+      .toMatchObject({ intent: "grocery_list_edit", grocery: { itemNames: ["arroz"], newProductName: "arroz integral" } });
+    expect(getExplicitGroceryListManagementResult("altere a quantidade do leite para 3 caixas na lista"))
+      .toMatchObject({ intent: "grocery_list_edit", grocery: { itemNames: ["leite"], newQuantity: "3 caixas" } });
+    expect(getExplicitGroceryListManagementResult("mude a categoria do sabonete para higiene na lista"))
+      .toMatchObject({ intent: "grocery_list_edit", grocery: { itemNames: ["sabonete"], newCategory: "Higiene" } });
   });
 });
 

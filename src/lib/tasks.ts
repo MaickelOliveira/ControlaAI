@@ -4,6 +4,7 @@ import { getSupabase } from "./supabase";
 export type TaskStatus = "pending" | "in_progress" | "completed";
 export type TaskPriority = "low" | "medium" | "high";
 export type TaskMode = "personal" | "business";
+export type TaskUpdateInput = Partial<Pick<Task, "title" | "status" | "priority" | "mode">> & { dueDate?: string | null };
 
 export type Task = {
   id: string;
@@ -58,10 +59,21 @@ export async function getOverdueTasks(userId: string, mode?: TaskMode): Promise<
     .filter(t => t.dueDate && t.dueDate < today);
 }
 
-export async function updateTaskStatus(id: string, userId: string, status: TaskStatus): Promise<Task | null> {
-  const { data, error } = await getSupabase().from("tasks").update({ status }).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+export async function updateTask(id: string, userId: string, patch: TaskUpdateInput): Promise<Task | null> {
+  const rowPatch: Partial<Row> = {};
+  if (patch.title !== undefined) rowPatch.title = patch.title;
+  if (patch.status !== undefined) rowPatch.status = patch.status;
+  if (patch.priority !== undefined) rowPatch.priority = patch.priority;
+  if (patch.dueDate !== undefined) rowPatch.due_date = patch.dueDate;
+  if (patch.mode !== undefined) rowPatch.mode = patch.mode;
+  if (!Object.keys(rowPatch).length) return null;
+  const { data, error } = await getSupabase().from("tasks").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);
+}
+
+export async function updateTaskStatus(id: string, userId: string, status: TaskStatus): Promise<Task | null> {
+  return updateTask(id, userId, { status });
 }
 
 export async function findTaskByTitle(userId: string, title: string, mode?: TaskMode): Promise<Task | null> {

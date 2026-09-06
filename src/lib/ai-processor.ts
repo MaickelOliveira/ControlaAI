@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
-import { nowISOBR, todayStrBR } from "./date-br";
+import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
 import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
@@ -52,6 +52,9 @@ export type Intent =
   | "grocery_list_add"
   | "grocery_list_show"
   | "grocery_list_check"
+  | "grocery_list_clear"
+  | "grocery_list_remove"
+  | "grocery_list_edit"
   | "grocery_purchase"
   | "grocery_purchase_finish"
   | "grocery_list_generate"
@@ -131,6 +134,10 @@ export type TaskData = {
   dueDate?: string;
   taskNumber?: number;
   newStatus?: "pending" | "in_progress" | "completed";
+  newTitle?: string;
+  newDueDate?: string;
+  newPriority?: "low" | "medium" | "high";
+  clearDueDate?: boolean;
   mode?: "personal" | "business"; // detectado automaticamente
 };
 
@@ -209,6 +216,11 @@ export type GroceryData = {
   items?: GroceryItemData[];
   /** grocery_list_add/grocery_list_check: nomes de itens da lista envolvidos */
   itemNames?: string[];
+  /** grocery_list_edit: novo nome, quantidade ou categoria do item. O item
+   * original fica em itemNames[0]. */
+  newProductName?: string;
+  newQuantity?: string;
+  newCategory?: GroceryCategory;
   /** grocery_list_add a partir de modelo pronto — chave de LIST_TEMPLATES
    *  (ex: "mercearia", "carnes", "hortifruti", "laticinios", "padaria", "bebidas", "higiene", "limpeza") */
   template?: string;
@@ -229,11 +241,13 @@ export type GroceryData = {
 
 export type EmployeeData = {
   name?: string;
+  newName?: string;
   role?: string;
   salary?: number;
   startDate?: string;
   phone?: string;
   email?: string;
+  notes?: string;
 };
 
 export type CustomerData = {
@@ -306,6 +320,89 @@ function localeInstruction(locale?: string): string {
 
 function normalizeCapabilityText(text: string): string {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+type DatePeriod = { from: string; to: string };
+
+/** Resolve períodos relativos no próprio sistema, sempre a partir do relógio
+ * de São Paulo. Assim consultas não dependem de a IA calcular corretamente
+ * expressões como "semana que vem" ou "mês passado". */
+export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR()): DatePeriod | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const pad = (part: number) => String(part).padStart(2, "0");
+  const toYmd = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const shiftDate = (date: Date, days: number) => {
+    const shifted = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
+    shifted.setDate(shifted.getDate() + days);
+    return shifted;
+  };
+  const shiftYmd = (value: string, days: number) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return toYmd(shiftDate(new Date(year, month - 1, day, 12, 0, 0), days));
+  };
+  const monthBounds = (offset: number): DatePeriod => {
+    const first = new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1, 12, 0, 0);
+    const last = new Date(anchor.getFullYear(), anchor.getMonth() + offset + 1, 0, 12, 0, 0);
+    return { from: toYmd(first), to: toYmd(last) };
+  };
+  const [weekFrom, weekTo] = weekBoundsBR(anchor);
+
+  if (/\bproxima\s+semana\b|\bsemana\s+(?:que\s+vem|seguinte|que\s+viene|siguiente)\b/.test(normalized)) {
+    return { from: shiftYmd(weekFrom, 7), to: shiftYmd(weekTo, 7) };
+  }
+  if (/\bultima\s+semana\b|\bsemana\s+(?:passada|anterior|pasada)\b/.test(normalized)) {
+    return { from: shiftYmd(weekFrom, -7), to: shiftYmd(weekTo, -7) };
+  }
+  if (/\b(?:esta|essa|nesta|nessa|desta|atual)\s+semana\b|\bsemana\s+atual\b|\bna\s+semana\b/.test(normalized)) {
+    return { from: weekFrom, to: weekTo };
+  }
+  if (/\bproximo\s+mes\b|\bmes\s+(?:que\s+vem|seguinte|que\s+viene|siguiente)\b/.test(normalized)) return monthBounds(1);
+  if (/\bultimo\s+mes\b|\bmes\s+(?:passado|anterior|pasado)\b/.test(normalized)) return monthBounds(-1);
+  if (/\b(?:este|esse|neste|nesse|deste|atual)\s+mes\b|\bmes\s+atual\b/.test(normalized)) return monthBounds(0);
+
+  if (/\b(?:ano\s+que\s+vem|proximo\s+ano|ano\s+siguiente)\b/.test(normalized)) {
+    const year = anchor.getFullYear() + 1;
+    return { from: `${year}-01-01`, to: `${year}-12-31` };
+  }
+  if (/\b(?:ano\s+passado|ultimo\s+ano|ano\s+anterior|ano\s+pasado)\b/.test(normalized)) {
+    const year = anchor.getFullYear() - 1;
+    return { from: `${year}-01-01`, to: `${year}-12-31` };
+  }
+  if (/\b(?:este|esse|neste|nesse|deste|atual)\s+ano\b|\bano\s+atual\b/.test(normalized)) {
+    return { from: `${anchor.getFullYear()}-01-01`, to: toYmd(anchor) };
+  }
+
+  const rollingDays = normalized.match(/\bultim(?:os|as)\s+(7|30)\s+dias\b/);
+  if (rollingDays) {
+    const days = Number(rollingDays[1]);
+    return { from: toYmd(shiftDate(anchor, -(days - 1))), to: toYmd(anchor) };
+  }
+  if (/\bamanha\b|\bmanana\b/.test(normalized)) {
+    const tomorrow = toYmd(shiftDate(anchor, 1));
+    return { from: tomorrow, to: tomorrow };
+  }
+  if (/\bontem\b|\bayer\b/.test(normalized)) {
+    const yesterday = toYmd(shiftDate(anchor, -1));
+    return { from: yesterday, to: yesterday };
+  }
+  if (/\bhoje\b|\bhoy\b/.test(normalized)) {
+    const today = toYmd(anchor);
+    return { from: today, to: today };
+  }
+  return null;
+}
+
+function withExplicitRelativePeriod(message: string, result: AIResult, anchor: Date = nowBR()): AIResult {
+  const period = getExplicitRelativePeriod(message, anchor);
+  if (!period) return result;
+  if (result.intent === "grocery_history_query") {
+    return { ...result, grocery: { ...(result.grocery ?? {}), period } };
+  }
+  const periodIntents: Intent[] = [
+    "finance_query", "finance_upcoming", "daily_summary", "weekly_summary",
+    "balance_query", "finance_detail", "finance_analysis",
+  ];
+  return periodIntents.includes(result.intent) ? { ...result, period } : result;
 }
 
 /** Atalho determinístico para perguntas sobre contas futuras. Essa intenção
@@ -420,26 +517,99 @@ export function getExplicitGroceryListAddResult(message: string): AIResult | nul
   return { intent: "grocery_list_add", confidence: 1, grocery: { items } };
 }
 
+/** Comandos operacionais da lista não devem cair no fallback conversacional:
+ * cada resultado abaixo corresponde a uma ação real no banco. */
+export function getExplicitGroceryListManagementResult(message: string): AIResult | null {
+  const text = message.trim().replace(/[\\]+$/, "").trim();
+  const normalized = normalizeCapabilityText(text);
+  const mentionsList = /\blista\b.*\b(compras?|supermercado|mercado|whatsapp)\b|\b(?:minha|mi)\s+lista\b|\blista\s+(?:inteira|completa)\b|\blista\s*$/.test(normalized);
+  if (!mentionsList) return null;
+
+  const clearList = /\b(?:limp\w*|esvazi\w*|vaci\w*)\s+(?:(?:toda|inteira|completa)\s+)?(?:(?:a|la)\s+)?(?:(?:minha|mi)\s+)?lista\b/.test(normalized)
+    || /\b(?:apague|apagar|exclua|excluir|delete|deletar|elimine|eliminar|borre|borrar|remova|remover)\s+(?:toda\s+|todos\s+os\s+itens\s+(?:da|de\s+la)\s+)?(?:(?:a|la)\s+)?(?:(?:minha|mi)\s+)?lista\b/.test(normalized);
+  if (clearList) return { intent: "grocery_list_clear", confidence: 1 };
+
+  const cleanItemName = (value: string) => value
+    .trim()
+    .replace(/[.!?;:]+$/, "")
+    .replace(/^(?:o|a|os|as|um|uma|el|la|los|las|un|una)\s+/i, "")
+    .trim();
+  const withoutListSuffix = (value: string) => value
+    .replace(/\s+(?:na|da|de|do|del|en\s+la)\s+(?:(?:minha|mi)\s+)?lista(?:\s+(?:de|do|da|del)\s+(?:compras?|supermercado|mercado))?.*$/i, "")
+    .trim();
+
+  const editVerb = "(?:altere|alterar|mude|mudar|troque|trocar|renomeie|renomear|edite|editar|cambie|cambiar|cambia)";
+  const quantityEdit = text.match(new RegExp(`${editVerb}\\s+(?:(?:a|la)\\s+)?(?:quantidade|cantidad)\\s+(?:do|da|de|del)\\s+(.+?)\\s+(?:para|por|a)\\s+(.+)$`, "i"));
+  if (quantityEdit) {
+    const target = cleanItemName(withoutListSuffix(quantityEdit[1]));
+    const quantity = cleanItemName(withoutListSuffix(quantityEdit[2]));
+    if (target && quantity) {
+      return { intent: "grocery_list_edit", confidence: 1, grocery: { itemNames: [target], newQuantity: quantity } };
+    }
+  }
+
+  const categoryEdit = text.match(new RegExp(`${editVerb}\\s+(?:(?:a|la)\\s+)?categoria\\s+(?:do|da|de|del)\\s+(.+?)\\s+(?:para|por|a)\\s+(.+)$`, "i"));
+  if (categoryEdit) {
+    const target = cleanItemName(withoutListSuffix(categoryEdit[1]));
+    const requestedCategory = normalizeCapabilityText(withoutListSuffix(categoryEdit[2]));
+    const categoryAliases: Array<[GroceryCategory, RegExp]> = [
+      ["Mercearia", /\b(mercearia|abarrotes)\b/], ["Carnes", /\bcarnes?\b/],
+      ["Hortifruti", /\b(hortifruti|frutas?\s+e\s+legumes|frutas?\s+y\s+verduras)\b/],
+      ["Laticínios", /\b(laticinios|lacteos)\b/], ["Padaria", /\b(padaria|panaderia)\b/],
+      ["Bebidas", /\bbebidas?\b/], ["Higiene", /\bhigiene\b/],
+      ["Limpeza", /\b(limpeza|limpieza)\b/], ["Outros", /\b(outros|otros)\b/],
+    ];
+    const category = categoryAliases.find(([, pattern]) => pattern.test(requestedCategory))?.[0];
+    if (target && category) {
+      return { intent: "grocery_list_edit", confidence: 1, grocery: { itemNames: [target], newCategory: category } };
+    }
+  }
+
+  const renameEdit = text.match(new RegExp(`${editVerb}\\s+(?:(?:o|a|el|la)\\s+)?(?:item|produto|producto)?\\s*(.+?)\\s+(?:para|por)\\s+(.+)$`, "i"));
+  if (renameEdit) {
+    const target = cleanItemName(withoutListSuffix(renameEdit[1]));
+    const replacement = cleanItemName(withoutListSuffix(renameEdit[2]));
+    if (target && replacement) {
+      return /^\d/.test(replacement)
+        ? { intent: "grocery_list_edit", confidence: 1, grocery: { itemNames: [target], newQuantity: replacement } }
+        : { intent: "grocery_list_edit", confidence: 1, grocery: { itemNames: [target], newProductName: replacement } };
+    }
+  }
+
+  const removeVerb = "(?:remova|remover|remove|exclua|excluir|delete|deletar|apague|apagar|tire|tirar|elimine|eliminar|elimina|borre|borrar)";
+  const beforeList = text.match(new RegExp(`${removeVerb}\\s+(.+?)\\s+(?:da|de|do|del)\\s+(?:(?:minha|mi)\\s+)?lista(?:\\s+(?:de|do|da|del)\\s+(?:compras?|supermercado|mercado))?`, "i"))?.[1];
+  const afterList = text.match(new RegExp(`${removeVerb}\\s+(?:da|de|do|del)\\s+(?:(?:minha|mi)\\s+)?lista(?:\\s+(?:de|do|da|del)\\s+(?:compras?|supermercado|mercado))?[:,]?\\s+(.+)$`, "i"))?.[1];
+  const rawRemovedItems = beforeList || afterList;
+  if (rawRemovedItems) {
+    const itemNames = rawRemovedItems.split(/\s*,\s*|\s+(?:e|y)\s+/i).map(cleanItemName).filter(Boolean);
+    if (itemNames.length) return { intent: "grocery_list_remove", confidence: 1, grocery: { itemNames } };
+  }
+
+  const showList = /^(?:(?:por\s+favor[, ]*|pode\s+|puedes?\s+)?(?:mostre|mostrar|mostra|mande|mandar|envie|enviar|me\s+(?:manda|mande|envie|mostre|muestra|ensena)|muestra|mostrar|ensena|quiero\s+ver|quero\s+ver|qual|quais|o\s+que\s+tem|que\s+tem|como\s+esta)|(?:minha|mi)\s+lista|lista\s+(?:de|do|da|del)\s+(?:compras?|supermercado|mercado))\b/.test(normalized)
+    || /\bo\s+que\s+(?:falta|preciso)\s+comprar\b|\bque\s+(?:falta|necesito)\s+comprar\b/.test(normalized);
+  return showList ? { intent: "grocery_list_show", confidence: 1 } : null;
+}
+
 /** "Resumo da semana" é um briefing transversal do assessor (agenda +
  * compromissos financeiros futuros), não sinônimo de extrato. Pedidos que
  * dizem explicitamente "financeiro" continuam no classificador de finanças. */
-export function getExplicitWeeklySummaryResult(message: string): AIResult | null {
+export function getExplicitWeeklySummaryResult(message: string, anchor: Date = nowBR()): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
-  const asksWeeklySummary = /\bresumo\s+(?:da|desta)\s+semana\b|\bresumo\s+semanal\b|\bresumen\s+(?:de\s+la|de\s+esta)\s+semana\b|\bresumen\s+semanal\b/.test(normalized);
+  const asksWeeklySummary = /\b(?:resumo|resumen)\s+(?:(?:da|de|desta|dessa|esta|la)\s+)*(?:(?:proxima|ultima)\s+)?semana\b|\b(?:resumo|resumen)\s+semanal\b/.test(normalized);
   const explicitlyFinancialOnly = /\b(financeir\w*|finanz\w*|so\s+(?:de\s+)?(?:dinheiro|gastos?|despesas?|ingresos?))\b/.test(normalized);
   if (!asksWeeklySummary || explicitlyFinancialOnly) return null;
-  return { intent: "weekly_summary", confidence: 1 };
+
+  return withExplicitRelativePeriod(message, { intent: "weekly_summary", confidence: 1 }, anchor);
 }
 
-/** Mesmo briefing transversal para o dia atual. Datas diferentes de hoje
- * passam pelo classificador completo para ele usar a data pré-calculada. */
-export function getExplicitDailySummaryResult(message: string): AIResult | null {
+/** Mesmo briefing transversal para hoje, ontem ou amanhã. O período relativo
+ * é resolvido localmente para não depender do cálculo do modelo. */
+export function getExplicitDailySummaryResult(message: string, anchor: Date = nowBR()): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
-  const asksDailySummary = /\bresumo\s+(?:do\s+dia|de\s+hoje|diario)\b|\bresumen\s+(?:del\s+dia|de\s+hoy|diario)\b/.test(normalized);
-  const anotherDay = /\b(ontem|amanha|ayer|manana)\b/.test(normalized);
+  const asksDailySummary = /\bresumo\s+(?:do\s+dia(?:\s+de\s+(?:hoje|ontem|amanha))?|de\s+(?:hoje|ontem|amanha)|diario)\b|\bresumen\s+(?:del\s+dia(?:\s+de\s+(?:hoy|ayer|manana))?|de\s+(?:hoy|ayer|manana)|diario)\b/.test(normalized);
   const explicitlyFinancialOnly = /\b(financeir\w*|finanz\w*|so\s+(?:de\s+)?(?:dinheiro|gastos?|despesas?|ingresos?))\b/.test(normalized);
-  if (!asksDailySummary || anotherDay || explicitlyFinancialOnly) return null;
-  return { intent: "daily_summary", confidence: 1 };
+  if (!asksDailySummary || explicitlyFinancialOnly) return null;
+  return withExplicitRelativePeriod(message, { intent: "daily_summary", confidence: 1 }, anchor);
 }
 
 function supportInsidePlatformLine(locale?: string): string {
@@ -702,27 +872,41 @@ function buildVolatileContext(ctx?: AiContext): string {
 
   const curMonthFrom = mkNoon(ty, tm, 1);
   const curMonthTo = mkNoon(ty, tm + 1, 0);
+  const nextMonthFrom = mkNoon(ty, tm + 1, 1);
+  const nextMonthTo = mkNoon(ty, tm + 2, 0);
   const lastMonthFrom = mkNoon(ty, tm - 1, 1);
   const lastMonthTo = mkNoon(ty, tm, 0);
+  const tomorrow = new Date(todayAnchor); tomorrow.setDate(todayAnchor.getDate() + 1);
+  const yesterday = new Date(todayAnchor); yesterday.setDate(todayAnchor.getDate() - 1);
 
   const todayDow = todayAnchor.getDay(); // 0=domingo..6=sábado
   const diffToMonday = todayDow === 0 ? -6 : 1 - todayDow;
   const thisWeekMon = new Date(todayAnchor); thisWeekMon.setDate(todayAnchor.getDate() + diffToMonday);
   const thisWeekSun = new Date(thisWeekMon); thisWeekSun.setDate(thisWeekMon.getDate() + 6);
+  const nextWeekMon = new Date(thisWeekMon); nextWeekMon.setDate(thisWeekMon.getDate() + 7);
+  const nextWeekSun = new Date(thisWeekSun); nextWeekSun.setDate(thisWeekSun.getDate() + 7);
   const lastWeekMon = new Date(thisWeekMon); lastWeekMon.setDate(thisWeekMon.getDate() - 7);
   const lastWeekSun = new Date(thisWeekMon); lastWeekSun.setDate(thisWeekMon.getDate() - 1);
 
   const firstWeekFrom = mkNoon(ty, tm, 1);
   const firstWeekTo = mkNoon(ty, tm, 7);
   const yearFrom = mkNoon(ty, 0, 1);
+  const lastYearFrom = mkNoon(ty - 1, 0, 1);
+  const lastYearTo = mkNoon(ty - 1, 11, 31);
 
   const periodsRef = [
+    `- Hoje: from "${hoje}" to "${hoje}"`,
+    `- Amanhã: from "${toYMD(tomorrow)}" to "${toYMD(tomorrow)}"`,
+    `- Ontem: from "${toYMD(yesterday)}" to "${toYMD(yesterday)}"`,
     `- Este mês / mês atual (${monthLabel(ty, tm)}): from "${toYMD(curMonthFrom)}" to "${toYMD(curMonthTo)}"`,
+    `- Próximo mês / mês que vem (${monthLabel(ty, tm + 1)}): from "${toYMD(nextMonthFrom)}" to "${toYMD(nextMonthTo)}"`,
     `- Mês passado (${monthLabel(ty, tm - 1)}): from "${toYMD(lastMonthFrom)}" to "${toYMD(lastMonthTo)}"`,
     `- Esta semana: from "${toYMD(thisWeekMon)}" to "${toYMD(thisWeekSun)}"`,
+    `- Próxima semana / semana que vem: from "${toYMD(nextWeekMon)}" to "${toYMD(nextWeekSun)}"`,
     `- Semana passada: from "${toYMD(lastWeekMon)}" to "${toYMD(lastWeekSun)}"`,
     `- Primeira semana deste mês: from "${toYMD(firstWeekFrom)}" to "${toYMD(firstWeekTo)}"`,
     `- Este ano: from "${toYMD(yearFrom)}" to "${hoje}"`,
+    `- Ano passado: from "${toYMD(lastYearFrom)}" to "${toYMD(lastYearTo)}"`,
   ].join("\n");
 
   const expenseCats = [...CATEGORIES_EXPENSE, ...(ctx?.user.customCategoriesExpense ?? [])];
@@ -788,7 +972,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_confirm_pending: confirmar/antecipar um lançamento AGENDADO (data futura, ainda não contabilizado) antes da data chegar sozinha ("já paguei aquela conta que agendei", "confirma o pagamento do aluguel que tá agendado", "antecipa o lançamento de X"). Use "keyword" com o termo de busca do lançamento.
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
 - task_create: criar uma tarefa ("cria uma tarefa", "lembra de", "preciso fazer", "anota a tarefa"). Extraia SEMPRE que possível: "priority" ("high" se a mensagem disser "urgente"/"importante"/"prioridade"/"o quanto antes"; "low" se disser "sem pressa"/"quando der"/"não urgente"; senão "medium"); "dueDate" (YYYY-MM-DD, se a mensagem mencionar um prazo — use o calendário do início da mensagem pra resolver dias da semana).
-- task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título) pra identificar qual.
+- task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título atual) pra identificar qual. Para editar dados, use somente os campos alterados: "newTitle", "newDueDate", "newPriority" ou "clearDueDate": true. Para mudar o andamento, use "newStatus".
 - task_delete: apagar/excluir uma tarefa ("apaga a tarefa 3", "remove a tarefa de ligar pro cliente", "deleta essa tarefa"). Use "taskNumber" ou "title" igual ao task_update.
 - task_query: listar tarefas
 - reminder_set: criar lembrete agendado. ⚠️ Se a mensagem pedir pra avisar/lembrar OUTRA PESSOA em vez de quem está mandando a mensagem (ex: "lembra a Milena de pagar amanhã às 10h", "avisa o cliente Carlos que a reunião é sexta", "manda um lembrete pra equipe às 9h", "lembra o João de ligar pro fornecedor"), inclua "reminder.recipientName" com o nome citado (ex: "Milena", "Carlos", "equipe", "João"). Sem menção a outra pessoa, NÃO inclua "recipientName" — o lembrete é pra quem está mandando a mensagem, como sempre. Se a mensagem TAMBÉM citar um número de telefone explícito pra essa pessoa (ex: "lembra o João, número 5544999999999, de pagar o boleto amanhã às 10h", "avisa a Maria no 44988887777 que a entrega chegou"), inclua "reminder.recipientPhone" com só os dígitos informados (com DDD, e código do país se a pessoa disser) — isso permite criar o lembrete pra alguém que ainda não está cadastrado como cliente/funcionário/número da família. Sem número explícito na mensagem, NÃO inclua "recipientPhone".
@@ -827,6 +1011,9 @@ INTENÇÕES POSSÍVEIS:
 - grocery_list_add: adicionar item(ns) à lista de compras de mercado ("põe arroz na lista", "adiciona leite e ovos na lista de compras", "preciso comprar detergente"). Use "grocery.items" com productName (e category se der pra inferir). ⚠️ Se pedir uma lista PRONTA por categoria ("põe a lista de mercearia", "quero a lista de carnes", "adiciona os itens de limpeza"), use "grocery.template" com a chave em minúsculo sem acento (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) em vez de "items".
 - grocery_list_show: ver a lista de compras ("o que tem na lista de compras", "minha lista do mercado", "o que falta comprar")
 - grocery_list_check: marcar item(ns) da lista como já comprado(s) ("comprei o arroz", "já peguei leite e ovos", "risca o detergente da lista"). Use "grocery.itemNames" com os nomes mencionados.
+- grocery_list_clear: apagar TODOS os itens da lista ("limpe minha lista de compras", "esvazie a lista inteira"). Não use quando a pessoa citar itens específicos.
+- grocery_list_remove: excluir item(ns) específicos sem marcar como comprados ("remova arroz da lista", "apague leite e pão da minha lista"). Use "grocery.itemNames".
+- grocery_list_edit: alterar um item que já está na lista. Use o nome atual em "grocery.itemNames[0]" e apenas o que mudar: "grocery.newProductName" para renomear, "grocery.newQuantity" para quantidade ou "grocery.newCategory" para categoria.
 - grocery_purchase: registrar uma compra de mercado COMPLETA, com itens e valores ("comprei no Assaí: arroz 25, feijão 8, leite 6"). Use "grocery.storeName" e "grocery.items" (productName, price, quantity). ⚠️ DIFERENTE de finance_register: se a mensagem só disser um valor total sem listar os itens ("gastei 350 no mercado"), é finance_register (categoria Alimentação), NÃO grocery_purchase — só use grocery_purchase quando os itens individuais forem listados.
 - grocery_purchase_finish: fechar a compra a partir dos itens JÁ MARCADOS na lista de compras, sem listar os itens de novo ("finalizei a compra no Assaí, foi 120 reais", "terminei as compras, gastei 85", "fechei a lista"). Use "grocery.storeName" e "grocery.total" se vierem na mensagem (se não vierem, será perguntado depois). ⚠️ DIFERENTE de grocery_purchase: aqui os itens NÃO são listados na mensagem, vêm da lista de compras já marcada.
 - grocery_list_generate: gerar/sugerir uma lista de compras básica ("gera uma lista de carnes e verduras pro dia a dia", "monta uma lista básica de mercearia pra mim", "sugere o que comprar"). Use "grocery.categories" com as chaves mencionadas (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) — se nenhuma categoria for citada, deixe vazio (gera de todas).
@@ -836,8 +1023,8 @@ INTENÇÕES POSSÍVEIS:
 - grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito de mercado, SEM listar os itens comprados ("quanto gastei no mercado esse mês", "qual mercado eu gasto mais", "quantas vezes fui no Assaí")
 - employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
-- employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João"). Use "keyword" com o nome e "employee" com os campos novos.
-- employee_deactivate: desativar/demitir um funcionário ("demite o João", "desativa a Ana", "o João não trabalha mais aqui"). Use "keyword" com o nome.
+- employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João", "troca o nome da Ana para Mariana"). Use "keyword" com o nome atual e "employee" com os campos novos; para renomear, use "employee.newName".
+- employee_deactivate: desativar/remover/demitir um funcionário, preservando o histórico financeiro ("demite o João", "desativa a Ana", "apague o funcionário João", "o João não trabalha mais aqui"). Use "keyword" com o nome.
 - customer_create: cadastrar um novo CLIENTE da empresa (quem COMPRA/contrata, não quem trabalha lá) ("cadastra o cliente Pedro", "adiciona a empresa XPTO como cliente", "novo cliente: Maria, telefone 11999999999"). Use "customer.name" (obrigatório), e opcionalmente "customer.phone", "customer.email", "customer.company", "customer.address", "customer.notes". ⚠️ DIFERENTE de employee_create (funcionário TRABALHA na empresa) e de recurring_create/finance_register (lançar um valor não é cadastrar um cliente).
 - customer_list: ver TODOS os clientes cadastrados ("meus clientes", "lista de clientes", "quais clientes eu tenho") — sem citar nome específico.
 - customer_query: perguntar um dado (telefone, email, endereço, empresa) de UM cliente específico pelo nome ("qual o telefone do meu cliente Bruno", "qual o email da Maria", "endereço do cliente Pedro Silva"). Use "keyword" com o nome citado (pode ser só o primeiro nome, ou nome completo se a mensagem já disser sobrenome/identificação — quanto mais específico o nome citado, melhor a busca acha só um cliente).
@@ -1036,6 +1223,17 @@ OU para atualização de tarefa:
     "title": "",
     "priority": "medium",
     "newStatus": "completed"
+  }
+}
+
+Exemplo para editar os dados de uma tarefa ("mude o prazo da tarefa relatório para amanhã"):
+{
+  "intent": "task_update",
+  "confidence": 0.9,
+  "task": {
+    "title": "relatório",
+    "priority": "medium",
+    "newDueDate": "2026-07-05"
   }
 }
 
@@ -1366,6 +1564,26 @@ OU para marcar item como comprado ("já comprei o arroz"):
   "grocery": { "itemNames": ["arroz"] }
 }
 
+OU para limpar a lista inteira ("limpe minha lista de compras"):
+{
+  "intent": "grocery_list_clear",
+  "confidence": 0.95
+}
+
+OU para excluir itens específicos ("remova arroz e leite da lista"):
+{
+  "intent": "grocery_list_remove",
+  "confidence": 0.95,
+  "grocery": { "itemNames": ["arroz", "leite"] }
+}
+
+OU para alterar um item ("mude arroz para arroz integral na lista"):
+{
+  "intent": "grocery_list_edit",
+  "confidence": 0.95,
+  "grocery": { "itemNames": ["arroz"], "newProductName": "arroz integral" }
+}
+
 OU para registrar compra completa ("comprei no Assaí: arroz 25, feijão 8"):
 {
   "intent": "grocery_purchase",
@@ -1449,6 +1667,14 @@ OU para editar funcionário ("muda o salário da Ana para 2200"):
   "confidence": 0.9,
   "keyword": "Ana",
   "employee": { "salary": 2200.00 }
+}
+
+Exemplo para renomear funcionário ("troca o nome da Ana para Mariana"):
+{
+  "intent": "employee_update",
+  "confidence": 0.9,
+  "keyword": "Ana",
+  "employee": { "newName": "Mariana" }
 }
 
 OU para desativar funcionário ("demite o João"):
@@ -1813,6 +2039,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   const explicitGroceryListAdd = getExplicitGroceryListAddResult(message);
   if (explicitGroceryListAdd) return explicitGroceryListAdd;
 
+  const explicitGroceryListManagement = getExplicitGroceryListManagementResult(message);
+  if (explicitGroceryListManagement) return explicitGroceryListManagement;
+
   const explicitWeeklySummary = getExplicitWeeklySummaryResult(message);
   if (explicitWeeklySummary) return explicitWeeklySummary;
 
@@ -1856,7 +2085,7 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    const parsed = JSON.parse(text) as AIResult;
+    const parsed = withExplicitRelativePeriod(message, JSON.parse(text) as AIResult);
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   } catch (e) {

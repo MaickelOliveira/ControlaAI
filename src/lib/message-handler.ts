@@ -6,14 +6,15 @@ import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileBy
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, type FinanceMode } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
-import { createTask, getPendingTasks, updateTaskStatus, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
+import { createTask, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
 import {
   addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore,
   findOrCreateStore, addPurchase, setPurchaseFinanceId, getPriceComparison, getStorePriceRanking,
-  getSuggestedListItems, categoryForTemplateKey, getPurchasesInRange,
+  getSuggestedListItems, categoryForTemplateKey, getPurchasesInRange, clearShoppingList,
+  removeShoppingItem, updateShoppingItem,
   type GroceryPurchaseItem, type GroceryCategory,
 } from "@/lib/grocery";
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
@@ -1732,8 +1733,23 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const numMatch = messageText.match(/(\d+)/);
         if (!taskToUpdate && numMatch) taskToUpdate = await findTaskByNumber(user.id, parseInt(numMatch[1]), mode);
         if (taskToUpdate) {
-          const updated = await updateTaskStatus(taskToUpdate.id, user.id, ai.task?.newStatus || "completed");
-          await wppSend(from, updated ? replyTaskUpdated(updated, user.locale) : "❌ Não consegui atualizar essa tarefa agora. Nada foi modificado; tente novamente.");
+          const hasFieldChanges = Boolean(ai.task?.newTitle || ai.task?.newDueDate || ai.task?.newPriority || ai.task?.clearDueDate);
+          const updated = await updateTask(taskToUpdate.id, user.id, {
+            status: ai.task?.newStatus || (hasFieldChanges ? undefined : "completed"),
+            title: ai.task?.newTitle ? cap(ai.task.newTitle) : undefined,
+            dueDate: ai.task?.clearDueDate ? null : ai.task?.newDueDate,
+            priority: ai.task?.newPriority,
+          });
+          if (!updated) {
+            await wppSend(from, "❌ Não consegui atualizar essa tarefa agora. Nada foi modificado; tente novamente.");
+          } else if (hasFieldChanges) {
+            const due = updated.dueDate ? new Date(`${updated.dueDate}T12:00:00`).toLocaleDateString(user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR") : user.locale === "es" ? "sin plazo" : "sem prazo";
+            await wppSend(from, user.locale === "es"
+              ? `✏️ Tarea actualizada.\n\n📌 ${updated.title}\n📅 ${due}`
+              : `✏️ Tarefa atualizada.\n\n📌 ${updated.title}\n📅 ${due}`);
+          } else {
+            await wppSend(from, replyTaskUpdated(updated, user.locale));
+          }
         } else {
           await wppSend(from, "❓ Tarefa não encontrada. Digite *minhas tarefas* para ver a lista.");
         }
@@ -1818,7 +1834,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "reminder_update": {
         const keyword = ai.keyword || "";
-        const target = keyword ? await findReminderByKeyword(user.id, keyword, mode) : null;
+        const reminderNumber = Number(keyword.match(/^\s*(?:lembrete|recordatorio)?\s*(\d+)\s*$/i)?.[1] || messageText.match(/(?:lembrete|recordatorio)\s+(\d+)/i)?.[1] || 0);
+        const target = reminderNumber > 0
+          ? (await getRemindersByUser(user.id, mode))[reminderNumber - 1] ?? null
+          : keyword ? await findReminderByKeyword(user.id, keyword, mode) : null;
         if (!target) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         const patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat">> = {};
         if (ai.reminder?.message) patch.message = cap(ai.reminder.message);
@@ -1832,7 +1851,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "reminder_delete": {
         const delKeyword = ai.keyword || "";
-        const delTarget = delKeyword ? await findReminderByKeyword(user.id, delKeyword, mode) : null;
+        const reminderNumber = Number(delKeyword.match(/^\s*(?:lembrete|recordatorio)?\s*(\d+)\s*$/i)?.[1] || messageText.match(/(?:lembrete|recordatorio)\s+(\d+)/i)?.[1] || 0);
+        const delTarget = reminderNumber > 0
+          ? (await getRemindersByUser(user.id, mode))[reminderNumber - 1] ?? null
+          : delKeyword ? await findReminderByKeyword(user.id, delKeyword, mode) : null;
         if (!delTarget) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         const deleted = await deleteReminder(delTarget.id, user.id);
         await wppSend(from, deleted ? replyReminderDeleted(delTarget.message, user.locale) : "❌ Não consegui excluir esse lembrete agora. Tente novamente.");
@@ -2106,6 +2128,100 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "grocery_list_clear": {
+        const removedCount = await clearShoppingList(user.id);
+        const confirmation = user.locale === "es"
+          ? removedCount > 0 ? `🗑️ Lista vaciada. Eliminé ${removedCount} ${removedCount === 1 ? "artículo" : "artículos"}.` : "🛒 Tu lista ya estaba vacía."
+          : user.locale === "pt-PT"
+            ? removedCount > 0 ? `🗑️ Lista limpa. Removi ${removedCount} ${removedCount === 1 ? "item" : "itens"}.` : "🛒 A tua lista já estava vazia."
+            : removedCount > 0 ? `🗑️ Lista limpa. Removi ${removedCount} ${removedCount === 1 ? "item" : "itens"}.` : "🛒 Sua lista já estava vazia.";
+        await wppSend(from, confirmation);
+        break;
+      }
+
+      case "grocery_list_remove": {
+        const requestedNames = ai.grocery?.itemNames?.filter(Boolean) ?? [];
+        if (!requestedNames.length) {
+          await wppSend(from, user.locale === "es" ? "❓ ¿Qué artículo quieres eliminar de la lista?" : "❓ Qual item deseja remover da lista?");
+          break;
+        }
+        const available = (await getShoppingList(user.id)).filter(item => !item.checked);
+        const normalizeName = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+        const removedNames: string[] = [];
+        const notFound: string[] = [];
+        const usedIds = new Set<string>();
+        for (const requestedName of requestedNames) {
+          const needle = normalizeName(requestedName);
+          const candidates = available.filter(item => {
+            if (usedIds.has(item.id)) return false;
+            const itemName = normalizeName(item.name);
+            return itemName === needle || itemName.includes(needle) || needle.includes(itemName);
+          });
+          const exact = candidates.find(item => normalizeName(item.name) === needle);
+          const match = exact || (candidates.length === 1 ? candidates[0] : undefined);
+          if (!match) { notFound.push(requestedName); continue; }
+          await removeShoppingItem(match.id, user.id);
+          usedIds.add(match.id);
+          removedNames.push(match.name);
+        }
+        const lines: string[] = [];
+        if (removedNames.length) {
+          lines.push(user.locale === "es"
+            ? `🗑️ Eliminé de la lista: ${removedNames.join(", ")}.`
+            : `🗑️ Removi da lista: ${removedNames.join(", ")}.`);
+        }
+        if (notFound.length) {
+          lines.push(user.locale === "es"
+            ? `❓ No encontré: ${notFound.join(", ")}.`
+            : `❓ Não encontrei: ${notFound.join(", ")}.`);
+        }
+        const updatedList = await getShoppingList(user.id);
+        await wppSend(from, `${lines.join("\n")}\n\n${replyGroceryList(updatedList, user.locale)}`.trim());
+        break;
+      }
+
+      case "grocery_list_edit": {
+        const targetName = ai.grocery?.itemNames?.[0];
+        if (!targetName) {
+          await wppSend(from, user.locale === "es" ? "❓ ¿Qué artículo de la lista quieres cambiar?" : "❓ Qual item da lista deseja alterar?");
+          break;
+        }
+        const normalizeName = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+        const needle = normalizeName(targetName);
+        const list = (await getShoppingList(user.id)).filter(item => !item.checked);
+        const candidates = list.filter(item => {
+          const itemName = normalizeName(item.name);
+          return itemName === needle || itemName.includes(needle) || needle.includes(itemName);
+        });
+        const exact = candidates.find(item => normalizeName(item.name) === needle);
+        if (!exact && candidates.length > 1) {
+          const names = candidates.map(item => `• ${item.name}`).join("\n");
+          await wppSend(from, user.locale === "es"
+            ? `Encontré más de un artículo parecido. Dime el nombre exacto:\n${names}`
+            : `Encontrei mais de um item parecido. Diga o nome exato:\n${names}`);
+          break;
+        }
+        const target = exact || candidates[0];
+        if (!target) {
+          await wppSend(from, user.locale === "es" ? `❓ No encontré *${targetName}* en tu lista.` : `❓ Não encontrei *${targetName}* na sua lista.`);
+          break;
+        }
+        const updated = await updateShoppingItem(target.id, user.id, {
+          name: ai.grocery?.newProductName ? cap(ai.grocery.newProductName) : undefined,
+          quantity: ai.grocery?.newQuantity,
+          category: ai.grocery?.newCategory,
+        });
+        if (!updated) {
+          await wppSend(from, user.locale === "es" ? "❓ Dime qué quieres cambiar: nombre, cantidad o categoría." : "❓ Diga o que deseja alterar: nome, quantidade ou categoria.");
+          break;
+        }
+        const confirmation = user.locale === "es"
+          ? `✏️ Artículo actualizado: *${updated.name}* — ${updated.quantity}.`
+          : `✏️ Item atualizado: *${updated.name}* — ${updated.quantity}.`;
+        await wppSend(from, `${confirmation}\n\n${replyGroceryList(await getShoppingList(user.id), user.locale)}`);
+        break;
+      }
+
       case "grocery_list_check": {
         const names = ai.grocery?.itemNames ?? [];
         if (!names.length) { await wppSend(from, "❓ Qual item deseja marcar como comprado?"); break; }
@@ -2245,10 +2361,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const empTarget = empKeyword ? await findEmployeeByName(user.id, empKeyword) : null;
         if (!empTarget) { await wppSend(from, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista."); break; }
         const empPatch: Partial<Employee> = {};
+        if (ai.employee?.newName) empPatch.name = cap(ai.employee.newName);
         if (ai.employee?.role) empPatch.role = cap(ai.employee.role);
         if (ai.employee?.salary && ai.employee.salary > 0) empPatch.salary = ai.employee.salary;
+        if (ai.employee?.startDate) empPatch.startDate = ai.employee.startDate;
         if (ai.employee?.phone) empPatch.phone = ai.employee.phone;
         if (ai.employee?.email) empPatch.email = ai.employee.email;
+        if (ai.employee?.notes) empPatch.notes = ai.employee.notes;
         if (Object.keys(empPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o salário da Ana para 2200\"_"); break; }
         const empUpdated = await updateEmployee(empTarget.id, user.id, empPatch);
         await wppSend(from, empUpdated ? replyEmployeeUpdated(empUpdated, user.locale) : "❌ Não consegui atualizar esse funcionário agora. Nada foi modificado; tente novamente.");

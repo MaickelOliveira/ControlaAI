@@ -72,7 +72,7 @@ export async function getDueReminders(): Promise<Reminder[]> {
   const { data, error } = await getSupabase().from("reminders").select("*")
     .eq("sent", false).lte("scheduled_at", now).lt("failed_attempts", MAX_FAILED_ATTEMPTS);
   if (error) { console.error("[reminders] getDueReminders erro:", error.message); return []; }
-  return (data as Row[]).map(fromRow);
+  return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 
 export async function markReminderSent(id: string, repeat: ReminderRepeat): Promise<void> {
@@ -105,7 +105,7 @@ export async function getRemindersByUser(userId: string, mode?: "personal" | "bu
   if (mode) query = query.eq("mode", mode);
   const { data, error } = await query;
   if (error) { console.error("[reminders] getRemindersByUser erro:", error.message); return []; }
-  return (data as Row[]).map(fromRow);
+  return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 
 export async function getAllRemindersByUser(userId: string, mode?: "personal" | "business"): Promise<Reminder[]> {
