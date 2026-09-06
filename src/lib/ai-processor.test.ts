@@ -104,6 +104,26 @@ describe("getExplicitGroceryListAddResult", () => {
   it("does not confuse viewing the list with adding an item", () => {
     expect(getExplicitGroceryListAddResult("O que tem na lista do supermercado?")).toBeNull();
   });
+
+  it("understands creating a supermarket list even when products have no commas", () => {
+    expect(getExplicitGroceryListAddResult(
+      "Criar lista supermercado com amaciante Cotonete Inseticida tomada Alface Pão de forma Mussarela\\",
+    )).toMatchObject({
+      intent: "grocery_list_add",
+      confidence: 1,
+      grocery: {
+        items: [
+          { productName: "amaciante", category: "Limpeza" },
+          { productName: "Cotonete", category: "Higiene" },
+          { productName: "Inseticida", category: "Limpeza" },
+          { productName: "tomada" },
+          { productName: "Alface", category: "Hortifruti" },
+          { productName: "Pão de forma", category: "Padaria" },
+          { productName: "Mussarela", category: "Laticínios" },
+        ],
+      },
+    });
+  });
 });
 
 describe("getUnsupportedBankConnectionResponse", () => {

@@ -351,7 +351,7 @@ export function getExplicitUpcomingFinanceQueryResult(message: string): AIResult
 export function getExplicitGroceryListAddResult(message: string): AIResult | null {
   const text = message.trim();
   const normalized = normalizeCapabilityText(text);
-  const action = /^(?:(?:por\s+favor|por\s+favor,|quero|pode|preciso|quiero|puedes?)\s+)?(?:adicione|adiciona|adicionar|coloque|coloca|poe|ponha|bota|inclua|inclui|agrega|agregue|anade|pon)\b/i;
+  const action = /^(?:(?:por\s+favor|por\s+favor,|quero|pode|preciso|quiero|puedes?)\s+)?(?:adicione|adiciona|adicionar|coloque|coloca|poe|ponha|bota|inclua|inclui|agrega|agregue|anade|pon|criar|crie|crear|crea)\b/i;
   const listTarget = /\blista\b.*\b(compras?|supermercado|mercado)\b|\blista\b\s*$/i;
   if (!action.test(normalized) || !listTarget.test(normalized)) return null;
 
@@ -374,7 +374,8 @@ export function getExplicitGroceryListAddResult(message: string): AIResult | nul
   const verb = "(?:adicione|adiciona|adicionar|coloque|coloca|põe|poe|ponha|bota|inclua|inclui|agrega|agregue|añade|anade|pon)";
   const beforeList = text.match(new RegExp(`${verb}\\s+(.+?)\\s+(?:na|à|a)\\s+(?:minha\\s+|mi\\s+)?lista(?:\\s+(?:de|do|da|del)\\s+(?:compras?|supermercado|mercado))?`, "i"))?.[1];
   const afterList = text.match(new RegExp(`${verb}\\s+(?:na|à|a)\\s+(?:minha\\s+|mi\\s+)?lista(?:\\s+(?:de|do|da|del)\\s+(?:compras?|supermercado|mercado))?[:,]?\\s+(.+)$`, "i"))?.[1];
-  const rawItems = (beforeList || afterList || "").trim();
+  const createdList = text.match(/(?:criar|crie|crear|crea)\s+(?:(?:uma|a|una|la)\s+)?lista(?:\s+(?:(?:de|do|da|del)\s+)?(?:compras?|supermercado|mercado))?\s+(?:com|con)\s+(.+)$/i)?.[1];
+  const rawItems = (beforeList || afterList || createdList || "").trim().replace(/[\\]+$/, "").trim();
   if (!rawItems) return null;
 
   const inferCategory = (productName: string): GroceryCategory | undefined => {
@@ -383,17 +384,25 @@ export function getExplicitGroceryListAddResult(message: string): AIResult | nul
       ["Mercearia", /\b(arroz|arrozes|feijao|feijoes|oleos?|acucar|sal|macarrao|massas?|farinhas?|cafes?|molhos?|azeite|aveia|granola|rice|frijoles?|aceite|azucar|harina)\b/],
       ["Carnes", /\b(carnes?|frangos?|peixes?|linguicas?|bacon|presunto|picanha|alcatra|bife|pollo|pescado|chorizo|jamon)\b/],
       ["Hortifruti", /\b(bananas?|macas?|laranjas?|mamao|abacate|limao|tomates?|cebolas?|alho|batatas?|cenouras?|alface|pepino|frutas?|verduras?|manzana|naranja|papa|zanahoria|lechuga)\b/],
-      ["Laticínios", /\b(leites?|queijos?|iogurtes?|manteiga|requeijao|creme\s+de\s+leite|leche|queso|yogur|mantequilla)\b/],
-      ["Padaria", /\b(paes?|bolachas?|biscoitos?|torradas?|pan|galletas?)\b/],
+      ["Laticínios", /\b(leites?|queijos?|iogurtes?|manteiga|requeijao|creme\s+de\s+leite|mussarela|mucarela|leche|queso|yogur|mantequilla)\b/],
+      ["Padaria", /\b(pao|paes|pao\s+de\s+forma|bolachas?|biscoitos?|torradas?|pan|galletas?)\b/],
       ["Bebidas", /\b(agua|refrigerantes?|sucos?|cervejas?|vinhos?|refresco|jugo|bebidas?)\b/],
-      ["Limpeza", /\b(detergentes?|sabao|desinfetantes?|agua\s+sanitaria|amaciante|esponjas?|limpeza|jabon|cloro|limpieza)\b/],
-      ["Higiene", /\b(shampoo|condicionador|sabonetes?|pasta\s+de\s+dente|papel\s+higienico|desodorantes?|champu|cepillo\s+dental|higiene)\b/],
+      ["Limpeza", /\b(detergentes?|sabao|desinfetantes?|agua\s+sanitaria|amaciante|inseticida|esponjas?|limpeza|jabon|cloro|limpieza)\b/],
+      ["Higiene", /\b(shampoo|condicionador|sabonetes?|cotonetes?|pasta\s+de\s+dente|papel\s+higienico|desodorantes?|champu|cepillo\s+dental|higiene)\b/],
     ];
     return groups.find(([, pattern]) => pattern.test(product))?.[0];
   };
 
-  const items = rawItems
-    .split(/\s*,\s*|\s+(?:e|y)\s+/i)
+  const explicitlySeparated = /,|\s+(?:e|y)\s+/i.test(rawItems);
+  const knownItemPattern = /\b(p[ãa]o\s+de\s+forma|creme\s+de\s+leite|papel\s+higi[eê]nico|pasta\s+de\s+dente|[áa]gua\s+sanit[áa]ria|amaciante|cotonetes?|inseticida|tomada|alface|mussarela|mu[çc]arela|arroz|feij[ãa]o|leites?|queijos?|detergentes?|sabonetes?|bananas?|tomates?|cebolas?|batatas?|frangos?|carnes?|caf[eé]s?)\b/gi;
+  const knownItems = [...rawItems.matchAll(knownItemPattern)].map(match => match[0]);
+  const splitItems = explicitlySeparated
+    ? rawItems.split(/\s*,\s*|\s+(?:e|y)\s+/i)
+    : knownItems.length > 1
+      ? knownItems
+      : [rawItems];
+
+  const items = splitItems
     .map(raw => raw.trim().replace(/^(?:o|a|os|as|um|uma|el|la|los|las|un|una)\s+/i, ""))
     .filter(Boolean)
     .map(raw => {

@@ -46,7 +46,7 @@ const LIST_FILTER_CATS = [
 
 export default function SupermercadoPagePt() {
   const [mode, setMode] = useState<string>("");
-  const [tab, setTab] = useState<"lista" | "compras" | "comparar" | "gastos" | "catalogo">("lista");
+  const [tab, setTab] = useState<"lista" | "whatsapp" | "compras" | "comparar" | "gastos" | "catalogo">("lista");
   const [list, setList] = useState<ShoppingItem[]>([]);
   const [listFilter, setListFilter] = useState("");
   const [prices, setPrices] = useState<PriceComp[]>([]);
@@ -83,6 +83,7 @@ export default function SupermercadoPagePt() {
 
   useEffect(() => {
     if (tab === "lista") loadList(listFilter);
+    if (tab === "whatsapp") loadList();
     // "compras" (Histórico) e "gastos" (Por mercado) mostram a mesma lista
     // de purchases — antes só "gastos" buscava, então Histórico ficava
     // vazio até o usuário clicar em Por mercado primeiro.
@@ -93,9 +94,9 @@ export default function SupermercadoPagePt() {
   }, [tab, listFilter, loadList]);
 
   useEffect(() => {
-    if (tab !== "lista") return;
+    if (tab !== "lista" && tab !== "whatsapp") return;
     const sync = () => {
-      loadList(listFilter);
+      loadList(tab === "whatsapp" ? undefined : listFilter);
       loadOverview();
     };
     const timer = window.setInterval(sync, 5_000);
@@ -111,19 +112,19 @@ export default function SupermercadoPagePt() {
 
   async function toggleItem(id: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_toggle", id }) });
-    loadList(listFilter); loadOverview();
+    loadList(tab === "whatsapp" ? undefined : listFilter); loadOverview();
   }
   async function removeItem(id: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_remove", id }) });
-    loadList(listFilter); loadOverview();
+    loadList(tab === "whatsapp" ? undefined : listFilter); loadOverview();
   }
   async function clearChecked() {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_clear_checked" }) });
-    loadList(listFilter); loadOverview();
+    loadList(tab === "whatsapp" ? undefined : listFilter); loadOverview();
   }
   async function addFromTemplate(key: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_from_template", template: key }) });
-    loadList(listFilter); loadOverview();
+    loadList(tab === "whatsapp" ? undefined : listFilter); loadOverview();
   }
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -179,6 +180,7 @@ export default function SupermercadoPagePt() {
 
   const checkedCount = list.filter(i => i.checked).length;
   const grouped = list.reduce((acc, i) => { (acc[i.category] = acc[i.category] || []).push(i); return acc; }, {} as Record<string, ShoppingItem[]>);
+  const whatsappItems = list.filter(i => !i.checked);
 
   if (mode === "business") {
     return (
@@ -248,16 +250,17 @@ export default function SupermercadoPagePt() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
         {[
           { key: "lista", label: "📋 Lista" },
+          { key: "whatsapp", label: "💬 Lista WhatsApp" },
           { key: "compras", label: "🧾 Histórico" },
           { key: "comparar", label: "💰 Preços" },
           { key: "gastos", label: "📊 Por mercado" },
           { key: "catalogo", label: "📦 Catálogo" },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-            className={clsx("px-4 py-2 rounded-lg text-sm font-medium transition",
+            className={clsx("px-4 py-2 rounded-lg text-sm font-medium transition shrink-0",
               tab === t.key ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
             {t.label}
           </button>
@@ -354,6 +357,49 @@ export default function SupermercadoPagePt() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── LISTA PARTILHADA COM O WHATSAPP ── */}
+      {tab === "whatsapp" && (
+        <div className="space-y-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1">
+              <p className="font-semibold text-emerald-900">💬 Lista sincronizada com o WhatsApp</p>
+              <p className="text-sm text-emerald-700 mt-1">Os itens pedidos ao Zelo aparecem aqui e também no separador Lista. A atualização acontece automaticamente.</p>
+            </div>
+            <button onClick={() => loadList()} className="px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
+              Atualizar agora
+            </button>
+          </div>
+
+          {whatsappItems.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
+              <p className="text-4xl mb-3">💬</p>
+              <p className="font-semibold text-slate-700">Nenhum item pendente</p>
+              <p className="text-sm text-slate-400 mt-1">Envia no WhatsApp: “Criar lista supermercado com arroz, leite e pão”.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-700">Itens para comprar</span>
+                <span className="text-xs text-slate-400">{whatsappItems.length} itens</span>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {whatsappItems.map(item => (
+                  <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+                    <button onClick={() => toggleItem(item.id)} aria-label={`Marcar ${item.name} como comprado`}
+                      className="w-5 h-5 rounded-md border-2 border-slate-300 hover:border-amber-500 shrink-0" />
+                    <span>{CAT_ICON[item.category] || "📦"}</span>
+                    <span className="text-sm text-slate-700 flex-1">{item.name}</span>
+                    <span className="text-xs text-slate-400">{item.quantity}</span>
+                    <button onClick={() => removeItem(item.id)} aria-label={`Remover ${item.name}`}
+                      className="text-slate-300 hover:text-red-400 transition text-xs p-1">✕</button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -475,7 +521,7 @@ export default function SupermercadoPagePt() {
       {/* ── CATÁLOGO ── */}
       {tab === "catalogo" && (
         <div className="space-y-3">
-          <p className="text-xs text-slate-400">Produtos registados automaticamente conforme registas compras. Se algo aparecer duplicado ou junto errado, avisa-me.</p>
+          <p className="text-xs text-slate-400">O Catálogo não é a lista de compras. É a memória dos produtos que já compraste e serve para organizar o histórico e comparar preços entre mercados.</p>
           {products.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
               <p className="text-4xl mb-3">📦</p>
