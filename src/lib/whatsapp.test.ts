@@ -3,6 +3,8 @@ import {
   languageCodeFor,
   localizedTemplateName,
   localizedTemplateParams,
+  renderSpanishBusinessReminder,
+  SPANISH_BUSINESS_REMINDER_TEMPLATE_BODY,
   SPANISH_TEMPLATE_NAMES,
   SPANISH_WELCOME_TEMPLATE_TEXT,
 } from "./whatsapp";
@@ -16,7 +18,7 @@ describe("Spanish WhatsApp templates", () => {
     expect(names.every((name) => !name.endsWith("_es"))).toBe(true);
     expect(Object.entries(SPANISH_TEMPLATE_NAMES).every(([base, name]) => base !== name)).toBe(true);
     expect(localizedTemplateName("lembrete_assessor", "es")).toBe("aviso_programado_por_contacto");
-    expect(localizedTemplateName("lbte_empresarial", "es")).toBe("seguimiento_tarea_solicitada");
+    expect(localizedTemplateName("lbte_empresarial", "es")).toBe("informacion_programada_cuenta");
     expect(localizedTemplateName("boas_vindas_cadastro2", "es")).toBe("acceso_confirmado_zelo");
   });
 
@@ -57,7 +59,7 @@ describe("Spanish WhatsApp templates", () => {
     expect(localizedTemplateParams("lbte_empresarial", {
       lembrete: "Revisar el flujo de caja de la empresa",
     }, "es")).toEqual({
-      aviso: "Revisar el flujo de caja de la empresa",
+      detalle: "Revisar el flujo de caja de la empresa",
     });
 
     expect(() => localizedTemplateParams("lbte_empresarial", {
@@ -70,5 +72,18 @@ describe("Spanish WhatsApp templates", () => {
       "entra en zelogestaointeligente.com.br/es, inicia sesión, abre Configuración",
     );
     expect(SPANISH_WELCOME_TEMPLATE_TEXT).toContain("sección WhatsApp");
+  });
+
+  it("keeps the registered Spanish business body aligned with the Inbox rendering", () => {
+    expect(SPANISH_BUSINESS_REMINDER_TEMPLATE_BODY).toBe(
+      "📌 Información de tu cuenta Zelo\n\n" +
+      "Tienes esta actividad programada:\n\n" +
+      "{{detalle}}\n\n" +
+      "La notificación fue configurada desde tu cuenta.",
+    );
+    expect(renderSpanishBusinessReminder("Revisar los pagos pendientes")).toContain(
+      "Revisar los pagos pendientes",
+    );
+    expect(renderSpanishBusinessReminder("Revisar los pagos pendientes")).not.toContain("{{detalle}}");
   });
 });

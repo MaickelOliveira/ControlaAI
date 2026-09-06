@@ -46,7 +46,7 @@ export async function register() {
       if (!remindersModule || !wppModule) return;
 
       const { getDueReminders, markReminderSent, markReminderFailed, markReminderSkippedForInactiveUser } = remindersModule;
-      const { sendText, sendReminderTemplate } = wppModule;
+      const { sendText, sendReminderTemplate, renderSpanishBusinessReminder } = wppModule;
       const due = await getDueReminders();
       if (due.length > 0) console.log(`[cron] ${due.length} lembrete(s) a disparar`);
       for (const r of due) {
@@ -76,7 +76,7 @@ export async function register() {
             ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, locale);
           } else if (r.mode === "business") {
             const texto = locale === "es"
-              ? `🔔 Aviso empresarial\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
+              ? renderSpanishBusinessReminder(r.message)
               : locale === "pt-PT"
               ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`
               : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;

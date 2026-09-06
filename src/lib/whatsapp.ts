@@ -41,7 +41,7 @@ function defaultCountryIsoFor(locale?: string): string | undefined {
  * exatamente com o nome aprovado no Meta Business Manager. */
 export const SPANISH_TEMPLATE_NAMES = {
   lembrete_assessor: "aviso_programado_por_contacto",
-  lbte_empresarial: "seguimiento_tarea_solicitada",
+  lbte_empresarial: "informacion_programada_cuenta",
   lbt_pessoal: "nota_personal_pendiente",
   cbr_recorrente: "movimiento_financiero_del_dia",
   lembrete_compromisso: "agenda_evento_proximo",
@@ -53,13 +53,26 @@ type SpanishTemplateBase = keyof typeof SPANISH_TEMPLATE_NAMES;
 
 const SPANISH_PARAM_NAMES: Record<SpanishTemplateBase, Record<string, string>> = {
   lembrete_assessor: { remetente: "remitente", lembrete: "aviso" },
-  lbte_empresarial: { lembrete: "aviso" },
+  lbte_empresarial: { lembrete: "detalle" },
   lbt_pessoal: { texto: "aviso" },
   cbr_recorrente: { descricao: "concepto", valor: "importe", data: "fecha" },
   lembrete_compromisso: { compromisso: "evento", horario: "hora" },
   lembrete_compromisso15: { compromisso: "evento", horario: "hora" },
   boas_vindas_cadastro2: {},
 };
+
+/** Corpo que deve ser cadastrado exatamente no Meta para o template
+ * informacion_programada_cuenta. A variável nomeada {{detalle}} também
+ * precisa coincidir com o nome enviado pela Graph API. */
+export const SPANISH_BUSINESS_REMINDER_TEMPLATE_BODY =
+  "📌 Información de tu cuenta Zelo\n\n" +
+  "Tienes esta actividad programada:\n\n" +
+  "{{detalle}}\n\n" +
+  "La notificación fue configurada desde tu cuenta.";
+
+export function renderSpanishBusinessReminder(detail: string): string {
+  return SPANISH_BUSINESS_REMINDER_TEMPLATE_BODY.replace("{{detalle}}", detail);
+}
 
 export function localizedTemplateName(base: string, locale?: string): string {
   const validatedLocale = validatedTemplateLocale(locale);

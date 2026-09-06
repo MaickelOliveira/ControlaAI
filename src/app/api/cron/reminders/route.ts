@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDueReminders, markReminderSent, markReminderFailed, markReminderSkippedForInactiveUser } from "@/lib/reminders";
-import { sendReminderTemplate } from "@/lib/whatsapp";
+import { renderSpanishBusinessReminder, sendReminderTemplate } from "@/lib/whatsapp";
 import { acquireCronLock, releaseCronLock } from "@/lib/cron-lock";
 import { getUserById, hasAccess } from "@/lib/users";
 
@@ -54,7 +54,7 @@ async function runCron() {
         ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, owner.locale);
       } else if (r.mode === "business") {
         const texto = owner.locale === "es"
-          ? `🔔 Aviso empresarial\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
+          ? renderSpanishBusinessReminder(r.message)
           : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
         ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message }, owner.locale);
       } else {
