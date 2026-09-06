@@ -377,15 +377,34 @@ export function getExplicitGroceryListAddResult(message: string): AIResult | nul
   const rawItems = (beforeList || afterList || "").trim();
   if (!rawItems) return null;
 
+  const inferCategory = (productName: string): GroceryCategory | undefined => {
+    const product = normalizeCapabilityText(productName);
+    const groups: Array<[GroceryCategory, RegExp]> = [
+      ["Mercearia", /\b(arroz|arrozes|feijao|feijoes|oleos?|acucar|sal|macarrao|massas?|farinhas?|cafes?|molhos?|azeite|aveia|granola|rice|frijoles?|aceite|azucar|harina)\b/],
+      ["Carnes", /\b(carnes?|frangos?|peixes?|linguicas?|bacon|presunto|picanha|alcatra|bife|pollo|pescado|chorizo|jamon)\b/],
+      ["Hortifruti", /\b(bananas?|macas?|laranjas?|mamao|abacate|limao|tomates?|cebolas?|alho|batatas?|cenouras?|alface|pepino|frutas?|verduras?|manzana|naranja|papa|zanahoria|lechuga)\b/],
+      ["Laticínios", /\b(leites?|queijos?|iogurtes?|manteiga|requeijao|creme\s+de\s+leite|leche|queso|yogur|mantequilla)\b/],
+      ["Padaria", /\b(paes?|bolachas?|biscoitos?|torradas?|pan|galletas?)\b/],
+      ["Bebidas", /\b(agua|refrigerantes?|sucos?|cervejas?|vinhos?|refresco|jugo|bebidas?)\b/],
+      ["Limpeza", /\b(detergentes?|sabao|desinfetantes?|agua\s+sanitaria|amaciante|esponjas?|limpeza|jabon|cloro|limpieza)\b/],
+      ["Higiene", /\b(shampoo|condicionador|sabonetes?|pasta\s+de\s+dente|papel\s+higienico|desodorantes?|champu|cepillo\s+dental|higiene)\b/],
+    ];
+    return groups.find(([, pattern]) => pattern.test(product))?.[0];
+  };
+
   const items = rawItems
     .split(/\s*,\s*|\s+(?:e|y)\s+/i)
     .map(raw => raw.trim().replace(/^(?:o|a|os|as|um|uma|el|la|los|las|un|una)\s+/i, ""))
     .filter(Boolean)
     .map(raw => {
       const quantityMatch = raw.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/);
-      return quantityMatch
-        ? { productName: quantityMatch[2].trim(), quantity: Number(quantityMatch[1].replace(",", ".")) }
-        : { productName: raw };
+      const productName = quantityMatch ? quantityMatch[2].trim() : raw;
+      const category = inferCategory(productName);
+      return {
+        productName,
+        ...(quantityMatch ? { quantity: Number(quantityMatch[1].replace(",", ".")) } : {}),
+        ...(category ? { category } : {}),
+      };
     });
   if (!items.length) return null;
 

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
@@ -59,16 +59,20 @@ export default function SupermercadoPage() {
   const [finishPrices, setFinishPrices] = useState<Record<string, string>>({});
   const [finishing, setFinishing] = useState(false);
 
-  const loadList = (cat?: string) => {
+  const loadList = useCallback((cat?: string) => {
     fetch(`/api/admin/grocery?view=list${cat ? `&category=${cat}` : ""}`)
       .then(r => r.json()).then(setList);
-  };
+  }, []);
+
+  const loadOverview = useCallback(() => {
+    fetch("/api/admin/grocery?view=overview").then(r => r.json()).then(setOverview);
+  }, []);
 
   useEffect(() => {
     fetchDashboardMe().then(d => setMode(d.user?.activeMode || "personal"));
-    fetch("/api/admin/grocery?view=overview").then(r => r.json()).then(setOverview);
+    loadOverview();
     loadList();
-  }, []);
+  }, [loadList, loadOverview]);
 
   useEffect(() => {
     if (tab === "lista") loadList(listFilter);
@@ -79,28 +83,48 @@ export default function SupermercadoPage() {
     if (tab === "comparar") fetch("/api/admin/grocery?view=prices").then(r => r.json()).then(setPrices);
     if (tab === "gastos") fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend);
     if (tab === "catalogo") fetch("/api/admin/grocery?view=products").then(r => r.json()).then(setProducts);
-  }, [tab, listFilter]);
+  }, [tab, listFilter, loadList]);
+
+  // WhatsApp e painel usam a mesma lista no banco. Enquanto esta aba está
+  // aberta, atualiza lista + contador periodicamente e também ao voltar para
+  // a janela, para um item pedido ao Zelo aparecer sem recarregar a página.
+  useEffect(() => {
+    if (tab !== "lista") return;
+    const sync = () => {
+      loadList(listFilter);
+      loadOverview();
+    };
+    const timer = window.setInterval(sync, 5_000);
+    const onVisibility = () => { if (document.visibilityState === "visible") sync(); };
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [tab, listFilter, loadList, loadOverview]);
 
   async function toggleItem(id: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_toggle", id }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function removeItem(id: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_remove", id }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function clearChecked() {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_clear_checked" }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function addFromTemplate(key: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_from_template", template: key }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_add", ...newItem }) });
-    setShowAddItem(false); setNewItem({ name: "", category: "Mercearia", quantity: "1" }); loadList(listFilter);
+    setShowAddItem(false); setNewItem({ name: "", category: "Mercearia", quantity: "1" }); loadList(listFilter); loadOverview();
   }
   async function addPurchase(e: React.FormEvent) {
     e.preventDefault();
@@ -116,7 +140,7 @@ export default function SupermercadoPage() {
     }
     setShowAddPurchase(false);
     setPurchaseForm({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
-    fetch("/api/admin/grocery?view=overview").then(r2 => r2.json()).then(setOverview);
+    loadOverview();
     if (tab === "gastos") { fetch("/api/admin/grocery?view=spend").then(r2 => r2.json()).then(setSpend); fetch("/api/admin/grocery?view=purchases").then(r2 => r2.json()).then(setPurchases); }
   }
 
@@ -145,7 +169,7 @@ export default function SupermercadoPage() {
       setFinishForm({ storeName: "", date: "" });
       setFinishPrices({});
       loadList(listFilter);
-      fetch("/api/admin/grocery?view=overview").then(r2 => r2.json()).then(setOverview);
+      loadOverview();
     }
   }
 

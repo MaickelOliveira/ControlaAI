@@ -83,13 +83,20 @@ describe("getExplicitGroceryListAddResult", () => {
       .toMatchObject({
         intent: "grocery_list_add",
         confidence: 1,
-        grocery: { items: [{ productName: "arroz" }, { productName: "feijão" }, { productName: "leites", quantity: 2 }] },
+        grocery: { items: [
+          { productName: "arroz", category: "Mercearia" },
+          { productName: "feijão", category: "Mercearia" },
+          { productName: "leites", quantity: 2, category: "Laticínios" },
+        ] },
       });
   });
 
   it("supports Spanish and ready-made category lists", () => {
     expect(getExplicitGroceryListAddResult("Agrega arroz y leche a mi lista de compras"))
-      .toMatchObject({ intent: "grocery_list_add", grocery: { items: [{ productName: "arroz" }, { productName: "leche" }] } });
+      .toMatchObject({ intent: "grocery_list_add", grocery: { items: [
+        { productName: "arroz", category: "Mercearia" },
+        { productName: "leche", category: "Laticínios" },
+      ] } });
     expect(getExplicitGroceryListAddResult("Põe a lista de limpeza na lista de compras"))
       .toMatchObject({ intent: "grocery_list_add", grocery: { template: "limpeza" } });
   });

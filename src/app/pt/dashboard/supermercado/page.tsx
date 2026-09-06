@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
@@ -11,8 +11,15 @@ type Product = { id: string; name: string; category: string; defaultUnit: string
 
 function fmt(v: number) { return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR" }); }
 
-const CATEGORIES = ["Mercearia", "Carnes", "Frutas e Legumes", "Laticínios", "Padaria", "Bebidas", "Limpeza", "Higiene", "Outros"] as const;
-const CAT_ICON: Record<string, string> = { Mercearia: "🌾", Carnes: "🥩", "Frutas e Legumes": "🥬", Laticínios: "🥛", Padaria: "🍞", Bebidas: "🧃", Limpeza: "🧹", Higiene: "🧴", Outros: "📦" };
+const CATEGORIES = [
+  { value: "Mercearia", label: "Mercearia" }, { value: "Carnes", label: "Carnes" },
+  { value: "Hortifruti", label: "Frutas e Legumes" }, { value: "Laticínios", label: "Laticínios" },
+  { value: "Padaria", label: "Padaria" }, { value: "Bebidas", label: "Bebidas" },
+  { value: "Limpeza", label: "Limpeza" }, { value: "Higiene", label: "Higiene" },
+  { value: "Outros", label: "Outros" },
+] as const;
+const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(CATEGORIES.map(c => [c.value, c.label]));
+const CAT_ICON: Record<string, string> = { Mercearia: "🌾", Carnes: "🥩", Hortifruti: "🥬", Laticínios: "🥛", Padaria: "🍞", Bebidas: "🧃", Limpeza: "🧹", Higiene: "🧴", Outros: "📦" };
 
 const LIST_TEMPLATES = [
   { key: "mercearia", label: "🌾 Mercearia", desc: "Arroz, feijão, óleo, açúcar..." },
@@ -29,7 +36,7 @@ const LIST_FILTER_CATS = [
   { value: "", label: "📋 Lista Completa" },
   { value: "Mercearia", label: "🌾 Mercearia" },
   { value: "Carnes", label: "🥩 Carnes" },
-  { value: "Frutas e Legumes", label: "🥬 Frutas e Legumes" },
+  { value: "Hortifruti", label: "🥬 Frutas e Legumes" },
   { value: "Laticínios", label: "🥛 Laticínios" },
   { value: "Padaria", label: "🍞 Padaria" },
   { value: "Bebidas", label: "🧃 Bebidas" },
@@ -59,16 +66,20 @@ export default function SupermercadoPagePt() {
   const [finishPrices, setFinishPrices] = useState<Record<string, string>>({});
   const [finishing, setFinishing] = useState(false);
 
-  const loadList = (cat?: string) => {
+  const loadList = useCallback((cat?: string) => {
     fetch(`/api/admin/grocery?view=list${cat ? `&category=${cat}` : ""}`)
       .then(r => r.json()).then(setList);
-  };
+  }, []);
+
+  const loadOverview = useCallback(() => {
+    fetch("/api/admin/grocery?view=overview").then(r => r.json()).then(setOverview);
+  }, []);
 
   useEffect(() => {
     fetchDashboardMe().then(d => setMode(d.user?.activeMode || "personal"));
-    fetch("/api/admin/grocery?view=overview").then(r => r.json()).then(setOverview);
+    loadOverview();
     loadList();
-  }, []);
+  }, [loadList, loadOverview]);
 
   useEffect(() => {
     if (tab === "lista") loadList(listFilter);
@@ -79,28 +90,45 @@ export default function SupermercadoPagePt() {
     if (tab === "comparar") fetch("/api/admin/grocery?view=prices").then(r => r.json()).then(setPrices);
     if (tab === "gastos") fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend);
     if (tab === "catalogo") fetch("/api/admin/grocery?view=products").then(r => r.json()).then(setProducts);
-  }, [tab, listFilter]);
+  }, [tab, listFilter, loadList]);
+
+  useEffect(() => {
+    if (tab !== "lista") return;
+    const sync = () => {
+      loadList(listFilter);
+      loadOverview();
+    };
+    const timer = window.setInterval(sync, 5_000);
+    const onVisibility = () => { if (document.visibilityState === "visible") sync(); };
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [tab, listFilter, loadList, loadOverview]);
 
   async function toggleItem(id: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_toggle", id }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function removeItem(id: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_remove", id }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function clearChecked() {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_clear_checked" }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function addFromTemplate(key: string) {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_from_template", template: key }) });
-    loadList(listFilter);
+    loadList(listFilter); loadOverview();
   }
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_add", ...newItem }) });
-    setShowAddItem(false); setNewItem({ name: "", category: "Mercearia", quantity: "1" }); loadList(listFilter);
+    setShowAddItem(false); setNewItem({ name: "", category: "Mercearia", quantity: "1" }); loadList(listFilter); loadOverview();
   }
   async function addPurchase(e: React.FormEvent) {
     e.preventDefault();
@@ -116,7 +144,7 @@ export default function SupermercadoPagePt() {
     }
     setShowAddPurchase(false);
     setPurchaseForm({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
-    fetch("/api/admin/grocery?view=overview").then(r2 => r2.json()).then(setOverview);
+    loadOverview();
     if (tab === "gastos") { fetch("/api/admin/grocery?view=spend").then(r2 => r2.json()).then(setSpend); fetch("/api/admin/grocery?view=purchases").then(r2 => r2.json()).then(setPurchases); }
   }
 
@@ -145,7 +173,7 @@ export default function SupermercadoPagePt() {
       setFinishForm({ storeName: "", date: "" });
       setFinishPrices({});
       loadList(listFilter);
-      fetch("/api/admin/grocery?view=overview").then(r2 => r2.json()).then(setOverview);
+      loadOverview();
     }
   }
 
@@ -302,7 +330,7 @@ export default function SupermercadoPagePt() {
                 <div key={cat} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                   <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
                     <span>{CAT_ICON[cat] || "📦"}</span>
-                    <span className="text-sm font-semibold text-slate-700">{cat}</span>
+                    <span className="text-sm font-semibold text-slate-700">{CATEGORY_LABEL[cat] || cat}</span>
                     <span className="text-xs text-slate-400 ml-auto">{items.filter(i => !i.checked).length} itens</span>
                   </div>
                   <div className="divide-y divide-slate-50">
@@ -382,7 +410,7 @@ export default function SupermercadoPagePt() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="font-semibold text-slate-800">{p.productName}</p>
-                    <p className="text-xs text-slate-400">{CAT_ICON[p.category]} {p.category}</p>
+                    <p className="text-xs text-slate-400">{CAT_ICON[p.category]} {CATEGORY_LABEL[p.category] || p.category}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-amber-600 font-semibold">Poupa {fmt(diff)}</p>
@@ -460,7 +488,7 @@ export default function SupermercadoPagePt() {
                 <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
                   <span>{CAT_ICON[p.category] || "📦"}</span>
                   <span className="text-sm text-slate-700 flex-1">{p.name}</span>
-                  <span className="text-xs text-slate-400">{p.category}</span>
+                  <span className="text-xs text-slate-400">{CATEGORY_LABEL[p.category] || p.category}</span>
                 </div>
               ))}
             </div>
@@ -478,7 +506,7 @@ export default function SupermercadoPagePt() {
                 placeholder="Nome do produto" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
               <select value={newItem.category} onChange={e => setNewItem(f => ({ ...f, category: e.target.value }))}
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
-                {CATEGORIES.map(c => <option key={c} value={c}>{CAT_ICON[c]} {c}</option>)}
+                {CATEGORIES.map(c => <option key={c.value} value={c.value}>{CAT_ICON[c.value]} {c.label}</option>)}
               </select>
               <input value={newItem.quantity} onChange={e => setNewItem(f => ({ ...f, quantity: e.target.value }))}
                 placeholder="Quantidade (ex: 2 kg, 1 caixa)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
@@ -552,7 +580,7 @@ export default function SupermercadoPagePt() {
                       placeholder="Produto" className="col-span-12 sm:col-span-4 w-full border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" />
                     <select value={item.category} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], category: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
                       className="col-span-6 sm:col-span-3 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none bg-white">
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                     <input type="number" step="0.01" value={item.price} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], price: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
                       placeholder="€" className="col-span-3 sm:col-span-2 w-full border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" />

@@ -16,6 +16,29 @@ export const GROCERY_CATEGORIES = [
 
 export type GroceryCategory = typeof GROCERY_CATEGORIES[number];
 
+// Categorias são armazenadas num formato único, independente do idioma da
+// tela. Os aliases mantêm compatibilidade com itens antigos que possam ter
+// sido gravados com o rótulo traduzido antes dessa normalização.
+const CATEGORY_STORAGE_ALIASES: Record<GroceryCategory, string[]> = {
+  Mercearia: ["Abarrotes"],
+  Carnes: [],
+  Hortifruti: ["Frutas e Legumes", "Frutas y Verduras"],
+  "Laticínios": ["Lácteos"],
+  Padaria: ["Panadería"],
+  Bebidas: [],
+  Limpeza: ["Limpieza"],
+  Higiene: [],
+  Outros: ["Otros"],
+};
+
+export function canonicalGroceryCategory(category: string): GroceryCategory {
+  if ((GROCERY_CATEGORIES as readonly string[]).includes(category)) return category as GroceryCategory;
+  for (const [canonical, aliases] of Object.entries(CATEGORY_STORAGE_ALIASES)) {
+    if (aliases.includes(category)) return canonical as GroceryCategory;
+  }
+  return "Outros";
+}
+
 export type GroceryStore = { id: string; userId: string; name: string; location: string };
 
 export type GroceryProduct = {
@@ -99,7 +122,7 @@ function storeFromRow(r: StoreRow): GroceryStore {
 
 type ProductRow = { id: string; user_id: string; name: string; normalized_name: string; category: string; default_unit: string };
 function productFromRow(r: ProductRow): GroceryProduct {
-  return { id: r.id, userId: r.user_id, name: r.name, category: r.category as GroceryCategory, defaultUnit: r.default_unit };
+  return { id: r.id, userId: r.user_id, name: r.name, category: canonicalGroceryCategory(r.category), defaultUnit: r.default_unit };
 }
 
 // ── Stores ──────────────────────────────
@@ -181,7 +204,7 @@ export async function getPurchasesByUser(userId: string, limit = 100): Promise<G
   for (const it of (items as ItemRow[] | null) ?? []) {
     const list = itemsByPurchase.get(it.purchase_id) ?? [];
     list.push({
-      productName: it.product_name, category: it.category as GroceryCategory,
+      productName: it.product_name, category: canonicalGroceryCategory(it.category),
       price: Number(it.price), quantity: Number(it.quantity), unit: it.unit,
       productId: it.product_id ?? undefined, priceEstimated: it.price_estimated,
     });
@@ -289,7 +312,7 @@ export async function getPriceComparison(
   const map = new Map<string, { category: string; prices: Map<string, { storeName: string; price: number; date: string }> }>();
   for (const row of data as unknown as Row[]) {
     const key = row.product_name.toLowerCase();
-    const cur = map.get(key) ?? { category: row.category, prices: new Map() };
+    const cur = map.get(key) ?? { category: canonicalGroceryCategory(row.category), prices: new Map() };
     const storeName = row.grocery_purchases.grocery_stores?.name ?? "Mercado";
     const date = row.grocery_purchases.date;
     const existing = cur.prices.get(storeName);
@@ -352,7 +375,7 @@ export async function getSuggestedListItems(
   const freq = new Map<string, { productName: string; category: GroceryCategory; count: number }>();
   for (const row of data as unknown as Row[]) {
     const key = row.product_name.toLowerCase();
-    const cur = freq.get(key) ?? { productName: row.product_name, category: row.category as GroceryCategory, count: 0 };
+    const cur = freq.get(key) ?? { productName: row.product_name, category: canonicalGroceryCategory(row.category), count: 0 };
     cur.count++;
     freq.set(key, cur);
   }
@@ -363,12 +386,12 @@ export async function getSuggestedListItems(
 // ── Shopping List ─────────────────────────
 type ListRow = { id: string; user_id: string; name: string; category: string; quantity: string; checked: boolean };
 function listItemFromRow(r: ListRow): ShoppingListItem {
-  return { id: r.id, userId: r.user_id, name: r.name, category: r.category as GroceryCategory, quantity: r.quantity, checked: r.checked };
+  return { id: r.id, userId: r.user_id, name: r.name, category: canonicalGroceryCategory(r.category), quantity: r.quantity, checked: r.checked };
 }
 
 export async function getShoppingList(userId: string, category?: GroceryCategory): Promise<ShoppingListItem[]> {
   let query = getSupabase().from("grocery_shopping_list_items").select("*").eq("user_id", userId);
-  if (category) query = query.eq("category", category);
+  if (category) query = query.in("category", [category, ...CATEGORY_STORAGE_ALIASES[category]]);
   const { data, error } = await query.order("category");
   if (error || !data) return [];
   return (data as ListRow[]).map(listItemFromRow);
