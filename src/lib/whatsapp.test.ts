@@ -43,7 +43,7 @@ describe("Spanish WhatsApp templates", () => {
 
   it("instructs the customer how to connect WhatsApp after account activation", () => {
     expect(SPANISH_WELCOME_TEMPLATE_TEXT).toContain(
-      "entra en zelogestaointeligente.com.br, inicia sesión, abre Configuración",
+      "entra en zelogestaointeligente.com.br/es, inicia sesión, abre Configuración",
     );
     expect(SPANISH_WELCOME_TEMPLATE_TEXT).toContain("sección WhatsApp");
   });

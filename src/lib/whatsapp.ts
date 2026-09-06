@@ -95,7 +95,7 @@ export async function sendReminderTemplate(to: string, templateName: string, ren
 export const SPANISH_WELCOME_TEMPLATE_TEXT =
   "¡Hola! Tu pago fue confirmado y tu cuenta de Zelo ya está activa.\n\n" +
   "Las instrucciones para crear tu contraseña fueron enviadas a tu correo electrónico.\n\n" +
-  "Para conectar tu WhatsApp con la inteligencia artificial de Zelo, entra en zelogestaointeligente.com.br, inicia sesión, abre Configuración y sigue las instrucciones de la sección WhatsApp.\n\n" +
+  "Para conectar tu WhatsApp con la inteligencia artificial de Zelo, entra en zelogestaointeligente.com.br/es, inicia sesión, abre Configuración y sigue las instrucciones de la sección WhatsApp.\n\n" +
   "Si no encuentras el correo o necesitas ayuda, escribe a contato@zelogestaointeligente.com.br.";
 
 export async function sendWelcomeTemplate(to: string, locale?: string): Promise<boolean> {
