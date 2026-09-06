@@ -333,6 +333,39 @@ function normalizeCapabilityText(text: string): string {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
+/** Identifica verbos inequívocos de entrada e saída de dinheiro em PT-BR e
+ * espanhol. O resultado é aplicado depois do classificador externo para que
+ * frases naturais como "comprei livros por 108" nunca sejam salvas como
+ * receita, mesmo se o modelo devolver o tipo errado. */
+export function getExplicitFinanceTypeSignal(message: string): "income" | "expense" | null {
+  const normalized = normalizeCapabilityText(message.trim());
+
+  // "Recebi" normalmente indica receita, mas receber uma conta/fatura é o
+  // recebimento de uma cobrança — portanto continua sendo despesa.
+  const receivedBill = /\b(?:recebi|recebemos|recebeu|receberam)\s+(?:(?:uma?|a)\s+)?(?:conta|fatura|cobranca|boleto)\b|\b(?:recibi|recibimos|recibio|recibieron)\s+(?:(?:una?|la)\s+)?(?:cuenta|factura|cobro)\b/.test(normalized);
+  if (receivedBill) return "expense";
+
+  const hasIncomeSignal = /\b(?:recebi|recebemos|recebeu|receberam|ganhei|ganhamos|ganhou|ganharam|faturei|faturamos|faturou|faturaram|vendi|vendemos|vendeu|venderam|lucrei|lucramos|lucrou|lucraram|arrecadei|arrecadamos|arrecadou|cobrei|cobramos|depositaram|creditaram|entrou|caiu\s+(?:o\s+pagamento|na\s+conta)|pagamento\s+recebido|valor\s+recebido|pix\s+recebido|transferencia\s+recebida|comissao\s+recebida|reembolso\s+recebido|estorno\s+recebido|recibi|recibimos|recibio|recibieron|gane|ganamos|gano|ganaron|ingreso|entro|cayo\s+(?:el\s+pago|en\s+la\s+cuenta)|me\s+pagaron|cobre|cobramos|facture|facturamos|vendimos|vendio|obtuv(?:e|imos|o)\s+(?:una\s+)?ganancia|depositaron|acreditaron|pago\s+recibido|valor\s+recibido|transferencia\s+recibida|comision\s+recibida|reembolso\s+recibido)\b/.test(normalized);
+  const hasExpenseSignal = /\b(?:comprei|compramos|comprou|compraram|paguei|pagamos|pagou|pagaram|gastei|gastamos|gastou|gastaram|adquiri|adquirimos|adquiriu|desembolsei|desembolsamos|desembolsou|quitei|quitamos|quitou|contratei|contratamos|contratou|assinei|assinamos|assinou|abasteci|abastecemos|abasteceu|saiu\s+da\s+conta|foi\s+debitado|foi\s+cobrado|me\s+cobraram|debitaram|descontaram|fiz(?:emos)?\s+uma\s+compra|tive(?:mos)?\s+uma\s+despesa|compre|compramos|compro|compraron|pague|pagamos|gaste|gastamos|gasto|gastaron|adquiri|adquirimos|adquirio|desembolse|desembolsamos|desembolso|liquide|liquidamos|liquido|contrate|contratamos|contrato|me\s+suscribi|nos\s+suscribimos|cargue\s+combustible|salio\s+de\s+la\s+cuenta|fue\s+debitado|fue\s+cobrado|me\s+cobraron|debitaron|descontaron|hice|hicimos)\b/.test(normalized);
+
+  // Uma mensagem pode listar entradas e saídas juntas. Nesse caso, o modelo
+  // precisa conservar o tipo individual de cada item, sem sobrescrita global.
+  if (hasIncomeSignal === hasExpenseSignal) return null;
+  return hasIncomeSignal ? "income" : "expense";
+}
+
+export function withExplicitFinanceType(message: string, result: AIResult): AIResult {
+  if (result.intent !== "finance_register") return result;
+  const type = getExplicitFinanceTypeSignal(message);
+  if (!type) return result;
+
+  return {
+    ...result,
+    ...(result.finance ? { finance: { ...result.finance, type } } : {}),
+    ...(result.finances ? { finances: result.finances.map(finance => ({ ...finance, type })) } : {}),
+  };
+}
+
 type DatePeriod = { from: string; to: string };
 
 /** Resolve períodos relativos no próprio sistema, sempre a partir do relógio
@@ -713,7 +746,11 @@ function groceryCategoryFromQuery(normalized: string): GroceryCategory | undefin
 export function getExplicitGroceryHistoryQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
   const hasPurchaseSubject = /\b(compras?|comprei|compre)\b/.test(normalized);
-  const hasQuerySignal = /\b(o\s+que|que|quais?|quanto|valor|total|mostre|mostrar|liste|listar|historico|minhas?|mis|todas?|todos?|ultimas?|penultima|antepenultima)\b/.test(normalized);
+  // "valor" e "total" sozinhos não tornam a frase uma consulta. Em
+  // "comprei livros no valor de 108 reais", por exemplo, eles pertencem ao
+  // lançamento da despesa. A consulta precisa trazer uma pergunta, pedido
+  // de listagem ou referência explícita ao histórico.
+  const hasQuerySignal = /\b(o\s+que|que\s+(?:eu\s+)?(?:comprei|compre|compras?)|quais?|qual|cuales?|quanto|cuanto|mostre|mostrar|muestra|dime|liste|listar|historico|historial|minhas?|mis|todas?|todos?|ultimas?|penultima|antepenultima)\b/.test(normalized);
   const isShoppingList = /\blista\s+(?:de|do|da|del)\s+(?:compras?|supermercado)\b/.test(normalized);
   const isMutation = /\b(registr|cadastr|adicion|inclu|anot|apag|exclu|delet|remov|alter|edit|corrig)\w*/.test(normalized);
   const isSingleLatest = /\b(?:ultima|mais\s+recente)\s+compra\b|\bcompra\s+mais\s+recente\b/.test(normalized);
@@ -1264,9 +1301,14 @@ INTENÇÕES POSSÍVEIS:
 - unknown: não identificado
 
 ⚠️ REGRA CRÍTICA — tipo income vs expense:
-Palavras que indicam RECEITA (type: "income"): recebi, ganhei, entrou, faturei, vendi, lucrei, recebo, entrada de, receita de, faturamento, pagamento recebido
-Palavras que indicam DESPESA (type: "expense"): gastei, paguei, comprei, saiu, despesa, gasto, conta, fatura, parcela, custo
-Se a mensagem contém "recebi", "ganhei" ou "entrou" → type DEVE ser "income", independentemente da categoria.
+Palavras e expressões que indicam RECEITA (type: "income") em português: recebi, recebo, ganhei, ganho, entrou, caiu na conta, caiu o pagamento, faturei, vendi, lucrei, arrecadei, cobrei, depositaram, creditaram, pagamento recebido, valor recebido, entrada, receita, faturamento, comissão recebida, reembolso recebido, estorno recebido.
+Equivalentes em espanhol: recibí, recibo, gané, gano, ingresó, entró, cayó el pago, cobré, facturé, vendí, obtuve una ganancia, depositaron, acreditaron, pago recibido, ingreso, facturación, comisión recibida, reembolso recibido.
+Palavras e expressões que indicam DESPESA (type: "expense") em português: gastei, gasto, paguei, pago, comprei, adquiri, desembolsei, quitei, contratei, assinei, abasteci, saiu da conta, foi debitado, foi cobrado, descontaram, fiz uma compra, tive uma despesa, conta, fatura, parcela, mensalidade, custo.
+Equivalentes em espanhol: gasté, gasto, pagué, pago, compré, adquirí, desembolsé, liquidé, contraté, me suscribí, cargué combustible, salió de la cuenta, debitaron, cobraron, descontaron, hice una compra, tuve un gasto, factura, cuota, mensualidad, costo.
+Uma frase DECLARATIVA no passado com verbo financeiro e valor é um REGISTRO, nunca uma consulta. Ex.: "comprei livros no valor de 108 reais pela conta da empresa" → finance_register, expense, Educação, business. Em espanhol: "compré libros por 108 dólares para la empresa" → finance_register, expense, Educación, business.
+"Comprei/compré" só significa consulta ao histórico quando a frase realmente pergunta algo, como "o que comprei?", "qué compré?" ou "mostre minhas compras". Não use grocery_history_query apenas porque apareceu o verbo "comprei".
+Exceção de sentido: "recebi uma conta/fatura/cobrança/boleto" não é receita; é uma despesa recebida e ainda não necessariamente paga.
+Se a mensagem contém "recebi", "ganhei" ou "entrou" com sentido de dinheiro recebido → type DEVE ser "income", independentemente da categoria.
 Exemplo: "recebi 500 de vendas" → type: "income", category: "Vendas"
 Exemplo: "vendas do mês foram 2000" → type: "income", category: "Vendas"
 Exemplo: "gastei 500 com vendedor" → type: "expense", category: "Outros"
@@ -2336,7 +2378,10 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    const parsed = withExplicitRelativePeriod(message, JSON.parse(text) as AIResult);
+    const parsed = withExplicitFinanceType(
+      message,
+      withExplicitRelativePeriod(message, JSON.parse(text) as AIResult),
+    );
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   } catch (e) {

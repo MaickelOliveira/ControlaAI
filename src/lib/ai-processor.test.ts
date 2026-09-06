@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getExplicitDailySummaryResult,
+  getExplicitFinanceTypeSignal,
   getExplicitGroceryListAddResult,
   getExplicitGroceryListManagementResult,
   getExplicitGroceryHistoryQueryResult,
@@ -13,7 +14,44 @@ import {
   getExplicitWeeklySummaryResult,
   getUnsupportedBankConnectionResponse,
   processMessage,
+  withExplicitFinanceType,
 } from "./ai-processor";
+
+describe("explicit finance type", () => {
+  it("recognizes natural income and expense language in Portuguese and Spanish", () => {
+    expect(getExplicitFinanceTypeSignal("Comprei livros no valor de 108 reais pela conta da empresa")).toBe("expense");
+    expect(getExplicitFinanceTypeSignal("Paguei a mensalidade e gastei 80 reais")).toBe("expense");
+    expect(getExplicitFinanceTypeSignal("Compré libros por 108 dólares para la empresa")).toBe("expense");
+    expect(getExplicitFinanceTypeSignal("Recebi 900 reais de comissão")).toBe("income");
+    expect(getExplicitFinanceTypeSignal("Me pagaron 500 dólares por el servicio")).toBe("income");
+  });
+
+  it("treats a received bill as an expense and leaves mixed records to the classifier", () => {
+    expect(getExplicitFinanceTypeSignal("Recebi uma fatura de 200 reais")).toBe("expense");
+    expect(getExplicitFinanceTypeSignal("Recibí una factura de 40 dólares")).toBe("expense");
+    expect(getExplicitFinanceTypeSignal("Recebi 500 e paguei 100 de energia")).toBeNull();
+  });
+
+  it("corrects the final finance type returned by the external classifier", () => {
+    const result = withExplicitFinanceType(
+      "Comprei livros no valor de 108 reais pela conta da empresa",
+      {
+        intent: "finance_register",
+        confidence: 0.9,
+        finance: {
+          type: "income",
+          amount: 108,
+          category: "Educação",
+          description: "Livros",
+          date: "2026-09-06",
+          mode: "business",
+        },
+      },
+    );
+
+    expect(result.finance?.type).toBe("expense");
+  });
+});
 
 describe("getExplicitUnscheduledReminderResult", () => {
   const request = "Me lembra depois de comprar o suporte de escova de dente, a luminária para pôr no portão, para ver o interfone que tá assim, e marcar de fazer a limpeza do, do sistema de freio do carro da Deborah.";
@@ -263,6 +301,23 @@ describe("getExplicitGroceryHistoryQueryResult", () => {
   it("understands the same filters in Spanish", () => {
     expect(getExplicitGroceryHistoryQueryResult("muéstrame mi penúltima compra en Muffato", anchor))
       .toMatchObject({ grocery: { storeName: "muffato", allHistory: true, purchaseLimit: 1, purchaseOffset: 1, queryDetail: "items" } });
+  });
+
+  it("does not confuse completed expenses with grocery history queries", () => {
+    expect(getExplicitGroceryHistoryQueryResult(
+      "Comprei livros no valor de 108 reais pela conta da empresa",
+      anchor,
+    )).toBeNull();
+    expect(getExplicitGroceryHistoryQueryResult(
+      "Compré libros por 108 dólares para la empresa",
+      anchor,
+    )).toBeNull();
+    expect(getExplicitGroceryHistoryQueryResult(
+      "Comprei os livros que precisava por 108 reais",
+      anchor,
+    )).toBeNull();
+    expect(getExplicitGroceryHistoryQueryResult("Paguei 65 reais na farmácia", anchor)).toBeNull();
+    expect(getExplicitGroceryHistoryQueryResult("Recebi 900 reais de comissão", anchor)).toBeNull();
   });
 });
 

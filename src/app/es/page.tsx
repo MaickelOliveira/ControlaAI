@@ -441,12 +441,11 @@ function CalendarCard() {
 }
 
 function MeetingFlowDemo() {
-  const { ref, stage } = useAnimatedStage<HTMLDivElement>(4, 1900);
+  const { ref, stage } = useAnimatedStage<HTMLDivElement>(3, 1900);
   const steps = [
     ["Reunión creada", "Equipo Comercial · hoy, 14:00"],
     ["Invitaciones enviadas", "Carla, Pedro y Marina confirmados"],
-    ["Google Meet en curso", "3 participantes · 32 minutos"],
-    ["Acta lista por la IA", "Decisiones y próximos pasos organizados"],
+    ["Google Meet listo", "Link guardado en el evento de la agenda"],
   ];
   return (
     <div ref={ref} className="relative mx-auto w-full max-w-md">
@@ -461,9 +460,6 @@ function MeetingFlowDemo() {
                 <div><p className="text-sm font-bold text-slate-800">{title}</p><p className="mt-0.5 text-[11px] text-slate-500">{desc}</p></div>
               </div>
             ))}
-          </div>
-          <div className={clsx("mt-4 overflow-hidden rounded-2xl bg-slate-950 p-4 text-white transition-all duration-500", stage === 3 ? "max-h-36 opacity-100" : "max-h-0 p-0 opacity-0")}>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-400">Resumen de la IA</p><p className="mt-2 text-xs leading-relaxed text-slate-300">Decidido: cerrar la propuesta antes del viernes. Carla envía el contrato revisado. Próxima reunión el jueves.</p>
           </div>
         </div>
       </div>
@@ -609,26 +605,117 @@ function DashboardPhoneScreen() {
   );
 }
 
+function DashboardLaptopScreen() {
+  const cards = [
+    ["Ingresos", fmt(5800), "text-emerald-600", "bg-emerald-50"],
+    ["Gastos", fmt(2558.5), "text-red-500", "bg-red-50"],
+    ["Por cobrar", fmt(420), "text-sky-600", "bg-sky-50"],
+    ["Por pagar", fmt(1420), "text-orange-600", "bg-orange-50"],
+  ];
+
+  return (
+    <div className="flex h-full bg-slate-100 text-slate-900">
+      <aside className="flex w-[23%] shrink-0 flex-col bg-slate-950 px-2.5 py-3 text-white sm:px-3.5 sm:py-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
+            <Image src="/brand/zelo-icon.png" alt="" width={17} height={17} />
+          </span>
+          <span className="hidden text-[11px] font-extrabold sm:block">Zelo</span>
+        </div>
+        <div className="mt-5 space-y-1.5 text-[8px] font-semibold sm:text-[9px]">
+          {["Panel", "Finanzas", "Agenda", "Tareas"].map((item, index) => (
+            <div key={item} className={clsx("flex items-center gap-2 rounded-lg px-2 py-2", index === 0 ? "bg-amber-400/15 text-amber-400" : "text-slate-500")}>
+              <span className="h-2.5 w-2.5 rounded-[3px] border border-current" />
+              <span className="hidden sm:block">{item}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-auto rounded-lg border border-white/5 bg-white/[0.04] p-2">
+          <p className="hidden text-[8px] text-slate-500 sm:block">Modo actual</p>
+          <p className="mt-0.5 text-[8px] font-bold text-white sm:text-[9px]">👤 Personal</p>
+        </div>
+      </aside>
+
+      <div className="min-w-0 flex-1 p-3 sm:p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-[8px] font-semibold text-slate-400 sm:text-[9px]">VISIÓN GENERAL</p>
+            <p className="text-[12px] font-extrabold sm:text-sm">Hola, Maickel</p>
+          </div>
+          <span className="rounded-full bg-emerald-50 px-2 py-1 text-[7px] font-bold text-emerald-600 sm:text-[8px]">● Sincronizado</span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {cards.map(([label, value, color, bg]) => (
+            <div key={label} className={clsx("rounded-lg border border-white p-2 shadow-sm", bg)}>
+              <p className="text-[7px] font-semibold text-slate-400 sm:text-[8px]">{label}</p>
+              <p className={clsx("mt-1 truncate text-[9px] font-extrabold sm:text-[10px]", color)}>{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 grid grid-cols-[1.35fr_.65fr] gap-2">
+          <div className="rounded-xl border border-white bg-white p-2.5 shadow-sm sm:p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[8px] font-bold sm:text-[9px]">Flujo financiero</p>
+              <span className="text-[7px] text-slate-400">Julio</span>
+            </div>
+            <div className="mt-2 flex h-16 items-end gap-1 sm:h-20">
+              {[28, 43, 35, 57, 49, 76, 67, 88].map((height, index) => (
+                <span key={index} className="flex-1 rounded-t bg-gradient-to-t from-amber-400 to-amber-300" style={{ height: `${height}%` }} />
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl bg-slate-900 p-2.5 text-white shadow-sm sm:p-3">
+            <p className="text-[7px] font-semibold text-slate-500 sm:text-[8px]">SALDO PREVISTO</p>
+            <p className="mt-1 text-[11px] font-extrabold sm:text-sm">{fmt(4241.5)}</p>
+            <div className="mt-3 space-y-1.5">
+              <div className="h-1.5 w-full rounded-full bg-emerald-400/70" />
+              <div className="h-1.5 w-2/3 rounded-full bg-amber-400/70" />
+              <div className="h-1.5 w-1/2 rounded-full bg-sky-400/70" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardDevice() {
   return (
-    <div className="relative mx-auto flex min-h-[570px] w-full max-w-[420px] items-center justify-center">
-      <div className="pointer-events-none absolute inset-10 rounded-full bg-amber-300/30 blur-[90px]" />
-      <div className="absolute left-0 top-20 z-20 hidden rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:block">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Gasto registrado</p>
-        <p className="mt-1 text-sm font-extrabold text-slate-900">Supermercado · R$ 184,90</p>
-        <p className="mt-0.5 text-[11px] font-semibold text-emerald-600">Categorizado automáticamente</p>
+    <div aria-label="Panel de Zelo accesible desde computadora y celular" className="relative mx-auto min-h-[520px] w-full max-w-[620px] pt-14 sm:min-h-[560px] sm:pt-16">
+      <div className="pointer-events-none absolute inset-12 rounded-full bg-amber-300/35 blur-[100px]" />
+      <div className="absolute left-1/2 top-0 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-200 bg-white/95 px-4 py-2 text-[11px] font-extrabold text-slate-800 shadow-lg backdrop-blur sm:text-xs">
+        💻 Panel completo en tu computadora
       </div>
-      <div className="absolute bottom-24 right-0 z-20 hidden rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:block">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Visión completa</p>
-        <p className="mt-1 text-sm font-extrabold text-slate-900">Personal separado de la empresa</p>
-      </div>
-      <div className="relative z-10 rounded-[3.4rem] bg-gradient-to-br from-slate-700 via-slate-950 to-black p-[7px] shadow-[0_35px_80px_-30px_rgba(15,23,42,.7)] ring-1 ring-slate-400/40">
-        <div className="overflow-hidden rounded-[2.95rem] bg-slate-950 ring-1 ring-white/10">
-          <DashboardPhoneScreen />
+
+      <div className="relative z-10 mx-auto w-[94%] sm:w-[96%]">
+        <div className="relative rounded-t-[1.4rem] bg-gradient-to-br from-slate-700 via-slate-900 to-black p-[7px] shadow-[0_30px_70px_-30px_rgba(15,23,42,.75)] ring-1 ring-slate-500/50">
+          <span className="absolute left-1/2 top-[3px] h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-slate-600" />
+          <div className="aspect-[16/10] overflow-hidden rounded-t-[.95rem] bg-slate-100 ring-1 ring-white/10">
+            <DashboardLaptopScreen />
+          </div>
         </div>
-        <span className="absolute -right-[3px] top-28 h-16 w-[3px] rounded-r bg-slate-700" />
-        <span className="absolute -left-[3px] top-24 h-10 w-[3px] rounded-l bg-slate-700" />
-        <span className="absolute -left-[3px] top-36 h-14 w-[3px] rounded-l bg-slate-700" />
+        <div className="relative -left-[3%] h-5 w-[106%] rounded-b-[1.2rem] bg-gradient-to-b from-slate-300 via-slate-200 to-slate-400 shadow-xl ring-1 ring-slate-400/60">
+          <span className="absolute left-1/2 top-0 h-1.5 w-20 -translate-x-1/2 rounded-b-lg bg-slate-400/70" />
+        </div>
+        <div className="mx-auto h-2 w-[72%] rounded-[50%] bg-slate-900/20 blur-md" />
+      </div>
+
+      <div className="absolute bottom-0 right-2 z-20 w-[205px] sm:right-0 sm:w-[230px]">
+        <div className="absolute -left-10 top-16 z-30 hidden whitespace-nowrap rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[10px] font-extrabold text-slate-800 shadow-xl backdrop-blur sm:block">
+          📱 Accede también desde tu celular
+        </div>
+        <div className="relative rounded-[2.6rem] bg-gradient-to-br from-slate-700 via-slate-950 to-black p-[6px] shadow-[0_30px_65px_-22px_rgba(15,23,42,.8)] ring-1 ring-slate-400/50">
+          <div className="overflow-hidden rounded-[2.2rem] bg-slate-950 ring-1 ring-white/10">
+            <DashboardPhoneScreen />
+          </div>
+          <span className="absolute -right-[3px] top-24 h-12 w-[3px] rounded-r bg-slate-700" />
+          <span className="absolute -left-[3px] top-20 h-9 w-[3px] rounded-l bg-slate-700" />
+        </div>
+      </div>
+
+      <div className="absolute bottom-8 left-2 z-20 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:bottom-14 sm:left-0">
+        <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Una sola cuenta</p>
+        <p className="mt-1 text-[11px] font-extrabold text-slate-900 sm:text-sm">Computadora y celular sincronizados</p>
       </div>
     </div>
   );
@@ -701,7 +788,7 @@ const MODE_BENEFITS = {
       ["Clientes organizados", "Registra contactos, empresas, teléfonos, direcciones y notas."],
       ["Equipo y nómina", "Empleados, cargos, salarios y pagos recurrentes en un solo lugar."],
       ["Vehículos de la empresa", "Kilometraje, combustible, mantenimiento, seguro y gastos."],
-      ["Reuniones y agenda", "Google Meet, participantes, compromisos y actas generadas por IA."],
+      ["Reuniones y agenda", "Google Meet, participantes, eventos y recordatorios organizados."],
       ["Socios y equipo", "Cada persona usa su propio WhatsApp, con acceso según el modo."],
     ],
   },
@@ -820,8 +907,8 @@ const AGENDA_DETAILS: Detail[] = [
 const REUNIOES_DETAILS: Detail[] = [
   { icon: FEATURE_ICONS.link, title: "Link en segundos", desc: "Pídelo y Zelo crea el Google Meet al instante, sin abrir Google Calendar." },
   { icon: FEATURE_ICONS.megaphone, title: "Invitación automática", desc: "Participantes convocados directo por WhatsApp, sin trabajo manual." },
-  { icon: FEATURE_ICONS.doc, title: "Acta generada por IA", desc: "Al final, Zelo resume decisiones y próximos pasos automáticamente." },
-  { icon: FEATURE_ICONS.search, title: "Fácil de encontrar después", desc: "El acta queda guardada y se puede consultar cuando quieras." },
+  { icon: FEATURE_ICONS.clock, title: "Todo en tu agenda", desc: "El link y los participantes quedan organizados en el evento correcto." },
+  { icon: FEATURE_ICONS.bell, title: "Recordatorio a tiempo", desc: "Zelo te avisa sobre la reunión para que nadie pierda el horario." },
 ];
 
 const CONTA_DETAILS: Detail[] = [
@@ -844,7 +931,7 @@ const FAQS = [
   { q: "¿Cómo funcionan el Modo Personal y el Modo Empresa?", a: "Es la misma cuenta y el mismo WhatsApp, pero con dos ambientes separados: uno para la vida personal y otro para la empresa. Cambias de modo con un clic en el panel (o pidiéndoselo a Zelo), y cada uno tiene su propio saldo, categorías y metas — sin mezclar las cuentas." },
   { q: "¿Cómo funciona la importación de la factura de la tarjeta?", a: "Envía el PDF de la factura por WhatsApp (o por el panel) y Zelo lee cada movimiento solo, lo categoriza automáticamente y avisa cuando algún gasto ya fue registrado antes — así nunca duplicas una compra." },
   { q: "¿Puedo compartir mi cuenta con otras personas?", a: "Sí. Puedes vincular el número de familiares, socios o de tu equipo a la misma cuenta — cada uno registra desde su propio WhatsApp, identificado por su nombre, y todo cae en el mismo panel." },
-  { q: "¿Qué pasa con mis reuniones de Google Meet?", a: "Puedes pedirle a Zelo que cree el link de la reunión, convoque a los participantes por WhatsApp y, cuando termine, él mismo genera un acta con los puntos principales discutidos." },
+  { q: "¿Qué pasa con mis reuniones de Google Meet?", a: "Puedes pedirle a Zelo que cree el link de la reunión, agregue el evento a la agenda y convoque a los participantes por WhatsApp." },
   { q: "¿Cómo funciona el Drive Inteligente?", a: "Envía cualquier archivo por WhatsApp y Zelo lo guarda solo en la carpeta correcta. Después, solo describe lo que buscas — \"busca el comprobante del mecánico\" — y él lo encuentra por ti." },
   { q: "¿Mis datos están seguros?", a: "Sí. Tus datos quedan vinculados a tu cuenta y nunca se comparten entre usuarios diferentes — cada familia, socio o equipo solo ve su propia información." },
   { q: "¿Cómo funciona la garantía?", a: "Tu primera compra tiene 7 días de garantía. Dentro de ese plazo, puedes solicitar la cancelación y la devolución del valor a través de la plataforma de Hotmart." },
@@ -1273,7 +1360,7 @@ export default function LandingPageEs() {
         reverse
         tint
         title="Tu dinero organizado en un solo panel."
-        desc="Tus gastos, compromisos y metas organizados en un panel completo. Siempre sabes qué pasó, qué está pendiente y qué viene después."
+        desc="Accede desde tu computadora o celular. Tus gastos, compromisos y metas permanecen sincronizados en un panel completo, para que sepas qué pasó, qué está pendiente y qué viene después."
         details={PAINEL_DETAILS}
         visual={<DashboardDevice />}
       />
@@ -1313,10 +1400,10 @@ export default function LandingPageEs() {
       </div>
 
       <Feature
-        eyebrow="🎥 Reuniones y Actas"
+        eyebrow="🎥 Reuniones y Google Meet"
         reverse
-        title="Reuniones agendadas y resumidas solas."
-        desc="Pídele a Zelo que cree el link de Google Meet, convoque a los participantes por WhatsApp y, cuando termine la reunión, él mismo genera el acta con los puntos principales."
+        title="Reuniones agendadas y organizadas en segundos."
+        desc="Pídele a Zelo que cree el link de Google Meet, agregue el evento a la agenda y convoque a los participantes por WhatsApp."
         details={REUNIOES_DETAILS}
         visual={<MeetingFlowDemo />}
       />
