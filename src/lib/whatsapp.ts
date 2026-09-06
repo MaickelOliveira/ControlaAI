@@ -12,16 +12,25 @@ import { addMessage } from "@/lib/conversations";
 /** Código de idioma que a Graph API espera no campo language.code do
  *  template — nunca confiar em "pt_BR" fixo depois que existe conta em
  *  outro idioma. */
-function languageCodeFor(locale?: string): string {
-  if (locale === "es") return "es";
-  if (locale === "pt-PT") return "pt_PT";
+type TemplateLocale = "pt-BR" | "pt-PT" | "es";
+
+function validatedTemplateLocale(locale?: string): TemplateLocale {
+  if (locale === undefined || locale === "pt-BR") return "pt-BR";
+  if (locale === "pt-PT" || locale === "es") return locale;
+  throw new Error(`[whatsapp] locale de template não suportado: ${locale}`);
+}
+
+export function languageCodeFor(locale?: string): string {
+  const validatedLocale = validatedTemplateLocale(locale);
+  if (validatedLocale === "es") return "es";
+  if (validatedLocale === "pt-PT") return "pt_PT";
   return "pt_BR";
 }
 
 /** Nomes espanhóis são deliberadamente diferentes dos modelos brasileiros
  * já cadastrados — não são simples sufixos "_es". O mapa precisa coincidir
  * exatamente com o nome aprovado no Meta Business Manager. */
-export const SPANISH_TEMPLATE_NAMES: Record<string, string> = {
+export const SPANISH_TEMPLATE_NAMES = {
   lembrete_assessor: "aviso_programado_por_contacto",
   lbte_empresarial: "seguimiento_tarea_solicitada",
   lbt_pessoal: "nota_personal_pendiente",
@@ -29,27 +38,46 @@ export const SPANISH_TEMPLATE_NAMES: Record<string, string> = {
   lembrete_compromisso: "agenda_evento_proximo",
   lembrete_compromisso15: "agenda_evento_en_breve",
   boas_vindas_cadastro2: "acceso_confirmado_zelo",
-};
+} as const;
 
-const SPANISH_PARAM_NAMES: Record<string, Record<string, string>> = {
+type SpanishTemplateBase = keyof typeof SPANISH_TEMPLATE_NAMES;
+
+const SPANISH_PARAM_NAMES: Record<SpanishTemplateBase, Record<string, string>> = {
   lembrete_assessor: { remetente: "remitente", lembrete: "aviso" },
   lbte_empresarial: { lembrete: "aviso" },
   lbt_pessoal: { texto: "aviso" },
   cbr_recorrente: { descricao: "concepto", valor: "importe", data: "fecha" },
   lembrete_compromisso: { compromisso: "evento", horario: "hora" },
   lembrete_compromisso15: { compromisso: "evento", horario: "hora" },
+  boas_vindas_cadastro2: {},
 };
 
 export function localizedTemplateName(base: string, locale?: string): string {
-  if (locale === "es") return SPANISH_TEMPLATE_NAMES[base] ?? base;
-  if (locale === "pt-PT") return `${base}_pt`;
+  const validatedLocale = validatedTemplateLocale(locale);
+  if (validatedLocale === "es") {
+    const spanishName = SPANISH_TEMPLATE_NAMES[base as SpanishTemplateBase];
+    if (!spanishName) {
+      throw new Error(`[whatsapp] template espanhol não mapeado: ${base}`);
+    }
+    return spanishName;
+  }
+  if (validatedLocale === "pt-PT") return `${base}_pt`;
   return base;
 }
 
 export function localizedTemplateParams(base: string, params: Record<string, string>, locale?: string): Record<string, string> {
-  if (locale !== "es") return params;
-  const names = SPANISH_PARAM_NAMES[base] ?? {};
-  return Object.fromEntries(Object.entries(params).map(([key, value]) => [names[key] ?? key, value]));
+  if (validatedTemplateLocale(locale) !== "es") return params;
+  const names = SPANISH_PARAM_NAMES[base as SpanishTemplateBase];
+  if (!names) {
+    throw new Error(`[whatsapp] parâmetros de template espanhol não mapeados: ${base}`);
+  }
+  return Object.fromEntries(Object.entries(params).map(([key, value]) => {
+    const spanishKey = names[key];
+    if (!spanishKey) {
+      throw new Error(`[whatsapp] parâmetro espanhol não mapeado: ${base}.${key}`);
+    }
+    return [spanishKey, value];
+  }));
 }
 
 export async function sendText(to: string, message: string): Promise<boolean> {

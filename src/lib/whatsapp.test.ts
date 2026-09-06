@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  languageCodeFor,
   localizedTemplateName,
   localizedTemplateParams,
   SPANISH_TEMPLATE_NAMES,
@@ -13,6 +14,7 @@ describe("Spanish WhatsApp templates", () => {
     expect(names).toHaveLength(7);
     expect(new Set(names).size).toBe(names.length);
     expect(names.every((name) => !name.endsWith("_es"))).toBe(true);
+    expect(Object.entries(SPANISH_TEMPLATE_NAMES).every(([base, name]) => base !== name)).toBe(true);
     expect(localizedTemplateName("lembrete_assessor", "es")).toBe("aviso_programado_por_contacto");
     expect(localizedTemplateName("lbte_empresarial", "es")).toBe("seguimiento_tarea_solicitada");
     expect(localizedTemplateName("boas_vindas_cadastro2", "es")).toBe("acceso_confirmado_zelo");
@@ -20,6 +22,17 @@ describe("Spanish WhatsApp templates", () => {
 
   it("keeps existing names for Brazilian Portuguese", () => {
     expect(localizedTemplateName("lembrete_assessor", "pt-BR")).toBe("lembrete_assessor");
+    expect(languageCodeFor("pt-BR")).toBe("pt_BR");
+    expect(languageCodeFor("es")).toBe("es");
+  });
+
+  it("blocks an unmapped Spanish template instead of falling back to Portuguese", () => {
+    expect(() => localizedTemplateName("modelo_sem_mapeamento", "es")).toThrow(
+      "template espanhol não mapeado",
+    );
+    expect(() => localizedTemplateName("lembrete_assessor", "fr")).toThrow(
+      "locale de template não suportado",
+    );
   });
 
   it("sends the exact named parameters registered in the Spanish Meta templates", () => {
@@ -46,6 +59,10 @@ describe("Spanish WhatsApp templates", () => {
     }, "es")).toEqual({
       aviso: "Revisar el flujo de caja de la empresa",
     });
+
+    expect(() => localizedTemplateParams("lbte_empresarial", {
+      campo_portugues_inesperado: "valor",
+    }, "es")).toThrow("parâmetro espanhol não mapeado");
   });
 
   it("instructs the customer how to connect WhatsApp after account activation", () => {
