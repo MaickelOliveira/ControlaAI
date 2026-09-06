@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalGroceryCategory, findLatestPurchaseByStoreName, type GroceryPurchase } from "./grocery";
+import { canonicalGroceryCategory, findLatestPurchaseByStoreName, groceryStoreNameMatches, type GroceryPurchase } from "./grocery";
 
 describe("canonicalGroceryCategory", () => {
   it("keeps one storage category across Portuguese and Spanish pages", () => {
@@ -28,5 +28,11 @@ describe("findLatestPurchaseByStoreName", () => {
     expect(findLatestPurchaseByStoreName(purchases, "Muffatto")?.id).toBe("2");
     expect(findLatestPurchaseByStoreName(purchases, "Assai")?.id).toBe("3");
     expect(findLatestPurchaseByStoreName(purchases, "Mercado inexistente")).toBeNull();
+  });
+
+  it("uses the same safe store matching for full-history filters", () => {
+    expect(groceryStoreNameMatches("Super Muffato", "Muffatto")).toBe(true);
+    expect(groceryStoreNameMatches("Assaí Atacadista", "Assai")).toBe(true);
+    expect(groceryStoreNameMatches("Super Muffato", "Mercado inexistente")).toBe(false);
   });
 });

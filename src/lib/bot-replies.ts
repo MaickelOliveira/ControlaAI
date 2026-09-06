@@ -1007,23 +1007,28 @@ export function replyGroceryPurchaseFinished(p: GroceryPurchase, locale?: string
   return msg;
 }
 
-export function replyGrocerySpend(spend: Array<{ storeName: string; total: number; visits: number }>, totalSpent: number, locale?: string): string {
+export function replyGrocerySpend(
+  spend: Array<{ storeName: string; total: number; visits: number }>,
+  totalSpent: number,
+  locale?: string,
+  periodLabel?: string,
+): string {
   if (isEs(locale)) {
     if (!spend.length) return `🛒 Ninguna compra de supermercado registrada todavía.`;
-    let msg = `💲 *Gastos en el supermercado:*\n\n`;
+    let msg = `💲 *Gastos en el supermercado${periodLabel ? ` — ${periodLabel}` : ""}:*\n\n`;
     spend.slice(0, 6).forEach(s => { msg += `🏪 ${s.storeName} — ${formatCurrency(s.total)} _(${s.visits}x)_\n`; });
     msg += `\n💰 *Total general: ${formatCurrency(totalSpent)}*`;
     return msg;
   }
   if (isPtPt(locale)) {
     if (!spend.length) return `🛒 Nenhuma compra de supermercado registada ainda.`;
-    let msg = `💲 *Despesas no supermercado:*\n\n`;
+    let msg = `💲 *Despesas no supermercado${periodLabel ? ` — ${periodLabel}` : ""}:*\n\n`;
     spend.slice(0, 6).forEach(s => { msg += `🏪 ${s.storeName} — ${formatCurrency(s.total)} _(${s.visits}x)_\n`; });
     msg += `\n💰 *Total geral: ${formatCurrency(totalSpent)}*`;
     return msg;
   }
   if (!spend.length) return `🛒 Nenhuma compra de mercado registrada ainda.`;
-  let msg = `💲 *Gastos no mercado:*\n\n`;
+  let msg = `💲 *Gastos no mercado${periodLabel ? ` — ${periodLabel}` : ""}:*\n\n`;
   spend.slice(0, 6).forEach(s => { msg += `🏪 ${s.storeName} — ${formatCurrency(s.total)} _(${s.visits}x)_\n`; });
   msg += `\n💰 *Total geral: ${formatCurrency(totalSpent)}*`;
   return msg;

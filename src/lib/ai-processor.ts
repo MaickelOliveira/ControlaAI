@@ -241,6 +241,13 @@ export type GroceryData = {
   /** grocery_last_purchase_query: controla se a resposta mostra apenas o
    * total ou também todos os itens da compra mais recente. */
   queryDetail?: "total" | "items";
+  /** grocery_history_query: permite buscar todo o histórico em vez de cair
+   * no mês atual quando nenhum período foi mencionado. */
+  allHistory?: boolean;
+  /** grocery_history_query: quantidade e deslocamento no histórico já
+   * ordenado do mais recente para o mais antigo. Ex.: penúltima = 1/1. */
+  purchaseLimit?: number;
+  purchaseOffset?: number;
 };
 
 export type EmployeeData = {
@@ -397,9 +404,11 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
 }
 
 function withExplicitRelativePeriod(message: string, result: AIResult, anchor: Date = nowBR()): AIResult {
-  const period = getExplicitRelativePeriod(message, anchor);
+  const groceryIntent = result.intent === "grocery_history_query" || result.intent === "grocery_spend_query";
+  const period = getExplicitRelativePeriod(message, anchor)
+    ?? (groceryIntent ? explicitPurchaseCalendarPeriod(message, anchor) : null);
   if (!period) return result;
-  if (result.intent === "grocery_history_query") {
+  if (groceryIntent) {
     return { ...result, grocery: { ...(result.grocery ?? {}), period } };
   }
   const periodIntents: Intent[] = [
@@ -607,7 +616,6 @@ export function getExplicitLastGroceryPurchaseResult(message: string): AIResult 
     || text.match(/(?:gastei|paguei|comprei|compre)\s+(?:no|na|do|da|em|del|en)\s+(.+?)\s+(?:na\s+|da\s+|la\s+)?[úu]ltima\s+vez$/i)?.[1]
     || text.match(/(?:no|na|do|da|em|del|en)\s+(.+?)\s+(?:na\s+|da\s+|la\s+)?[úu]ltima\s+vez$/i)?.[1];
   const cleanStore = storeName?.replace(/^(?:minha|mi)\s+/i, "").trim();
-  if (!cleanStore) return null;
 
   const queryDetail: "total" | "items" = /\b(o\s+que|quais?|itens?|produtos?|comprei|compre|articulos?)\b/.test(normalized)
     ? "items"
@@ -615,7 +623,127 @@ export function getExplicitLastGroceryPurchaseResult(message: string): AIResult 
   return {
     intent: "grocery_last_purchase_query",
     confidence: 1,
-    grocery: { storeName: cleanStore, queryDetail },
+    grocery: { ...(cleanStore ? { storeName: cleanStore } : {}), queryDetail },
+  };
+}
+
+const PURCHASE_MONTHS: Record<string, number> = {
+  janeiro: 1, enero: 1, fevereiro: 2, febrero: 2, marco: 3, marzo: 3,
+  abril: 4, maio: 5, mayo: 5, junho: 6, junio: 6, julho: 7, julio: 7,
+  agosto: 8, setembro: 9, septiembre: 9, outubro: 10, octubre: 10,
+  novembro: 11, noviembre: 11, dezembro: 12, diciembre: 12,
+};
+
+function explicitPurchaseCalendarPeriod(message: string, anchor: Date): DatePeriod | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const ymd = (year: number, month: number, day: number) => `${year}-${pad(month)}-${pad(day)}`;
+  const parseYear = (raw: string | undefined) => {
+    if (!raw) return anchor.getFullYear();
+    const year = Number(raw);
+    return year < 100 ? 2000 + year : year;
+  };
+  const range = normalized.match(/\b(?:de|entre)\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(?:a|ate|e|al)\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (range) {
+    const endYear = parseYear(range[6]);
+    const startYear = range[3] ? parseYear(range[3]) : endYear;
+    return { from: ymd(startYear, Number(range[2]), Number(range[1])), to: ymd(endYear, Number(range[5]), Number(range[4])) };
+  }
+  const singleDate = normalized.match(/\b(?:em|no\s+dia|dia|del)?\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
+  if (singleDate) {
+    const date = ymd(parseYear(singleDate[3]), Number(singleDate[2]), Number(singleDate[1]));
+    return { from: date, to: date };
+  }
+  const monthNames = Object.keys(PURCHASE_MONTHS).join("|");
+  const namedMonth = normalized.match(new RegExp(`\\b(${monthNames})(?:\\s+(?:de\\s+)?(20\\d{2}))?\\b`));
+  if (namedMonth) {
+    const month = PURCHASE_MONTHS[namedMonth[1]];
+    const year = namedMonth[2]
+      ? Number(namedMonth[2])
+      : month <= anchor.getMonth() + 1 ? anchor.getFullYear() : anchor.getFullYear() - 1;
+    return { from: ymd(year, month, 1), to: ymd(year, month, new Date(year, month, 0).getDate()) };
+  }
+  const explicitYear = normalized.match(/\b(?:(?:no|do|em|del)\s+ano\s+(?:de\s+)?|(?:em|de|no|del)\s+)(20\d{2})\b/);
+  if (explicitYear) return { from: `${explicitYear[1]}-01-01`, to: `${explicitYear[1]}-12-31` };
+  return null;
+}
+
+function extractGroceryStoreFromHistory(message: string): string | undefined {
+  const normalized = normalizeCapabilityText(message.trim()).replace(/[?!.,;:]+$/, "");
+  const subject = normalized.match(/\b(?:compras?|comprei|compre)\b/);
+  if (!subject?.index && subject?.index !== 0) return undefined;
+  let tail = normalized.slice(subject.index + subject[0].length);
+  const monthNames = Object.keys(PURCHASE_MONTHS).join("|");
+  tail = tail
+    .replace(/\s+(?:de|entre)\s+\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s+(?:a|ate|e|al)\s+\d{1,2}\/\d{1,2}(?:\/\d{2,4})?$/i, "")
+    .replace(/\s+(?:em|no\s+dia|dia|del)?\s*\d{1,2}\/\d{1,2}\/\d{2,4}$/i, "")
+    .replace(new RegExp(`\\s+(?:(?:em|no|na|de|del|en)\\s+)?(?:${monthNames})(?:\\s+(?:de\\s+)?20\\d{2})?$`, "i"), "")
+    .replace(/\s+(?:(?:em|no|na|de|del|en)\s+)?(?:o\s+)?ano\s+(?:de\s+)?20\d{2}$/i, "")
+    .replace(/\s+(?:em|de|no|del)\s+20\d{2}$/i, "")
+    .replace(/\s+(?:nos|nas|en\s+los)\s+ultimos\s+(?:7|30)\s+dias$/i, "")
+    .replace(/\s+(?:(?:em|no|na|de|del|en)\s+)?(?:hoje|ontem|hoy|ayer|esta\s+semana|essa\s+semana|semana\s+passada|este\s+mes|esse\s+mes|mes\s+passado|este\s+ano|ano\s+passado|esta\s+semana|semana\s+pasada|este\s+mes|mes\s+pasado|este\s+ano|ano\s+pasado)$/i, "")
+    .trim();
+  const prepositions = [...tail.matchAll(/\b(?:no|na|do|da|em|en|del)\s+/g)];
+  const lastPreposition = prepositions.at(-1);
+  const captured = (lastPreposition?.index !== undefined ? tail.slice(lastPreposition.index + lastPreposition[0].length) : "").trim()
+    .replace(/^(?:mercado|supermercado)\s+/i, "")
+    .replace(/\s+(?:ultima|penultima|antepenultima)\s+vez$/i, "")
+    .trim();
+  if (!captured || /^(?:mercado|supermercado|compras?)$/i.test(captured)) return undefined;
+  return captured;
+}
+
+function groceryCategoryFromQuery(normalized: string): GroceryCategory | undefined {
+  const categories: Array<[RegExp, GroceryCategory]> = [
+    [/\b(carnes?|carniceria)\b/, "Carnes"],
+    [/\b(mercearia|abarrotes)\b/, "Mercearia"],
+    [/\b(hortifruti|frutas?\s+e\s+legumes|frutas?\s+y\s+verduras)\b/, "Hortifruti"],
+    [/\b(laticinios|lacteos)\b/, "Laticínios"],
+    [/\b(padaria|panaderia)\b/, "Padaria"],
+    [/\b(bebidas?)\b/, "Bebidas"],
+    [/\b(limpeza|limpieza)\b/, "Limpeza"],
+    [/\b(higiene)\b/, "Higiene"],
+  ];
+  return categories.find(([pattern]) => pattern.test(normalized))?.[1];
+}
+
+/** Atalho determinístico para consultas ao histórico de compras. Garante os
+ * filtros essenciais mesmo quando o classificador externo interpreta
+ * "todas", "últimas 3" ou "penúltima" de forma inconsistente. */
+export function getExplicitGroceryHistoryQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const hasPurchaseSubject = /\b(compras?|comprei|compre)\b/.test(normalized);
+  const hasQuerySignal = /\b(o\s+que|que|quais?|quanto|valor|total|mostre|mostrar|liste|listar|historico|minhas?|mis|todas?|todos?|ultimas?|penultima|antepenultima)\b/.test(normalized);
+  const isShoppingList = /\blista\s+(?:de|do|da|del)\s+(?:compras?|supermercado)\b/.test(normalized);
+  const isMutation = /\b(registr|cadastr|adicion|inclu|anot|apag|exclu|delet|remov|alter|edit|corrig)\w*/.test(normalized);
+  const isSingleLatest = /\b(?:ultima|mais\s+recente)\s+compra\b|\bcompra\s+mais\s+recente\b/.test(normalized);
+  if (!hasPurchaseSubject || !hasQuerySignal || isShoppingList || isMutation || isSingleLatest) return null;
+
+  const period = getExplicitRelativePeriod(message, anchor) ?? explicitPurchaseCalendarPeriod(message, anchor);
+  const storeName = extractGroceryStoreFromHistory(message);
+  const numberWords: Record<string, number> = { uma: 1, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, una: 1, dos: 2 };
+  const latestCount = normalized.match(/\bultimas?\s+(\d+|uma|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|una|dos)\s+compras?\b/);
+  let purchaseLimit = latestCount ? (Number(latestCount[1]) || numberWords[latestCount[1]]) : undefined;
+  let purchaseOffset: number | undefined;
+  if (/\bantepenultima\s+compra\b/.test(normalized)) { purchaseLimit = 1; purchaseOffset = 2; }
+  else if (/\bpenultima\s+compra\b|\bsegunda\s+compra\s+mais\s+recente\b/.test(normalized)) { purchaseLimit = 1; purchaseOffset = 1; }
+  const asksForItems = /\b(o\s+que|que\s+compre|quais?|itens?|produtos?|articulos?|comprei|compre)\b/.test(normalized);
+  const asksOnlyTotal = /\b(quanto|valor|total|gastei|paguei)\b/.test(normalized) && !asksForItems;
+  const allHistory = !period && (/\b(todas?(?:\s+(?:as?|minhas?|mis)){0,2}\s+compras?|todo\s+(?:(?:o|meu|mi)\s+)?historico|historial\s+completo)\b/.test(normalized) || !!storeName || !!purchaseLimit || purchaseOffset !== undefined);
+  const category = groceryCategoryFromQuery(normalized);
+
+  return {
+    intent: "grocery_history_query",
+    confidence: 1,
+    grocery: {
+      ...(storeName ? { storeName } : {}),
+      ...(period ? { period } : {}),
+      ...(category ? { category } : {}),
+      ...(allHistory ? { allHistory: true } : {}),
+      ...(purchaseLimit ? { purchaseLimit } : {}),
+      ...(purchaseOffset !== undefined ? { purchaseOffset } : {}),
+      queryDetail: asksOnlyTotal ? "total" : "items",
+    },
   };
 }
 
@@ -957,7 +1085,7 @@ Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:S
 Calendário dos próximos dias (use para resolver dias da semana sem errar):
 ${nextDays.join("\n")}
 
-⚠️ Períodos relativos JÁ CALCULADOS — use EXATAMENTE esses valores no campo "period" quando a mensagem mencionar o período correspondente (finance_query, finance_upcoming, daily_summary, weekly_summary, balance_query, finance_detail, finance_analysis). NUNCA calcule essas datas por conta própria:
+⚠️ Períodos relativos JÁ CALCULADOS — use EXATAMENTE esses valores no campo "period" quando a mensagem mencionar o período correspondente (finance_query, finance_upcoming, daily_summary, weekly_summary, balance_query, finance_detail, finance_analysis, grocery_history_query, grocery_spend_query). NUNCA calcule essas datas por conta própria:
 ${periodsRef}
 
 CATEGORIAS DE DESPESA: ${expenseCats.join(", ")}
@@ -1048,9 +1176,9 @@ INTENÇÕES POSSÍVEIS:
 - grocery_list_generate: gerar/sugerir uma lista de compras básica ("gera uma lista de carnes e verduras pro dia a dia", "monta uma lista básica de mercearia pra mim", "sugere o que comprar"). Use "grocery.categories" com as chaves mencionadas (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) — se nenhuma categoria for citada, deixe vazio (gera de todas).
 - grocery_price_compare: perguntar o preço de UM produto específico entre os mercados que a pessoa já comprou ("quanto pago no detergente", "onde o leite tá mais barato", "qual o preço do arroz nos mercados que comprei"). Use "grocery.productName" com o nome do produto perguntado. ⚠️ DIFERENTE de grocery_spend_query: aqui é sobre o PREÇO de um item específico comparado entre lojas, não sobre gasto total/mercado favorito.
 - grocery_store_ranking: perguntar qual mercado é mais barato NO GERAL, considerando os itens comprados em comum entre eles ("qual mercado é mais barato pra mim", "onde compensa mais eu comprar", "ranking dos mercados que eu compro")
-- grocery_history_query: listar as COMPRAS de mercado de fato (itens + valor), opcionalmente filtrado por categoria e/ou período ("o que comprei no mercado esse mês", "qual carne comprei semana passada", "minhas compras de mercado", "resumo das compras do mês", "o que comprei de limpeza esse mês"). ⚠️ DIFERENTE de grocery_spend_query (que só dá o total por mercado, sem listar item) e de grocery_price_compare (preço de 1 item específico entre lojas) — aqui é "o que eu comprei", com os itens de verdade. Se mencionar uma categoria (carne, limpeza, bebida, etc.), inclua "grocery.category" com uma das categorias válidas (Carnes, Mercearia, Hortifruti, Laticínios, Padaria, Bebidas, Limpeza, Higiene, Outros). Se mencionar um período diferente do mês atual ("semana passada", "mês passado"), inclua "grocery.period" com os valores pré-calculados do início da mensagem (mesma regra de finance_query — NUNCA calcule a data por conta própria).
-- grocery_last_purchase_query: consultar a compra MAIS RECENTE num mercado específico ("quanto gastei na minha última compra do Muffato", "o que comprei no Muffato última vez"). Use "grocery.storeName" e "grocery.queryDetail": "total" quando pedir quanto gastou, ou "items" quando pedir o que comprou — nesse caso o sistema mostra todos os itens, quantidades, preços e total.
-- grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito de mercado, SEM listar os itens comprados ("quanto gastei no mercado esse mês", "qual mercado eu gasto mais", "quantas vezes fui no Assaí")
+- grocery_history_query: listar as COMPRAS de mercado de fato, opcionalmente filtradas por mercado, categoria, período e posição/quantidade ("o que comprei no Muffato em agosto", "qual carne comprei semana passada", "todas as minhas compras", "minhas últimas 3 compras", "minha penúltima compra"). Use "grocery.storeName" para o mercado, "grocery.category" para uma categoria válida, "grocery.period" para o período, "grocery.allHistory": true quando pedir todo o histórico, "grocery.purchaseLimit" para últimas N, "grocery.purchaseOffset": 1 para penúltima e 2 para antepenúltima. Use "grocery.queryDetail": "items" quando pedir o que comprou ou "total" quando pedir só valores. ⚠️ DIFERENTE de grocery_spend_query (resumo total por mercado) e grocery_price_compare (preço de um produto). Para períodos relativos, copie as datas pré-calculadas.
+- grocery_last_purchase_query: consultar a compra MAIS RECENTE, com ou sem mercado específico ("quanto gastei na minha última compra", "o que comprei no Muffato última vez"). Use "grocery.storeName" quando citado e "grocery.queryDetail": "total" quando pedir quanto gastou, ou "items" quando pedir o que comprou.
+- grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito, sem listar itens ("quanto gastei no mercado esse mês", "quanto gastei no Muffato em agosto", "qual mercado eu gasto mais"). Quando houver, use "grocery.storeName" e "grocery.period" para filtrar corretamente.
 - employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João", "troca o nome da Ana para Mariana"). Use "keyword" com o nome atual e "employee" com os campos novos; para renomear, use "employee.newName".
@@ -1627,10 +1755,11 @@ OU para registrar compra completa ("comprei no Assaí: arroz 25, feijão 8"):
   }
 }
 
-OU para gasto de mercado ("quanto gastei no mercado esse mês"):
+OU para gasto de mercado específico num período ("quanto gastei no Muffato em agosto de 2026"):
 {
   "intent": "grocery_spend_query",
-  "confidence": 0.85
+  "confidence": 0.9,
+  "grocery": { "storeName": "Muffato", "period": { "from": "2026-08-01", "to": "2026-08-31" } }
 }
 
 OU para finalizar compra a partir da lista marcada ("finalizei a compra no Assaí, foi 120 reais"):
@@ -1672,6 +1801,20 @@ OU para listar todas as compras do mês, sem filtro ("o que comprei no mercado e
   "intent": "grocery_history_query",
   "confidence": 0.9,
   "grocery": {}
+}
+
+OU para listar todo o histórico de um mercado ("mostre todas as compras do Muffato"):
+{
+  "intent": "grocery_history_query",
+  "confidence": 0.95,
+  "grocery": { "storeName": "Muffato", "allHistory": true, "queryDetail": "items" }
+}
+
+OU para consultar a penúltima compra ("quanto foi minha penúltima compra no Assaí"):
+{
+  "intent": "grocery_history_query",
+  "confidence": 0.95,
+  "grocery": { "storeName": "Assaí", "allHistory": true, "purchaseLimit": 1, "purchaseOffset": 1, "queryDetail": "total" }
 }
 
 OU para consultar a última compra de um mercado ("o que comprei no Muffato última vez"):
@@ -2081,6 +2224,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitLastGroceryPurchase = getExplicitLastGroceryPurchaseResult(message);
   if (explicitLastGroceryPurchase) return explicitLastGroceryPurchase;
+
+  const explicitGroceryHistory = getExplicitGroceryHistoryQueryResult(message);
+  if (explicitGroceryHistory) return explicitGroceryHistory;
 
   const explicitWeeklySummary = getExplicitWeeklySummaryResult(message);
   if (explicitWeeklySummary) return explicitWeeklySummary;

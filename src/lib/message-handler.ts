@@ -75,6 +75,26 @@ async function wppSend(to: string, message: string): Promise<void> {
   if (!sent) throw new Error(`[message-handler] WhatsApp recusou resposta para ${to.slice(-4)}`);
 }
 
+/** Mantém respostas de histórico dentro do limite prático do WhatsApp sem
+ * omitir compras. A quebra privilegia linhas completas. */
+async function wppSendLong(to: string, message: string, maxLength = 3500): Promise<void> {
+  if (message.length <= maxLength) {
+    await wppSend(to, message);
+    return;
+  }
+  let chunk = "";
+  for (const line of message.split("\n")) {
+    const candidate = chunk ? `${chunk}\n${line}` : line;
+    if (candidate.length <= maxLength) {
+      chunk = candidate;
+      continue;
+    }
+    if (chunk) await wppSend(to, chunk);
+    chunk = line;
+  }
+  if (chunk) await wppSend(to, chunk);
+}
+
 /** Pergunta qual compromisso o usuário quis dizer quando a busca por
  *  palavra-chave bate em mais de um (ex: duas "reunião" na mesma semana) —
  *  mesmo padrão usado para lançamentos financeiros e metas ambíguas: nunca
@@ -2240,15 +2260,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "grocery_last_purchase_query": {
         const requestedStore = ai.grocery?.storeName?.trim();
-        if (!requestedStore) {
-          await wppSend(from, user.locale === "es" ? "❓ ¿De qué supermercado quieres consultar la última compra?" : "❓ De qual mercado deseja consultar a última compra?");
-          break;
-        }
-        const latestPurchase = findLatestPurchaseByStoreName(await getPurchasesInRange(user.id), requestedStore);
+        const purchases = await getPurchasesInRange(user.id);
+        const latestPurchase = requestedStore ? findLatestPurchaseByStoreName(purchases, requestedStore) : purchases[0] ?? null;
         if (!latestPurchase) {
+          const target = requestedStore ? ` *${requestedStore}*` : "";
           await wppSend(from, user.locale === "es"
-            ? `❓ No encontré ninguna compra registrada en *${requestedStore}*.`
-            : `❓ Não encontrei nenhuma compra registrada no *${requestedStore}*.`);
+            ? `❓ No encontré ninguna compra registrada${requestedStore ? ` en${target}` : ""}.`
+            : `❓ Não encontrei nenhuma compra registrada${requestedStore ? ` no${target}` : ""}.`);
           break;
         }
         const dateLocale = user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR";
@@ -2285,9 +2303,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "grocery_spend_query": {
-        const spend = await getSpendByStore(user.id);
+        const spendPeriod = ai.grocery?.period;
+        const spend = await getSpendByStore(user.id, spendPeriod?.from, spendPeriod?.to, ai.grocery?.storeName);
         const totalSpent = spend.reduce((s, x) => s + x.total, 0);
-        await wppSend(from, replyGrocerySpend(spend, totalSpent, user.locale));
+        const spendPeriodLabel = spendPeriod ? periodLabelFor(spendPeriod, now, user.locale) : undefined;
+        await wppSend(from, replyGrocerySpend(spend, totalSpent, user.locale, spendPeriodLabel));
         break;
       }
 
@@ -2356,36 +2376,72 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "grocery_history_query": {
         const categoryFilter = ai.grocery?.category as GroceryCategory | undefined;
         const [defFrom, defTo] = monthBounds(year, month);
-        const histFrom = ai.grocery?.period?.from || defFrom;
-        const histTo = ai.grocery?.period?.to || defTo;
-        const histPurchases = await getPurchasesInRange(user.id, histFrom, histTo, categoryFilter);
+        const requestedPeriod = ai.grocery?.period;
+        const requestedStore = ai.grocery?.storeName?.trim();
+        const purchaseLimit = ai.grocery?.purchaseLimit && ai.grocery.purchaseLimit > 0 ? Math.floor(ai.grocery.purchaseLimit) : undefined;
+        const purchaseOffset = ai.grocery?.purchaseOffset && ai.grocery.purchaseOffset > 0 ? Math.floor(ai.grocery.purchaseOffset) : 0;
+        const useAllHistory = ai.grocery?.allHistory || !!requestedStore || !!purchaseLimit || purchaseOffset > 0;
+        const histFrom = requestedPeriod?.from || (useAllHistory ? undefined : defFrom);
+        const histTo = requestedPeriod?.to || (useAllHistory ? undefined : defTo);
+        const allMatchingPurchases = await getPurchasesInRange(user.id, histFrom, histTo, categoryFilter, requestedStore);
+        const histPurchases = allMatchingPurchases.slice(purchaseOffset, purchaseLimit ? purchaseOffset + purchaseLimit : undefined);
 
         if (!histPurchases.length) {
-          await wppSend(from, categoryFilter
-            ? `❓ Não achei compras de *${categoryFilter}* nesse período.`
-            : `❓ Nenhuma compra de mercado registrada nesse período.`);
+          const storePart = requestedStore ? (user.locale === "es" ? ` en *${requestedStore}*` : ` no *${requestedStore}*`) : "";
+          const categoryPart = categoryFilter ? (user.locale === "es" ? ` de *${categoryFilter}*` : ` de *${categoryFilter}*`) : "";
+          await wppSend(from, user.locale === "es"
+            ? `❓ No encontré compras${categoryPart}${storePart} con esos filtros.`
+            : `❓ Não encontrei compras${categoryPart}${storePart} com esses filtros.`);
           break;
         }
 
-        const byStore = new Map<string, { total: number; items: typeof histPurchases[0]["items"] }>();
-        for (const p of histPurchases) {
-          const cur = byStore.get(p.storeName) ?? { total: 0, items: [] };
-          cur.total += p.total;
-          cur.items.push(...p.items);
-          byStore.set(p.storeName, cur);
-        }
-        const stores = Array.from(byStore.entries()).sort((a, b) => b[1].total - a[1].total);
-        const grandTotal = stores.reduce((s, [, v]) => s + v.total, 0);
+        const dateLocale = user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR";
+        const scopeLabel = requestedPeriod
+          ? periodLabelFor(requestedPeriod, now, user.locale)
+          : purchaseOffset === 1 && purchaseLimit === 1
+            ? (user.locale === "es" ? "penúltima compra" : "penúltima compra")
+            : purchaseOffset === 2 && purchaseLimit === 1
+              ? (user.locale === "es" ? "antepenúltima compra" : "antepenúltima compra")
+              : purchaseLimit
+                ? (user.locale === "es" ? `últimas ${purchaseLimit} compras` : `últimas ${purchaseLimit} compras`)
+                : useAllHistory
+                  ? (user.locale === "es" ? "todo el historial" : "todo o histórico")
+                  : periodLabelFor(undefined, now, user.locale);
+        const categoryTitle = categoryFilter ? ` — ${categoryFilter}` : "";
+        const storeTitle = requestedStore ? ` — ${histPurchases[0].storeName}` : "";
+        let historyMessage = user.locale === "es"
+          ? `📋 *Compras${storeTitle}${categoryTitle} — ${scopeLabel}*\n\n`
+          : `📋 *Compras${storeTitle}${categoryTitle} — ${scopeLabel}*\n\n`;
+        const grandTotal = histPurchases.reduce((sum, purchase) => sum + purchase.total, 0);
 
-        let msg = `📋 *Suas compras${categoryFilter ? ` de ${categoryFilter}` : ""} — ${periodLabelFor(ai.grocery?.period, now)}:*\n\n`;
-        for (const [storeName, v] of stores) {
-          msg += `🏪 *${storeName}* — ${formatCurrency(v.total)}\n`;
-          v.items.forEach(i => { msg += `   • ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity}\n`; });
-          msg += "\n";
+        if (ai.grocery?.queryDetail === "total") {
+          for (const purchase of histPurchases) {
+            const purchaseDate = new Date(`${purchase.date}T12:00:00`).toLocaleDateString(dateLocale);
+            historyMessage += `• ${purchaseDate} — ${purchase.storeName}: *${formatCurrency(purchase.total)}*\n`;
+          }
+        } else {
+          for (const purchase of histPurchases) {
+            const purchaseDate = new Date(`${purchase.date}T12:00:00`).toLocaleDateString(dateLocale);
+            historyMessage += `🏪 *${purchase.storeName}* — ${purchaseDate}\n`;
+            if (!purchase.items.length) {
+              historyMessage += user.locale === "es" ? "   • Sin artículos detallados\n" : "   • Sem itens detalhados\n";
+            } else {
+              for (const item of purchase.items) {
+                const simpleUnit = /^(?:un|und|unidad(?:es)?)$/i.test(item.unit || "");
+                const quantity = item.quantity === 1 && item.unit && !simpleUnit
+                  ? item.unit
+                  : `${item.quantity}${item.unit ? ` ${item.unit}` : ""}`;
+                const estimated = item.priceEstimated ? " _(estimado)_" : "";
+                historyMessage += `   • ${item.productName} — ${quantity} × ${formatCurrency(item.price)} = ${formatCurrency(item.quantity * item.price)}${estimated}\n`;
+              }
+            }
+            historyMessage += `${categoryFilter ? "Subtotal" : "Total"}: *${formatCurrency(purchase.total)}*\n\n`;
+          }
         }
-        msg += `💰 *Total geral: ${formatCurrency(grandTotal)}*`;
-        if (stores.length > 1) msg += `\n🏆 Mercado que mais comprou: ${stores[0][0]}`;
-        await wppSend(from, msg.trim());
+        historyMessage += user.locale === "es"
+          ? `🧾 ${histPurchases.length} ${histPurchases.length === 1 ? "compra" : "compras"}\n💰 *Total: ${formatCurrency(grandTotal)}*`
+          : `🧾 ${histPurchases.length} ${histPurchases.length === 1 ? "compra" : "compras"}\n💰 *Total: ${formatCurrency(grandTotal)}*`;
+        await wppSendLong(from, historyMessage.trim());
         break;
       }
 

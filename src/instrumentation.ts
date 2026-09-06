@@ -45,7 +45,7 @@ export async function register() {
       const usersModuleForReminders = await import("./lib/users").catch(() => null);
       if (!remindersModule || !wppModule) return;
 
-      const { getDueReminders, markReminderSent, markReminderFailed } = remindersModule;
+      const { getDueReminders, markReminderSent, markReminderFailed, markReminderSkippedForInactiveUser } = remindersModule;
       const { sendText, sendReminderTemplate } = wppModule;
       const due = await getDueReminders();
       if (due.length > 0) console.log(`[cron] ${due.length} lembrete(s) a disparar`);
@@ -56,6 +56,11 @@ export async function register() {
           // pediu, já que ele pode nunca ter falado com o bot antes. Lembrete
           // "pra mim mesmo" continua no template original.
           const owner = usersModuleForReminders ? await usersModuleForReminders.getUserById(r.userId) : null;
+          if (!owner || !usersModuleForReminders?.hasAccess(owner)) {
+            await markReminderSkippedForInactiveUser(r.id, r.repeat);
+            console.log(`[cron] ignorado — conta sem acesso ativo — id=${r.id}`);
+            continue;
+          }
           const locale = owner?.locale;
           let ok: boolean;
           if (r.recipientType !== "self") {
@@ -118,7 +123,7 @@ export async function register() {
           for (const rec of dueToday) {
             try {
               const user = await getUserById(rec.userId);
-              if (!user) continue;
+              if (!user || !usersModule.hasAccess(user)) continue;
               const phones = (await getPhonesForUser(user.id)).map(link => link.phone);
               const msg = buildRecurringNotification(rec, user.locale);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
@@ -163,7 +168,7 @@ export async function register() {
           for (const apt of ended) {
             try {
               const aptUser = await getUserById(apt.userId);
-              if (!aptUser) continue;
+              if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
               const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
               for (const phone of phones) {
                 const ok = await sendText(phone, replyMeetAtaRequest(apt.title));
@@ -204,7 +209,7 @@ export async function register() {
           for (const apt of dueSoon) {
             try {
               const aptUser = await getUserById(apt.userId);
-              if (!aptUser) continue;
+              if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
               const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
               const msg = replyAppointmentReminder(apt, "2 horas", aptUser.locale);
               const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
@@ -247,7 +252,7 @@ export async function register() {
           for (const apt of dueSoon15) {
             try {
               const aptUser = await getUserById(apt.userId);
-              if (!aptUser) continue;
+              if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
               const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
               const msg = replyAppointmentReminder(apt, "15 minutos", aptUser.locale);
               const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };

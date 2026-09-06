@@ -193,9 +193,11 @@ export async function getProductsByUser(userId: string): Promise<GroceryProduct[
 type PurchaseRow = { id: string; user_id: string; store_id: string; date: string; total: string | number; source: string; finance_id: string | null; created_at: string; grocery_stores?: { name: string } | null };
 type ItemRow = { id: string; purchase_id: string; product_id: string | null; product_name: string; category: string; price: string | number; quantity: string | number; unit: string; price_estimated: boolean };
 
-export async function getPurchasesByUser(userId: string, limit = 100): Promise<GroceryPurchase[]> {
+export async function getPurchasesByUser(userId: string, limit = 100, offset = 0): Promise<GroceryPurchase[]> {
   const { data: purchases, error } = await getSupabase().from("grocery_purchases")
-    .select("*, grocery_stores(name)").eq("user_id", userId).order("date", { ascending: false }).limit(limit);
+    .select("*, grocery_stores(name)").eq("user_id", userId)
+    .order("date", { ascending: false }).order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
   if (error || !purchases?.length) return [];
   const rows = purchases as PurchaseRow[];
   const ids = rows.map(r => r.id);
@@ -225,11 +227,18 @@ export async function getPurchasesByUser(userId: string, limit = 100): Promise<G
  *  itens (não o total da compra inteira) — deixa claro que é um subtotal
  *  filtrado, não o valor pago de fato naquela compra. */
 export async function getPurchasesInRange(
-  userId: string, from?: string, to?: string, category?: GroceryCategory
+  userId: string, from?: string, to?: string, category?: GroceryCategory, storeName?: string
 ): Promise<GroceryPurchase[]> {
-  const all = await getPurchasesByUser(userId, 500);
+  const all: GroceryPurchase[] = [];
+  const pageSize = 200;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await getPurchasesByUser(userId, pageSize, offset);
+    all.push(...page);
+    if (page.length < pageSize) break;
+  }
   return all
     .filter(p => (!from || p.date >= from) && (!to || p.date <= to))
+    .filter(p => !storeName || groceryStoreNameMatches(p.storeName, storeName))
     .map(p => {
       if (!category) return p;
       const items = p.items.filter(i => i.category === category);
@@ -240,6 +249,12 @@ export async function getPurchasesInRange(
 
 function storeSearchName(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+const GENERIC_STORE_WORDS = new Set(["mercado", "supermercado", "super", "hipermercado", "hiper"]);
+
+function meaningfulStoreTokens(value: string): string[] {
+  return storeSearchName(value).split(" ").filter(token => token && !GENERIC_STORE_WORDS.has(token));
 }
 
 function editDistance(left: string, right: string): number {
@@ -261,21 +276,26 @@ function editDistance(left: string, right: string): number {
 export function findLatestPurchaseByStoreName(purchases: GroceryPurchase[], storeName: string): GroceryPurchase | null {
   const query = storeSearchName(storeName);
   if (!query) return null;
-  const genericStoreWords = new Set(["mercado", "supermercado", "super", "hipermercado", "hiper"]);
-  const meaningfulTokens = (value: string) => value.split(" ").filter(token => token && !genericStoreWords.has(token));
-  const queryTokens = meaningfulTokens(query);
-  const matches = purchases.filter(purchase => {
-    const candidate = storeSearchName(purchase.storeName);
-    if (candidate === query || candidate.includes(query) || query.includes(candidate)) return true;
-    if (query.length < 3) return false;
-    const candidateTokens = meaningfulTokens(candidate);
-    return queryTokens.some(queryToken => candidateTokens.some(candidateToken => {
-      const distance = editDistance(queryToken, candidateToken);
-      const allowedDistance = Math.max(1, Math.floor(Math.max(queryToken.length, candidateToken.length) * 0.2));
-      return distance <= allowedDistance;
-    }));
-  });
+  const matches = purchases.filter(purchase => groceryStoreNameMatches(purchase.storeName, query));
   return matches.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+}
+
+/** Compara nomes de mercado ignorando acentos, prefixos genéricos e um
+ * pequeno erro de digitação ("Muffatto" encontra "Super Muffato"). */
+export function groceryStoreNameMatches(candidateName: string, requestedName: string): boolean {
+  const candidate = storeSearchName(candidateName);
+  const query = storeSearchName(requestedName);
+  if (!candidate || !query) return false;
+  if (candidate === query || candidate.includes(query) || query.includes(candidate)) return true;
+  if (query.length < 3) return false;
+  const queryTokens = meaningfulStoreTokens(query);
+  const candidateTokens = meaningfulStoreTokens(candidate);
+  if (!queryTokens.length || !candidateTokens.length) return false;
+  return queryTokens.some(queryToken => candidateTokens.some(candidateToken => {
+    const distance = editDistance(queryToken, candidateToken);
+    const allowedDistance = Math.max(1, Math.floor(Math.max(queryToken.length, candidateToken.length) * 0.2));
+    return distance <= allowedDistance;
+  }));
 }
 
 /** Único ponto de gravação de itens de compra — cada item passa por
@@ -318,7 +338,22 @@ export async function setPurchaseFinanceId(purchaseId: string, userId: string, f
 }
 
 // ── Analytics ────────────────────────────
-export async function getSpendByStore(userId: string): Promise<Array<{ storeId: string; storeName: string; total: number; visits: number }>> {
+export async function getSpendByStore(
+  userId: string, from?: string, to?: string, storeName?: string
+): Promise<Array<{ storeId: string; storeName: string; total: number; visits: number }>> {
+  if (from || to || storeName) {
+    const purchases = await getPurchasesInRange(userId, from, to, undefined, storeName);
+    const filtered = new Map<string, { storeName: string; total: number; visits: number }>();
+    for (const purchase of purchases) {
+      const cur = filtered.get(purchase.storeId) ?? { storeName: purchase.storeName, total: 0, visits: 0 };
+      cur.total += purchase.total;
+      cur.visits += 1;
+      filtered.set(purchase.storeId, cur);
+    }
+    return Array.from(filtered.entries())
+      .map(([storeId, value]) => ({ storeId, ...value }))
+      .sort((a, b) => b.total - a.total);
+  }
   const { data, error } = await getSupabase().from("grocery_purchases")
     .select("store_id, total, grocery_stores(name)").eq("user_id", userId);
   if (error || !data) return [];
@@ -467,6 +502,17 @@ export async function toggleShoppingItem(id: string, userId: string): Promise<bo
   const { error } = await getSupabase().from("grocery_shopping_list_items")
     .update({ checked: !(data as { checked: boolean }).checked }).eq("id", id).eq("user_id", userId);
   return !error;
+}
+
+export async function setShoppingItemsChecked(
+  userId: string, checked: boolean, category?: GroceryCategory
+): Promise<number> {
+  let query = getSupabase().from("grocery_shopping_list_items")
+    .update({ checked }).eq("user_id", userId).eq("checked", !checked);
+  if (category) query = query.in("category", [category, ...CATEGORY_STORAGE_ALIASES[category]]);
+  const { data, error } = await query.select("id");
+  if (error) throw new Error(`[grocery] setShoppingItemsChecked falhou: ${error.message}`);
+  return data?.length ?? 0;
 }
 
 export async function clearCheckedItems(userId: string): Promise<void> {

@@ -120,6 +120,13 @@ export default function SupermercadoPage() {
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_clear_checked" }) });
     loadList(tab === "whatsapp" ? undefined : listFilter); loadOverview();
   }
+  async function setAllChecked(checked: boolean) {
+    await fetch("/api/admin/grocery", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "list_check_all", checked, category: listFilter || undefined }),
+    });
+    loadList(listFilter); loadOverview();
+  }
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
     await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list_add", ...newItem }) });
@@ -297,13 +304,23 @@ export default function SupermercadoPage() {
 
           {/* Actions */}
           <div className="flex items-center justify-between">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button onClick={() => setShowAddItem(true)}
                 className="px-3 py-1.5 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-700 transition">
                 + Item
               </button>
+              {list.some(item => !item.checked) && (
+                <button onClick={() => setAllChecked(true)}
+                  className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-xs font-semibold hover:bg-amber-100 transition">
+                  ✓ Marcar todos ({list.filter(item => !item.checked).length})
+                </button>
+              )}
               {checkedCount > 0 && (
                 <>
+                  <button onClick={() => setAllChecked(false)}
+                    className="px-3 py-1.5 bg-white text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold hover:bg-slate-50 transition">
+                    Desmarcar todos
+                  </button>
                   <button onClick={openFinish}
                     className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition">
                     ✅ Finalizar compra ({checkedCount})

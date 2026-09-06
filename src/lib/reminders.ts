@@ -75,18 +75,44 @@ export async function getDueReminders(): Promise<Reminder[]> {
   return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 
-export async function markReminderSent(id: string, repeat: ReminderRepeat): Promise<void> {
+/** Calcula a próxima ocorrência futura sem tentar "recuperar" um lembrete
+ * perdido várias vezes. Isso também permite pular os disparos enquanto a
+ * conta está sem acesso e retomar normalmente depois da renovação. */
+export function nextReminderOccurrenceAfter(
+  scheduledAt: string, repeat: ReminderRepeat, now: Date = new Date()
+): string | null {
+  if (repeat === "none") return null;
+  const next = new Date(scheduledAt);
+  if (Number.isNaN(next.getTime())) return null;
+  while (next <= now) {
+    if (repeat === "daily") next.setDate(next.getDate() + 1);
+    else if (repeat === "weekly") next.setDate(next.getDate() + 7);
+    else next.setMonth(next.getMonth() + 1);
+  }
+  return next.toISOString();
+}
+
+async function advanceReminder(id: string, repeat: ReminderRepeat): Promise<void> {
   if (repeat === "none") {
     await getSupabase().from("reminders").update({ sent: true, failed_attempts: 0 }).eq("id", id);
     return;
   }
   const { data, error } = await getSupabase().from("reminders").select("scheduled_at").eq("id", id).maybeSingle();
   if (error || !data) return;
-  const next = new Date((data as { scheduled_at: string }).scheduled_at);
-  if (repeat === "daily") next.setDate(next.getDate() + 1);
-  else if (repeat === "weekly") next.setDate(next.getDate() + 7);
-  else if (repeat === "monthly") next.setMonth(next.getMonth() + 1);
-  await getSupabase().from("reminders").update({ scheduled_at: next.toISOString(), sent: false, failed_attempts: 0 }).eq("id", id);
+  const next = nextReminderOccurrenceAfter((data as { scheduled_at: string }).scheduled_at, repeat);
+  if (!next) return;
+  await getSupabase().from("reminders").update({ scheduled_at: next, sent: false, failed_attempts: 0 }).eq("id", id);
+}
+
+export async function markReminderSent(id: string, repeat: ReminderRepeat): Promise<void> {
+  await advanceReminder(id, repeat);
+}
+
+/** Conta sem assinatura ativa não recebe o disparo. A ocorrência vencida é
+ * pulada e a recorrência fica preparada para uma data futura, caso a pessoa
+ * renove; lembrete único vencido é encerrado para não chegar atrasado. */
+export async function markReminderSkippedForInactiveUser(id: string, repeat: ReminderRepeat): Promise<void> {
+  await advanceReminder(id, repeat);
 }
 
 /** Chamado quando o envio falha (WhatsApp indisponível, número inválido,

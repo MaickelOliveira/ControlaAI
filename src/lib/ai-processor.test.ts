@@ -3,6 +3,7 @@ import {
   getExplicitDailySummaryResult,
   getExplicitGroceryListAddResult,
   getExplicitGroceryListManagementResult,
+  getExplicitGroceryHistoryQueryResult,
   getExplicitLastGroceryPurchaseResult,
   getExplicitRelativePeriod,
   getExplicitTaskCreateResult,
@@ -189,6 +190,42 @@ describe("getExplicitLastGroceryPurchaseResult", () => {
       .toMatchObject({ intent: "grocery_last_purchase_query", grocery: { storeName: "Muffato", queryDetail: "items" } });
     expect(getExplicitLastGroceryPurchaseResult("¿qué compré en Muffato la última vez?"))
       .toMatchObject({ intent: "grocery_last_purchase_query", grocery: { storeName: "Muffato", queryDetail: "items" } });
+    expect(getExplicitLastGroceryPurchaseResult("quanto gastei na minha última compra?"))
+      .toMatchObject({ intent: "grocery_last_purchase_query", grocery: { queryDetail: "total" } });
+  });
+});
+
+describe("getExplicitGroceryHistoryQueryResult", () => {
+  const anchor = new Date(2026, 8, 6, 12, 0, 0);
+
+  it("combines store, calendar period and itemized history", () => {
+    expect(getExplicitGroceryHistoryQueryResult("mostre todas as compras do Muffato em agosto de 2026", anchor))
+      .toMatchObject({
+        intent: "grocery_history_query",
+        grocery: {
+          storeName: "muffato",
+          period: { from: "2026-08-01", to: "2026-08-31" },
+          queryDetail: "items",
+        },
+      });
+    expect(getExplicitGroceryHistoryQueryResult("liste as compras no Assaí de 01/08/2026 a 15/08/2026", anchor))
+      .toMatchObject({ grocery: { storeName: "assai", period: { from: "2026-08-01", to: "2026-08-15" } } });
+    expect(getExplicitGroceryHistoryQueryResult("mostre as compras do Muffato em 2025", anchor))
+      .toMatchObject({ grocery: { storeName: "muffato", period: { from: "2025-01-01", to: "2025-12-31" } } });
+  });
+
+  it("supports all history, latest N and ordinal purchases", () => {
+    expect(getExplicitGroceryHistoryQueryResult("mostre todas as minhas compras", anchor))
+      .toMatchObject({ grocery: { allHistory: true, queryDetail: "items" } });
+    expect(getExplicitGroceryHistoryQueryResult("liste minhas últimas 3 compras no Assaí", anchor))
+      .toMatchObject({ grocery: { storeName: "assai", allHistory: true, purchaseLimit: 3 } });
+    expect(getExplicitGroceryHistoryQueryResult("o que comprei na penúltima compra do Muffato?", anchor))
+      .toMatchObject({ grocery: { storeName: "muffato", allHistory: true, purchaseLimit: 1, purchaseOffset: 1 } });
+  });
+
+  it("understands the same filters in Spanish", () => {
+    expect(getExplicitGroceryHistoryQueryResult("muéstrame mi penúltima compra en Muffato", anchor))
+      .toMatchObject({ grocery: { storeName: "muffato", allHistory: true, purchaseLimit: 1, purchaseOffset: 1, queryDetail: "items" } });
   });
 });
 

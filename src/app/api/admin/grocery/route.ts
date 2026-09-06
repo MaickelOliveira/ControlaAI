@@ -4,9 +4,9 @@ import {
   getStoresByUser, findOrCreateStore, addPurchase, getPurchasesByUser,
   getSpendByStore, getPriceComparison, getStorePriceRanking, getProductsByUser,
   getShoppingList, addToShoppingList, toggleShoppingItem,
-  clearCheckedItems, removeShoppingItem, LIST_TEMPLATES, addFromTemplate,
+  clearCheckedItems, removeShoppingItem, setShoppingItemsChecked, LIST_TEMPLATES, addFromTemplate,
   finalizePurchaseFromChecked, setPurchaseFinanceId,
-  type GroceryCategory,
+  GROCERY_CATEGORIES, type GroceryCategory,
 } from "@/lib/grocery";
 import { addFinance } from "@/lib/finances";
 
@@ -93,6 +93,14 @@ export async function POST(req: NextRequest) {
   if (action === "list_toggle") {
     await toggleShoppingItem(body.id, session.sub);
     return NextResponse.json({ ok: true });
+  }
+
+  if (action === "list_check_all") {
+    const category = typeof body.category === "string" && (GROCERY_CATEGORIES as readonly string[]).includes(body.category)
+      ? body.category as GroceryCategory
+      : undefined;
+    const changed = await setShoppingItemsChecked(session.sub, body.checked !== false, category);
+    return NextResponse.json({ ok: true, changed });
   }
 
   if (action === "list_remove") {
