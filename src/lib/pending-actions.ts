@@ -1,6 +1,6 @@
 import { getSupabase } from "./supabase";
 import { VehicleExpenseType, type VehicleUpdateInput } from "./vehicles";
-import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
+import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } from "./finances";
 import type { AIResult, RecurringData } from "./ai-processor";
 
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
@@ -415,7 +415,12 @@ export function parseFinanceChoiceMulti(
   text: string,
   candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string }>
 ): number[] {
-  const t = text.trim().toLowerCase();
+  // A pessoa pode reforçar a data depois dos números ("2 e 3 do dia
+  // 07/09/2026"). A data é contexto, não parte do segundo índice.
+  const t = text.trim().toLowerCase().replace(
+    /\s+(?:(?:do|no)\s+dia|de\s+la\s+fecha|del\s+dia)\s+\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s*$/,
+    "",
+  );
   if (/^(todos|tudo|all)$/.test(t)) return candidates.map((_, i) => i);
 
   const tokens = t.split(/\s*,\s*|\s+e\s+|\s+ou\s+/).map(s => s.trim()).filter(Boolean);
@@ -451,8 +456,8 @@ export function parseAmountBR(text: string): number | null {
 
 /** Interpreta a resposta do usuário como o NOVO VALOR de um lançamento já
  *  escolhido (etapa final de finance_edit, quando falta só o "o que mudar").
- *  Aceita valor em reais, nome de categoria conhecida, e/ou uma nova
- *  descrição ("descrição para X" / "nome para X"). Retorna um patch
+ *  Aceita valor, nome de categoria conhecida, modo pessoal/empresarial
+ *  e/ou uma nova descrição ("descrição para X" / "nome para X"). Retorna um patch
  *  parcial — pode vir vazio se não reconhecer nada. */
 export function parseFinancePatchFromText(text: string): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
@@ -468,6 +473,9 @@ export function parseFinancePatchFromText(text: string): Record<string, unknown>
   const allCategories = [...CATEGORIES_EXPENSE, ...CATEGORIES_INCOME];
   const category = allCategories.find((c) => lower.includes(c.toLowerCase()));
   if (category) patch.category = category;
+
+  const destinationMode = parseFinanceDestinationMode(t);
+  if (destinationMode) patch.mode = destinationMode;
 
   return patch;
 }

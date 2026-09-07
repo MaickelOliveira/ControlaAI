@@ -4,7 +4,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, type FinanceMode } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
@@ -40,6 +40,7 @@ import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/wha
 import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
+import { localeForWhatsAppPhone } from "@/lib/phone";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
@@ -68,6 +69,17 @@ export function parseLinkedPhoneAccess(value: string): "personal" | "business" |
   return null;
 }
 
+export function replyPhoneNotLinked(phone: string): string {
+  const locale = localeForWhatsAppPhone(phone);
+  if (locale === "es") {
+    return "¡Hola! Soy Zelo, pero todavía no encontré tu número.\n\nSi ya tienes una cuenta, abre *Configuración → Vincular WhatsApp*.\n\nzelogestaointeligente.com.br/es";
+  }
+  if (locale === "pt-PT") {
+    return "Olá! Sou o Zelo, mas ainda não encontrei o seu número.\n\nSe já tem uma conta, aceda a *Configurações → Associar WhatsApp*.\n\nzelogestaointeligente.com.br/pt";
+  }
+  return "Olá! Sou o Zelo, mas ainda não encontrei seu número.\n\nSe você já tem uma conta, acesse *Configurações → Vincular WhatsApp*.\n\nzelogestaointeligente.com.br";
+}
+
 async function getUserByWppPhone(phone: string) {
   const userId = await getUserIdByPhone(phone);
   return userId ? getUserById(userId) : null;
@@ -76,6 +88,14 @@ async function getUserByWppPhone(phone: string) {
 function cap(s: string): string {
   if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Keycap emoji só existe para um algarismo. Em 10️⃣ o WhatsApp renderiza
+ * "1" + o ícone "0", então listas longas usam numeração textual a partir
+ * de 10 para permanecerem legíveis. */
+export function listNumberLabel(zeroBasedIndex: number): string {
+  const number = zeroBasedIndex + 1;
+  return number <= 9 ? `${number}️⃣` : `${number}.`;
 }
 
 /** No fluxo conversacional, falha de envio não pode parecer sucesso. A
@@ -603,7 +623,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const user = await getUserByWppPhone(from);
 
     if (!user) {
-      await wppSend(from, "Olá / ¡Hola! Sou o Zelo, mas ainda não encontrei seu número. / Soy Zelo, pero todavía no encontré tu número.\n\nSe você já tem uma conta, acesse *Configurações → Vincular WhatsApp*. / Si ya tienes una cuenta, abre *Configuración → Vincular WhatsApp*.\n\nPortuguês: zelogestaointeligente.com.br\nEspañol: zelogestaointeligente.com.br/es");
+      await wppSend(from, replyPhoneNotLinked(from));
       return;
     }
 
@@ -1378,6 +1398,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.finance?.category) editPatch.category = ai.finance.category;
         if (ai.finance?.date) editPatch.date = ai.finance.date;
         if (ai.finance?.type) editPatch.type = ai.finance.type;
+        const destinationMode = ai.finance?.newMode || parseFinanceDestinationMode(messageText);
+        if (destinationMode) editPatch.mode = destinationMode;
         if (ai.newDescription) editPatch.description = ai.newDescription;
         // Correção "isso na verdade é a receber/a pagar" num lançamento já
         // contabilizado — tira do saldo sem apagar (mesma regra de
@@ -1451,7 +1473,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Palavra-chave achou vários → deixa escolher entre eles
         if (editCandidates.length > 1) {
           const list = editCandidates.map((c, i) =>
-            `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
+            `${listNumberLabel(i)} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
           ).join("\n");
           await setPendingAction(from, {
             type: "finance_select", userId: user.id,
@@ -1472,7 +1494,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           break;
         }
         const recentList = recentCandidates.map((c, i) =>
-          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
+          `${listNumberLabel(i)} ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
         ).join("\n");
         await setPendingAction(from, {
           type: "finance_select", userId: user.id,
@@ -1531,7 +1553,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Palavra-chave achou vários → deixa escolher entre eles
         if (delCandidates.length > 1) {
           const delList = delCandidates.map((c, i) =>
-            `${i + 1}️⃣ *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
+            `${listNumberLabel(i)} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
           ).join("\n");
           await setPendingAction(from, {
             type: "finance_select", userId: user.id,
@@ -1551,7 +1573,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           break;
         }
         const recentList = recentCandidates.map((c, i) =>
-          `${i + 1}️⃣ ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
+          `${listNumberLabel(i)} ${c.type === "income" ? "💰" : "💸"} *${c.description}* — ${formatCurrency(c.amount)} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
         ).join("\n");
         await setPendingAction(from, {
           type: "finance_select", userId: user.id,

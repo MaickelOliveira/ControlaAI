@@ -6,6 +6,37 @@ export type FinanceMode = "personal" | "business";
 export type FinanceSource = "whatsapp" | "web";
 export type FinanceStatus = "posted" | "pending";
 
+function normalizeFinanceModeText(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+/** Identifica o modo de DESTINO numa alteração de lançamento.
+ *
+ * É separado do `mode` usado como contexto/origem porque frases como
+ * "mudar da conta pessoal para a conta da empresa" citam os dois modos.
+ * As formas com "para/a la" têm prioridade; uma resposta curta como
+ * "conta da empresa" também funciona durante uma edição pendente. */
+export function parseFinanceDestinationMode(text: string): FinanceMode | null {
+  const normalized = normalizeFinanceModeText(text);
+  if (!normalized) return null;
+
+  const businessTarget = /\b(?:para|pra|pro|a|ao|hacia)\s+(?:(?:a|o|la|el)\s+)?(?:(?:conta|cuenta|modo)\s+)?(?:(?:da|de\s+la|do)\s+)?(?:empresa|empresarial|negocio)\b/;
+  const personalTarget = /\b(?:para|pra|pro|a|ao|hacia)\s+(?:(?:a|o|la|el)\s+)?(?:(?:conta|cuenta|modo)\s+)?(?:pessoal|personal)\b/;
+
+  const businessTargetMatch = normalized.match(businessTarget);
+  const personalTargetMatch = normalized.match(personalTarget);
+  if (businessTargetMatch || personalTargetMatch) {
+    if (!businessTargetMatch) return "personal";
+    if (!personalTargetMatch) return "business";
+    return (businessTargetMatch.index ?? 0) > (personalTargetMatch.index ?? 0) ? "business" : "personal";
+  }
+
+  const mentionsBusiness = /\b(?:conta|cuenta|modo)\s+(?:(?:da|de\s+la)\s+)?(?:empresa|empresarial|negocio)\b|\bconta\s+empresarial\b|\bcuenta\s+empresarial\b/.test(normalized);
+  const mentionsPersonal = /\b(?:conta|cuenta|modo)\s+(?:pessoal|personal)\b/.test(normalized);
+  if (mentionsBusiness === mentionsPersonal) return null;
+  return mentionsBusiness ? "business" : "personal";
+}
+
 export const CATEGORIES_EXPENSE = [
   "Alimentação", "Transporte", "Moradia", "Saúde", "Educação",
   "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos",
@@ -294,7 +325,7 @@ export async function deleteAllFinances(userId: string, mode: FinanceMode | "bot
   return count ?? 0;
 }
 
-export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost" | "type">>): Promise<Finance | null> {
+export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost" | "type" | "mode">>): Promise<Finance | null> {
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
   if (patch.category !== undefined) rowPatch.category = patch.category;
@@ -303,6 +334,7 @@ export async function updateFinance(id: string, userId: string, patch: Partial<P
   if (patch.status !== undefined) rowPatch.pending = patch.status === "pending";
   if (patch.autoPost !== undefined) rowPatch.auto_post = patch.autoPost;
   if (patch.type !== undefined) rowPatch.type = patch.type;
+  if (patch.mode !== undefined) rowPatch.mode = patch.mode;
   const { data, error } = await getSupabase().from("finances").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);

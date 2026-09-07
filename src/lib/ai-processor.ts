@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
-import { CATEGORIES_EXPENSE, CATEGORIES_INCOME } from "./finances";
+import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } from "./finances";
 import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
 
 export type Intent =
@@ -111,7 +111,9 @@ export type FinanceData = {
   category: string;
   description: string;
   date: string;
-  mode?: "personal" | "business"; // detectado automaticamente
+  mode?: "personal" | "business"; // modo atual/contexto do lançamento
+  /** Modo de destino solicitado em finance_edit; nunca confundir com `mode`. */
+  newMode?: "personal" | "business";
   accountHint?: string; // nome da conta/cartão mencionado, ex: "no Nubank", "cartão Inter" — ausente = usa a conta padrão
   // true SE E SOMENTE SE a mensagem indicar explicitamente que o valor
   // ainda NÃO foi recebido/pago de fato (é uma expectativa, não algo que já
@@ -363,6 +365,19 @@ export function withExplicitFinanceType(message: string, result: AIResult): AIRe
     ...result,
     ...(result.finance ? { finance: { ...result.finance, type } } : {}),
     ...(result.finances ? { finances: result.finances.map(finance => ({ ...finance, type })) } : {}),
+  };
+}
+
+/** Garante que uma troca explícita de conta pessoal/empresarial sobreviva
+ * mesmo quando o classificador preencher `mode` (origem/contexto) ou omitir
+ * o campo. Só atua em finance_edit para não alterar novos registros. */
+export function withExplicitFinanceDestinationMode(message: string, result: AIResult): AIResult {
+  if (result.intent !== "finance_edit") return result;
+  const newMode = parseFinanceDestinationMode(message);
+  if (!newMode) return result;
+  return {
+    ...result,
+    finance: { ...(result.finance ?? {}), newMode } as FinanceData,
   };
 }
 
@@ -1212,7 +1227,7 @@ PRIORIDADE DE INTERPRETAÇÃO:
 
 INTENÇÕES POSSÍVEIS:
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular).
-- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Se o usuário disser que o TIPO está errado — era despesa, não receita, ou vice-versa (ex: "isso é despesa, não receita", "errei, é gasto"), inclua "finance.type" com o tipo certo ("income" ou "expense"). Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
+- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser MOVER o lançamento entre pessoal e empresa (ex: "muda para a conta da empresa", "passe as contas de água para o empresarial", "pasa a la cuenta personal"), use "finance.newMode" com o DESTINO ("business" ou "personal"); "finance.mode" nunca representa o destino da mudança. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Se o usuário disser que o TIPO está errado — era despesa, não receita, ou vice-versa (ex: "isso é despesa, não receita", "errei, é gasto"), inclua "finance.type" com o tipo certo ("income" ou "expense"). Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
   ⚠️ CORREÇÃO EM LOTE do que acabou de ser registrado: se a mensagem for uma correção CURTA e GENÉRICA, sem citar a descrição de um lançamento específico, logo depois de você (o assistente) ter confirmado um registro — de 1 lançamento OU de vários de uma vez (ex: usuário registrou várias despesas e depois manda só "tá errado, são despesas", "errei, isso tudo é receita", "na verdade é a receber", "muda pra despesa") — marque "bulkCorrectLastBatch": true e preencha em "finance" SOMENTE os campos que mudaram (type e/ou pending e/ou category — o que a mensagem indicar). NÃO invente "keyword" nesse caso (deixe vazio) — o sistema já sabe aplicar a correção em cima do que foi registrado por último, um ou vários, sem precisar buscar por nome. Só use isso quando o histórico deixar claro que a mensagem é sobre o registro mais recente, não sobre um lançamento antigo específico.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X"). ⚠️ Se o pedido for genérico e curto, sem citar a descrição de um lançamento específico, logo depois de você ter confirmado um registro — de 1 lançamento OU de vários de uma vez (ex: "apaga isso", "apaga esses lançamentos", "remove tudo que acabei de mandar", "cancela esses"), marque "bulkCorrectLastBatch": true e NÃO invente "keyword" — o sistema apaga todo o registro mais recente (um ou vários) de uma vez. Só use isso quando ficar claro pelo histórico que é sobre o registro mais recente, não sobre um lançamento antigo específico.
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
@@ -1321,7 +1336,7 @@ Exemplo: "vou receber 2000 do aluguel semana que vem" → type: "income", pendin
 
 As categorias válidas (incluindo as personalizadas do usuário, se houver) vêm no início da mensagem, em CATEGORIAS DE DESPESA/CATEGORIAS DE RECEITA.
 
-MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, finance_edit, task_create, goal_create, vehicle_create, vehicle_update, vehicle_expense, recurring_create, recurring_edit, reminder_set. Sempre que a intenção criar/editar algo, tente identificar o campo "mode":
+MODO (business ou personal) — ⚠️ REGRA VALE PARA TODOS OS REGISTROS, não só finanças: finance_register, task_create, goal_create, vehicle_create, vehicle_update, vehicle_expense, recurring_create, recurring_edit, reminder_set. Sempre que a intenção criar/editar algo, tente identificar o campo "mode". EXCEÇÃO: em finance_edit, quando o pedido for mover um lançamento para outro modo, o destino vai em "finance.newMode" (não em "finance.mode"):
 1. PRIORIDADE MÁXIMA — pedido explícito: se a mensagem disser "modo empresa"/"empresarial"/"para empresa"/"na empresa" → mode: "business". Se disser "modo pessoal"/"pessoal" → mode: "personal". Isso vale mesmo que o conteúdo pareça sugerir o modo contrário — o pedido explícito do usuário sempre vence.
 2. Sem pedido explícito, infira pelo CONTEÚDO/CONTEXTO:
    - business: menções a FGTS, INSS, funcionário(s), salário de funcionário, folha, fornecedor, marketing, nota fiscal, cliente, faturamento, ou nome de projeto/cliente que soe como trabalho (ex: "construir site [nome de cliente]", "reunião com [cliente]", "entregar proposta para [empresa]"), ou categoria Funcionários/Marketing/Fornecedores/Impostos de empresa
@@ -1602,6 +1617,16 @@ Exemplo renomear a descrição ("muda a descrição do ifood para almoço com cl
   "confidence": 0.9,
   "keyword": "ifood",
   "newDescription": "almoço com cliente"
+}
+
+Exemplo mover lançamentos para a empresa ("mudar as contas de água para a conta da empresa"):
+{
+  "intent": "finance_edit",
+  "confidence": 0.95,
+  "keyword": "água",
+  "finance": {
+    "newMode": "business"
+  }
 }
 
 Exemplo onde a descrição do lançamento é uma palavra que também indica tipo ("corrija a receita para 2000 no modo pessoal"):
@@ -2378,9 +2403,12 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    const parsed = withExplicitFinanceType(
+    const parsed = withExplicitFinanceDestinationMode(
       message,
-      withExplicitRelativePeriod(message, JSON.parse(text) as AIResult),
+      withExplicitFinanceType(
+        message,
+        withExplicitRelativePeriod(message, JSON.parse(text) as AIResult),
+      ),
     );
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;

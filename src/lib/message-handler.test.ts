@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { parseLinkedPhoneAccess, phoneMatches } from "./message-handler";
+import { listNumberLabel, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked } from "./message-handler";
+import { parseFinanceDestinationMode } from "./finances";
+import { parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 
 describe("phoneMatches", () => {
   it("matches identical numbers", () => {
@@ -44,5 +46,49 @@ describe("parseLinkedPhoneAccess", () => {
     ["3", "both"],
   ])("understands Spanish access answer %s", (answer, expected) => {
     expect(parseLinkedPhoneAccess(answer)).toBe(expected);
+  });
+});
+
+describe("finance mode changes", () => {
+  it.each([
+    ["mudar para conta da empresa", "business"],
+    ["conta empresarial", "business"],
+    ["mudar da conta da empresa para pessoal", "personal"],
+    ["pasar a la cuenta de la empresa", "business"],
+    ["cuenta personal", "personal"],
+  ] as const)("parses %s as %s", (message, expected) => {
+    expect(parseFinanceDestinationMode(message)).toBe(expected);
+    expect(parseFinancePatchFromText(message)).toMatchObject({ mode: expected });
+  });
+
+  it("keeps both selected item numbers when the user also repeats the date", () => {
+    const candidates = [1, 2, 3].map(index => ({
+      id: String(index), description: `Conta ${index}`, amount: index * 10,
+      date: "2026-09-07", category: "Moradia", mode: "personal",
+    }));
+    expect(parseFinanceChoiceMulti("2 e 3 do dia 07/09/2026", candidates)).toEqual([1, 2]);
+  });
+});
+
+describe("unlinked phone language", () => {
+  it("sends only Portuguese to a Brazilian number", () => {
+    const reply = replyPhoneNotLinked("+55 (88) 82316-735");
+    expect(reply).toContain("Olá!");
+    expect(reply).not.toMatch(/¡Hola|Soy Zelo|Español/);
+  });
+
+  it("sends only Spanish to Spanish-speaking country numbers", () => {
+    const reply = replyPhoneNotLinked("+52 55 1234 5678");
+    expect(reply).toContain("¡Hola!");
+    expect(reply).not.toMatch(/Sou o Zelo|Português/);
+  });
+});
+
+describe("WhatsApp list numbering", () => {
+  it("uses keycap icons only through 9 and plain numbers from 10 onward", () => {
+    expect(listNumberLabel(0)).toBe("1️⃣");
+    expect(listNumberLabel(8)).toBe("9️⃣");
+    expect(listNumberLabel(9)).toBe("10.");
+    expect(listNumberLabel(12)).toBe("13.");
   });
 });

@@ -14,6 +14,7 @@ import {
   getExplicitWeeklySummaryResult,
   getUnsupportedBankConnectionResponse,
   processMessage,
+  withExplicitFinanceDestinationMode,
   withExplicitFinanceType,
 } from "./ai-processor";
 
@@ -50,6 +51,26 @@ describe("explicit finance type", () => {
     );
 
     expect(result.finance?.type).toBe("expense");
+  });
+});
+
+describe("explicit finance destination mode", () => {
+  it.each([
+    ["Mudar para a conta da empresa", "business"],
+    ["Mudar as contas de água para o empresarial", "business"],
+    ["Passe da conta da empresa para a conta pessoal", "personal"],
+    ["Pasa estos gastos a la cuenta de la empresa", "business"],
+    ["Cámbialos a la cuenta personal", "personal"],
+  ] as const)("keeps the destination from %s", (message, expected) => {
+    const result = withExplicitFinanceDestinationMode(message, {
+      intent: "finance_edit",
+      confidence: 0.9,
+      finance: {
+        type: "expense", amount: 10, category: "Outros", description: "Água", date: "2026-09-07",
+        mode: expected === "business" ? "personal" : "business",
+      },
+    });
+    expect(result.finance?.newMode).toBe(expected);
   });
 });
 
