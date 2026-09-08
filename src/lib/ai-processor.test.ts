@@ -31,6 +31,25 @@ describe("internet research classification", () => {
       .toMatchObject({ intent: "web_search", confidence: 1 });
   });
 
+  it("routes short current lookups of every kind without requiring the word internet", async () => {
+    expect(getExplicitWebSearchResult("Balneário Camboriú hoje"))
+      .toMatchObject({ intent: "web_search", confidence: 1, keyword: "Balneário Camboriú hoje" });
+    expect(getExplicitWebSearchResult("dólar hoje"))
+      .toMatchObject({ intent: "web_search", confidence: 1, keyword: "dólar hoje" });
+    expect(getExplicitWebSearchResult("clima en Bogotá"))
+      .toMatchObject({ intent: "web_search", confidence: 1, keyword: "clima en Bogotá" });
+    expect(await processMessage("eventos en Ciudad de México hoy"))
+      .toMatchObject({ intent: "web_search", confidence: 1 });
+  });
+
+  it("does not steal finance, reminder, task or agenda messages that mention today", () => {
+    expect(getExplicitWebSearchResult("Gastei 60 na farmácia hoje")).toBeNull();
+    expect(getExplicitWebSearchResult("me lembre do dólar hoje às 18h")).toBeNull();
+    expect(getExplicitWebSearchResult("tarefa de hoje: pesquisar hotéis")).toBeNull();
+    expect(getExplicitWebSearchResult("tenho reunião hoje em Bogotá")).toBeNull();
+    expect(getExplicitWebSearchResult("qual meu saldo hoje?")).toBeNull();
+  });
+
   it("does not confuse an internal Drive search with a web search", () => {
     expect(getExplicitWebSearchResult("Busque meu contrato no Drive")).toBeNull();
   });
