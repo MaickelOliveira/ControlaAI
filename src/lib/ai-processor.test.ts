@@ -38,6 +38,12 @@ describe("internet research classification", () => {
       .toMatchObject({ intent: "web_search", confidence: 1, keyword: "dólar hoje" });
     expect(getExplicitWebSearchResult("clima en Bogotá"))
       .toMatchObject({ intent: "web_search", confidence: 1, keyword: "clima en Bogotá" });
+    expect(getExplicitWebSearchResult("vai chver essa semana em salvador"))
+      .toMatchObject({ intent: "web_search", confidence: 1, keyword: "vai chver essa semana em salvador" });
+    expect(getExplicitWebSearchResult("vai chover esta semana em Manaus?"))
+      .toMatchObject({ intent: "web_search", confidence: 1 });
+    expect(getExplicitWebSearchResult("¿va a llover esta semana en Santiago?"))
+      .toMatchObject({ intent: "web_search", confidence: 1 });
     expect(await processMessage("eventos en Ciudad de México hoy"))
       .toMatchObject({ intent: "web_search", confidence: 1 });
   });

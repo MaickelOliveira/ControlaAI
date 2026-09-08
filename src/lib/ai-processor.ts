@@ -328,7 +328,7 @@ export function getExplicitWebSearchResult(message: string): AIResult | null {
   const asksToSearch = /\b(?:pesquis(?:a|e|ar)|procur(?:a|e|ar)|busc(?:a|ar|que)|consult(?:a|e|ar)|verific(?:a|ar|que)|investig(?:a|ar|ue)|averigu(?:a|ar|e))\b/.test(normalized);
   const mentionsWeb = /\b(?:internet|google|web|online|site|sites)\b/.test(normalized);
   const hasCurrentSignal = /\b(?:hoje|hoy|agora|ahora|atual|actual|neste momento|en este momento)\b/.test(normalized);
-  const hasLiveInformationSubject = /\b(?:clima|tempo|meteorologia|previsao do tempo|pronostico|temperatura|chuva|lluvia|noticias?|eventos?|cotacao|cambio|dolar|euro|moeda|moneda|bolsa|acoes|acciones|transito|trafico|horarios?|funcionamento|aberto|abierta?|fechado|cerrada?|preco|precio|valor|custa|cuesta|disponibilidade|disponibilidad|passagens?|voos?|vuelos?|hoteis?|hoteles?)\b/.test(normalized);
+  const hasLiveInformationSubject = /\b(?:clima|tempo|meteorologia|previsao do tempo|pronostico|temperatura|chuva|chov\w*|chover|chver|lluvia|llov\w*|noticias?|eventos?|cotacao|cambio|dolar|euro|moeda|moneda|bolsa|acoes|acciones|transito|trafico|horarios?|funcionamento|aberto|abierta?|fechado|cerrada?|preco|precio|valor|custa|cuesta|disponibilidade|disponibilidad|passagens?|voos?|vuelos?|hoteis?|hoteles?)\b/.test(normalized);
   const terseCurrentSubject = hasCurrentSignal
     && normalized.split(/\s+/).length <= 9
     && /[a-z]{2,}/.test(normalized);
