@@ -56,6 +56,29 @@ describe("internet research classification", () => {
     expect(getExplicitWebSearchResult("qual meu saldo hoje?")).toBeNull();
   });
 
+  it("uses the previous grounded search to resolve any city or subject referenced indirectly", async () => {
+    const history = [
+      { role: "user" as const, content: "preço das passagens de Campo Mourão a Balneário Camboriú" },
+      { role: "assistant" as const, content: "Encontrei opções de passagens.\n\n🔎 *Fontes consultadas:*\n1. Empresa de ônibus: https://example.com" },
+    ];
+    expect(getExplicitWebSearchResult("como está o clima lá?", history)).toMatchObject({
+      intent: "web_search",
+      confidence: 1,
+      keyword: expect.stringContaining("Balneário Camboriú"),
+    });
+    expect(await processMessage("e amanhã?", { user: { activeMode: "personal", customCategoriesExpense: [], customCategoriesIncome: [], locale: "pt-BR" }, history }))
+      .toMatchObject({ intent: "web_search", keyword: expect.stringContaining("Campo Mourão") });
+  });
+
+  it("resolves the same contextual research flow in Spanish", () => {
+    const history = [
+      { role: "user" as const, content: "hoteles en Cartagena" },
+      { role: "assistant" as const, content: "Encontré opciones.\n\n🔎 *Fuentes consultadas:*\n1. Hotel: https://example.com" },
+    ];
+    expect(getExplicitWebSearchResult("¿cómo está el clima allí?", history))
+      .toMatchObject({ intent: "web_search", keyword: expect.stringContaining("Cartagena") });
+  });
+
   it("does not confuse an internal Drive search with a web search", () => {
     expect(getExplicitWebSearchResult("Busque meu contrato no Drive")).toBeNull();
   });

@@ -17,6 +17,32 @@ alívio mental e organização completa em uma conversa.
 - `*-feed.png`: 1080 × 1350, proporção 4:5.
 - `*-stories.png`: 1080 × 1920, proporção 9:16 para Stories e Reels.
 
+### Controle vencedor em espanhol
+
+A pasta `es-419/control-resumo/` contém a adaptação direta do anúncio
+brasileiro vencedor `Resumo da manhã`, sem pessoas e sem telas de produto
+inventadas:
+
+- `resumen-control-oscuro-feed.png`
+- `resumen-control-oscuro-stories.png`
+- `resumen-control-amarillo-feed.png`
+- `resumen-control-amarillo-stories.png`
+
+As versões escura e amarela usam exatamente a mesma mensagem. Alterar somente
+a cor no teste A/B permite medir o efeito do fundo sem misturar outras
+variáveis criativas.
+
+Texto principal sugerido: `Empieza el día con claridad. Pregúntale a Zelo por WhatsApp y recibe un resumen de tus finanzas, tareas y agenda. Todo organizado en una sola conversación.`
+
+Título: `Pregunta. Recibe el resumen.`
+
+Descrição: `Tu negocio en cifras por WhatsApp`
+
+Destino obrigatório: `https://zelogestaointeligente.com.br/es`
+
+O conceito antigo `03-pergunte-organiza` com a mulher foi rejeitado e não deve
+ser publicado.
+
 ## Separação obrigatória de links
 
 - Português do Brasil: `https://zelogestaointeligente.com.br/`

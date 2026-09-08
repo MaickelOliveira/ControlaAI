@@ -323,7 +323,40 @@ export type AIResult = {
  * WhatsApp ("dólar hoje", "Balneário Camboriú hoje", "clima em Bogotá").
  * Comandos internos e registros ficam de fora para não roubar intenções do
  * financeiro, agenda, tarefas, lembretes ou supermercado. */
-export function getExplicitWebSearchResult(message: string): AIResult | null {
+type WebSearchHistory = { role: "user" | "assistant"; content: string }[];
+
+function hasContextualWebReference(message: string): boolean {
+  const raw = message.toLowerCase();
+  const normalized = normalizeCapabilityText(message);
+  return /(?:^|\s)(?:lá|ali|aí|dali)(?=$|\s|[?!.,;:])/.test(raw)
+    || /\b(?:nesse lugar|neste lugar|essa cidade|esta cidade|isso|disso|esse|essa|ele|ela|alli|ahi|alla|ese lugar|este lugar|esa ciudad|esta ciudad|eso|esto|ese|esa|ella)\b/.test(normalized);
+}
+
+function contextualWebSearchKeyword(message: string, history?: WebSearchHistory): string {
+  const normalized = normalizeCapabilityText(message);
+  const refersToPreviousSubject = hasContextualWebReference(message);
+  const isShortTimeFollowUp = /^(?:e|y)\b/.test(normalized)
+    && /\b(?:hoje|hoy|amanha|manana|semana|fim de semana|fin de semana|mes|m[eê]s)\b/.test(normalized)
+    && normalized.split(/\s+/).length <= 9;
+  if (!refersToPreviousSubject && !isShortTimeFollowUp) return message.trim();
+
+  const recent = history?.slice(-10) ?? [];
+  const hasRecentGroundedAnswer = recent.some(item =>
+    item.role === "assistant" && /\b(?:fontes consultadas|fuentes consultadas)\b/i.test(normalizeCapabilityText(item.content)),
+  );
+  if (!hasRecentGroundedAnswer) return message.trim();
+
+  const previousRequest = [...recent].reverse().find(item =>
+    item.role === "user"
+    && item.content.trim().length > 2
+    && !/^(?:sim|si|não|nao|no|ok|certo|gracias|obrigad[oa])\b/i.test(normalizeCapabilityText(item.content.trim())),
+  )?.content.trim();
+  if (!previousRequest) return message.trim();
+
+  return `Pedido anterior: ${previousRequest}\nContinuação do usuário: ${message.trim()}`;
+}
+
+export function getExplicitWebSearchResult(message: string, history?: WebSearchHistory): AIResult | null {
   const normalized = normalizeCapabilityText(message);
   const asksToSearch = /\b(?:pesquis(?:a|e|ar)|procur(?:a|e|ar)|busc(?:a|ar|que)|consult(?:a|e|ar)|verific(?:a|ar|que)|investig(?:a|ar|ue)|averigu(?:a|ar|e))\b/.test(normalized);
   const mentionsWeb = /\b(?:internet|google|web|online|site|sites)\b/.test(normalized);
@@ -332,11 +365,18 @@ export function getExplicitWebSearchResult(message: string): AIResult | null {
   const terseCurrentSubject = hasCurrentSignal
     && normalized.split(/\s+/).length <= 9
     && /[a-z]{2,}/.test(normalized);
+  const hasRecentGroundedAnswer = history?.slice(-10).some(item =>
+    item.role === "assistant" && /\b(?:fontes consultadas|fuentes consultadas)\b/i.test(normalizeCapabilityText(item.content)),
+  ) ?? false;
+  const contextualFollowUp = hasRecentGroundedAnswer && (
+    hasContextualWebReference(message)
+    || (/^(?:e|y)\b/.test(normalized) && /\b(?:hoje|hoy|amanha|manana|semana|fim de semana|fin de semana|mes|m[eê]s)\b/.test(normalized))
+  );
   const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|recebi|recibi|ganhei|comprei|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|conta da empresa|cuenta de la empresa|drive)\w*/.test(normalized);
 
-  if (!(asksToSearch && mentionsWeb) && !(hasLiveInformationSubject || terseCurrentSubject) || isInternalOrMutation) return null;
+  if (!(asksToSearch && mentionsWeb) && !(hasLiveInformationSubject || terseCurrentSubject || contextualFollowUp) || isInternalOrMutation) return null;
 
-  const keyword = message.trim();
+  const keyword = contextualWebSearchKeyword(message, history);
   return keyword ? { intent: "web_search", confidence: 1, keyword } : null;
 }
 
@@ -2623,7 +2663,7 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   const explicitDailySummary = getExplicitDailySummaryResult(message);
   if (explicitDailySummary) return explicitDailySummary;
 
-  const explicitWebSearch = getExplicitWebSearchResult(message);
+  const explicitWebSearch = getExplicitWebSearchResult(message, ctx?.history);
   if (explicitWebSearch) return explicitWebSearch;
 
   const unsupportedBankConnection = getUnsupportedBankConnectionResponse(
