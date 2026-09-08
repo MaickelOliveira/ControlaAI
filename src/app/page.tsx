@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { BRAZIL_CHECKOUT } from "@/lib/checkout-markets";
 
 const heading = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-heading" });
 
@@ -1152,7 +1153,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "/mês",
     total: "Pagamento mensal",
     totalValue: 47,
-    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=00zzvpfa&checkoutMode=6",
+    checkoutUrl: BRAZIL_CHECKOUT.checkoutUrls.monthly,
     badge: null,
   },
   {
@@ -1164,7 +1165,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "",
     total: "ou R$ 197,00 à vista",
     totalValue: 197,
-    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=gbxytpij&checkoutMode=6&bid=1786344680923",
+    checkoutUrl: BRAZIL_CHECKOUT.checkoutUrls.semiannual,
     badge: "Mais popular",
   },
   {
@@ -1176,7 +1177,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "",
     total: "ou R$ 297,00 à vista",
     totalValue: 297,
-    checkoutUrl: "https://pay.hotmart.com/B107093609V?off=zyi6wlxp&checkoutMode=6",
+    checkoutUrl: BRAZIL_CHECKOUT.checkoutUrls.annual,
     badge: "Melhor valor",
   },
 ] as const;

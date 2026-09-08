@@ -71,11 +71,22 @@ export async function setSupportStatus(userId: string, status: SupportStatus) {
   await saveConversation(userId, conv);
 }
 
-export async function sendAdminSupportMessage(userId: string, text: string) {
+export async function sendAdminSupportMessage(
+  userId: string,
+  text: string,
+  attachment?: SupportImageAttachment,
+): Promise<SupportMessage> {
   const conv = (await findConversation(userId)) ?? { ...EMPTY, messages: [] };
-  pushMessage(conv, { sender: "admin", text, ts: Date.now() });
+  const message: SupportMessage = {
+    sender: "admin",
+    text,
+    ts: Date.now(),
+    ...(attachment ? { attachment } : {}),
+  };
+  pushMessage(conv, message);
   conv.unreadUser = true;
   await saveConversation(userId, conv);
+  return message;
 }
 
 /** Processa uma mensagem nova do usuário no widget: grava, decide se o bot

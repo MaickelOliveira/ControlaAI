@@ -6,6 +6,7 @@ import { createPasswordSetupLink } from "./password-reset";
 import { sendFirstAccessLinkEmail } from "./brevo";
 import { sendWelcomeTemplate } from "./whatsapp";
 import { normalizeWhatsAppPhone } from "./phone";
+import { checkoutLocaleFromIdentifiers } from "./checkout-markets";
 
 /** Recebe webhooks de plataforma de venda (Hotmart, Kiwify, etc.) e ativa/
  *  desativa/troca o plano do cliente correspondente automaticamente. Como
@@ -229,23 +230,73 @@ function firstScalarString(body: unknown, paths: string[]): string | undefined {
   return undefined;
 }
 
-const SPANISH_HOTMART_PRODUCT_IDS = new Set(["107497176", "t107497176b"]);
-const SPANISH_HOTMART_OFFER_CODES = new Set(["nhj4i7mi", "yzqph7pa", "zcsygj89"]);
+const CHECKOUT_COUNTRY_PATHS = [
+  "data.buyer.address.country_iso",
+  "data.buyer.address.country",
+  "data.buyer.country_iso",
+  "data.buyer.country",
+  "data.purchase.checkout_country.iso",
+  "data.purchase.checkout_country",
+  "data.checkout_country.iso",
+  "data.checkout_country",
+  "address_country_ISO",
+  "Customer.address.country_iso",
+  "Customer.address.country",
+];
 
-/** Garante que as três ofertas da página /es criem a conta em espanhol,
- * inclusive em integrações Hotmart já salvas no banco antes de o localeMap
- * padrão existir. */
+function localeFromCountry(country?: string): UserLocale | undefined {
+  if (!country) return undefined;
+  const normalized = country.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  if (["br", "bra", "brasil", "brazil"].includes(normalized)) return "pt-BR";
+  if (["pt", "prt", "portugal"].includes(normalized)) return "pt-PT";
+  return undefined;
+}
+
+function localeFromBuyerPreference(body: unknown): UserLocale | undefined {
+  const locale = firstScalarString(body, ["data.buyer.locale", "data.subscriber.locale", "Customer.locale"])
+    ?.replace("_", "-")
+    .toLowerCase();
+  if (locale === "pt-br" || locale === "pt") return "pt-BR";
+  if (locale === "pt-pt") return "pt-PT";
+  if (locale?.startsWith("es")) return "es";
+  return undefined;
+}
+
+function isBrazilianCheckoutPhone(body: unknown): boolean {
+  const phone = firstScalarString(body, [
+    "data.buyer.checkout_phone",
+    "data.buyer.phone",
+    "phone_checkout_number",
+    "phone_number",
+  ]);
+  if (!phone) return false;
+  return /^55\d{10,11}$/.test(phone.replace(/\D/g, ""));
+}
+
+/** Resolve o idioma da conta sem confundir o mercado brasileiro com o
+ * espanhol. País e telefone do comprador prevalecem sobre produto/oferta:
+ * mesmo que um brasileiro abra por engano o checkout internacional, a conta
+ * e as mensagens continuam em pt-BR. */
 export function inferCheckoutLocale(body: unknown): UserLocale | undefined {
+  const countryLocale = localeFromCountry(firstScalarString(body, CHECKOUT_COUNTRY_PATHS));
+  if (countryLocale) return countryLocale;
+  if (isBrazilianCheckoutPhone(body)) return "pt-BR";
+
+  const buyerLocale = localeFromBuyerPreference(body);
+  if (buyerLocale) return buyerLocale;
+
   const product = firstScalarString(body, ["data.product.id", "product.id", "prod"]);
   const offer = firstScalarString(body, ["data.purchase.offer.code", "data.offer.code", "off"]);
-  const normalizedProduct = product?.toLowerCase();
-  const normalizedOffer = offer?.toLowerCase();
-
-  if ((normalizedProduct && SPANISH_HOTMART_PRODUCT_IDS.has(normalizedProduct))
-    || (normalizedOffer && SPANISH_HOTMART_OFFER_CODES.has(normalizedOffer))) {
-    return "es";
-  }
-  return undefined;
+  const source = firstScalarString(body, [
+    "data.purchase.tracking.source_sck",
+    "data.purchase.tracking.source",
+    "data.purchase.origin.src",
+    "data.purchase.origin.sck",
+    "sales_source",
+    "src",
+    "sck",
+  ]);
+  return checkoutLocaleFromIdentifiers(product, offer, source);
 }
 
 /** Extrai e normaliza o telefone do checkout para E.164. A Hotmart informa
@@ -262,13 +313,7 @@ export function normalizedCheckoutPhone(body: unknown): string | undefined {
   ]);
   if (!phone) return undefined;
 
-  const countryIso = firstScalarString(body, [
-    "data.buyer.address.country_iso",
-    "data.purchase.checkout_country.iso",
-    "data.checkout_country.iso",
-    "address_country_ISO",
-    "Customer.address.country_iso",
-  ]);
+  const countryIso = firstScalarString(body, CHECKOUT_COUNTRY_PATHS);
 
   // Na Hotmart, o DDD brasileiro pode vir separado do telefone.
   if (countryIso?.toUpperCase() === "BR") {
@@ -327,7 +372,10 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     const localeRaw = getByPath(body, cfg.localePath);
     mappedLocale = typeof localeRaw === "string" || typeof localeRaw === "number" ? cfg.localeMap[String(localeRaw)] : undefined;
   }
-  mappedLocale ??= inferCheckoutLocale(body);
+  // A identificação segura do comprador precisa prevalecer inclusive sobre
+  // localeMap antigo salvo no banco, que pode mapear o produto internacional
+  // para espanhol sem saber que o país/telefone da venda é brasileiro.
+  mappedLocale = inferCheckoutLocale(body) ?? mappedLocale;
 
   let user = await getUserByEmail(email);
   if (!user && !isActivate) return { ok: true, action: "ignored", email, detail: "cliente ainda não possui conta" };

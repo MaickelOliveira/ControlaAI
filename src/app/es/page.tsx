@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { SPANISH_CHECKOUT } from "@/lib/checkout-markets";
 
 const heading = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-heading" });
 
@@ -1133,7 +1134,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "/mes",
     total: "Pago mensual",
     totalValue: 47,
-    checkoutUrl: "https://pay.hotmart.com/T107497176B?off=nhj4i7mi&bid=1788729261163",
+    checkoutUrl: SPANISH_CHECKOUT.checkoutUrls.monthly,
     badge: null,
   },
   {
@@ -1145,7 +1146,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "/semestre",
     total: "Puedes pagar hasta en 6 cuotas en el checkout",
     totalValue: 197,
-    checkoutUrl: "https://pay.hotmart.com/T107497176B?off=yzqph7pa&bid=1788729318758",
+    checkoutUrl: SPANISH_CHECKOUT.checkoutUrls.semiannual,
     badge: "Más popular",
   },
   {
@@ -1157,7 +1158,7 @@ const PLAN_OPTIONS = [
     priceSuffix: "/año",
     total: "Puedes pagar hasta en 12 cuotas en el checkout",
     totalValue: 297,
-    checkoutUrl: "https://pay.hotmart.com/T107497176B?off=zcsygj89&bid=1788729347182",
+    checkoutUrl: SPANISH_CHECKOUT.checkoutUrls.annual,
     badge: "Mejor precio",
   },
 ] as const;

@@ -31,6 +31,9 @@ type SupportSummary = {
   messageCount: number;
 };
 
+const SUPPORT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_SUPPORT_IMAGE_BYTES = 5 * 1024 * 1024;
+
 function displayPhone(phone: string): string {
   const d = phone.replace(/\D/g, "");
   if (d.length >= 12) return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9)}`;
@@ -85,11 +88,20 @@ export default function AdminInboxPage() {
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
   const [supportInput, setSupportInput] = useState("");
   const [supportSending, setSupportSending] = useState(false);
+  const [supportImage, setSupportImage] = useState<File | null>(null);
+  const [supportImagePreview, setSupportImagePreview] = useState<string | null>(null);
+  const [supportSendError, setSupportSendError] = useState<string | null>(null);
   const [supportSearch, setSupportSearch] = useState("");
   const supportSelectedRef = useRef<string | null>(null);
   const supportUserScrolledUpRef = useRef(false);
   const supportMessagesEndRef = useRef<HTMLDivElement>(null);
   const supportScrollContainerRef = useRef<HTMLDivElement>(null);
+  const supportFileInputRef = useRef<HTMLInputElement>(null);
+  const supportImagePreviewRef = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    if (supportImagePreviewRef.current) URL.revokeObjectURL(supportImagePreviewRef.current);
+  }, []);
 
   const fetchConversations = useCallback(() => {
     fetch("/api/admin/inbox/conversations")
@@ -162,10 +174,42 @@ export default function AdminInboxPage() {
   }
 
   function handleSupportSelect(userId: string) {
+    clearSupportImage();
+    setSupportInput("");
+    setSupportSendError(null);
     supportSelectedRef.current = userId;
     setSupportSelected(userId);
     setSupportMessages([]);
     supportUserScrolledUpRef.current = false;
+  }
+
+  function clearSupportImage() {
+    if (supportImagePreviewRef.current) URL.revokeObjectURL(supportImagePreviewRef.current);
+    supportImagePreviewRef.current = null;
+    setSupportImagePreview(null);
+    setSupportImage(null);
+    if (supportFileInputRef.current) supportFileInputRef.current.value = "";
+  }
+
+  function selectSupportImage(file: File | null) {
+    if (!file) return;
+    setSupportSendError(null);
+    if (!SUPPORT_IMAGE_TYPES.has(file.type.toLowerCase())) {
+      setSupportSendError("Envie uma imagem JPG, PNG ou WEBP.");
+      if (supportFileInputRef.current) supportFileInputRef.current.value = "";
+      return;
+    }
+    if (file.size > MAX_SUPPORT_IMAGE_BYTES) {
+      setSupportSendError("A imagem deve ter no máximo 5 MB.");
+      if (supportFileInputRef.current) supportFileInputRef.current.value = "";
+      return;
+    }
+
+    if (supportImagePreviewRef.current) URL.revokeObjectURL(supportImagePreviewRef.current);
+    const objectUrl = URL.createObjectURL(file);
+    supportImagePreviewRef.current = objectUrl;
+    setSupportImagePreview(objectUrl);
+    setSupportImage(file);
   }
 
   function handleScroll() {
@@ -209,21 +253,48 @@ export default function AdminInboxPage() {
   }
 
   async function sendSupport() {
-    if (!supportSelected || !supportInput.trim() || supportSending) return;
+    if (!supportSelected || (!supportInput.trim() && !supportImage) || supportSending) return;
     setSupportSending(true);
+    setSupportSendError(null);
+    const userId = supportSelected;
     const text = supportInput.trim();
-    setSupportInput("");
-    const r = await fetch("/api/admin/support/send", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: supportSelected, text }),
-    });
-    if (r.ok) {
-      setSupportMessages(m => [...m, { sender: "admin", text, ts: Date.now() }]);
-    } else {
-      alert("Falha ao enviar mensagem");
-      setSupportInput(text);
+    try {
+      let r: Response;
+      if (supportImage) {
+        const body = new FormData();
+        body.set("userId", userId);
+        body.set("text", text);
+        body.set("image", supportImage);
+        r = await fetch("/api/admin/support/send", { method: "POST", body });
+      } else {
+        r = await fetch("/api/admin/support/send", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, text }),
+        });
+      }
+
+      const data = await r.json().catch(() => null);
+      if (!r.ok) {
+        setSupportSendError(data?.error ?? "Não foi possível enviar. Tente novamente.");
+        return;
+      }
+
+      const sentMessage = data?.message as SupportMessage | undefined;
+      if (supportSelectedRef.current === userId && sentMessage) {
+        setSupportMessages(messages => [...messages, sentMessage]);
+      }
+      if (sentMessage) {
+        setSupportConvs(conversations => conversations.map(conversation => conversation.userId === userId
+          ? { ...conversation, lastMessage: sentMessage, lastActivity: sentMessage.ts }
+          : conversation));
+      }
+      setSupportInput("");
+      clearSupportImage();
+    } catch {
+      setSupportSendError("Não foi possível enviar. Verifique sua conexão e tente novamente.");
+    } finally {
+      setSupportSending(false);
     }
-    setSupportSending(false);
   }
 
   async function setSupportStatus(status: SupportStatus) {
@@ -446,7 +517,7 @@ export default function AdminInboxPage() {
                             >
                               <Image
                                 src={`/api/admin/support/attachments/${encodeURIComponent(supportSelected)}/${encodeURIComponent(m.attachment.fileName)}`}
-                                alt="Imagem enviada pelo cliente"
+                                alt={m.sender === "admin" ? "Imagem enviada pelo suporte" : "Imagem enviada pelo cliente"}
                                 width={420}
                                 height={315}
                                 unoptimized
@@ -466,15 +537,37 @@ export default function AdminInboxPage() {
                   <div ref={supportMessagesEndRef} />
                 </div>
 
-                <div className="p-3 border-t border-slate-200 flex gap-2">
-                  <input value={supportInput} onChange={e => setSupportInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendSupport(); } }}
-                    placeholder="Digite uma mensagem..."
-                    className="flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
-                  <button onClick={sendSupport} disabled={!supportInput.trim() || supportSending}
-                    className="bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40">
-                    Enviar
-                  </button>
+                <div className="p-3 border-t border-slate-200 shrink-0">
+                  {supportImagePreview && (
+                    <div className="mb-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                      <Image src={supportImagePreview} alt="Pré-visualização da imagem" width={48} height={48} unoptimized
+                        className="h-12 w-12 rounded-lg object-cover" />
+                      <p className="min-w-0 flex-1 truncate text-xs text-slate-600">{supportImage?.name}</p>
+                      <button type="button" onClick={clearSupportImage} disabled={supportSending}
+                        className="h-7 w-7 rounded-full text-lg leading-none text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+                        aria-label="Remover imagem">×</button>
+                    </div>
+                  )}
+                  {supportSendError && <p className="mb-2 text-xs text-red-600" role="alert">{supportSendError}</p>}
+                  <div className="flex gap-2">
+                    <input ref={supportFileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                      onChange={event => selectSupportImage(event.target.files?.[0] ?? null)} />
+                    <button type="button" onClick={() => supportFileInputRef.current?.click()} disabled={supportSending}
+                      className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-slate-100 text-slate-600 transition hover:border-amber-500 hover:text-amber-700 disabled:opacity-40"
+                      aria-label="Anexar uma imagem" title="Anexar imagem (até 5 MB)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="mx-auto h-5 w-5" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a3.75 3.75 0 0 0-5.303-5.303L6.11 9.53a5.25 5.25 0 0 0 7.425 7.425l7.5-7.5M8.25 12.75l7.5-7.5" />
+                      </svg>
+                    </button>
+                    <input value={supportInput} onChange={e => setSupportInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendSupport(); } }}
+                      placeholder={supportImage ? "Escreva uma legenda (opcional)..." : "Digite uma mensagem..."}
+                      className="min-w-0 flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
+                    <button onClick={sendSupport} disabled={(!supportInput.trim() && !supportImage) || supportSending}
+                      className="bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40 shrink-0">
+                      {supportSending ? "Enviando..." : "Enviar"}
+                    </button>
+                  </div>
                 </div>
               </>
             )}

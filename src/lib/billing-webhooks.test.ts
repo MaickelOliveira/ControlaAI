@@ -65,6 +65,34 @@ describe("Hotmart international checkout", () => {
     expect(inferCheckoutLocale({ data: { product: { id: "outro-produto" } } })).toBeUndefined();
   });
 
+  it("always keeps Brazilian buyers in pt-BR even with a Spanish product or offer", () => {
+    expect(inferCheckoutLocale({
+      data: {
+        product: { id: 107497176 },
+        buyer: { address: { country_iso: "BR" } },
+      },
+    })).toBe("pt-BR");
+    expect(inferCheckoutLocale({
+      data: {
+        purchase: { offer: { code: "nhj4i7mi" } },
+        buyer: { address: { country: "Brasil" } },
+      },
+    })).toBe("pt-BR");
+    expect(inferCheckoutLocale({
+      data: {
+        purchase: { offer: { code: "nhj4i7mi" } },
+        buyer: { checkout_phone: "+55 11 99999-9999" },
+      },
+    })).toBe("pt-BR");
+  });
+
+  it("identifies the Brazilian checkout even when buyer country is absent", () => {
+    expect(inferCheckoutLocale({ data: { product: { id: 107093609 } } })).toBe("pt-BR");
+    for (const code of ["00zzvpfa", "gbxytpij", "zyi6wlxp"]) {
+      expect(inferCheckoutLocale({ data: { purchase: { offer: { code } } } })).toBe("pt-BR");
+    }
+  });
+
   it("keeps the Spanish product mapped in newly created webhook settings", () => {
     expect(BILLING_WEBHOOK_PRESETS.hotmart.localeMap?.["107497176"]).toBe("es");
     expect(BILLING_WEBHOOK_PRESETS.hotmart.localeMap?.T107497176B).toBe("es");
