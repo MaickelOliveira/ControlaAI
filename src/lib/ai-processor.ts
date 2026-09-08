@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, type GenerateContentResult } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
@@ -72,6 +72,7 @@ export type Intent =
   | "customer_query"
   | "customer_update"
   | "customer_deactivate"
+  | "web_search"
   | "how_to"
   | "help"
   | "category_create"
@@ -277,16 +278,27 @@ export type AIResult = {
   finance?: FinanceData;
   finances?: FinanceData[]; // múltiplos lançamentos de uma vez
   task?: TaskData;
+  tasks?: TaskData[]; // várias tarefas pedidas na mesma mensagem
   reminder?: ReminderData;
+  reminders?: ReminderData[]; // vários lembretes pedidos na mesma mensagem
   goal?: GoalData;
+  goals?: GoalData[];
   vehicle?: VehicleData;
+  vehicles?: VehicleData[];
+  vehicleExpenses?: VehicleData[];
   recurring?: RecurringData;
+  recurrings?: RecurringData[];
   agendaData?: AgendaData;
+  agendaItems?: AgendaData[];
   meetData?: MeetData;
+  meetItems?: MeetData[];
   grocery?: GroceryData;
+  groceryPurchases?: GroceryData[];
   account?: AccountData;
   employee?: EmployeeData;
+  employees?: EmployeeData[];
   customer?: CustomerData;
+  customers?: CustomerData[];
   mode?: UserMode;
   financeType?: "income" | "expense"; // para finance_detail/finance_query/finance_upcoming: qual tipo mostrar (padrão "expense"); para category_create: restringe a categoria a só esse tipo (padrão: ambos)
   keyword?: string; // palavra-chave para buscar lançamento em finance_detail/finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
@@ -302,8 +314,57 @@ export type AIResult = {
   // vários) em vez de buscar/escolher um por um.
   bulkCorrectLastBatch?: boolean;
   categoryName?: string; // category_create: nome exato da categoria a criar
+  categoryNames?: string[]; // várias categorias pedidas na mesma mensagem
   confidence: number;
 };
+
+/** Reconhece pedidos explícitos de pesquisa sem depender do classificador.
+ * Pedidos implícitos (por exemplo, "quanto custa X hoje?") continuam sendo
+ * classificados pelo Gemini com o contexto da conversa. */
+export function getExplicitWebSearchResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message);
+  const asksToSearch = /\b(?:pesquis(?:a|e|ar)|procur(?:a|e|ar)|busc(?:a|ar|que)|consult(?:a|e|ar)|verific(?:a|ar|que)|investig(?:a|ar|ue)|averigu(?:a|ar|e))\b/.test(normalized);
+  const mentionsWeb = /\b(?:internet|google|web|online|site|sites)\b/.test(normalized);
+  if (!asksToSearch || !mentionsWeb) return null;
+
+  const keyword = message.trim();
+  return keyword ? { intent: "web_search", confidence: 1, keyword } : null;
+}
+
+/** Dados mínimos que não podem ser adivinhados em buscas sensíveis a data
+ * ou localização. O classificador continua responsável pelos demais casos. */
+export function getWebSearchMissingQuestion(query: string, locale?: string): string | null {
+  const normalized = normalizeCapabilityText(query);
+  const isTravelSearch = /\b(?:passagem|passagens|voo|voos|flight|flights|vuelo|vuelos|pasaje|pasajes)\b/.test(normalized);
+  if (isTravelSearch) {
+    const hasRoute = /\b(?:de|desde)\s+.{2,60}\s+(?:para|a|hasta)\s+.{2,60}/.test(normalized);
+    if (!hasRoute) {
+      return locale === "es"
+        ? "✈️ ¿Cuál es la ciudad o aeropuerto de origen y cuál es el destino?"
+        : locale === "pt-PT"
+          ? "✈️ Qual é a cidade ou aeroporto de origem e qual é o destino?"
+          : "✈️ Qual é a cidade ou aeroporto de origem e qual é o destino?";
+    }
+    const hasDate = /\b(?:hoje|hoy|amanha|manana|segunda|terca|quarta|quinta|sexta|sabado|domingo|lunes|martes|miercoles|jueves|viernes)\b|\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\s+de\s+(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|enero|febrero|marzo|mayo|junio|julio|septiembre|octubre|noviembre|diciembre)\b/.test(normalized);
+    if (!hasDate) {
+      return locale === "es"
+        ? "✈️ ¿Para qué fecha quieres viajar, es solo ida o ida y vuelta, y para cuántas personas?"
+        : locale === "pt-PT"
+          ? "✈️ Para que data queres viajar, é só ida ou ida e volta, e para quantas pessoas?"
+          : "✈️ Para qual data você quer viajar, é só ida ou ida e volta, e para quantas pessoas?";
+    }
+  }
+
+  const isGenericMedicinePrice = /\b(?:preco|valor|custa|cuanto)\b[\s\S]*\b(?:remedio|medicamento|medicina|farmaco)\b\s*[?!.]*$/.test(normalized);
+  if (isGenericMedicinePrice) {
+    return locale === "es"
+      ? "💊 ¿Cuál es el nombre, la concentración y la presentación del medicamento? Por ejemplo: 500 mg, caja con 20 comprimidos."
+      : locale === "pt-PT"
+        ? "💊 Qual é o nome, a dosagem e a apresentação do medicamento? Por exemplo: 500 mg, caixa com 20 comprimidos."
+        : "💊 Qual é o nome, a dosagem e a apresentação do remédio? Por exemplo: 500 mg, caixa com 20 comprimidos.";
+  }
+  return null;
+}
 
 export type AiContext = {
   user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome" | "locale">;
@@ -941,6 +1002,97 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
   };
 }
 
+/** Pedidos explícitos para montar uma lista devem virar tarefas separadas.
+ * Esse atalho evita que uma enumeração completa seja descartada pelo modelo
+ * como se o usuário ainda não tivesse informado o título da tarefa. */
+export function getExplicitTaskListCreateResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  if (!/\b(?:monta|monte|montar|cria|crie|criar|prepara|prepare|preparar|faz|faca|hacer|crea|crear|arma|armar)\b[\s\S]*\blista\s+de\s+tarefas?\b|\blista\s+de\s+tareas?\b/.test(normalized)) return null;
+
+  const marker = text.search(/lista\s+de\s+tarefas?|lista\s+de\s+tareas?/i);
+  if (marker < 0) return null;
+  let body = text.slice(marker)
+    .replace(/^lista\s+de\s+tarefas?\s*[:.\-–—,]?\s*/i, "")
+    .replace(/^lista\s+de\s+tareas?\s*[:.\-–—,]?\s*/i, "");
+  body = body.replace(/(?:^|[.!?]\s+)(?:prepara|prepare|monte|monta|crie|cria|haz)\s+(?:para\s+mim\s+|pra\s+mim\s+|para\s+mi\s+)?(?:uma|una)\s+lista[\s\S]*$/i, "").trim();
+  if (!body) return null;
+
+  const taskActionVerbs = "estudar|separar|arrumar|montar|organizar|ver|revisar|ligar|chamar|enviar|comprar|pagar|fazer|buscar|agendar|estudiar|ordenar|organizar|llamar|enviar|comprar|pagar|hacer|buscar|programar";
+  const rawParts = body
+    .split(new RegExp(`\\s*[;\\n]\\s*|\\s*[.!?]\\s+|\\s*,\\s*|\\s+(?:e|y)\\s+(?=(?:${taskActionVerbs})\\b)`, "i"))
+    .map(part => part.trim()).filter(Boolean);
+  const parts: string[] = [];
+  for (const rawPart of rawParts) {
+    if (/^item\s+\d+$/i.test(rawPart)) continue;
+    let part = rawPart.replace(/^(?:e|y)\s+/i, "").replace(/^item\s+\d+\s*[:.\-–—]?\s*/i, "").trim();
+    if (!part) continue;
+    // Ditado por voz pode quebrar "na Zap" em "na, na Zap".
+    if (/^(?:na|no|em|en|de)\s+/i.test(part) && parts.length) {
+      parts[parts.length - 1] = `${parts[parts.length - 1]} ${part}`.replace(/\b(na|no|em|en|de)\s+\1\b/gi, "$1");
+      continue;
+    }
+    part = part.replace(/\s+(?:por\s+favor|por\s+fa(?:v|b)or)\s*$/i, "").trim();
+    if (part.length >= 2) parts.push(part);
+  }
+
+  const unique = [...new Map(parts.map(part => [normalizeCapabilityText(part), part])).values()].slice(0, 30);
+  if (unique.length < 2) return null;
+  return {
+    intent: "task_create",
+    confidence: 1,
+    tasks: unique.map(title => ({ title, priority: "medium" as const })),
+  };
+}
+
+/** Se a pessoa chama algo de tarefa, mas informa um horário para ser
+ * avisada, a expectativa é um lembrete que dispara naquele momento. */
+export function getExplicitScheduledReminderResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  if (!/\b(?:tarefa|tarea|lembrete|recordatorio)\b/.test(normalized)
+    && !/^(?:me\s+)?(?:lembra|lembre)(?:-me)?\b/.test(normalized)
+    && !/^(?:recuerdame|recordarme)\b/.test(normalized)) return null;
+  const dateToken = normalized.match(/\b(hoje|hoy|amanha|manana)\b/)?.[1];
+  if (!dateToken) return null;
+
+  let hour: number | undefined;
+  let minute = 0;
+  const spoken = normalized.match(/\b(\d{1,2})(?::(\d{2}))?\s*(?:horas?\s+)?(?:da|de\s+la)\s+(tarde|manha|manana|noite|noche)\b/);
+  if (spoken) {
+    hour = Number(spoken[1]);
+    minute = Number(spoken[2] || 0);
+    if (/^(?:tarde|noite|noche)$/.test(spoken[3]) && hour < 12) hour += 12;
+  } else {
+    const numeric = normalized.match(/\b(?:as|a\s+las)\s+(\d{1,2})(?::(\d{2}))?\b/) ?? normalized.match(/\b(\d{1,2})h(?:(\d{2}))?\b/);
+    if (numeric) { hour = Number(numeric[1]); minute = Number(numeric[2] || 0); }
+  }
+  if (hour === undefined || hour > 23 || minute > 59) return null;
+
+  const date = addDaysToBRDate(/^(?:amanha|manana)$/.test(dateToken) ? 1 : 0);
+  let content = text
+    .replace(/^\p{L}[\p{L}\s'-]{0,40},\s*/u, "")
+    .replace(/^\s*(?:(?:me\s+)?(?:lembra|lembre)(?:-me)?|recu[eé]rdame|recordarme)\s*/i, "")
+    .replace(/^\s*(?:tarefa|tarea|lembrete|recordatorio)\b\s*(?:de|para)?\s*(?:hoje|hoy|amanh[ãa]|ma[ñn]ana)?\s*[.,;:]?\s*/i, "")
+    .replace(/^\s*(?:hoje|hoy|amanh[ãa]|ma[ñn]ana)\s*[.,;:]?\s*/i, "")
+    .replace(/^\s*\d{1,2}(?::\d{2})?\s*(?:horas?\s+)?(?:da|de\s+la)\s+(?:tarde|manh[ãa]|mañana|noite|noche)\s*[.,;:]?\s*/i, "")
+    .replace(/^\s*(?:(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2})?|\d{1,2}h(?:\d{2})?)\s*[.,;:]?\s*/i, "")
+    .replace(/^\s*(?:de|para|que)\s+/i, "")
+    .trim().replace(/[.!?]+$/, "");
+  if (!content) content = text.replace(/^[^,.;:]+[,.;:]\s*/, "").trim();
+  if (!content || content === text) return null;
+
+  return {
+    intent: "reminder_set",
+    confidence: 1,
+    reminder: {
+      message: content,
+      scheduledAt: `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`,
+      repeat: "none",
+    },
+  };
+}
+
 const REMINDER_ACTION_VERBS = "comprar|ver|marcar|fazer|hacer|ligar|llamar|levar|llevar|buscar|pegar|recoger|enviar|mandar|pagar|agendar|programar|limpar|limpiar|trocar|cambiar|consertar|arreglar|revisar";
 
 function reminderChecklist(body: string, language: "pt" | "es" = "pt"): string {
@@ -1285,6 +1437,8 @@ PRIORIDADE DE INTERPRETAÇÃO:
 4. Escolha a intenção mais específica disponível. Por exemplo, valores ainda a pagar/receber são finance_upcoming, não um resumo genérico finance_query.
 5. Se o usuário pediu uma AÇÃO, mas não informou todos os dados necessários, mantenha a intenção dessa ação e retorne os campos que conseguiu extrair. NÃO transforme em "unknown", consulta ou lista e NÃO invente o que faltou: o sistema perguntará somente os campos ausentes e continuará a mesma ação na resposta seguinte.
 
+REGISTROS EM LOTE: sempre que a pessoa pedir dois ou mais registros da mesma função, extraia TODOS, sem pedir novamente os dados que já foram ditos. Use estes arrays: finances, tasks, reminders, goals, vehicles, vehicleExpenses, recurrings, agendaItems, meetItems, groceryPurchases, employees, customers ou categoryNames. Use o campo singular equivalente somente para um registro. Esta regra vale igualmente em português brasileiro, espanhol neutro e português de Portugal.
+
 ⚠️ CONTINUAÇÃO DE AÇÃO: quando a mensagem vier no formato "Pedido original" + "Informação complementar", una todas as partes como um único comando. A informação complementar responde à pergunta feita pelo sistema; preserve a intenção original e complete somente os campos novos.
 
 INTENÇÕES POSSÍVEIS:
@@ -1304,20 +1458,20 @@ INTENÇÕES POSSÍVEIS:
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
 - finance_confirm_pending: confirmar/antecipar um lançamento AGENDADO (data futura, ainda não contabilizado) antes da data chegar sozinha ("já paguei aquela conta que agendei", "confirma o pagamento do aluguel que tá agendado", "antecipa o lançamento de X"). Use "keyword" com o termo de busca do lançamento.
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
-- task_create: criar uma tarefa ("cria uma tarefa", "lembra de", "preciso fazer", "anota a tarefa"). Extraia SEMPRE que possível: "priority" ("high" se a mensagem disser "urgente"/"importante"/"prioridade"/"o quanto antes"; "low" se disser "sem pressa"/"quando der"/"não urgente"; senão "medium"); "dueDate" (YYYY-MM-DD, se a mensagem mencionar um prazo — use o calendário do início da mensagem pra resolver dias da semana).
+- task_create: criar uma ou VÁRIAS tarefas ("cria uma tarefa", "monta uma lista de tarefas", "preciso fazer", "anota as tarefas"). Para uma só, use "task". Se a mensagem enumerar duas ou mais, use "tasks" (array), com UMA tarefa por ação; nunca junte a lista inteira num título e nunca pergunte o que já foi informado. Extraia em cada item: "priority" ("high" se disser "urgente"/"importante"/"prioridade"/"o quanto antes"; "low" se disser "sem pressa"/"quando der"/"não urgente"; senão "medium"); "dueDate" (YYYY-MM-DD, se mencionar prazo). Se data/modo/prioridade valerem para a lista toda, repita-os em cada item. ⚠️ Se houver HORÁRIO explícito em que a pessoa quer ser avisada (mesmo que diga "tarefa"), use reminder_set, não task_create.
 - task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título atual) pra identificar qual. Para editar dados, use somente os campos alterados: "newTitle", "newDueDate", "newPriority" ou "clearDueDate": true. Para mudar o andamento, use "newStatus".
 - task_delete: apagar/excluir uma tarefa ("apaga a tarefa 3", "remove a tarefa de ligar pro cliente", "deleta essa tarefa"). Use "taskNumber" ou "title" igual ao task_update.
 - task_query: listar tarefas
-- reminder_set: criar lembrete agendado. ⚠️ Se a mensagem pedir pra avisar/lembrar OUTRA PESSOA em vez de quem está mandando a mensagem (ex: "lembra a Milena de pagar amanhã às 10h", "avisa o cliente Carlos que a reunião é sexta", "manda um lembrete pra equipe às 9h", "lembra o João de ligar pro fornecedor"), inclua "reminder.recipientName" com o nome citado (ex: "Milena", "Carlos", "equipe", "João"). Sem menção a outra pessoa, NÃO inclua "recipientName" — o lembrete é pra quem está mandando a mensagem, como sempre. Se a mensagem TAMBÉM citar um número de telefone explícito pra essa pessoa (ex: "lembra o João, número 5544999999999, de pagar o boleto amanhã às 10h", "avisa a Maria no 44988887777 que a entrega chegou"), inclua "reminder.recipientPhone" com só os dígitos informados (com DDD, e código do país se a pessoa disser) — isso permite criar o lembrete pra alguém que ainda não está cadastrado como cliente/funcionário/número da família. Sem número explícito na mensagem, NÃO inclua "recipientPhone".
+- reminder_set: criar um ou VÁRIOS lembretes agendados. Para um só, use "reminder"; para dois ou mais, use "reminders" (array), um aviso por item. Pedido chamado de "tarefa" que traz horário explícito para avisar/confirmar também é reminder_set. Se pedir para outra pessoa, inclua recipientName e, quando informado, recipientPhone só com dígitos.
 - reminder_list: listar lembretes ativos ("meus lembretes", "quais lembretes eu tenho", "o que eu tenho agendado pra me avisar")
 - reminder_update: editar um lembrete existente — mensagem, data/hora ou repetição ("muda o lembrete do remédio pra 8h", "troca o lembrete da conta de luz pra todo dia 5"). Use "keyword" com o termo de busca e "reminder" com os novos valores (só os campos que mudaram).
 - reminder_delete: cancelar/apagar um lembrete ("cancela o lembrete do remédio", "apaga o lembrete da reunião", "não precisa mais me lembrar disso"). Use "keyword" com o termo de busca.
-- goal_create: criar meta financeira ("meta", "guardar", "juntar", "economizar para", "quero juntar X para Y", "quero guardar X para Z"). SEMPRE inclua "title" com o nome da meta e "targetAmount" com o valor alvo. Se o usuário mencionar "já tenho X", "ja tenho X", "tenho X guardado", inclua "currentAmount" com esse valor. Se o valor alvo não for especificado, use targetAmount: 0 (o sistema pedirá ao usuário).
+- goal_create: criar uma ou várias metas financeiras. Use "goal" para uma e "goals" para várias. Em cada item inclua title e targetAmount; inclua currentAmount quando informado.
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
 - goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
 - goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo", "meta viagem concluída"). SEMPRE inclua "title" com o nome da meta.
 - goal_cancel: cancelar/desistir de uma meta ("cancela a meta da viagem", "desisti de juntar pra isso", "apaga essa meta"). Use "keyword" com o nome da meta.
-- recurring_create: cadastrar despesa ou receita parcelada ou recorrente ("comprei geladeira em 10x", "pago netflix todo mês", "recebo salário todo dia 10", "parcela do carro", "assinatura mensal"). Use recurrenceType: "installment" para parcelamentos (compra dividida em N vezes, tem totalInstallments) e "recurring" para recorrentes contínuos (assinatura, mensalidade, conta fixa). Campos que ajudam MUITO se a mensagem trouxer (extraia sempre que possível, mas não invente se não tiver pista):
+- recurring_create: cadastrar uma ou várias despesas/receitas parceladas ou recorrentes. Use "recurring" para uma e "recurrings" para várias. Use recurrenceType: "installment" para parcelamentos e "recurring" para recorrentes contínuos. Campos que ajudam MUITO se a mensagem trouxer (extraia sempre que possível, mas não invente se não tiver pista):
   • "dayOfMonth": o dia do mês em que vence, se mencionado (ex: "todo dia 10" → dayOfMonth: 10). Sem isso o sistema pergunta ao usuário, porque o dia do vencimento muda quando o cron avisa.
   • "repeatUnit": "monthly" (padrão), "weekly", "daily" ou "yearly" — só usa algo diferente de monthly se a mensagem disser claramente ("toda semana" → weekly, "todo ano"/"anual" → yearly).
   • "totalInstallments": nº de parcelas (installment) OU nº de meses/ocorrências de um recorrente com PRAZO (ex: "academia por 12 meses", "assinatura por 6 meses" → recurrenceType: "recurring" + totalInstallments: 12/6 — NÃO "installment", já que não é uma compra parcelada). Se o recorrente não tiver prazo mencionado (a maioria dos casos: netflix, aluguel, salário), NÃO inclua "totalInstallments" — fica perpétuo.
@@ -1329,17 +1483,17 @@ INTENÇÕES POSSÍVEIS:
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
-- agenda_create: agendar um compromisso, reunião, consulta ou evento com data e hora ("agendar reunião amanhã às 14h", "consulta médica sexta às 10h", "evento no sábado às 9h"). Use "agendaData" com título, startDate, startTime e opcionalmente location, description, endDate, endTime, repeat, allDay (true se for um evento de dia inteiro, sem horário específico, ex: "aniversário dia 15" sem hora).
+- agenda_create: agendar um ou vários compromissos, reuniões, consultas ou eventos. Use "agendaData" para um e "agendaItems" para vários, com título, startDate, startTime e campos opcionais em cada item.
 - agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
 - agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: "reunião", "consulta") — NUNCA inclua dia/data/hora no keyword, já que a busca compara com o título salvo (que não tem essas palavras) e um keyword mais longo que o título nunca bate. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
 - agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "reagendar a reunião para segunda às 10h" extraia keyword: "reunião", NÃO "reunião para segunda") e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
 - agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "apaga o compromisso de sexta" extraia keyword: "compromisso", NÃO "compromisso de sexta"; de "cancelar a reunião de amanhã" extraia "reunião", NÃO "reunião de amanhã").
 - agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com APENAS o nome/assunto do compromisso, sem dia/data/hora. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
 - meet_create: criar uma reunião do Google Meet ("criar meet amanhã às 14h", "meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). Diferente de agenda_create — esse cria um link real do Google Meet.
-- vehicle_create: cadastrar um veículo novo ("cadastre meu carro", "adiciona uma moto", "novo veículo Volkswagen Gol 2020"). Use "vehicle.brand", "vehicle.model", "vehicle.year", "vehicle.plate", "vehicle.fuelType" e "vehicle.currentKm" quando informados. Marca, modelo e ano são coletados depois se faltarem. NÃO use para gasto/abastecimento/manutenção.
+- vehicle_create: cadastrar um ou vários veículos novos. Use "vehicle" para um e "vehicles" para vários. Inclua brand, model, year, plate, fuelType e currentKm quando informados. Marca, modelo e ano serão perguntados item por item se faltarem.
 - vehicle_update: alterar os dados de um veículo existente ("altere a placa do Gol para ABC1D23", "muda o km da moto para 35000", "quero alterar meu veículo"). Use "keyword" com marca, modelo ou placa do veículo original e em "vehicle" SOMENTE os novos campos. Para mudar entre pessoal e empresa, use "vehicle.newMode". Se a pessoa só disser que quer alterar, sem dizer o campo, deixe os novos campos vazios: o sistema perguntará.
 - vehicle_delete: excluir um veículo ("exclua o Gol", "remova minha moto"). Use "keyword" com marca, modelo ou placa quando houver. Se não identificar qual, o sistema mostrará a lista.
-- vehicle_expense: registrar gasto com veículo, carro, moto ou caminhão ("abasteci", "revisão no carro", "troca de óleo", "seguro do carro", "manutenção do carro/moto/caminhão", "conserto do carro", "paguei IPVA", "pneu do carro", "gasto com a moto", "oficina"). Se a mensagem mencionar veículo ou carro/moto/caminhão, use vehicle_expense. Inclua expenseType: fuel para combustível, maintenance para manutenção/revisão/conserto/pneu/óleo, insurance para seguro, tax para IPVA/impostos, other para outros. NÃO confunda com vehicle_create/update/delete.
+- vehicle_expense: registrar um ou vários gastos com veículo, carro, moto ou caminhão. Use "vehicle" para um e "vehicleExpenses" para vários; em cada item inclua amount, expenseType, description, km, name e mode quando informados. Se mencionar veículo, use vehicle_expense. NÃO confunda com vehicle_create/update/delete.
 - vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
 - grocery_list_add: adicionar item(ns) à lista de compras de mercado ("põe arroz na lista", "adiciona leite e ovos na lista de compras", "preciso comprar detergente"). Use "grocery.items" com productName (e category se der pra inferir). ⚠️ Se pedir uma lista PRONTA por categoria ("põe a lista de mercearia", "quero a lista de carnes", "adiciona os itens de limpeza"), use "grocery.template" com a chave em minúsculo sem acento (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) em vez de "items".
 - grocery_list_show: ver a lista de compras ("o que tem na lista de compras", "minha lista do mercado", "o que falta comprar")
@@ -1347,7 +1501,7 @@ INTENÇÕES POSSÍVEIS:
 - grocery_list_clear: apagar TODOS os itens da lista ("limpe minha lista de compras", "esvazie a lista inteira"). Não use quando a pessoa citar itens específicos.
 - grocery_list_remove: excluir item(ns) específicos sem marcar como comprados ("remova arroz da lista", "apague leite e pão da minha lista"). Use "grocery.itemNames".
 - grocery_list_edit: alterar um item que já está na lista. Use o nome atual em "grocery.itemNames[0]" e apenas o que mudar: "grocery.newProductName" para renomear, "grocery.newQuantity" para quantidade ou "grocery.newCategory" para categoria.
-- grocery_purchase: registrar uma compra de mercado COMPLETA, com itens e valores ("comprei no Assaí: arroz 25, feijão 8, leite 6"). Use "grocery.storeName" e "grocery.items" (productName, price, quantity). ⚠️ DIFERENTE de finance_register: se a mensagem só disser um valor total sem listar os itens ("gastei 350 no mercado"), é finance_register (categoria Alimentação), NÃO grocery_purchase — só use grocery_purchase quando os itens individuais forem listados.
+- grocery_purchase: registrar uma ou várias compras de mercado COMPLETAS, com itens e valores. Use "grocery" para uma compra e "groceryPurchases" para várias compras distintas; os produtos de cada compra ficam no respectivo items[]. Se houver apenas valor total sem itens, use finance_register, não grocery_purchase.
 - grocery_purchase_finish: fechar a compra a partir dos itens JÁ MARCADOS na lista de compras, sem listar os itens de novo ("finalizei a compra no Assaí, foi 120 reais", "terminei as compras, gastei 85", "fechei a lista"). Use "grocery.storeName" e "grocery.total" se vierem na mensagem (se não vierem, será perguntado depois). ⚠️ DIFERENTE de grocery_purchase: aqui os itens NÃO são listados na mensagem, vêm da lista de compras já marcada.
 - grocery_list_generate: gerar/sugerir uma lista de compras básica ("gera uma lista de carnes e verduras pro dia a dia", "monta uma lista básica de mercearia pra mim", "sugere o que comprar"). Use "grocery.categories" com as chaves mencionadas (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) — se nenhuma categoria for citada, deixe vazio (gera de todas).
 - grocery_price_compare: perguntar o preço de UM produto específico entre os mercados que a pessoa já comprou ("quanto pago no detergente", "onde o leite tá mais barato", "qual o preço do arroz nos mercados que comprei"). Use "grocery.productName" com o nome do produto perguntado. ⚠️ DIFERENTE de grocery_spend_query: aqui é sobre o PREÇO de um item específico comparado entre lojas, não sobre gasto total/mercado favorito.
@@ -1355,15 +1509,16 @@ INTENÇÕES POSSÍVEIS:
 - grocery_history_query: listar as COMPRAS de mercado de fato, opcionalmente filtradas por mercado, categoria, período e posição/quantidade ("o que comprei no Muffato em agosto", "qual carne comprei semana passada", "todas as minhas compras", "minhas últimas 3 compras", "minha penúltima compra"). Use "grocery.storeName" para o mercado, "grocery.category" para uma categoria válida, "grocery.period" para o período, "grocery.allHistory": true quando pedir todo o histórico, "grocery.purchaseLimit" para últimas N, "grocery.purchaseOffset": 1 para penúltima e 2 para antepenúltima. Use "grocery.queryDetail": "items" quando pedir o que comprou ou "total" quando pedir só valores. ⚠️ DIFERENTE de grocery_spend_query (resumo total por mercado) e grocery_price_compare (preço de um produto). Para períodos relativos, copie as datas pré-calculadas.
 - grocery_last_purchase_query: consultar a compra MAIS RECENTE, com ou sem mercado específico ("quanto gastei na minha última compra", "o que comprei no Muffato última vez"). Use "grocery.storeName" quando citado e "grocery.queryDetail": "total" quando pedir quanto gastou, ou "items" quando pedir o que comprou.
 - grocery_spend_query: perguntar sobre gasto TOTAL/mercado favorito, sem listar itens ("quanto gastei no mercado esse mês", "quanto gastei no Muffato em agosto", "qual mercado eu gasto mais"). Quando houver, use "grocery.storeName" e "grocery.period" para filtrar corretamente.
-- employee_create: cadastrar um novo funcionário ("cadastra a Ana como vendedora, 2000", "contrata o João de auxiliar, salário 1800", "registra funcionário"). Use "employee.name", "employee.role", "employee.salary". ⚠️ DIFERENTE de recurring_create: "cadastra a Ana como vendedora, salário 2000" é employee_create (está criando o REGISTRO da funcionária); "pago o funcionário 2000 todo dia 5" ou "pago a Ana 2000 todo mês" é recurring_create (está registrando o PAGAMENTO recorrente de alguém que já é funcionário) — o sinal é se a mensagem fala em CADASTRAR/CONTRATAR uma pessoa (employee_create) ou em PAGAR/UM VALOR RECORRENTE (recurring_create). Nesse segundo caso, inclua SEMPRE "recurring.employeePayment": true, e "recurring.employeeName" com o nome se a mensagem citar um (o sistema pergunta qual funcionário se não der pra saber sozinho).
+- employee_create: cadastrar um ou vários funcionários. Use "employee" para um e "employees" para vários; cada um leva name, role e salary. Diferencie de recurring_create, que representa o pagamento recorrente de alguém já cadastrado. Se a mensagem falar em pagar funcionário todo mês, use recurring_create com employeePayment: true e employeeName quando houver nome.
 - employee_list: ver funcionários e folha de pagamento ("meus funcionários", "quanto pago de folha", "lista de funcionários")
 - employee_update: alterar dados de um funcionário existente ("muda o salário da Ana para 2200", "atualiza o cargo do João", "troca o nome da Ana para Mariana"). Use "keyword" com o nome atual e "employee" com os campos novos; para renomear, use "employee.newName".
 - employee_deactivate: desativar/remover/demitir um funcionário, preservando o histórico financeiro ("demite o João", "desativa a Ana", "apague o funcionário João", "o João não trabalha mais aqui"). Use "keyword" com o nome.
-- customer_create: cadastrar um novo CLIENTE da empresa (quem COMPRA/contrata, não quem trabalha lá) ("cadastra o cliente Pedro", "adiciona a empresa XPTO como cliente", "novo cliente: Maria, telefone 11999999999"). Use "customer.name" (obrigatório), e opcionalmente "customer.phone", "customer.email", "customer.company", "customer.address", "customer.notes". ⚠️ DIFERENTE de employee_create (funcionário TRABALHA na empresa) e de recurring_create/finance_register (lançar um valor não é cadastrar um cliente).
+- customer_create: cadastrar um ou vários clientes da empresa. Use "customer" para um e "customers" para vários; name é obrigatório em cada item e os demais dados são opcionais.
 - customer_list: ver TODOS os clientes cadastrados ("meus clientes", "lista de clientes", "quais clientes eu tenho") — sem citar nome específico.
 - customer_query: perguntar um dado (telefone, email, endereço, empresa) de UM cliente específico pelo nome ("qual o telefone do meu cliente Bruno", "qual o email da Maria", "endereço do cliente Pedro Silva"). Use "keyword" com o nome citado (pode ser só o primeiro nome, ou nome completo se a mensagem já disser sobrenome/identificação — quanto mais específico o nome citado, melhor a busca acha só um cliente).
 - customer_update: alterar dados de um cliente existente ("muda o telefone do Pedro", "atualiza o email da Maria"). Use "keyword" com o nome e "customer" com os campos novos.
 - customer_deactivate: desativar/remover um cliente ("remove o cliente Pedro", "esse cliente não compra mais comigo"). Use "keyword" com o nome.
+- web_search: pesquisar informações públicas e atuais na internet, como preços e disponibilidade de produtos/remédios, passagens, hotéis, serviços, horários, notícias, endereços ou comparações. Use "keyword" com a pesquisa COMPLETA, reunindo a mensagem atual e o contexto recente quando necessário. Se faltar um dado indispensável para a busca (ex.: data/origem/destino de viagem; nome/apresentação do medicamento; cidade quando a disponibilidade local importar), use "response" para fazer UMA pergunta objetiva e não invente o dado. Não use para consultar dados internos do Zelo, arquivos do Drive ou histórico financeiro. Não ofereça diagnóstico, prescrição nem alteração de dose de medicamentos.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa", "como acesso o painel/site", "qual o site/link do Zelo", "estou conectado no Google", "como conecto o Google", "verificar conexão do Google"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos, funcionalidades ou endereços/links que não existem). ⚠️ Se a resposta precisar citar o endereço do painel, use EXATAMENTE o "Endereço do painel web" informado no início da mensagem — nunca invente um domínio diferente.
   ⚠️ LIMITES DO PRODUTO: neste momento NÃO é possível cadastrar, acessar, conectar ou sincronizar contas bancárias/cartões no Zelo. O Zelo NÃO usa e NÃO oferecerá instruções de Open Finance/Open Banking. Nunca mande procurar menus como "Conexões", "Integrações Bancárias" ou "Minhas Contas" e nunca crie um passo a passo bancário. Para esse pedido, informe a indisponibilidade e oriente: "Acesse o painel do Zelo e abra o *Suporte* no canto inferior direito."
@@ -1373,7 +1528,7 @@ INTENÇÕES POSSÍVEIS:
   2) Vincular o WhatsApp de outra pessoa (funcionário, sócio, familiar) pra ela poder conversar com o bot como se fosse a própria conta: a pessoa (ou o dono da conta, se estiver com o número dela em mãos) digita "vincular número" aqui no chat OU acessa Configurações → "Vincular WhatsApp" no painel — isso gera um código de 4 dígitos válido por 10 minutos; a pessoa manda esse código PARA ESTE MESMO NÚMERO do Zelo no WhatsApp dela, e o bot pergunta o nome, o vínculo (ex: "funcionário", "sócio") e o tipo de acesso (pessoal/empresa/ambos) — depois disso ela já pode registrar gastos, tarefas etc. direto pelo WhatsApp dela.
   ⚠️ Pergunta sobre conexão com o GOOGLE (Calendar/Meet) — se está conectado, como conectar, ou como trocar a conta conectada: SEMPRE responda mandando a pessoa entrar no painel web do Zelo (use o endereço informado no início da mensagem) → Configurações → seção "Google Calendar / Meet". Lá tem o status da conexão (mostra o e-mail conectado quando já está) e o botão "Conectar Google" (ou "Desconectar" se já estiver). Não existe forma de conectar/verificar isso pelo próprio WhatsApp — nunca invente um jeito de fazer isso por aqui.
 - help: pedir lista de comandos ("ajuda", "help", "o que você faz")
-- category_create: criar uma categoria personalizada de despesa/receita ("cria a categoria Nubank", "adiciona categoria Consórcio", "nova categoria Investimentos"). Use "categoryName" com o nome exato dito. ⚠️ AÇÃO DE 1 PASSO SÓ, sem perguntar nada: por padrão cria a categoria pra despesa E receita ao mesmo tempo — só restrinja a um tipo só se o usuário disser explicitamente ("categoria de receita chamada X", "só pra despesa"), usando "financeType" ("expense"/"income") nesse caso. NÃO existe limite/meta de orçamento por categoria no sistema — nunca pergunte sobre isso nem sobre mais configurações.
+- category_create: criar uma ou várias categorias personalizadas. Use categoryName para uma e categoryNames para várias. Por padrão cria para despesa e receita; restrinja apenas quando o usuário disser explicitamente.
 - finance_clear_history: apagar/limpar/zerar TODO o histórico financeiro de uma vez — não é apagar 1 lançamento específico (isso é finance_delete), é remover TUDO ("apaga todo o histórico", "limpa tudo", "zera meus registros financeiros", "apaga todas as despesas e receitas"). Se a mensagem disser claramente "pessoal", "empresa" ou "os dois"/"tudo", inclua "mode" ("personal"/"business" — se for os dois, deixe "mode" vazio, o sistema pergunta). ⚠️ Essa intent SÓ inicia a confirmação — o sistema mostra quantos lançamentos seriam apagados e pede uma confirmação forte antes de executar de verdade; você nunca confirma nem executa a exclusão sozinho no campo "response" ou em texto livre.
 - unknown: não identificado
 
@@ -1553,6 +1708,17 @@ Exemplo tarefa claramente pessoal, sem pedido explícito ("me lembra de levar o 
   }
 }
 
+Exemplo de várias tarefas ("monte uma lista: estudar CFC, separar as fotos e arrumar a mesa"):
+{
+  "intent": "task_create",
+  "confidence": 0.95,
+  "tasks": [
+    { "title": "Estudar CFC", "priority": "medium", "mode": "personal" },
+    { "title": "Separar as fotos", "priority": "medium", "mode": "personal" },
+    { "title": "Arrumar a mesa", "priority": "medium", "mode": "personal" }
+  ]
+}
+
 OU para atualização de tarefa:
 {
   "intent": "task_update",
@@ -1605,6 +1771,17 @@ OU para lembrete:
     "message": "Pagar conta de água",
     "scheduledAt": "2026-07-05T09:00:00",
     "repeat": "monthly"
+  }
+}
+
+Exemplo em que a pessoa diz "tarefa", mas quer aviso com horário ("tarefa de hoje, 2 horas da tarde, confirmar se depositei a pensão"):
+{
+  "intent": "reminder_set",
+  "confidence": 0.98,
+  "reminder": {
+    "message": "Confirmar se depositei a pensão",
+    "scheduledAt": "2026-07-04T14:00:00",
+    "repeat": "none"
   }
 }
 
@@ -2401,6 +2578,12 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   const explicitUnscheduledReminder = getExplicitUnscheduledReminderResult(message, ctx?.history);
   if (explicitUnscheduledReminder) return explicitUnscheduledReminder;
 
+  const explicitScheduledReminder = getExplicitScheduledReminderResult(message);
+  if (explicitScheduledReminder) return explicitScheduledReminder;
+
+  const explicitTaskList = getExplicitTaskListCreateResult(message);
+  if (explicitTaskList) return explicitTaskList;
+
   const explicitTask = getExplicitTaskCreateResult(message);
   if (explicitTask) return explicitTask;
 
@@ -2430,6 +2613,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitDailySummary = getExplicitDailySummaryResult(message);
   if (explicitDailySummary) return explicitDailySummary;
+
+  const explicitWebSearch = getExplicitWebSearchResult(message);
+  if (explicitWebSearch) return explicitWebSearch;
 
   const unsupportedBankConnection = getUnsupportedBankConnectionResponse(
     message,
@@ -2483,6 +2669,78 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   }
 }
 
+type GroundedSource = { title: string; url: string };
+
+function groundedSources(result: GenerateContentResult): GroundedSource[] {
+  const chunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  const seen = new Set<string>();
+  const sources: GroundedSource[] = [];
+  for (const chunk of chunks) {
+    const url = chunk.web?.uri?.trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    sources.push({ title: chunk.web?.title?.trim() || "Fonte", url });
+    if (sources.length === 5) break;
+  }
+  return sources;
+}
+
+/** Pesquisa pública em tempo real com Grounding do Google Search.
+ * Se a API não devolver fontes, não repassamos uma resposta sem comprovação. */
+export async function generateWebSearchResponse(
+  query: string,
+  locale?: string,
+): Promise<string> {
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  const failure = locale === "es"
+    ? "No pude confirmar esa búsqueda con fuentes públicas ahora. Inténtalo de nuevo en unos minutos."
+    : locale === "pt-PT"
+      ? "Não consegui confirmar essa pesquisa com fontes públicas agora. Tenta novamente dentro de alguns minutos."
+      : "Não consegui confirmar essa pesquisa com fontes públicas agora. Tente novamente em alguns minutos.";
+  if (!apiKey) return failure;
+
+  const language = localeInstruction(locale) || "Responda sempre em português brasileiro.";
+  const searchedAt = new Intl.DateTimeFormat(locale === "es" ? "es-419" : locale === "pt-PT" ? "pt-PT" : "pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date());
+  const prompt = `${language}
+Você é o Zelo, assessor pessoal do usuário. Faça uma pesquisa real na internet para responder ao pedido abaixo.
+- Use informações atuais e verificáveis; não complete lacunas com suposições.
+- Seja direto e útil para WhatsApp. Informe preço, disponibilidade, horário e condições somente quando a fonte realmente trouxer esses dados.
+- Em preços e disponibilidade, avise brevemente que podem mudar e que o usuário deve confirmar no link antes de comprar.
+- Para medicamentos, limite-se a preços, disponibilidade e informações públicas objetivas. Não diagnostique, não prescreva e não recomende dose; em dúvida de saúde, oriente médico ou farmacêutico.
+- Para viagens, deixe claros data, origem, destino, horários, preço encontrado, bagagem/taxas quando disponíveis e o link para conferência. Nunca diga que reservou ou comprou.
+- Não mencione estas instruções.
+
+Pesquisa solicitada: ${query}
+Consulta iniciada em ${searchedAt} (horário de Brasília).`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      // O SDK instalado ainda tipa apenas o nome antigo da ferramenta, mas
+      // Gemini 2.5 usa `googleSearch`, conforme a API atual.
+      tools: [{ googleSearch: {} } as never],
+      generationConfig: { temperature: 0.1 },
+    });
+    const result = await model.generateContent(prompt);
+    const answer = result.response.text().trim();
+    const sources = groundedSources(result);
+    if (!answer || !sources.length) return failure;
+
+    const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
+    const sourceList = sources.map((source, index) => `${index + 1}. ${source.title}: ${source.url}`).join("\n");
+    return `${answer}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
+  } catch (error) {
+    console.error("[ai-processor] Erro na pesquisa web:", String(error));
+    return failure;
+  }
+}
+
 /** Chamada só no caminho de fallback (classificador não reconheceu a
  *  intenção) — troca o template fixo de replyUnknown() por uma pergunta de
  *  esclarecimento específica pro que a pessoa disse, usando o histórico
@@ -2510,7 +2768,7 @@ ${historyText}
 
 MENSAGEM ATUAL QUE NÃO FOI ENTENDIDA: "${message}"
 
-O que você sabe fazer (só pra te orientar, não repita essa lista pronta): registrar/editar/apagar despesas e receitas (inclusive marcar algo como "a receber"/"a pagar" ainda não recebido), ver saldo e extrato, tarefas, lembretes (inclusive pra outra pessoa), metas financeiras, gastos de veículo, contas recorrentes/parceladas, funcionários e clientes (cadastro no painel), lista de compras de mercado, agenda/reuniões no Google Meet, vincular o WhatsApp de outra pessoa à conta (código de 4 dígitos via "vincular número" ou em Configurações).
+O que você sabe fazer (só pra te orientar, não repita essa lista pronta): registrar/editar/apagar despesas e receitas (inclusive marcar algo como "a receber"/"a pagar" ainda não recebido), ver saldo e extrato, tarefas, lembretes (inclusive pra outra pessoa), metas financeiras, gastos de veículo, contas recorrentes/parceladas, funcionários e clientes (cadastro no painel), lista de compras de mercado, agenda/reuniões no Google Meet, pesquisar informações públicas atuais na internet com fontes, vincular o WhatsApp de outra pessoa à conta (código de 4 dígitos via "vincular número" ou em Configurações).
 
 Instruções:
 - Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.

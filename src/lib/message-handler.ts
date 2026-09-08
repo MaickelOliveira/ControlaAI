@@ -1,12 +1,12 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
-import { createTask, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
+import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
@@ -20,7 +20,7 @@ import {
 import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, choiceIndexByLabels } from "@/lib/pending-actions";
-import { beginSlotFill, hasMissingSlotFields, runSlotFillTurn } from "@/lib/slot-filling";
+import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
   getMissingActionQuestion,
@@ -43,7 +43,7 @@ import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanc
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
 import { localeForWhatsAppPhone } from "@/lib/phone";
 import {
-  replyFinanceRegistered, replyBalance, replyTaskCreated, replyTaskList,
+  replyFinanceRegistered, replyBalance, replyTaskCreated, replyTasksCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
   replyTrialExpired, replyAccountInactive, replyUnknown, replyLowConfidence,
   replyRecurringConfirmed, replyRecurringList,
@@ -1085,39 +1085,59 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // ── Confirmação de Meet (sim/não) ──
     if (pending?.type === "meet_confirm" && pending.userId === user.id) {
       const lower = messageText.toLowerCase().trim();
-      const yes = ["sim", "s", "yes", "y", "1", "quero", "pode", "ok", "confirmar"].some(w => lower.includes(w));
-      const no = ["não", "nao", "n", "no", "0", "sem", "cancela"].some(w => lower.includes(w));
+      const yes = /^(?:sim|s|s[ií]|yes|y|1|quero|pode|ok|confirmar)\b/.test(lower);
+      const no = /^(?:n[ãa]o|n|no|0|sem|cancela)\b/.test(lower);
       if (yes || no) {
         await clearPendingAction(from);
-        let meetLink: string | undefined;
-        let calendarEventId: string | undefined;
-        if (yes && await isConnected(user.id)) {
-          try {
-            const r = await createMeetEvent({
-              userId: user.id, title: pending.title, description: pending.description,
-              startAt: pending.startAt, endAt: pending.endAt, attendees: pending.attendees,
-            });
-            meetLink = r.meetLink;
-            calendarEventId = r.calendarEventId;
-          } catch (e) {
-            console.error("[meet_confirm]", e);
-            await wppSend(from, "⚠️ Não consegui gerar o link do Meet. Criando o compromisso sem link...");
+        const meetItems = pending.items?.length ? pending.items : [{
+          title: pending.title, description: pending.description, startAt: pending.startAt,
+          endAt: pending.endAt, attendees: pending.attendees,
+        }];
+        const connected = yes ? await isConnected(user.id) : false;
+        if (yes && !connected) {
+          await wppSend(from, user.locale === "es"
+            ? "⚠️ Tu cuenta de Google no está conectada. Crearé la cita sin enlace de Meet."
+            : user.locale === "pt-PT"
+              ? "⚠️ A tua conta Google não está ligada. Vou criar o compromisso sem ligação do Meet."
+              : "⚠️ Sua conta Google não está conectada. Criando o compromisso sem link Meet.");
+        }
+        const confirmations: string[] = [];
+        let failedMeetLinks = 0;
+        for (const item of meetItems) {
+          let meetLink: string | undefined;
+          let calendarEventId: string | undefined;
+          if (yes && connected) {
+            try {
+              const r = await createMeetEvent({ userId: user.id, ...item });
+              meetLink = r.meetLink;
+              calendarEventId = r.calendarEventId;
+            } catch (e) {
+              console.error("[meet_confirm]", e);
+              failedMeetLinks++;
+            }
           }
-        } else if (yes && !await isConnected(user.id)) {
-          await wppSend(from, "⚠️ Sua conta Google não está conectada. Criando o compromisso sem link Meet.");
+          const apt = await createAppointment({
+            userId: user.id, title: item.title, description: item.description,
+            startAt: item.startAt, endAt: item.endAt, allDay: false, repeat: "none",
+            status: "scheduled", source: "whatsapp", meetLink, calendarEventId,
+          });
+          confirmations.push(replyMeetCreated(apt, undefined, user.locale));
+          for (const attendee of item.attendees.filter(attendee => attendee.phone)) {
+            await wppSend(attendee.phone!, replyMeetInvite(apt, attendee.name, user.locale));
+          }
         }
-        const apt = await createAppointment({
-          userId: user.id, title: pending.title, description: pending.description,
-          startAt: pending.startAt, endAt: pending.endAt,
-          allDay: false, repeat: "none", status: "scheduled", source: "whatsapp",
-          meetLink, calendarEventId,
-        });
-        await wppSend(from, replyMeetCreated(apt, undefined, user.locale));
-        for (const a of pending.attendees.filter(a => a.phone)) {
-          await wppSend(a.phone!, replyMeetInvite(apt, a.name, user.locale));
-        }
+        const failedMeetWarning = failedMeetLinks === 0 ? "" : user.locale === "es"
+          ? `⚠️ No pude generar el enlace de Meet en ${failedMeetLinks === 1 ? "una reunión" : `${failedMeetLinks} reuniones`}; las citas sí quedaron creadas.`
+          : user.locale === "pt-PT"
+            ? `⚠️ Não consegui gerar a ligação do Meet em ${failedMeetLinks === 1 ? "uma reunião" : `${failedMeetLinks} reuniões`}; os compromissos ficaram criados.`
+            : `⚠️ Não consegui gerar o link do Meet em ${failedMeetLinks === 1 ? "uma reunião" : `${failedMeetLinks} reuniões`}; os compromissos foram criados.`;
+        await wppSend(from, [failedMeetWarning, confirmations.join("\n\n────────\n\n")].filter(Boolean).join("\n\n"));
       } else {
-        await wppSend(from, `Responda *Sim* para incluir o link do Google Meet ou *Não* para criar só o compromisso.`);
+        await wppSend(from, user.locale === "es"
+          ? "Responde *Sí* para incluir el enlace de Google Meet o *No* para crear solo la cita."
+          : user.locale === "pt-PT"
+            ? "Responde *Sim* para incluir a ligação do Google Meet ou *Não* para criar apenas o compromisso."
+            : "Responda *Sim* para incluir o link do Google Meet ou *Não* para criar só o compromisso.");
       }
       return;
     }
@@ -1267,6 +1287,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       "task_query", "reminder_list", "goal_query", "recurring_query", "agenda_list", "vehicle_query",
       "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking", "grocery_last_purchase_query",
       "grocery_history_query", "employee_list", "customer_list", "customer_query",
+      "web_search",
     ].includes(ai.intent);
     const shouldCollectMissingSlots = hasMissingSlotFields(ai, { user, userId: user.id, phone: from, mode });
     if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent && !isReadOnlyIntent && !shouldCollectMissingSlots) {
@@ -1832,10 +1853,26 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "task_create": {
-        if (!ai.task) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
-        const taskMode = ai.task.mode || mode;
-        const task = await createTask({ userId: user.id, title: cap(ai.task.title), priority: ai.task.priority || "medium", dueDate: ai.task.dueDate, status: "pending", mode: taskMode });
-        await wppSend(from, replyTaskCreated(task, user.locale));
+        const rawTasks = ai.tasks?.length ? ai.tasks : ai.task ? [ai.task] : [];
+        const uniqueTasks = [...new Map(rawTasks
+          .filter(task => task?.title?.trim())
+          .map(task => [task.title.trim().toLocaleLowerCase(), task])).values()].slice(0, 30);
+        if (!uniqueTasks.length) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
+        const unauthorizedMode = phoneAccess !== "both"
+          ? uniqueTasks.find(task => task.mode && task.mode !== mode)?.mode
+          : undefined;
+        if (unauthorizedMode) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
+        if (uniqueTasks.length === 1) {
+          const data = uniqueTasks[0];
+          const task = await createTask({ userId: user.id, title: cap(data.title), priority: data.priority || "medium", dueDate: data.dueDate, status: "pending", mode: data.mode || mode });
+          await wppSend(from, replyTaskCreated(task, user.locale));
+        } else {
+          const tasks = await createTasks(uniqueTasks.map(data => ({
+            userId: user.id, title: cap(data.title), priority: data.priority || "medium",
+            dueDate: data.dueDate, status: "pending" as const, mode: data.mode || mode,
+          })));
+          await wppSend(from, replyTasksCreated(tasks, user.locale));
+        }
         break;
       }
 
@@ -1890,7 +1927,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "reminder_set": {
-        const { reply } = await beginSlotFill("reminder_set", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        const reminderAis = ai.reminders?.length
+          ? ai.reminders.map(reminder => ({ ...ai, reminder, reminders: undefined }))
+          : [ai];
+        const { reply } = await beginBatchSlotFill("reminder_set", reminderAis, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, reply);
         break;
       }
@@ -1931,7 +1971,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "goal_create": {
-        const { reply: goalReply } = await beginSlotFill("goal_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        const goalAis = ai.goals?.length ? ai.goals.map(goal => ({ ...ai, goal, goals: undefined })) : [ai];
+        const { reply: goalReply } = await beginBatchSlotFill("goal_create", goalAis, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, goalReply);
         break;
       }
@@ -2034,7 +2075,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "vehicle_create": {
-        const { reply } = await beginSlotFill("vehicle_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        const vehicleAis = ai.vehicles?.length ? ai.vehicles.map(vehicle => ({ ...ai, vehicle, vehicles: undefined })) : [ai];
+        const { reply } = await beginBatchSlotFill("vehicle_create", vehicleAis, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, reply);
         break;
       }
@@ -2093,6 +2135,63 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "vehicle_expense": {
+        if (ai.vehicleExpenses?.length) {
+          const expenses = ai.vehicleExpenses.slice(0, 30);
+          if (phoneAccess !== "both" && expenses.some(item => item.mode && item.mode !== mode)) {
+            await wppSend(from, replyModeAccessDenied(mode, user.locale));
+            break;
+          }
+          const missingAmount = expenses.findIndex(item => !(item.amount && item.amount > 0));
+          if (missingAmount >= 0) {
+            await wppSend(from, user.locale === "es"
+              ? `💰 ¿Cuál fue el importe del gasto ${missingAmount + 1} del vehículo?`
+              : `💰 Qual foi o valor do gasto ${missingAmount + 1} do veículo?`);
+            break;
+          }
+          const prepared: Array<{ item: typeof expenses[number]; target: Vehicle | null; mode: "personal" | "business" }> = [];
+          let unresolved = "";
+          for (const item of expenses) {
+            const expenseMode = item.mode || mode;
+            const vehicles = await getVehiclesByUser(user.id, expenseMode);
+            const target = item.name
+              ? await findVehicleByName(user.id, item.name, expenseMode)
+              : vehicles.length === 1 ? vehicles[0] : null;
+            if (!target && vehicles.length > 1) {
+              unresolved = item.description || item.name || String(prepared.length + 1);
+              break;
+            }
+            prepared.push({ item, target, mode: expenseMode });
+          }
+          if (unresolved) {
+            await wppSend(from, user.locale === "es"
+              ? `🚗 ¿En cuál vehículo debo registrar *${unresolved}*? Indica la marca, el modelo o la matrícula.`
+              : `🚗 Em qual veículo devo registrar *${unresolved}*? Informe a marca, modelo ou placa.`);
+            break;
+          }
+          const registered: string[] = [];
+          for (const { item, target, mode: expenseMode } of prepared) {
+            const amount = item.amount!;
+            const expenseType = item.expenseType || "other";
+            const description = cap(item.description || expenseType);
+            const date = todayStrBR();
+            if (!target) {
+              await addFinance({ userId: user.id, type: "expense", amount, category: "Transporte", description, date, mode: expenseMode, source: "whatsapp", registeredBy: from });
+              registered.push(`${description} — ${formatCurrency(amount)}`);
+              continue;
+            }
+            const updatedVehicle = await addVehicleExpense(target.id, user.id, { date, km: item.km, type: expenseType, amount, description });
+            if (!updatedVehicle) throw new Error(`[vehicle_expense] falha no lote para ${target.id}`);
+            const createdExpense = updatedVehicle.expenses[updatedVehicle.expenses.length - 1];
+            const finance = await addFinance({ userId: user.id, type: "expense", amount, category: VEHICLE_FINANCE_CATEGORY[expenseType] || "Transporte", description: `${description} — ${target.brand} ${target.model}`, date, mode: expenseMode, source: "whatsapp", registeredBy: from });
+            await setExpenseFinanceId(target.id, createdExpense.id, finance.id);
+            registered.push(`${description} — ${target.brand} ${target.model} — ${formatCurrency(amount)}`);
+          }
+          const heading = user.locale === "es"
+            ? `✅ Registré *${registered.length} gastos de vehículos*:`
+            : `✅ Registrei *${registered.length} gastos de veículos*:`;
+          await wppSend(from, `${heading}\n\n${registered.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
+          break;
+        }
         const vAmount = ai.vehicle?.amount || ai.finance?.amount || 0;
         const vType = ai.vehicle?.expenseType || "other";
         const vDesc = cap(ai.vehicle?.description || ai.finance?.description || vType);
@@ -2361,7 +2460,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "grocery_purchase": {
-        const { reply: groceryReply } = await beginSlotFill("grocery_purchase", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        const purchaseAis = ai.groceryPurchases?.length
+          ? ai.groceryPurchases.map(grocery => ({ ...ai, grocery, groceryPurchases: undefined }))
+          : [ai];
+        const { reply: groceryReply } = await beginBatchSlotFill("grocery_purchase", purchaseAis, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, groceryReply);
         break;
       }
@@ -2495,7 +2597,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "employee_create": {
-        const { reply: employeeReply } = await beginSlotFill("employee_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        const employeeAis = ai.employees?.length ? ai.employees.map(employee => ({ ...ai, employee, employees: undefined })) : [ai];
+        const { reply: employeeReply } = await beginBatchSlotFill("employee_create", employeeAis, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, employeeReply);
         break;
       }
@@ -2535,7 +2638,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "customer_create": {
-        const { reply: customerReply } = await beginSlotFill("customer_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        const customerAis = ai.customers?.length ? ai.customers.map(customer => ({ ...ai, customer, customers: undefined })) : [ai];
+        const { reply: customerReply } = await beginBatchSlotFill("customer_create", customerAis, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, customerReply);
         break;
       }
@@ -2579,6 +2683,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "recurring_create": {
+        if (ai.recurrings?.length) {
+          const recurringAis = ai.recurrings.map(recurring => ({ ...ai, recurring, recurrings: undefined }));
+          const { reply } = await beginBatchSlotFill("recurring_create", recurringAis, { user, userId: user.id, phone: from, mode }, messageText);
+          await wppSend(from, reply);
+          break;
+        }
         // Pagamento de funcionário: precisa saber QUAL antes de criar o
         // recorrente, pra não ficar com descrição genérica "Funcionário".
         if (ai.recurring?.employeePayment) {
@@ -2685,7 +2795,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "agenda_create": {
-        const { reply: agendaReply } = await beginSlotFill("agenda_create", ai, { user, userId: user.id, phone: from, mode }, messageText);
+        const agendaAis = ai.agendaItems?.length ? ai.agendaItems.map(agendaData => ({ ...ai, agendaData, agendaItems: undefined })) : [ai];
+        const { reply: agendaReply } = await beginBatchSlotFill("agenda_create", agendaAis, { user, userId: user.id, phone: from, mode }, messageText);
         await wppSend(from, agendaReply);
         break;
       }
@@ -2769,32 +2880,46 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "meet_create": {
-        const d = ai.meetData;
-        if (!d?.startDate || !d?.startTime) {
+        const rawMeetItems = ai.meetItems?.length ? ai.meetItems : ai.meetData ? [ai.meetData] : [];
+        if (!rawMeetItems.length || rawMeetItems.some(item => !item.startDate || !item.startTime)) {
           await wppSend(from, `🗓️ Me diga a data e horário da reunião!\n\nEx: _"reunião amanhã às 14h"_\nEx: _"meet hoje às 16h com João (11 99999-9999)"_`);
           break;
         }
-        const meetStartAt = spToUTC(`${d.startDate}T${d.startTime}:00`);
-        const durationMs = (d.duration || 60) * 60_000;
-        const meetEndAt = d.endDate
-          ? spToUTC(`${d.endDate}T${d.endTime || "00:00"}:00`)
-          : new Date(new Date(meetStartAt).getTime() + durationMs).toISOString();
-        const meetTitle = cap(d.title || "Reunião");
-        const meetAttendees = d.attendees || [];
+        const pendingMeetItems = rawMeetItems.slice(0, 30).map(d => {
+          const startAt = spToUTC(`${d.startDate}T${d.startTime}:00`);
+          const durationMs = (d.duration || 60) * 60_000;
+          return {
+            title: cap(d.title || "Reunião"), description: d.description, startAt,
+            endAt: d.endDate ? spToUTC(`${d.endDate}T${d.endTime || "00:00"}:00`) : new Date(new Date(startAt).getTime() + durationMs).toISOString(),
+            attendees: d.attendees || [],
+          };
+        });
+        const firstMeet = pendingMeetItems[0];
         // Pergunta se quer link do Google Meet
         const { formatDateTimeBR } = await import("@/lib/date-br");
-        const timeStr = formatDateTimeBR(meetStartAt);
+        const timeStr = formatDateTimeBR(firstMeet.startAt);
         await setPendingAction(from, {
           type: "meet_confirm",
           userId: user.id,
-          title: meetTitle,
-          description: d.description,
-          startAt: meetStartAt,
-          endAt: meetEndAt,
-          attendees: meetAttendees,
+          title: firstMeet.title,
+          description: firstMeet.description,
+          startAt: firstMeet.startAt,
+          endAt: firstMeet.endAt,
+          attendees: firstMeet.attendees,
+          items: pendingMeetItems,
           mode,
         });
-        await wppSend(from, `📅 *${meetTitle}*\n🕒 ${timeStr}\n${meetAttendees.length > 0 ? `👥 ${meetAttendees.map(a => a.name).join(", ")}\n` : ""}\nDeseja incluir link do *Google Meet*?\n\nResponda *Sim* ou *Não*`);
+        const title = pendingMeetItems.length === 1
+          ? `📅 *${firstMeet.title}*\n🕒 ${timeStr}`
+          : user.locale === "es"
+            ? `📅 *${pendingMeetItems.length} reuniones* — primera: ${firstMeet.title}, ${timeStr}`
+            : `📅 *${pendingMeetItems.length} reuniões* — primeira: ${firstMeet.title}, ${timeStr}`;
+        const question = user.locale === "es"
+          ? `¿Quieres incluir un enlace de *Google Meet* en ${pendingMeetItems.length === 1 ? "esta reunión" : "todas"}?\n\nResponde *Sí* o *No*`
+          : user.locale === "pt-PT"
+            ? `Queres incluir uma ligação do *Google Meet* em ${pendingMeetItems.length === 1 ? "esta reunião" : "todas"}?\n\nResponde *Sim* ou *Não*`
+            : `Deseja incluir link do *Google Meet* em ${pendingMeetItems.length === 1 ? "esta reunião" : "todas"}?\n\nResponda *Sim* ou *Não*`;
+        await wppSend(from, `${title}\n${firstMeet.attendees.length > 0 ? `👥 ${firstMeet.attendees.map(a => a.name).join(", ")}\n` : ""}\n${question}`);
         break;
       }
 
@@ -2819,37 +2944,51 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         break;
       }
 
+      case "web_search": {
+        if (ai.response) {
+          await wppSend(from, ai.response);
+          break;
+        }
+        const query = ai.keyword?.trim() || messageText.trim();
+        const missingQuestion = getWebSearchMissingQuestion(query, user.locale);
+        if (missingQuestion) {
+          await wppSend(from, missingQuestion);
+          break;
+        }
+        await wppSend(from, await generateWebSearchResponse(query, user.locale));
+        break;
+      }
+
       case "help": {
         await wppSend(from, replyHelp(user.locale));
         break;
       }
 
       case "category_create": {
-        const categoryName = ai.categoryName?.trim();
-        if (!categoryName) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
+        const categoryNames = [...new Map((ai.categoryNames?.length ? ai.categoryNames : ai.categoryName ? [ai.categoryName] : [])
+          .map(name => name.trim()).filter(Boolean).map(name => [name.toLocaleLowerCase(), name])).values()].slice(0, 30);
+        if (!categoryNames.length) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
 
         // Ação de 1 passo só: por padrão cria pros dois tipos ao mesmo tempo
         // (sem perguntar), só restringe se a IA identificou um tipo explícito.
         const targets: Array<"expense" | "income"> = ai.financeType ? [ai.financeType] : ["expense", "income"];
-        const added: string[] = [];
-        const already: string[] = [];
-
+        const summaries: string[] = [];
         for (const type of targets) {
           const defaults = type === "expense" ? CATEGORIES_EXPENSE : CATEGORIES_INCOME;
-          const existing = type === "expense" ? (user.customCategoriesExpense || []) : (user.customCategoriesIncome || []);
-          const exists = [...defaults, ...existing].some(c => c.toLowerCase() === categoryName.toLowerCase());
-          if (exists) { already.push(type); continue; }
-          const updated = [...existing, categoryName];
-          if (type === "expense") await updateUser(user.id, { customCategoriesExpense: updated });
-          else await updateUser(user.id, { customCategoriesIncome: updated });
-          added.push(type);
+          const existing = type === "expense" ? [...(user.customCategoriesExpense || [])] : [...(user.customCategoriesIncome || [])];
+          const added = categoryNames.filter(name => ![...defaults, ...existing].some(c => c.toLocaleLowerCase() === name.toLocaleLowerCase()));
+          if (added.length) {
+            const updated = [...existing, ...added];
+            if (type === "expense") await updateUser(user.id, { customCategoriesExpense: updated });
+            else await updateUser(user.id, { customCategoriesIncome: updated });
+          }
+          const label = user.locale === "es" ? (type === "expense" ? "gastos" : "ingresos") : (type === "expense" ? "despesas" : "receitas");
+          summaries.push(`${label}: ${added.length ? added.join(", ") : user.locale === "es" ? "ninguna nueva" : "nenhuma nova"}`);
         }
-
-        const typeLabel = (t: string) => t === "expense" ? "despesa" : "receita";
-        let msg = "";
-        if (added.length) msg += `✅ Categoria *${categoryName}* criada para ${added.map(typeLabel).join(" e ")}.`;
-        if (already.length) msg += `${msg ? "\n" : ""}ℹ️ Já existia pra ${already.map(typeLabel).join(" e ")}.`;
-        await wppSend(from, msg.trim());
+        const heading = user.locale === "es"
+          ? `✅ Procesé *${categoryNames.length} ${categoryNames.length === 1 ? "categoría" : "categorías"}*.`
+          : `✅ Processei *${categoryNames.length} ${categoryNames.length === 1 ? "categoria" : "categorias"}*.`;
+        await wppSend(from, `${heading}\n\n${summaries.join("\n")}`);
         break;
       }
 

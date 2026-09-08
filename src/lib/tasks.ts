@@ -36,6 +36,19 @@ export async function createTask(data: Omit<Task, "id" | "createdAt">): Promise<
   return fromRow(inserted as Row);
 }
 
+/** Insere a lista numa única operação para evitar confirmar um lote pela
+ * metade caso o banco rejeite algum registro. */
+export async function createTasks(items: Array<Omit<Task, "id" | "createdAt">>): Promise<Task[]> {
+  if (!items.length) return [];
+  const rows = items.map(data => ({
+    id: randomUUID(), user_id: data.userId, title: data.title, status: data.status,
+    priority: data.priority, due_date: data.dueDate, mode: data.mode,
+  }));
+  const { data: inserted, error } = await getSupabase().from("tasks").insert(rows).select("*");
+  if (error) throw new Error(`[tasks] createTasks falhou: ${error.message}`);
+  return (inserted as Row[]).map(fromRow);
+}
+
 export async function getTasksByUser(userId: string, mode?: TaskMode): Promise<Task[]> {
   let query = getSupabase().from("tasks").select("*").eq("user_id", userId);
   if (mode) query = query.eq("mode", mode);
@@ -104,8 +117,8 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   completed: "Concluída",
 };
 
-export function formatDueDate(dateStr?: string): string {
-  if (!dateStr) return "Sem prazo";
+export function formatDueDate(dateStr?: string, locale = "pt-BR"): string {
+  if (!dateStr) return locale === "es" ? "Sin fecha límite" : "Sem prazo";
   // "YYYY-MM-DD" sem hora é interpretado pelo Date como meia-noite UTC — em
   // fuso atrás de UTC (Brasil) isso volta pro dia anterior ao converter pra
   // hora local, fazendo "amanhã" ser exibido como "hoje". Ancorar ao meio-dia
@@ -115,7 +128,7 @@ export function formatDueDate(dateStr?: string): string {
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
-  if (date.toDateString() === today.toDateString()) return "hoje";
-  if (date.toDateString() === tomorrow.toDateString()) return "amanhã";
-  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  if (date.toDateString() === today.toDateString()) return locale === "es" ? "hoy" : "hoje";
+  if (date.toDateString() === tomorrow.toDateString()) return locale === "es" ? "mañana" : "amanhã";
+  return date.toLocaleDateString(locale === "es" ? "es-419" : locale, { day: "2-digit", month: "2-digit" });
 }

@@ -78,6 +78,13 @@ export type PendingMeetConfirm = {
   startAt: string;
   endAt: string;
   attendees: Array<{ name: string; phone?: string; email?: string }>;
+  items?: Array<{
+    title: string;
+    description?: string;
+    startAt: string;
+    endAt: string;
+    attendees: Array<{ name: string; phone?: string; email?: string }>;
+  }>;
   mode: string;
   expiresAt: string;
 };
@@ -190,6 +197,11 @@ export type PendingSlotFill = {
   mode: "personal" | "business";
   /** mensagem que abriu o fluxo — usada em mensagens de desistência */
   originalText: string;
+  /** Lote da mesma intenção. Nada é criado enquanto ainda houver campos
+   * obrigatórios faltando. */
+  batchDrafts?: Array<Record<string, unknown>>;
+  batchMissing?: string[][];
+  batchIndex?: number;
   expiresAt: string;
 };
 

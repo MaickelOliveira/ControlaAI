@@ -79,10 +79,28 @@ export function replyWppNameSaved(name: string, locale?: string): string {
 }
 
 export function replyTaskCreated(task: Task, locale?: string): string {
-  const due = task.dueDate ? `\n📅 ${isEs(locale) ? "Vencimiento" : "Prazo"}: ${formatDueDate(task.dueDate)}` : "";
+  const due = task.dueDate ? `\n📅 ${isEs(locale) ? "Vencimiento" : "Prazo"}: ${formatDueDate(task.dueDate, locale)}` : "";
   const priority = PRIORITY_LABEL[task.priority];
   const verbo = isEs(locale) ? "Anotado en tu lista." : isPtPt(locale) ? "Registado na tua lista." : "Anotado na sua lista.";
   return `${verbo} 📌 ${task.title}\n${priority}${due}`;
+}
+
+export function replyTasksCreated(tasks: Task[], locale?: string): string {
+  const heading = isEs(locale)
+    ? `✅ Preparé tu lista con *${tasks.length} tareas*:`
+    : isPtPt(locale)
+      ? `✅ Criei a tua lista com *${tasks.length} tarefas*:`
+      : `✅ Montei sua lista com *${tasks.length} tarefas*:`;
+  const lines = tasks.map((task, index) => {
+    const priority = task.priority === "high" ? "⚡" : task.priority === "low" ? "⚪" : "🟡";
+    const due = task.dueDate ? ` — ${formatDueDate(task.dueDate, locale)}` : "";
+    return `${index + 1}. ${priority} ${task.title}${due}`;
+  });
+  const noDates = tasks.every(task => !task.dueDate);
+  const footer = noDates
+    ? (isEs(locale) ? "\nQuedaron sin fecha límite. Si quieres, dime los plazos." : isPtPt(locale) ? "\nFicaram sem prazo. Se quiseres, diz-me os prazos." : "\nFicaram sem prazo. Se quiser, me diga os prazos.")
+    : "";
+  return `${heading}\n\n${lines.join("\n")}${footer}`;
 }
 
 export function replyTaskList(tasks: Task[], mode: UserMode, locale?: string): string {
@@ -95,7 +113,7 @@ export function replyTaskList(tasks: Task[], mode: UserMode, locale?: string): s
   const titulo = isEs(locale) ? "Tus tareas pendientes" : "Suas tarefas pendentes";
   let msg = `📋 *${titulo} — ${modeLabel} (${tasks.length}):*\n\n`;
   tasks.slice(0, 10).forEach((t, i) => {
-    const due = t.dueDate ? ` — ${formatDueDate(t.dueDate)}` : "";
+    const due = t.dueDate ? ` — ${formatDueDate(t.dueDate, locale)}` : "";
     const pr = t.priority === "high" ? "⚡" : t.priority === "medium" ? "🟡" : "⚪";
     msg += `${i + 1}. ${pr} ${t.title}${due}\n`;
   });
@@ -273,6 +291,13 @@ Quien tenga WhatsApp vinculado recibe la invitación automáticamente.
 • _"Guarda como contrato firmado"_ → renombro el último archivo
 
 ━━━━━━━━━━━━━━━
+🔎 *BUSCAR EN INTERNET*
+• _"Busca en internet el precio de este medicamento"_
+• _"Investiga vuelos de Ciudad de México a Bogotá"_
+• _"Compara el precio de este producto"_
+Te doy información actual, fecha de consulta y enlaces a las fuentes. Si falta un dato esencial, te lo pregunto antes.
+
+━━━━━━━━━━━━━━━
 🏢 *MODO EMPRESA / PERSONAL*
 Separo las finanzas de la empresa de las personales:
 • _"Modo empresa"_ → los próximos registros van a la empresa
@@ -377,6 +402,13 @@ Quem tem WhatsApp associado recebe o convite automaticamente.
 • _"Guarda como contrato assinado"_ → renomeio o último ficheiro
 
 ━━━━━━━━━━━━━━━
+🔎 *PESQUISAR NA INTERNET*
+• _"Pesquisa na internet o preço deste medicamento"_
+• _"Procura voos de Lisboa para Madrid"_
+• _"Compara o preço deste produto"_
+Dou-te informação atual, data da consulta e ligações para as fontes. Se faltar um dado essencial, pergunto antes.
+
+━━━━━━━━━━━━━━━
 🏢 *MODO EMPRESA / PESSOAL*
 Separo as finanças da empresa das tuas pessoais:
 • _"Modo empresa"_ → os próximos registos vão para a empresa
@@ -478,6 +510,13 @@ Quem tem WhatsApp vinculado recebe o convite automaticamente.
 • Pra eu só guardar, sem lançar nada: mande com legenda _"salva"_ ou _"guarda"_
 • _"Ache o contrato do João"_ → te devolvo o arquivo
 • _"Salva como contrato assinado"_ → renomeio o último arquivo
+
+━━━━━━━━━━━━━━━
+🔎 *PESQUISAR NA INTERNET*
+• _"Pesquise na internet o preço deste remédio"_
+• _"Procure voos de Guarulhos para Belo Horizonte"_
+• _"Compare o preço deste produto"_
+Eu trago informação atual, data da consulta e links das fontes. Se faltar um dado essencial, pergunto antes.
 
 ━━━━━━━━━━━━━━━
 🏢 *MODO EMPRESA / PESSOAL*

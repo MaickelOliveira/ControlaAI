@@ -9,15 +9,44 @@ import {
   getExplicitLastGroceryPurchaseResult,
   getExplicitRelativePeriod,
   getExplicitTaskCreateResult,
+  getExplicitTaskListCreateResult,
+  getExplicitScheduledReminderResult,
   getExplicitUpcomingFinanceQueryResult,
   getExplicitUnscheduledReminderResult,
   getExplicitVehicleCrudResult,
+  getExplicitWebSearchResult,
+  getWebSearchMissingQuestion,
   getExplicitWeeklySummaryResult,
   getUnsupportedBankConnectionResponse,
   processMessage,
   withExplicitFinanceDestinationMode,
   withExplicitFinanceType,
 } from "./ai-processor";
+
+describe("internet research classification", () => {
+  it("routes explicit web research in Portuguese and Spanish", async () => {
+    expect(getExplicitWebSearchResult("Pesquise na internet o preço do medicamento X"))
+      .toMatchObject({ intent: "web_search", confidence: 1 });
+    expect(await processMessage("Busca en internet horarios de vuelos a Bogotá"))
+      .toMatchObject({ intent: "web_search", confidence: 1 });
+  });
+
+  it("does not confuse an internal Drive search with a web search", () => {
+    expect(getExplicitWebSearchResult("Busque meu contrato no Drive")).toBeNull();
+  });
+
+  it("keeps an instruction to research later as a reminder", async () => {
+    expect(await processMessage("Me lembre amanhã às 9h de pesquisar o preço na internet"))
+      .toMatchObject({ intent: "reminder_set" });
+  });
+
+  it("asks for the date before searching flight availability", () => {
+    expect(getWebSearchMissingQuestion("Pesquise passagens de Guarulhos para Belo Horizonte", "pt-BR"))
+      .toContain("qual data");
+    expect(getWebSearchMissingQuestion("Busca vuelos de Bogotá a Santiago el 20/09/2026", "es"))
+      .toBeNull();
+  });
+});
 
 describe("explicit finance type", () => {
   it("recognizes natural income and expense language in Portuguese and Spanish", () => {
@@ -135,6 +164,54 @@ describe("getExplicitTaskCreateResult", () => {
   it("leaves task updates and ambiguous weekday dates for the full classifier", () => {
     expect(getExplicitTaskCreateResult("Tarefa 2 concluída")).toBeNull();
     expect(getExplicitTaskCreateResult("Tarefa: entregar a guitarra na sexta-feira")).toBeNull();
+  });
+});
+
+describe("task lists and scheduled reminders", () => {
+  it("turns a spoken list into separate tasks without asking for the title again", () => {
+    const result = getExplicitTaskListCreateResult(
+      "Monta para mim uma lista de tarefas. Estudar CFC, item 2, cursos que tá na, na Zap Kiko Fotos. Separar as coisas de fotografia, arrumar minha mesa, montar esquema de carregador, e concursos de fotografia que tá no WhatsApp. Prepara uma lista de tarefas para mim sobre esses eventos, por favor.",
+    );
+
+    expect(result?.intent).toBe("task_create");
+    expect(result?.tasks?.map(task => task.title)).toEqual([
+      "Estudar CFC",
+      "cursos que tá na Zap Kiko Fotos",
+      "Separar as coisas de fotografia",
+      "arrumar minha mesa",
+      "montar esquema de carregador",
+      "concursos de fotografia que tá no WhatsApp",
+    ]);
+  });
+
+  it("treats a task with an explicit notification time as a reminder", () => {
+    const result = getExplicitScheduledReminderResult(
+      "Nilmar, tarefa de hoje. 2 horas da tarde, confirmar se eu depositei a pensão da Rafa.",
+    );
+
+    expect(result).toMatchObject({
+      intent: "reminder_set",
+      reminder: {
+        message: "confirmar se eu depositei a pensão da Rafa",
+        repeat: "none",
+      },
+    });
+    expect(result?.reminder?.scheduledAt).toMatch(/^\d{4}-\d{2}-\d{2}T14:00:00$/);
+  });
+
+  it("supports the same reminder wording in Spanish", () => {
+    expect(getExplicitScheduledReminderResult("Tarea de mañana, 3 de la tarde, confirmar el pago"))
+      .toMatchObject({ intent: "reminder_set", reminder: { message: "confirmar el pago" } });
+  });
+
+  it("creates a Spanish task list item by item", () => {
+    expect(getExplicitTaskListCreateResult("Crea una lista de tareas: estudiar, ordenar el escritorio y llamar a Ana")?.tasks?.map(task => task.title))
+      .toEqual(["estudiar", "ordenar el escritorio", "llamar a Ana"]);
+  });
+
+  it("applies the reminder correction before calling the external classifier", async () => {
+    const result = await processMessage("Tarefa de hoje, 2 horas da tarde, confirmar o depósito");
+    expect(result).toMatchObject({ intent: "reminder_set", confidence: 1, reminder: { message: "confirmar o depósito" } });
   });
 });
 

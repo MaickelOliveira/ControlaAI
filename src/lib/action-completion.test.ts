@@ -19,6 +19,13 @@ describe("action completion", () => {
       task: { title: "Comprar pão", priority: "medium" },
     }, "pt-BR")).toBeNull();
     expect(getMissingActionQuestion({
+      intent: "task_create", confidence: 0.9,
+      tasks: [
+        { title: "Estudar", priority: "medium" },
+        { title: "Arrumar a mesa", priority: "low" },
+      ],
+    }, "pt-BR")).toBeNull();
+    expect(getMissingActionQuestion({
       intent: "category_create", confidence: 0.9, categoryName: "Pets",
     }, "es")).toBeNull();
   });
@@ -35,5 +42,15 @@ describe("action completion", () => {
     });
     expect(buildActionContinuationMessage("criar reunião", ["amanhã", "às 9"]))
       .toContain("Informação complementar 2: às 9");
+  });
+
+  it("preserves batch items while completing an action", () => {
+    const previous = {
+      intent: "task_create" as const,
+      confidence: 0.8,
+      tasks: [{ title: "Estudar", priority: "medium" as const }],
+    };
+    const merged = mergeActionContinuation(previous, { intent: "unknown", confidence: 0.2 });
+    expect(merged.tasks).toEqual(previous.tasks);
   });
 });

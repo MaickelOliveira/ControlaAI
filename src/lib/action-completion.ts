@@ -81,8 +81,16 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
       return null;
     }
 
-    case "task_create":
-      return hasText(ai.task?.title) ? null : say(locale, "📌 Qual tarefa deseja criar?", "📌 ¿Qué tarea quieres crear?");
+    case "task_create": {
+      const tasks = ai.tasks?.length ? ai.tasks : ai.task ? [ai.task] : [];
+      if (!tasks.length) return say(locale, "📌 Qual tarefa deseja criar?", "📌 ¿Qué tarea quieres crear?");
+      const missing = tasks.findIndex(task => !hasText(task?.title));
+      return missing < 0
+        ? null
+        : say(locale,
+          `📌 Qual é a tarefa${tasks.length > 1 ? ` do item ${missing + 1}` : ""}?`,
+          `📌 ¿Cuál es la tarea${tasks.length > 1 ? ` del elemento ${missing + 1}` : ""}?`);
+    }
     case "task_update":
       if (!ai.task?.taskNumber && !hasText(ai.task?.title)) return say(locale, "📌 Qual tarefa deseja alterar ou concluir?", "📌 ¿Qué tarea quieres cambiar o completar?");
       if (!hasTaskChange(ai) && !/\b(conclu|concluir|complete|completar|finaliz|termin|feito|hecho)\w*/i.test(sourceText)) {
@@ -157,8 +165,18 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
       return hasText(ai.keyword) ? null : say(locale, "✅ Qual compromisso deseja marcar como realizado?", "✅ ¿Qué cita quieres marcar como realizada?");
 
     case "meet_create":
-      if (!hasText(ai.meetData?.startDate)) return say(locale, "📅 Em qual dia será a reunião?", "📅 ¿Qué día será la reunión?");
-      return hasText(ai.meetData?.startTime) ? null : say(locale, "🕒 Em qual horário será a reunião?", "🕒 ¿A qué hora será la reunión?");
+      {
+        const meets = ai.meetItems?.length ? ai.meetItems : ai.meetData ? [ai.meetData] : [];
+        if (!meets.length) return say(locale, "📅 Qual reunião deseja criar e para quando?", "📅 ¿Qué reunión quieres crear y para cuándo?");
+        const missingDate = meets.findIndex(meet => !hasText(meet.startDate));
+        if (missingDate >= 0) return say(locale,
+          `📅 Em qual dia será a reunião${meets.length > 1 ? ` ${missingDate + 1}` : ""}?`,
+          `📅 ¿Qué día será la reunión${meets.length > 1 ? ` ${missingDate + 1}` : ""}?`);
+        const missingTime = meets.findIndex(meet => !hasText(meet.startTime));
+        return missingTime < 0 ? null : say(locale,
+          `🕒 Em qual horário será a reunião${meets.length > 1 ? ` ${missingTime + 1}` : ""}?`,
+          `🕒 ¿A qué hora será la reunión${meets.length > 1 ? ` ${missingTime + 1}` : ""}?`);
+      }
 
     case "drive_rename":
       return hasText(ai.keyword) ? null : say(locale, "📄 Qual deve ser o novo nome do arquivo?", "📄 ¿Cuál debe ser el nuevo nombre del archivo?");
@@ -182,7 +200,10 @@ export function mergeActionContinuation(previous: AIResult, next: AIResult): AIR
     const after = next[key] as Record<string, unknown> | undefined;
     if (before || after) (merged as unknown as Record<string, unknown>)[key] = { ...(before || {}), ...(after || {}) };
   }
-  if (previous.finances?.length && !next.finances?.length) merged.finances = previous.finances;
+  const arrayKeys = ["finances", "tasks", "reminders", "goals", "vehicles", "vehicleExpenses", "recurrings", "agendaItems", "meetItems", "groceryPurchases", "employees", "customers", "categoryNames"] as const;
+  for (const key of arrayKeys) {
+    if (previous[key]?.length && !next[key]?.length) (merged as AIResult)[key] = previous[key] as never;
+  }
   return merged;
 }
 

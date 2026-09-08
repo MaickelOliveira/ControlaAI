@@ -166,8 +166,119 @@ function reconstruct(pending: PendingSlotFill, patch: Partial<PendingSlotFill>):
     asked: pending.asked,
     mode: pending.mode,
     originalText: pending.originalText,
+    batchDrafts: pending.batchDrafts,
+    batchMissing: pending.batchMissing,
+    batchIndex: pending.batchIndex,
     ...patch,
   };
+}
+
+function batchItemLabel(draft: Draft): string {
+  const value = draft.title || draft.name || draft.message || draft.description
+    || [draft.brand, draft.model].filter(Boolean).join(" ");
+  return typeof value === "string" && value.trim() ? ` — ${value.trim()}` : "";
+}
+
+function askBatchWithTtl(slot: SlotDef, draft: Draft, ctx: SlotCtx, index: number, total: number): string {
+  const prefix = ctx.user.locale === "es"
+    ? `*Elemento ${index + 1} de ${total}${batchItemLabel(draft)}*`
+    : `*Item ${index + 1} de ${total}${batchItemLabel(draft)}*`;
+  return `${prefix}\n${askWithTtl(slot, draft, ctx)}`;
+}
+
+function joinBatchReplies(replies: string[], ctx: SlotCtx): string {
+  const heading = ctx.user.locale === "es"
+    ? `✅ Registré *${replies.length} elementos*.`
+    : ctx.user.locale === "pt-PT"
+      ? `✅ Registei *${replies.length} itens*.`
+      : `✅ Registrei *${replies.length} itens*.`;
+  return `${heading}\n\n${replies.map((reply, index) => `${index + 1}. ${reply}`).join("\n\n")}`;
+}
+
+/** Coleta os campos que faltam item por item e só depois grava o lote. */
+export async function beginBatchSlotFill(
+  intent: SlotFillIntent,
+  items: AIResult[],
+  ctx: SlotCtx,
+  originalText: string,
+): Promise<{ reply: string }> {
+  if (items.length <= 1) return beginSlotFill(intent, items[0] ?? { intent, confidence: 1 }, ctx, originalText);
+  const flow = FLOWS[intent];
+  if (!flow) throw new Error(`[slot-filling] fluxo não implementado para intent "${intent}"`);
+  const drafts = items.slice(0, 30).map(item => flow.seed(item, ctx));
+  const missing = drafts.map(draft => flow.missing(draft, ctx));
+  const first = missing.findIndex(queue => queue.length > 0);
+  if (first < 0) {
+    await clearPendingAction(ctx.phone);
+    const replies = [];
+    for (const draft of drafts) replies.push(await flow.finalize(draft, ctx));
+    return { reply: joinBatchReplies(replies, ctx) };
+  }
+  await setPendingAction(ctx.phone, {
+    type: "slot_fill", userId: ctx.userId, intent, draft: drafts[first], missing: missing[first],
+    asked: 0, mode: ctx.mode, originalText, batchDrafts: drafts, batchMissing: missing, batchIndex: first,
+  });
+  return { reply: askBatchWithTtl(flow.slots[missing[first][0]], drafts[first], ctx, first, drafts.length) };
+}
+
+async function runBatchSlotFillTurn(
+  pending: PendingSlotFill,
+  text: string,
+  ctx: SlotCtx,
+): Promise<{ reply?: string; fallThrough: boolean }> {
+  const flow = FLOWS[pending.intent];
+  const drafts = pending.batchDrafts?.map(draft => ({ ...draft })) ?? [];
+  const missing = pending.batchMissing?.map(queue => [...queue]) ?? [];
+  const index = pending.batchIndex ?? 0;
+  if (!flow || !drafts[index] || !missing[index]?.length) {
+    await clearPendingAction(ctx.phone);
+    return { fallThrough: true };
+  }
+  const draft = drafts[index];
+  const queue = missing[index];
+  const slot = flow.slots[queue[0]];
+  const trimmed = text.trim();
+
+  if (isCancelWord(trimmed)) {
+    await clearPendingAction(ctx.phone);
+    return { reply: ctx.user.locale === "es" ? "Cancelado; no registré ningún elemento. 👍" : "Cancelado — não registrei nenhum item. 👍", fallThrough: false };
+  }
+
+  let value: unknown;
+  if (isSkipWord(trimmed) && slot.fallback) value = slot.fallback(draft, ctx);
+  else {
+    const parsed = slot.parse(text, draft, ctx);
+    if (!parsed.ok) {
+      const abandoning = looksLikeNewCommand(trimmed) || pending.asked >= MAX_ASK;
+      if (abandoning) {
+        await clearPendingAction(ctx.phone);
+        return { reply: flow.giveUp(draft, ctx), fallThrough: looksLikeNewCommand(trimmed) };
+      }
+      await setPendingAction(ctx.phone, reconstruct(pending, { batchDrafts: drafts, batchMissing: missing, batchIndex: index, draft, missing: queue, asked: pending.asked + 1 }));
+      const reask = slot.reask ? slot.reask(draft, ctx, pending.asked) : defaultReask(slot, draft, ctx);
+      return { reply: `*${ctx.user.locale === "es" ? "Elemento" : "Item"} ${index + 1} de ${drafts.length}${batchItemLabel(draft)}*\n${reask}`, fallThrough: false };
+    }
+    value = parsed.value;
+  }
+
+  queue.shift();
+  (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
+  drafts[index] = draft;
+  missing[index] = queue;
+
+  const next = missing.findIndex((candidate, candidateIndex) => candidateIndex >= index && candidate.length > 0);
+  if (next < 0) {
+    await clearPendingAction(ctx.phone);
+    const replies = [];
+    for (const completeDraft of drafts) replies.push(await flow.finalize(completeDraft, ctx));
+    return { reply: joinBatchReplies(replies, ctx), fallThrough: false };
+  }
+
+  await setPendingAction(ctx.phone, reconstruct(pending, {
+    batchDrafts: drafts, batchMissing: missing, batchIndex: next,
+    draft: drafts[next], missing: missing[next], asked: 0,
+  }));
+  return { reply: askBatchWithTtl(flow.slots[missing[next][0]], drafts[next], ctx, next, drafts.length), fallThrough: false };
 }
 
 /** Chamada pelos `case` do switch de intents. Se a mensagem já trouxer tudo
@@ -202,6 +313,7 @@ export async function runSlotFillTurn(
   text: string,
   ctx: SlotCtx
 ): Promise<{ reply?: string; fallThrough: boolean }> {
+  if (pending.batchDrafts?.length) return runBatchSlotFillTurn(pending, text, ctx);
   const flow = FLOWS[pending.intent];
   if (!flow) { await clearPendingAction(ctx.phone); return { reply: undefined, fallThrough: true }; }
   const slot = flow.slots[pending.missing[0]];
