@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getExplicitDailySummaryResult,
+  getExplicitFinanceDetailResult,
   getExplicitFinanceTypeSignal,
   getExplicitGroceryListAddResult,
   getExplicitGroceryListManagementResult,
@@ -158,6 +159,43 @@ describe("getExplicitUpcomingFinanceQueryResult", () => {
   it("keeps mutations and specific relative periods in the full classifier", () => {
     expect(getExplicitUpcomingFinanceQueryResult("registre uma conta para pagar")).toBeNull();
     expect(getExplicitUpcomingFinanceQueryResult("que contas tenho para pagar na semana que vem?")).toBeNull();
+  });
+});
+
+describe("finance detail conversation context", () => {
+  const expenseHistory = [
+    { role: "user" as const, content: "Despesas em empresarial" },
+    { role: "assistant" as const, content: "📋 Nenhuma despesa registrada ou programada em *setembro de 2026* (Empresa)." },
+    { role: "user" as const, content: "E pessoal" },
+    { role: "assistant" as const, content: "📋 Nenhuma despesa registrada ou programada em *setembro de 2026* (Pessoal)." },
+  ];
+
+  it("keeps the mode and searches for rent in a short follow-up", () => {
+    expect(getExplicitFinanceDetailResult("E meu aluguel", expenseHistory)).toMatchObject({
+      intent: "finance_detail",
+      financeType: "expense",
+      mode: "personal",
+      keyword: "aluguel",
+      confidence: 1,
+    });
+  });
+
+  it("switches between business and personal without losing the statement type", () => {
+    const history = expenseHistory.slice(0, 2);
+    expect(getExplicitFinanceDetailResult("E pessoal", history)).toMatchObject({
+      intent: "finance_detail", financeType: "expense", mode: "personal",
+    });
+  });
+
+  it("understands direct detailed statements and their subject", () => {
+    expect(getExplicitFinanceDetailResult("Extrato de receitas Auto Socorro")).toMatchObject({
+      intent: "finance_detail", financeType: "income", keyword: "Auto Socorro",
+    });
+    expect(getExplicitFinanceDetailResult("Extracto de gastos de la empresa")).toEqual({
+      intent: "finance_detail", financeType: "expense", mode: "business",
+      confidence: 1,
+    });
+    expect(getExplicitFinanceDetailResult("Extrato de despesas do aluguel")).toMatchObject({ keyword: "aluguel" });
   });
 });
 

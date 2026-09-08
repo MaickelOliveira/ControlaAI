@@ -30,6 +30,7 @@ import {
 } from "@/lib/action-completion";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
 import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
+import { replyFinanceDetail } from "@/lib/finance-detail";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import { createAppointment, getUpcomingAppointments, getAppointmentsInRange, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
 import { appointmentReminderAt, formatReminderOffset, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
@@ -1630,42 +1631,38 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const detailMode = (ai.mode as "personal" | "business" | undefined) || mode;
           const isIncome = ai.financeType === "income";
           const targetType = isIncome ? "income" : "expense";
-          const typeLabel = isIncome ? "Receitas" : "Despesas";
-          const typeEmoji = isIncome ? "💰" : "💸";
-          const catEmoji = isIncome ? "🟢" : "🔴";
 
-          const [dFrom, dTo] = ai.period?.from || ai.period?.to
-            ? [ai.period.from, ai.period.to]
-            : monthBounds(year, month);
-          const txList = (await getTransactionsInRange(user.id, detailMode, dFrom, dTo)).filter(f =>
-            f.type === targetType && !isNaN(f.amount) && f.amount > 0
+          const [defaultFrom, defaultTo] = monthBounds(year, month);
+          const dFrom = ai.period?.from ?? defaultFrom;
+          const dTo = ai.period?.to ?? defaultTo;
+          const [transactions, pendingFinances, recurringTransactions] = await Promise.all([
+            getTransactionsInRange(user.id, detailMode, dFrom, dTo),
+            getPendingFinances(user.id, detailMode),
+            getRecurringByUser(user.id, detailMode, "active"),
+          ]);
+          const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          const keywordTerms = ai.keyword ? expandMerchantAliases(ai.keyword).map(normalize) : [];
+          const matchesKeyword = (description: string, category?: string) => !keywordTerms.length
+            || keywordTerms.some(term => normalize(description).includes(term) || normalize(category ?? "").includes(term));
+          const txList = transactions.filter(item =>
+            item.type === targetType
+            && Number.isFinite(item.amount)
+            && item.amount > 0
+            && matchesKeyword(item.description, item.category)
           );
-          const monthTitle = periodLabelFor(ai.period, now);
-          const modeLabel = detailMode === "business" ? "Empresa" : "Pessoal";
-          if (!txList.length) {
-            await wppSend(from, `📋 Nenhuma ${typeLabel.toLowerCase()} registrada em *${monthTitle}* (${modeLabel}).`);
-            break;
-          }
-          // Agrupa por categoria ordenado por maior valor
-          const byCat: Record<string, { items: typeof txList; total: number }> = {};
-          for (const f of txList) {
-            if (!byCat[f.category]) byCat[f.category] = { items: [], total: 0 };
-            byCat[f.category].items.push(f);
-            byCat[f.category].total += f.amount;
-          }
-          const sortedCats = Object.entries(byCat).sort((a, b) => b[1].total - a[1].total);
-          const total = txList.reduce((s, f) => s + f.amount, 0);
-          let detailMsg = `📋 *${typeLabel} — ${monthTitle}*\n_(${modeLabel})_\n\n`;
-          for (const [cat, { items, total: catTotal }] of sortedCats) {
-            detailMsg += `${catEmoji} *${cat}* — ${formatCurrency(catTotal)}\n`;
-            for (const f of items) {
-              const d = new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-              detailMsg += `   • ${f.description} — ${formatCurrency(f.amount)} _(${d})_\n`;
-            }
-            detailMsg += "\n";
-          }
-          detailMsg += `━━━━━━━━━━━━\n${typeEmoji} *Total: ${formatCurrency(total)}*`;
-          const finalMsg = detailMsg.trim();
+          const upcoming = collectUpcomingFinanceItems(pendingFinances, recurringTransactions, {
+            from: dFrom,
+            to: dTo,
+            mode: detailMode,
+            includeUndated: true,
+          }).filter(item => item.type === targetType && matchesKeyword(item.description));
+          const finalMsg = replyFinanceDetail(txList, upcoming, {
+            type: targetType,
+            mode: detailMode,
+            periodLabel: periodLabelFor(ai.period, now, user.locale),
+            locale: user.locale,
+            keyword: ai.keyword,
+          });
           await wppSend(from, finalMsg.length > 4000 ? finalMsg.slice(0, 3950) + "\n\n_(lista truncada — veja o restante no dashboard)_" : finalMsg);
         } catch (detailErr) {
           console.error("[finance_detail]", detailErr);

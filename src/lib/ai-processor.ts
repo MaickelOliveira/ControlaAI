@@ -289,7 +289,7 @@ export type AIResult = {
   customer?: CustomerData;
   mode?: UserMode;
   financeType?: "income" | "expense"; // para finance_detail/finance_query/finance_upcoming: qual tipo mostrar (padrão "expense"); para category_create: restringe a categoria a só esse tipo (padrão: ambos)
-  keyword?: string; // palavra-chave para buscar lançamento em finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
+  keyword?: string; // palavra-chave para buscar lançamento em finance_detail/finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
   personName?: string; // nome OU vínculo (ex: "esposa", "filho") de uma pessoa específica mencionada em finance_query/balance_query/finance_detail (ex: "quanto a Ana gastou", "quanto minha esposa gastou")
   category?: string; // categoria específica perguntada em finance_query/balance_query (ex: "quanto gastei com comida" → "Alimentação")
   newDescription?: string; // finance_edit: novo texto da descrição, quando o usuário quer RENOMEAR o lançamento. Distinto de finance.description, que ecoa o lançamento encontrado e serve de busca.
@@ -499,6 +499,68 @@ export function getExplicitUpcomingFinanceQueryResult(message: string): AIResult
     confidence: 1,
     financeType,
     ...(mode ? { mode } : {}),
+  };
+}
+
+type FinanceDetailHistory = { role: "user" | "assistant"; content: string }[];
+
+function latestFinanceDetailContext(history?: FinanceDetailHistory): { financeType: "income" | "expense"; mode: UserMode } | null {
+  const lastDetailReply = [...(history ?? [])].reverse().find(item =>
+    item.role === "assistant" && item.content.trim().startsWith("📋"),
+  );
+  if (!lastDetailReply) return null;
+  const normalized = normalizeCapabilityText(lastDetailReply.content);
+  const financeType = /\b(receitas?|ingresos?)\b/.test(normalized) ? "income"
+    : /\b(despesas?|gastos?)\b/.test(normalized) ? "expense"
+      : null;
+  const mode = /\bempresa\b|\bempresarial\b/.test(normalized) ? "business"
+    : /\bpessoal\b|\bpersonal\b/.test(normalized) ? "personal"
+      : null;
+  return financeType && mode ? { financeType, mode } : null;
+}
+
+/** Mantém o assunto de um extrato em respostas curtas como "e pessoal?" ou
+ * "e meu aluguel?". Esse fluxo determinístico evita que o modelo descarte o
+ * filtro anterior ou transforme uma continuação em uma consulta diferente. */
+export function getExplicitFinanceDetailResult(message: string, history?: FinanceDetailHistory): AIResult | null {
+  const text = message.trim().replace(/[?!.,]+$/g, "").trim();
+  const normalized = normalizeCapabilityText(text);
+  const context = latestFinanceDetailContext(history);
+  const directDetail = /\b(extrato|extracto|detalh\w*|relatorio|reporte)\b/.test(normalized);
+  const shortContinuation = !!context && (
+    /^(?:e|y)?\s*(?:receitas?|despesas?|entradas?|gastos?|ingresos?|pessoal|personal|empresa|empresarial)\b/.test(normalized)
+    || /^(?:e|y)?\s*(?:o|a|os|as|meu|minha|meus|minhas|el|la|los|las|mi|mis)\s+.+/.test(normalized)
+  );
+  const isDifferentAction = /\b(registr|cadastr|agend|cri[ae]|adicion|apag|exclu|delet|edit|alter|corrig|proxim|a\s+pagar|a\s+receber|por\s+pagar|por\s+cobrar)\w*/.test(normalized);
+  if ((!directDetail && !shortContinuation) || isDifferentAction) return null;
+
+  const financeType = /\b(receitas?|entradas?|ingresos?)\b/.test(normalized) ? "income"
+    : /\b(despesas?|gastos?)\b/.test(normalized) ? "expense"
+      : context?.financeType ?? "expense";
+  const mode: UserMode | undefined = /\b(empresa|empresarial|negocio)\b/.test(normalized) ? "business"
+    : /\b(pessoal|personal)\b/.test(normalized) ? "personal"
+      : context?.mode;
+
+  let keyword: string | undefined;
+  const followUpSubject = text.match(/^(?:e|y)?\s*(?:o|a|os|as|meu|minha|meus|minhas|el|la|los|las|mi|mis)\s+(.+)$/i)?.[1]?.trim();
+  if (followUpSubject && !/^(?:pessoal|personal|empresa|empresarial)$/i.test(followUpSubject)) {
+    keyword = followUpSubject;
+  } else if (directDetail) {
+    const detailSubject = text.match(/\b(?:receitas?|despesas?|entradas?|gastos?|ingresos?)\b\s+(.+)$/i)?.[1]?.trim();
+    const normalizedSubject = detailSubject
+      ?.replace(/^(?:da|do|de|em|no|na|del|en)\s+(?:(?:minha|meu|la|el|los|las)\s+)?/i, "")
+      .trim();
+    if (normalizedSubject && !/^(?:empresa|empresarial|pessoal|personal|m[eê]s|semana|ano)\b/i.test(normalizedSubject)) {
+      keyword = normalizedSubject;
+    }
+  }
+
+  return {
+    intent: "finance_detail",
+    confidence: 1,
+    financeType,
+    ...(mode ? { mode } : {}),
+    ...(keyword ? { keyword } : {}),
   };
 }
 
@@ -1238,7 +1300,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_upcoming: listar valores que AINDA precisam ser pagos ou recebidos, com vencimentos e previsão de saldo ("quais são as próximas despesas para pagar esse mês?", "que contas tenho a pagar?", "o que vence esta semana?", "próximas receitas a receber", em espanhol: "gastos por pagar", "cuentas pendientes", "ingresos por cobrar"). Use "financeType": "expense" para contas/despesas a pagar e "income" para receitas/valores a receber. Não confunda com finance_query: finance_query resume o que JÁ aconteceu; finance_upcoming mostra pendências, parcelas e recorrentes que AINDA vão impactar o saldo. Se o usuário especificar empresa ou pessoal, inclua "mode". Se mencionar período diferente do mês atual, use "period" com os valores pré-calculados.
 - weekly_summary: briefing geral quando a pessoa disser "resumo da semana", "resumo semanal", "resumen de la semana" ou equivalente. Esta intenção reúne compromissos/reuniões, contas a pagar, valores a receber e previsão de saldo; NÃO use finance_query, pois um simples resumo de dinheiro está incompleto. Se disser explicitamente "resumo financeiro da semana", aí use finance_query. Para semana passada ou outra semana, inclua "period" com os valores pré-calculados.
 - daily_summary: o mesmo briefing geral para "resumo do dia", "resumo de hoje", "resumen del día" ou equivalente: compromissos/reuniões, contas a pagar, valores a receber e previsão de saldo daquele dia. NÃO use finance_query. Se pedir outro dia (ontem/amanhã/data), inclua "period" com from e to iguais à data correta do calendário.
-- finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa", "cria uma planilha", "manda minha planilha", "quero uma planilha das entradas/saídas", "envia o extrato", "me manda um relatório". ⚠️ O sistema não gera arquivo de planilha (.xlsx/.csv) — quando o pedido usar a palavra "planilha", ainda assim use finance_detail (o sistema manda a lista de lançamentos em texto), NUNCA responda how_to/unknown só porque a palavra usada foi "planilha" em vez de "extrato". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
+- finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. O sistema sempre acrescenta numa seção separada as despesas/receitas futuras, recorrentes e pendentes do período, sem misturá-las ao total já realizado. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Se o usuário pedir um item específico numa continuação (ex: "e meu aluguel?"), mantenha o tipo e modo do extrato anterior e use "keyword": "aluguel". Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa", "cria uma planilha", "manda minha planilha", "quero uma planilha das entradas/saídas", "envia o extrato", "me manda um relatório". ⚠️ O sistema não gera arquivo de planilha (.xlsx/.csv) — quando o pedido usar a palavra "planilha", ainda assim use finance_detail (o sistema manda a lista de lançamentos em texto), NUNCA responda how_to/unknown só porque a palavra usada foi "planilha" em vez de "extrato". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
 - finance_confirm_pending: confirmar/antecipar um lançamento AGENDADO (data futura, ainda não contabilizado) antes da data chegar sozinha ("já paguei aquela conta que agendei", "confirma o pagamento do aluguel que tá agendado", "antecipa o lançamento de X"). Use "keyword" com o termo de busca do lançamento.
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
@@ -2344,6 +2406,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitVehicle = getExplicitVehicleCrudResult(message);
   if (explicitVehicle) return explicitVehicle;
+
+  const explicitFinanceDetail = getExplicitFinanceDetailResult(message, ctx?.history);
+  if (explicitFinanceDetail) return withExplicitRelativePeriod(message, explicitFinanceDetail);
 
   const explicitUpcomingFinance = getExplicitUpcomingFinanceQueryResult(message);
   if (explicitUpcomingFinance) return explicitUpcomingFinance;
