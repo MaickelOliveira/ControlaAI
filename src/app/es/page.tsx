@@ -1509,6 +1509,8 @@ export default function LandingPageEs() {
             <a href="#drive" className="hover:text-white transition">Drive</a>
             <Link href="/es/login" className="hover:text-white transition">Ingresar</Link>
             <a href="#planos" className="hover:text-white transition">Ver planes</a>
+            <Link href="/es/privacidad" className="hover:text-white transition">Privacidad</Link>
+            <Link href="/es/terminos" className="hover:text-white transition">Términos de Uso</Link>
           </nav>
         </div>
         <div className="flex justify-center mt-8">

@@ -389,6 +389,9 @@ export default function ClienteConfigPage() {
             <div>
               <p className="text-sm font-semibold text-slate-800">Google Calendar / Meet</p>
               <p className="text-xs text-slate-400 mt-0.5">Crie reuniões no Google Meet diretamente pelo WhatsApp</p>
+              <p className="mt-1 max-w-xl text-[11px] leading-4 text-slate-400">
+                Ao conectar, você autoriza o Zelo a consultar, criar, editar e excluir eventos conforme seus comandos. Saiba mais na <a href="/privacidade" className="font-semibold text-blue-600 underline">Política de Privacidade</a>.
+              </p>
               {googleStatus?.connected && googleStatus.email && (
                 <p className="text-xs text-amber-600 mt-1 font-medium">✓ {googleStatus.email}</p>
               )}

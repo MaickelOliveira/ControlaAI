@@ -1422,6 +1422,8 @@ export default function LandingPagePt() {
             <a href="#drive" className="hover:text-white transition">Drive</a>
             <Link href="/pt/login" className="hover:text-white transition">Entrar</Link>
             <a href="#planos" className="hover:text-white transition">Ver planos</a>
+            <Link href="/pt/privacidade" className="hover:text-white transition">Privacidade</Link>
+            <Link href="/pt/termos" className="hover:text-white transition">Termos de Utilização</Link>
           </nav>
         </div>
         <div className="flex justify-center mt-8">

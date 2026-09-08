@@ -1528,6 +1528,8 @@ export default function LandingPage() {
             <a href="#drive" className="hover:text-white transition">Drive</a>
             <Link href="/login" className="hover:text-white transition">Login</Link>
             <a href="#planos" className="hover:text-white transition">Ver planos</a>
+            <Link href="/privacidade" className="hover:text-white transition">Privacidade</Link>
+            <Link href="/termos" className="hover:text-white transition">Termos de Uso</Link>
           </nav>
         </div>
         <div className="flex justify-center mt-8">
