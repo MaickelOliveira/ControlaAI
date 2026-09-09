@@ -3,9 +3,14 @@
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import {
+  isMetaPublicPath,
+  isMetaRegistrationPath,
+  isSpanishMetaPath,
+  metaCheckoutCurrency,
+} from "@/lib/meta-tracking-config";
 
 const CONSENT_KEY = "zelo_meta_consent";
-const PUBLIC_PATHS = new Set(["/", "/cadastro", "/login"]);
 
 type Consent = "granted" | "denied" | null;
 type MetaParameters = Record<string, string | number | boolean | string[]>;
@@ -77,7 +82,8 @@ export function trackMetaEvent(
 export default function MetaTracking() {
   const pathname = usePathname();
   const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID || "1673074203783828";
-  const isPublicPage = PUBLIC_PATHS.has(pathname);
+  const isPublicPage = isMetaPublicPath(pathname);
+  const isSpanishPage = isSpanishMetaPath(pathname);
   const [consent, setConsent] = useState<Consent | "loading">("loading");
   const initialized = useRef(false);
   const previousPath = useRef(pathname);
@@ -119,7 +125,7 @@ export default function MetaTracking() {
       const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
       if (!target) return;
       const url = new URL(target.href, window.location.href);
-      const isRegistration = url.origin === window.location.origin && url.pathname === "/cadastro";
+      const isRegistration = url.origin === window.location.origin && isMetaRegistrationPath(url.pathname);
       const isHotmartCheckout = url.hostname === "pay.hotmart.com";
       if (!isRegistration && !isHotmartCheckout) return;
       if (isHotmartCheckout) {
@@ -127,7 +133,7 @@ export default function MetaTracking() {
           content_name: "Plano Zelo",
           content_category: "subscription",
           plan: target.dataset.metaPlan || "not_selected",
-          currency: "BRL",
+          currency: metaCheckoutCurrency(pathname),
           value: Number(target.dataset.metaValue || 0),
         }, crypto.randomUUID());
         return;
@@ -166,13 +172,17 @@ export default function MetaTracking() {
 
       {consent === null && (
         <aside
-          aria-label="Preferências de privacidade"
+          aria-label={isSpanishPage ? "Preferencias de privacidad" : "Preferências de privacidade"}
           className="fixed inset-x-4 bottom-4 z-[100] mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl sm:flex sm:items-center sm:gap-5 sm:p-5"
         >
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-slate-950">Sua privacidade importa</p>
+            <p className="font-semibold text-slate-950">
+              {isSpanishPage ? "Tu privacidad es importante" : "Sua privacidade importa"}
+            </p>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Com sua permissão, usamos cookies da Meta para medir anúncios e melhorar nossas campanhas. Você pode recusar e continuar usando o site normalmente.
+              {isSpanishPage
+                ? "Con tu permiso, usamos cookies de Meta para medir anuncios y mejorar nuestras campañas. Puedes rechazarlos y seguir usando el sitio normalmente."
+                : "Com sua permissão, usamos cookies da Meta para medir anúncios e melhorar nossas campanhas. Você pode recusar e continuar usando o site normalmente."}
             </p>
           </div>
           <div className="mt-4 flex shrink-0 gap-2 sm:mt-0">
@@ -181,14 +191,14 @@ export default function MetaTracking() {
               onClick={() => chooseConsent("denied")}
               className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Recusar
+              {isSpanishPage ? "Rechazar" : "Recusar"}
             </button>
             <button
               type="button"
               onClick={() => chooseConsent("granted")}
               className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
             >
-              Aceitar
+              {isSpanishPage ? "Aceptar" : "Aceitar"}
             </button>
           </div>
         </aside>
@@ -199,7 +209,7 @@ export default function MetaTracking() {
           type="button"
           onClick={() => setConsent(null)}
           className="fixed bottom-3 left-3 z-[90] rounded-full border border-slate-200 bg-white/95 px-3 py-2 text-xs font-semibold text-slate-600 shadow-lg backdrop-blur transition hover:border-amber-300 hover:text-slate-950"
-          aria-label="Alterar preferências de cookies"
+          aria-label={isSpanishPage ? "Cambiar las preferencias de cookies" : "Alterar preferências de cookies"}
         >
           Cookies
         </button>
