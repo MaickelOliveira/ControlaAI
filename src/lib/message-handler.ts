@@ -73,12 +73,35 @@ export function parseLinkedPhoneAccess(value: string): "personal" | "business" |
 export function replyPhoneNotLinked(phone: string): string {
   const locale = localeForWhatsAppPhone(phone);
   if (locale === "es") {
-    return "¡Hola! Soy Zelo, pero todavía no encontré tu número.\n\nSi ya tienes una cuenta, abre *Configuración → Vincular WhatsApp*.\n\nzelogestaointeligente.com.br/es";
+    return "¡Hola! Soy Zelo, pero todavía no encontré tu número.\n\nSi ya tienes una cuenta, abre *Configuración → Vincular WhatsApp* y genera un nuevo código.\n\n⏱️ Después de confirmar el código, responde cada etapa en un máximo de *5 minutos*.\n\nzelogestaointeligente.com.br/es";
   }
   if (locale === "pt-PT") {
-    return "Olá! Sou o Zelo, mas ainda não encontrei o seu número.\n\nSe já tem uma conta, aceda a *Configurações → Associar WhatsApp*.\n\nzelogestaointeligente.com.br/pt";
+    return "Olá! Sou o Zelo, mas ainda não encontrei o seu número.\n\nSe já tem uma conta, aceda a *Configurações → Associar WhatsApp* e gere um novo código.\n\n⏱️ Depois de confirmar o código, responda a cada etapa num máximo de *5 minutos*.\n\nzelogestaointeligente.com.br/pt";
   }
-  return "Olá! Sou o Zelo, mas ainda não encontrei seu número.\n\nSe você já tem uma conta, acesse *Configurações → Vincular WhatsApp*.\n\nzelogestaointeligente.com.br";
+  return "Olá! Sou o Zelo, mas ainda não encontrei seu número.\n\nSe você já tem uma conta, acesse *Configurações → Vincular WhatsApp* e gere um novo código.\n\n⏱️ Depois de confirmar o código, responda cada etapa em até *5 minutos*.\n\nzelogestaointeligente.com.br";
+}
+
+export function replyWppLinkStep(
+  step: "name" | "relation" | "access",
+  locale?: string,
+  name?: string,
+): string {
+  const expiry = locale === "es"
+    ? "\n\n⏱️ Responde esta etapa en un máximo de *5 minutos* para no perder la vinculación."
+    : "\n\n⏱️ Responda esta etapa em até *5 minutos* para não perder a vinculação.";
+  if (step === "name") {
+    return (locale === "es"
+      ? "✅ ¡Código confirmado!\n\nAntes de vincular el número, necesito saber quién lo va a usar.\n\n¿Cómo puedo llamarte?"
+      : "✅ Código confirmado!\n\nAntes de vincular, preciso saber quem vai usar esse número.\n\nComo posso te chamar?") + expiry;
+  }
+  if (step === "relation") {
+    return (locale === "es"
+      ? `¡Mucho gusto, ${name}! 👋\n\n¿Cuál es tu relación con la cuenta? _(ej.: esposa, esposo, hijo, socio, tía...)_`
+      : `Prazer, ${name}! 👋\n\nQual seu vínculo com a conta? _(ex: esposa, marido, filho, sócio, tia...)_`) + expiry;
+  }
+  return (locale === "es"
+    ? "De acuerdo. ¿A qué modo puedes acceder?\n\n1️⃣ Solo personal\n2️⃣ Solo empresarial\n3️⃣ Los dos\n\nResponde con el número o la palabra."
+    : "Certo. E qual modo você pode acessar?\n\n1️⃣ Só pessoal\n2️⃣ Só empresarial\n3️⃣ Os dois\n\nResponda o número ou a palavra.") + expiry;
 }
 
 async function getUserByWppPhone(phone: string) {
@@ -684,9 +707,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         await updateUser(codeUser.id, { wppVerifyCode: undefined, wppVerifyExpires: undefined });
         await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: codeUser.id, step: "name" });
-        await wppSend(from, isSpanish
-          ? "✅ ¡Código confirmado!\n\nAntes de vincular el número, necesito saber quién lo va a usar.\n\n¿Cómo puedo llamarte?"
-          : "✅ Código confirmado!\n\nAntes de vincular, preciso saber quem vai usar esse número.\n\nComo posso te chamar?");
+        await wppSend(from, replyWppLinkStep("name", codeUser.locale));
         return;
       }
     }
@@ -700,17 +721,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       if (linkPending.step === "name") {
         const name = cap(messageText.trim().slice(0, 40)) || (isSpanish ? "Sin nombre" : "Sem nome");
         await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "relation", name });
-        await wppSend(from, isSpanish
-          ? `¡Mucho gusto, ${name}! 👋\n\n¿Cuál es tu relación con la cuenta? _(ej.: esposa, esposo, hijo, socio, tía...)_`
-          : `Prazer, ${name}! 👋\n\nQual seu vínculo com a conta? _(ex: esposa, marido, filho, sócio, tia...)_`);
+        await wppSend(from, replyWppLinkStep("relation", linkOwner?.locale, name));
         return;
       }
       if (linkPending.step === "relation") {
         const relation = cap(messageText.trim().slice(0, 30)) || (isSpanish ? "Otro" : "Outro");
         await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "access", name: linkPending.name, relation });
-        await wppSend(from, isSpanish
-          ? "De acuerdo. ¿A qué modo puedes acceder?\n\n1️⃣ Solo personal\n2️⃣ Solo empresarial\n3️⃣ Los dos\n\nResponde con el número o la palabra."
-          : "Certo. E qual modo você pode acessar?\n\n1️⃣ Só pessoal\n2️⃣ Só empresarial\n3️⃣ Os dois\n\nResponda o número ou a palavra.");
+        await wppSend(from, replyWppLinkStep("access", linkOwner?.locale));
         return;
       }
       if (linkPending.step === "access") {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, splitWhatsAppMessage } from "./message-handler";
+import { listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
@@ -75,12 +75,14 @@ describe("unlinked phone language", () => {
   it("sends only Portuguese to a Brazilian number", () => {
     const reply = replyPhoneNotLinked("+55 (88) 82316-735");
     expect(reply).toContain("Olá!");
+    expect(reply).toContain("em até *5 minutos*");
     expect(reply).not.toMatch(/¡Hola|Soy Zelo|Español/);
   });
 
   it("sends only Spanish to Spanish-speaking country numbers", () => {
     const reply = replyPhoneNotLinked("+52 55 1234 5678");
     expect(reply).toContain("¡Hola!");
+    expect(reply).toContain("un máximo de *5 minutos*");
     expect(reply).not.toMatch(/Sou o Zelo|Português/);
   });
 });
@@ -106,6 +108,18 @@ describe("localized WhatsApp help and errors", () => {
     const reply = replyProcessingError("es");
     expect(reply).toContain("Tuve un problema");
     expect(reply).not.toMatch(/Pode mandar|registrado do jeito certo|me avise/);
+  });
+});
+
+describe("WhatsApp link flow expiration warning", () => {
+  it.each(["name", "relation", "access"] as const)("warns about five minutes at the %s step in Portuguese", step => {
+    expect(replyWppLinkStep(step, "pt-BR", "Junior")).toContain("em até *5 minutos*");
+  });
+
+  it.each(["name", "relation", "access"] as const)("warns about five minutes at the %s step in Spanish", step => {
+    const reply = replyWppLinkStep(step, "es", "Junior");
+    expect(reply).toContain("un máximo de *5 minutos*");
+    expect(reply).not.toContain("Responda esta etapa");
   });
 });
 
