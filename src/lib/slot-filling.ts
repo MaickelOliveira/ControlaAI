@@ -120,7 +120,7 @@ function isSkipWord(t: string): boolean {
 function looksLikeNewCommand(t: string): boolean {
   const s = t.trim();
   if (s.length > 60) return true;
-  return /^(gastei|paguei|comprei|recebi|ganhei|quanto|qual|meu saldo|extrato|minhas?|agenda|lembr|ajuda|help|cria|criar|adiciona|marca)\b/i.test(s);
+  return /^(gastei|paguei|comprei|recebi|ganhei|gast[eé]|pagu[eé]|compr[eé]|recib[ií]|gan[eé]|cu[aá]nto|qu[eé]|cu[aá]l|mi saldo|extracto|mis|quanto|qual|meu saldo|extrato|minhas?|agenda|lembr|recuerda|recordatorio|ayuda|ajuda|help|crea|crear|cria|criar|agrega|a[ñn]ade|adiciona|marca)\b/i.test(s);
 }
 
 function askWithTtl(slot: SlotDef, draft: Draft, ctx: SlotCtx): string {

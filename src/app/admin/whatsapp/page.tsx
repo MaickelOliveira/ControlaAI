@@ -33,7 +33,8 @@ export default function AdminWhatsappPage() {
   const [testingWaba, setTestingWaba] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [testPhone, setTestPhone] = useState("");
-  const [testTemplate, setTestTemplate] = useState<"lbt_pessoal" | "lembrete_compromisso" | "lembrete_compromisso15" | "cbr_recorrente">("lbt_pessoal");
+  const [testTemplate, setTestTemplate] = useState<"lembrete_assessor" | "lbte_empresarial" | "lbt_pessoal" | "cbr_recorrente" | "lembrete_compromisso" | "lembrete_compromisso15" | "boas_vindas_cadastro2">("lbt_pessoal");
+  const [testTemplateLocale, setTestTemplateLocale] = useState<"pt-BR" | "es">("pt-BR");
   const [testingTemplate, setTestingTemplate] = useState(false);
   const [testTemplateMsg, setTestTemplateMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
@@ -87,7 +88,7 @@ export default function AdminWhatsappPage() {
 
   async function testTemplateSend() {
     setTestingTemplate(true); setTestTemplateMsg(null);
-    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "testTemplate", template: testTemplate, phone: testPhone }) });
+    const r = await fetch("/api/admin/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "testTemplate", template: testTemplate, phone: testPhone, locale: testTemplateLocale }) });
     const d = await r.json();
     setTestTemplateMsg(d.ok ? { type: "ok", text: "✓ Enviado! Confira o WhatsApp do número informado." } : { type: "err", text: d.error || "Falha ao enviar" });
     setTestingTemplate(false);
@@ -234,18 +235,28 @@ export default function AdminWhatsappPage() {
             </button>
 
             <div className="border-t border-slate-200 pt-3 mt-1">
-              <p className="text-[11px] text-slate-400 mb-2">Disparar um template real de teste (lbt_pessoal, lembrete_compromisso, lembrete_compromisso15, cbr_recorrente) pra um número, pra confirmar que está disparando.</p>
-              <div className="flex gap-2 mb-2">
+              <p className="text-[11px] text-slate-400 mb-2">Dispare qualquer template real em PT-BR ou espanhol para validar nome, idioma e variáveis aprovados na Meta.</p>
+              <div className="grid grid-cols-2 gap-2 mb-2">
                 <select value={testTemplate} onChange={e => setTestTemplate(e.target.value as typeof testTemplate)}
                   className="bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-amber-500 transition">
-                  <option value="lbt_pessoal">lbt_pessoal</option>
-                  <option value="lembrete_compromisso">lembrete_compromisso</option>
-                  <option value="lembrete_compromisso15">lembrete_compromisso15</option>
-                  <option value="cbr_recorrente">cbr_recorrente</option>
+                  <option value="lembrete_assessor">Lembrete para terceiro</option>
+                  <option value="lbte_empresarial">Lembrete empresarial</option>
+                  <option value="lbt_pessoal">Lembrete pessoal</option>
+                  <option value="cbr_recorrente">Cobrança recorrente</option>
+                  <option value="lembrete_compromisso">Compromisso — 2 horas</option>
+                  <option value="lembrete_compromisso15">Compromisso — 15 minutos</option>
+                  <option value="boas_vindas_cadastro2">Boas-vindas</option>
                 </select>
+                <select value={testTemplateLocale} onChange={e => setTestTemplateLocale(e.target.value as typeof testTemplateLocale)}
+                  className="bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-amber-500 transition">
+                  <option value="pt-BR">Português — Brasil</option>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+              <div className="mb-2">
                 <input value={testPhone} onChange={e => setTestPhone(e.target.value.replace(/\D/g, ""))}
-                  placeholder="5544999999999"
-                  className="flex-1 bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
+                  placeholder="Telefone com DDI, ex.: 5544999999999"
+                  className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition font-mono" />
               </div>
               {testTemplateMsg && (
                 <p className={clsx("text-xs rounded-lg px-3 py-2 border mb-2", testTemplateMsg.type === "ok" ? "text-amber-400 bg-amber-900/20 border-amber-800" : "text-red-400 bg-red-900/20 border-red-800")}>

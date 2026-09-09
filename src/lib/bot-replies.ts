@@ -762,9 +762,14 @@ export function replyAgendaCreated(a: Appointment, locale?: string): string {
   const dateTime = formatDateTimeBR(a.startAt);
   const locationLine = a.location ? `\n📍 ${a.location}` : "";
   const endLine = a.endAt ? ` ${isEs(locale) ? "hasta" : "até"} ${formatDateTimeBR(a.endAt).slice(11)}` : "";
-  if (isEs(locale)) return `Agendado en tu calendario.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}`;
-  if (isPtPt(locale)) return `Marcado na tua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}`;
-  return `Marcado na sua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}`;
+  const syncWarning = a.googleSyncFailed
+    ? isEs(locale) ? "\n\n⚠️ Se guardó en Zelo, pero no pude sincronizarlo con Google Calendar. Vuelve a conectar Google en Configuración."
+      : isPtPt(locale) ? "\n\n⚠️ Foi guardado no Zelo, mas não consegui sincronizá-lo com o Google Calendar. Volta a ligar o Google nas Definições."
+        : "\n\n⚠️ Foi salvo no Zelo, mas não consegui sincronizar com o Google Calendar. Reconecte o Google em Configurações."
+    : "";
+  if (isEs(locale)) return `Agendado en tu calendario.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${syncWarning}`;
+  if (isPtPt(locale)) return `Marcado na tua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${syncWarning}`;
+  return `Marcado na sua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${syncWarning}`;
 }
 
 export function replyAgendaList(appointments: Appointment[], locale?: string): string {

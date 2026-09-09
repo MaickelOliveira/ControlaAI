@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDueReminders, markReminderSent, markReminderFailed, markReminderSkippedForInactiveUser } from "@/lib/reminders";
-import { renderSpanishBusinessReminder, sendReminderTemplate } from "@/lib/whatsapp";
+import { buildReminderTemplateDispatch, sendReminderTemplate } from "@/lib/whatsapp";
 import { acquireCronLock, releaseCronLock } from "@/lib/cron-lock";
 import { getUserById, hasAccess } from "@/lib/users";
 
@@ -45,24 +45,20 @@ async function runCron() {
         results.push({ id: r.id, sent: false, skipped: "inactive_account" });
         continue;
       }
-      let ok: boolean;
-      if (r.recipientType !== "self") {
-        const remetente = owner.name || "alguém";
-        const texto = owner.locale === "es"
-          ? `🔔 Aviso programado por ${remetente}\n\n${r.message}\n\nEste aviso fue solicitado previamente en Zelo.`
-          : `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
-        ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, owner.locale);
-      } else if (r.mode === "business") {
-        const texto = owner.locale === "es"
-          ? renderSpanishBusinessReminder(r.message)
-          : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-        ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message }, owner.locale);
-      } else {
-        const texto = owner.locale === "es"
-          ? `🔔 Aviso personal\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
-          : `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
-        ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { texto: r.message }, owner.locale);
-      }
+      const dispatch = buildReminderTemplateDispatch({
+        message: r.message,
+        recipientType: r.recipientType,
+        mode: r.mode,
+        ownerName: owner.name,
+        locale: owner.locale,
+      });
+      const ok = await sendReminderTemplate(
+        r.phone,
+        dispatch.templateName,
+        dispatch.renderedText,
+        dispatch.params,
+        owner.locale,
+      );
       console.log(`[cron/reminders] ${ok ? "OK ✓" : "FALHOU ✗"} — id=${r.id}`);
       if (ok) await markReminderSent(r.id, r.repeat);
       else await markReminderFailed(r.id);

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import PasswordField from "@/components/pt/PasswordField";
+import GoogleCalendarIntegration from "@/components/GoogleCalendarIntegration";
 
 type UserData = {
   name: string; email: string; plan: string; wppPhone?: string; wppPhones: string[];
@@ -28,8 +29,6 @@ export default function ClienteConfigPagePt() {
   const [pwForm, setPwForm] = useState<PwForm>({ current: "", next: "", confirm: "" });
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pwLoading, setPwLoading] = useState(false);
-  const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email?: string } | null>(null);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const unlimitedPhones = (user?.maxWppPhones ?? 0) >= 1_000_000;
 
   function normalizeUser(d: { user: Partial<UserData> }): UserData {
@@ -46,7 +45,6 @@ export default function ClienteConfigPagePt() {
   useEffect(() => {
     fetch("/api/dashboard").then(r => r.json()).then(d => { if (d.user) setUser(normalizeUser(d)); });
     fetch("/api/bot-info").then(r => r.json()).then(d => { if (d.wppBotNumber) setBotNumber(d.wppBotNumber); setBotConnected(!!d.connected); });
-    fetch("/api/google/status").then(r => r.json()).then(d => setGoogleStatus(d)).catch(() => {});
   }, []);
 
   async function generateCode() {
@@ -93,13 +91,6 @@ export default function ClienteConfigPagePt() {
     if (r.ok) setUser(u => u ? { ...u, wppPhoneNames: d.wppPhoneNames, wppPhoneRelations: d.wppPhoneRelations, wppPhoneAccess: d.wppPhoneAccess } : u);
     setSavingName(false);
     setEditingPhone(null);
-  }
-
-  async function disconnectGoogle() {
-    setGoogleLoading(true);
-    await fetch("/api/google/disconnect", { method: "POST" });
-    setGoogleStatus({ connected: false });
-    setGoogleLoading(false);
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -381,41 +372,7 @@ export default function ClienteConfigPagePt() {
         </h2>
         <p className="text-xs text-slate-400 mb-5">Conecta serviços externos para ampliar as funcionalidades do bot</p>
 
-        <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm text-xl shrink-0">
-              🗓️
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800">Google Calendar / Meet</p>
-              <p className="text-xs text-slate-400 mt-0.5">Cria reuniões no Google Meet diretamente pelo WhatsApp</p>
-              <p className="mt-1 max-w-xl text-[11px] leading-4 text-slate-400">
-                Ao ligares, autorizas o Zelo a consultar, criar, editar e eliminar eventos conforme as tuas instruções. Consulta a <a href="/pt/privacidade" className="font-semibold text-blue-600 underline">Política de Privacidade</a>.
-              </p>
-              {googleStatus?.connected && googleStatus.email && (
-                <p className="text-xs text-amber-600 mt-1 font-medium">✓ {googleStatus.email}</p>
-              )}
-            </div>
-          </div>
-          <div className="shrink-0">
-            {googleStatus === null ? (
-              <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
-            ) : googleStatus.connected ? (
-              <button
-                onClick={disconnectGoogle}
-                disabled={googleLoading}
-                className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-3 py-1.5 transition disabled:opacity-50">
-                {googleLoading ? "..." : "Desligar"}
-              </button>
-            ) : (
-              <a
-                href="/api/google/connect"
-                className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-1.5 transition">
-                Ligar Google
-              </a>
-            )}
-          </div>
-        </div>
+        <GoogleCalendarIntegration locale="pt-PT" />
       </div>
 
       {/* Alterar senha */}

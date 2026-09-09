@@ -46,7 +46,7 @@ export async function register() {
       if (!remindersModule || !wppModule) return;
 
       const { getDueReminders, markReminderSent, markReminderFailed, markReminderSkippedForInactiveUser } = remindersModule;
-      const { sendText, sendReminderTemplate, renderSpanishBusinessReminder } = wppModule;
+      const { sendReminderTemplate, buildReminderTemplateDispatch } = wppModule;
       const due = await getDueReminders();
       if (due.length > 0) console.log(`[cron] ${due.length} lembrete(s) a disparar`);
       for (const r of due) {
@@ -61,34 +61,21 @@ export async function register() {
             console.log(`[cron] ignorado — conta sem acesso ativo — id=${r.id}`);
             continue;
           }
-          const locale = owner?.locale;
-          let ok: boolean;
-          if (r.recipientType !== "self") {
-            // Destinatário é um terceiro (cliente/funcionário/outro número),
-            // sem conta Zelo própria — usa o idioma de quem criou o lembrete
-            // como melhor sinal disponível.
-            const remetente = owner?.name || (locale === "es" ? "alguien" : "alguém");
-            const texto = locale === "es"
-              ? `🔔 Aviso programado por ${remetente}\n\n${r.message}\n\nEste aviso fue solicitado previamente en Zelo.`
-              : locale === "pt-PT"
-              ? `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`
-              : `🔔 Lembrete de ${remetente}: ${r.message} — Zelo Assessor`;
-            ok = await sendReminderTemplate(r.phone, "lembrete_assessor", texto, { remetente, lembrete: r.message }, locale);
-          } else if (r.mode === "business") {
-            const texto = locale === "es"
-              ? renderSpanishBusinessReminder(r.message)
-              : locale === "pt-PT"
-              ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`
-              : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${r.message}\n\nLembrete empresarial agendado no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lbte_empresarial", texto, { lembrete: r.message }, locale);
-          } else {
-            const texto = locale === "es"
-              ? `🔔 Aviso personal\n\n${r.message}\n\nEste aviso fue programado previamente en Zelo.`
-              : locale === "pt-PT"
-              ? `🔔 Zelo — Lembrete que configuraste\n\nPrecisas de: ${r.message}\n\nLembrete pessoal agendado por ti no Zelo.`
-              : `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${r.message}\n\nLembrete pessoal agendado por você no Zelo.`;
-            ok = await sendReminderTemplate(r.phone, "lbt_pessoal", texto, { texto: r.message }, locale);
-          }
+          const locale = owner.locale;
+          const dispatch = buildReminderTemplateDispatch({
+            message: r.message,
+            recipientType: r.recipientType,
+            mode: r.mode,
+            ownerName: owner.name,
+            locale,
+          });
+          const ok = await sendReminderTemplate(
+            r.phone,
+            dispatch.templateName,
+            dispatch.renderedText,
+            dispatch.params,
+            locale,
+          );
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) await markReminderSent(r.id, r.repeat);
           else await markReminderFailed(r.id);
@@ -151,46 +138,6 @@ export async function register() {
           console.error("[cron] Erro no bloco de recorrentes:", e);
         }
       }
-      // ── Verificar reuniões (na Agenda) encerradas que precisam de ata ──
-      try {
-        const agendaModule = await import("./lib/agenda").catch(() => null);
-        const usersModule = await import("./lib/users").catch(() => null);
-        const phoneLinksModule = await import("./lib/wpp-phone-links").catch(() => null);
-        const pendingModule = await import("./lib/pending-actions").catch(() => null);
-        const repliesModule = await import("./lib/bot-replies").catch(() => null);
-        if (agendaModule && usersModule && phoneLinksModule && pendingModule && repliesModule) {
-          const { getAppointmentsWithEndedMeet, updateAppointment } = agendaModule;
-          const { getUserById } = usersModule;
-          const { getPhonesForUser } = phoneLinksModule;
-          const { setPendingAction } = pendingModule;
-          const { replyMeetAtaRequest } = repliesModule;
-          const ended = await getAppointmentsWithEndedMeet();
-          for (const apt of ended) {
-            try {
-              const aptUser = await getUserById(apt.userId);
-              if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
-              const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
-              for (const phone of phones) {
-                const ok = await sendText(phone, replyMeetAtaRequest(apt.title));
-                if (ok) {
-                  await updateAppointment(apt.id, apt.userId, { ataNotifiedAt: new Date().toISOString() });
-                  await setPendingAction(phone, {
-                    type: "meet_ata",
-                    userId: apt.userId,
-                    meetId: apt.id,
-                    meetTitle: apt.title,
-                  });
-                }
-              }
-            } catch (e) {
-              console.error("[cron] Erro ao notificar ata:", e);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("[cron] Erro no bloco de meets:", e);
-      }
-
       // ── Lembrete de compromissos que começam em até 2h ──
       try {
         const agendaModule = await import("./lib/agenda").catch(() => null);

@@ -2,11 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   getExplicitDailySummaryResult,
   getExplicitFinanceDetailResult,
+  getExplicitFinanceConfirmPendingResult,
   getExplicitFinanceTypeSignal,
+  getExplicitEmployeeCrudResult,
+  getExplicitCustomerCrudResult,
+  getExplicitDriveRenameResult,
+  getExplicitDriveSearchResult,
+  getExplicitModeSwitchResult,
   getExplicitGroceryListAddResult,
   getExplicitGroceryListManagementResult,
   getExplicitGroceryHistoryQueryResult,
+  getExplicitGrocerySpendQueryResult,
   getExplicitLastGroceryPurchaseResult,
+  getExplicitRecurringQueryResult,
   getExplicitRelativePeriod,
   getExplicitTaskCreateResult,
   getExplicitTaskListCreateResult,
@@ -18,10 +26,112 @@ import {
   getWebSearchMissingQuestion,
   getExplicitWeeklySummaryResult,
   getUnsupportedBankConnectionResponse,
+  normalizeMeetingCreation,
   processMessage,
   withExplicitFinanceDestinationMode,
   withExplicitFinanceType,
 } from "./ai-processor";
+
+describe("pending finance confirmation parity", () => {
+  it("recognizes early payment and collection in Portuguese and Spanish", async () => {
+    expect(getExplicitFinanceConfirmPendingResult("Já paguei a conta de luz que estava pendente"))
+      .toMatchObject({ intent: "finance_confirm_pending", financeType: "expense", keyword: "conta de luz" });
+    expect(await processMessage("Ya pagué la factura de electricidad que estaba pendiente"))
+      .toMatchObject({ intent: "finance_confirm_pending", financeType: "expense", keyword: "factura de electricidad" });
+    expect(getExplicitFinanceConfirmPendingResult("Ya recibí el alquiler que estaba programado"))
+      .toMatchObject({ intent: "finance_confirm_pending", financeType: "income", keyword: "alquiler" });
+  });
+
+  it("does not hijack an ordinary expense that was already paid", () => {
+    expect(getExplicitFinanceConfirmPendingResult("Ya pagué la luz hoy")).toBeNull();
+  });
+});
+
+describe("employee command parity", () => {
+  it("handles employee CRUD in Portuguese and Spanish without depending on the model", async () => {
+    expect(getExplicitEmployeeCrudResult("Registra al empleado Carlos con salario de 1500"))
+      .toMatchObject({ intent: "employee_create", employee: { name: "Carlos", salary: 1500 } });
+    expect(await processMessage("Añade a María como vendedora"))
+      .toMatchObject({ intent: "employee_create", employee: { name: "María", role: "vendedora" } });
+    expect(await processMessage("Cambia el salario de Carlos a 1700"))
+      .toMatchObject({ intent: "employee_update", keyword: "Carlos", employee: { salary: 1700 } });
+    expect(getExplicitEmployeeCrudResult("Desativa o funcionário Carlos"))
+      .toMatchObject({ intent: "employee_deactivate", keyword: "Carlos" });
+    expect(getExplicitEmployeeCrudResult("Muéstrame mis empleados"))
+      .toMatchObject({ intent: "employee_list" });
+  });
+
+  it("does not steal customer or Drive updates", () => {
+    expect(getExplicitEmployeeCrudResult("Cambia el teléfono del cliente Juan")).toBeNull();
+    expect(getExplicitEmployeeCrudResult("Actualiza el correo de la empresa Sol")).toBeNull();
+    expect(getExplicitEmployeeCrudResult("Cambia el nombre de la factura a internet septiembre")).toBeNull();
+    expect(getExplicitEmployeeCrudResult("Cambia el nombre del archivo del cliente Juan")).toBeNull();
+  });
+});
+
+describe("customer command parity", () => {
+  it("handles customer CRUD in Portuguese and Spanish without the model", () => {
+    expect(getExplicitCustomerCrudResult("Registra al cliente Juan con teléfono 56912345678"))
+      .toMatchObject({ intent: "customer_create", customer: { name: "Juan", phone: "56912345678" } });
+    expect(getExplicitCustomerCrudResult("Muéstrame mis clientes")).toMatchObject({ intent: "customer_list" });
+    expect(getExplicitCustomerCrudResult("Busca al cliente Juan"))
+      .toMatchObject({ intent: "customer_query", keyword: "Juan" });
+    expect(getExplicitCustomerCrudResult("Cambia el teléfono del cliente Juan"))
+      .toMatchObject({ intent: "customer_update", keyword: "Juan" });
+    expect(getExplicitCustomerCrudResult("Desactiva al cliente Juan"))
+      .toMatchObject({ intent: "customer_deactivate", keyword: "Juan" });
+  });
+});
+
+describe("Drive command parity", () => {
+  it("handles Spanish search and rename phrases without the model", () => {
+    expect(getExplicitDriveSearchResult("Encuentra la factura de internet"))
+      .toMatchObject({ intent: "drive_search" });
+    expect(getExplicitDriveSearchResult("Muéstrame el último comprobante guardado"))
+      .toMatchObject({ intent: "drive_search" });
+    expect(getExplicitDriveRenameResult("Renombra el último archivo como contrato firmado"))
+      .toMatchObject({ intent: "drive_rename" });
+    expect(getExplicitDriveRenameResult("Pon al comprobante el nombre pago alquiler"))
+      .toMatchObject({ intent: "drive_rename" });
+  });
+});
+
+describe("mode switch parity", () => {
+  it("switches personal and business modes deterministically", () => {
+    expect(getExplicitModeSwitchResult("Pasa a la cuenta empresarial"))
+      .toMatchObject({ intent: "mode_switch", mode: "business" });
+    expect(getExplicitModeSwitchResult("Cambia al modo personal"))
+      .toMatchObject({ intent: "mode_switch", mode: "personal" });
+    expect(getExplicitModeSwitchResult("Troque para o modo empresa"))
+      .toMatchObject({ intent: "mode_switch", mode: "business" });
+  });
+
+  it("keeps account changes inside an active finance edit", () => {
+    expect(getExplicitModeSwitchResult("Mudar para conta da empresa", [
+      { role: "assistant", content: "Encontrei: Cinema. O que deseja alterar?" },
+    ])).toBeNull();
+  });
+});
+
+describe("meeting creation parity", () => {
+  it("offers the Google Meet flow for new meetings in Portuguese and Spanish", () => {
+    const base = {
+      intent: "agenda_create" as const,
+      confidence: 0.95,
+      agendaData: { title: "Reunión con Ana", startDate: "2026-09-09", startTime: "15:00" },
+    };
+    expect(normalizeMeetingCreation("Agenda una reunión con Ana mañana", base)).toMatchObject({
+      intent: "meet_create",
+      meetData: { title: "Reunión con Ana", startDate: "2026-09-09", startTime: "15:00" },
+    });
+    expect(normalizeMeetingCreation("Agende uma reunião com Ana amanhã", base)).toMatchObject({ intent: "meet_create" });
+  });
+
+  it("keeps ordinary appointments in the agenda flow", () => {
+    const result = { intent: "agenda_create" as const, confidence: 1, agendaData: { title: "Consulta médica" } };
+    expect(normalizeMeetingCreation("Crea una cita médica", result).intent).toBe("agenda_create");
+  });
+});
 
 describe("internet research classification", () => {
   it("routes explicit web research in Portuguese and Spanish", async () => {
@@ -209,9 +319,12 @@ describe("getExplicitTaskCreateResult", () => {
     expect(result.task?.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it("leaves task updates and ambiguous weekday dates for the full classifier", () => {
+  it("leaves task updates to the full classifier and resolves Spanish weekday obligations", () => {
     expect(getExplicitTaskCreateResult("Tarefa 2 concluída")).toBeNull();
-    expect(getExplicitTaskCreateResult("Tarefa: entregar a guitarra na sexta-feira")).toBeNull();
+    expect(getExplicitTaskCreateResult("Tengo que revisar el contrato el viernes")).toMatchObject({
+      intent: "task_create",
+      task: { title: "revisar el contrato" },
+    });
   });
 });
 
@@ -502,6 +615,18 @@ describe("getExplicitGroceryHistoryQueryResult", () => {
     )).toBeNull();
     expect(getExplicitGroceryHistoryQueryResult("Paguei 65 reais na farmácia", anchor)).toBeNull();
     expect(getExplicitGroceryHistoryQueryResult("Recebi 900 reais de comissão", anchor)).toBeNull();
+  });
+});
+
+describe("Spanish deterministic queries", () => {
+  it("separates supermarket totals from purchase item history", () => {
+    expect(getExplicitGrocerySpendQueryResult("¿Cuánto gasté en mis compras de supermercado este mes?"))
+      .toMatchObject({ intent: "grocery_spend_query", grocery: { queryDetail: "total" } });
+  });
+
+  it("keeps subscription lookups inside Zelo instead of sending them to web search", () => {
+    expect(getExplicitRecurringQueryResult("Consulta la suscripción de internet"))
+      .toMatchObject({ intent: "recurring_query", keyword: "internet" });
   });
 });
 

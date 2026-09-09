@@ -1,6 +1,8 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { todayStrBR } from "./date-br";
+import { createGoogleCalendarEvent, deleteGoogleCalendarEvent, updateGoogleCalendarEvent } from "./google-calendar";
+import { isConnected } from "./google-oauth";
 
 export type AppointmentRepeat = "none" | "daily" | "weekly" | "monthly" | "yearly";
 export type AppointmentStatus = "scheduled" | "done" | "cancelled";
@@ -21,6 +23,8 @@ export type Appointment = {
   // Google Meet
   meetLink?: string;
   calendarEventId?: string;
+  googleCalendarId?: string;
+  googleSyncFailed?: boolean;
   ataGenerated?: boolean;
   ataContent?: string;
   ataNotifiedAt?: string;
@@ -37,12 +41,31 @@ type Row = {
   reminder_15min_sent_at: string | null;
 };
 
+function encodeCalendarEventId(eventId?: string, calendarId?: string): string | undefined {
+  if (!eventId) return undefined;
+  return calendarId ? `gcal:${JSON.stringify({ eventId, calendarId })}` : eventId;
+}
+
+function decodeCalendarEventId(value: string | null): { eventId?: string; calendarId?: string } {
+  if (!value) return {};
+  if (value.startsWith("gcal:")) {
+    try {
+      const parsed = JSON.parse(value.slice(5)) as { eventId?: string; calendarId?: string };
+      if (parsed.eventId) return parsed;
+    } catch { /* mantém compatibilidade com valor legado */ }
+  }
+  // Antes do seletor, todos os eventos eram criados obrigatoriamente na primary.
+  return { eventId: value, calendarId: "primary" };
+}
+
 function fromRow(r: Row): Appointment {
+  const calendar = decodeCalendarEventId(r.calendar_event_id);
   return {
     id: r.id, userId: r.user_id, title: r.title, description: r.description ?? undefined,
     location: r.location ?? undefined, startAt: r.start_at, endAt: r.end_at ?? undefined,
     allDay: r.all_day, repeat: r.repeat, status: r.status, source: r.source, createdAt: r.created_at,
-    meetLink: r.meet_link ?? undefined, calendarEventId: r.calendar_event_id ?? undefined,
+    meetLink: r.meet_link ?? undefined, calendarEventId: calendar.eventId,
+    googleCalendarId: calendar.calendarId,
     ataGenerated: r.ata_generated, ataContent: r.ata_content ?? undefined,
     ataNotifiedAt: r.ata_notified_at ?? undefined, reminderSentAt: r.reminder_sent_at ?? undefined,
     reminder15MinSentAt: r.reminder_15min_sent_at ?? undefined,
@@ -62,21 +85,48 @@ function toRowPatch(patch: Partial<Omit<Appointment, "id" | "userId" | "createdA
     const col = map[key];
     if (col) out[col] = value;
   }
+  if (patch.calendarEventId !== undefined || patch.googleCalendarId !== undefined) {
+    out.calendar_event_id = encodeCalendarEventId(patch.calendarEventId, patch.googleCalendarId);
+  }
   return out;
 }
 
 export async function createAppointment(data: Omit<Appointment, "id" | "createdAt">): Promise<Appointment> {
+  let calendarEventId = data.calendarEventId;
+  let googleCalendarId = data.googleCalendarId;
+  let meetLink = data.meetLink;
+  let googleSyncFailed = false;
+  if (!calendarEventId && await isConnected(data.userId)) {
+    try {
+      const googleEvent = await createGoogleCalendarEvent({
+        userId: data.userId,
+        title: data.title,
+        description: data.description,
+        location: data.location,
+        startAt: data.startAt,
+        endAt: data.endAt,
+        allDay: data.allDay,
+        repeat: data.repeat,
+      });
+      calendarEventId = googleEvent.calendarEventId;
+      googleCalendarId = googleEvent.googleCalendarId;
+      meetLink = googleEvent.meetLink;
+    } catch (error) {
+      googleSyncFailed = true;
+      console.error("[agenda] falha ao sincronizar criação com Google Calendar:", error);
+    }
+  }
   const row = {
     id: randomUUID(), user_id: data.userId, title: data.title, description: data.description,
     location: data.location, start_at: data.startAt, end_at: data.endAt, all_day: data.allDay,
-    repeat: data.repeat, status: data.status, source: data.source, meet_link: data.meetLink,
-    calendar_event_id: data.calendarEventId, ata_generated: data.ataGenerated ?? false,
+    repeat: data.repeat, status: data.status, source: data.source, meet_link: meetLink,
+    calendar_event_id: encodeCalendarEventId(calendarEventId, googleCalendarId), ata_generated: data.ataGenerated ?? false,
     ata_content: data.ataContent, ata_notified_at: data.ataNotifiedAt, reminder_sent_at: data.reminderSentAt,
     reminder_15min_sent_at: data.reminder15MinSentAt,
   };
   const { data: inserted, error } = await getSupabase().from("appointments").insert(row).select("*").single();
   if (error) throw new Error(`[agenda] createAppointment falhou: ${error.message}`);
-  return fromRow(inserted as Row);
+  return { ...fromRow(inserted as Row), googleSyncFailed };
 }
 
 export async function getAppointments(userId: string): Promise<Appointment[]> {
@@ -96,12 +146,45 @@ export async function updateAppointment(
   userId: string,
   patch: Partial<Omit<Appointment, "id" | "userId" | "createdAt">>
 ): Promise<Appointment | null> {
+  const current = await getAppointmentById(id, userId);
+  if (!current) return null;
+  if (current.calendarEventId) {
+    const next = { ...current, ...patch };
+    try {
+      if (next.status === "cancelled") {
+        await deleteGoogleCalendarEvent(userId, current.calendarEventId, current.googleCalendarId);
+      } else {
+        await updateGoogleCalendarEvent({
+          userId,
+          calendarEventId: current.calendarEventId,
+          googleCalendarId: current.googleCalendarId,
+          title: next.title,
+          description: next.description,
+          location: next.location,
+          startAt: next.startAt,
+          endAt: next.endAt,
+          allDay: next.allDay,
+          repeat: next.repeat,
+        });
+      }
+    } catch (error) {
+      console.error("[agenda] falha ao sincronizar alteração com Google Calendar:", error);
+    }
+  }
   const { data, error } = await getSupabase().from("appointments").update(toRowPatch(patch)).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);
 }
 
 export async function deleteAppointment(id: string, userId: string): Promise<boolean> {
+  const current = await getAppointmentById(id, userId);
+  if (current?.calendarEventId) {
+    try {
+      await deleteGoogleCalendarEvent(userId, current.calendarEventId, current.googleCalendarId);
+    } catch (error) {
+      console.error("[agenda] falha ao excluir evento no Google Calendar:", error);
+    }
+  }
   const { error, count } = await getSupabase().from("appointments").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
   return !error && !!count && count > 0;
 }

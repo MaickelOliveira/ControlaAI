@@ -53,4 +53,30 @@ describe("action completion", () => {
     const merged = mergeActionContinuation(previous, { intent: "unknown", confidence: 0.2 });
     expect(merged.tasks).toEqual(previous.tasks);
   });
+
+  it("asks for missing information in Spanish across every actionable service", () => {
+    const incomplete = [
+      { intent: "finance_register", confidence: 1 },
+      { intent: "task_create", confidence: 1 },
+      { intent: "task_update", confidence: 1 },
+      { intent: "reminder_update", confidence: 1 },
+      { intent: "goal_add", confidence: 1 },
+      { intent: "vehicle_expense", confidence: 1 },
+      { intent: "grocery_list_add", confidence: 1 },
+      { intent: "employee_update", confidence: 1 },
+      { intent: "customer_update", confidence: 1 },
+      { intent: "recurring_edit", confidence: 1 },
+      { intent: "finance_confirm_pending", confidence: 1 },
+      { intent: "agenda_update", confidence: 1 },
+      { intent: "meet_create", confidence: 1 },
+      { intent: "drive_rename", confidence: 1 },
+      { intent: "category_create", confidence: 1 },
+    ] as const;
+    for (const command of incomplete) {
+      const question = getMissingActionQuestion(command, "es");
+      expect(question, command.intent).toBeTruthy();
+      expect(question, command.intent).toMatch(/[¿¡]|Qué|Cuál|Cuánto|Cuál debe/);
+      expect(question, command.intent).not.toMatch(/\b(?:Qual|Quanto|deseja|compromisso|lançamento|arquivo)\b/i);
+    }
+  });
 });

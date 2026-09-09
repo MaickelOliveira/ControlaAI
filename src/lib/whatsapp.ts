@@ -49,9 +49,9 @@ export const SPANISH_TEMPLATE_NAMES = {
   boas_vindas_cadastro2: "acceso_confirmado_zelo",
 } as const;
 
-type SpanishTemplateBase = keyof typeof SPANISH_TEMPLATE_NAMES;
+export type WhatsAppTemplateBase = keyof typeof SPANISH_TEMPLATE_NAMES;
 
-const SPANISH_PARAM_NAMES: Record<SpanishTemplateBase, Record<string, string>> = {
+const SPANISH_PARAM_NAMES: Record<WhatsAppTemplateBase, Record<string, string>> = {
   lembrete_assessor: { remetente: "remitente", lembrete: "aviso" },
   lbte_empresarial: { lembrete: "detalle" },
   lbt_pessoal: { texto: "aviso" },
@@ -59,6 +59,16 @@ const SPANISH_PARAM_NAMES: Record<SpanishTemplateBase, Record<string, string>> =
   lembrete_compromisso: { compromisso: "evento", horario: "hora" },
   lembrete_compromisso15: { compromisso: "evento", horario: "hora" },
   boas_vindas_cadastro2: {},
+};
+
+const TEMPLATE_PARAM_KEYS: Record<WhatsAppTemplateBase, readonly string[]> = {
+  lembrete_assessor: ["remetente", "lembrete"],
+  lbte_empresarial: ["lembrete"],
+  lbt_pessoal: ["texto"],
+  cbr_recorrente: ["descricao", "valor", "data"],
+  lembrete_compromisso: ["compromisso", "horario"],
+  lembrete_compromisso15: ["compromisso", "horario"],
+  boas_vindas_cadastro2: [],
 };
 
 /** Corpo que deve ser cadastrado exatamente no Meta para o template
@@ -74,10 +84,10 @@ export function renderSpanishBusinessReminder(detail: string): string {
   return SPANISH_BUSINESS_REMINDER_TEMPLATE_BODY.replace("{{detalle}}", detail);
 }
 
-export function localizedTemplateName(base: string, locale?: string): string {
+export function localizedTemplateName(base: WhatsAppTemplateBase, locale?: string): string {
   const validatedLocale = validatedTemplateLocale(locale);
   if (validatedLocale === "es") {
-    const spanishName = SPANISH_TEMPLATE_NAMES[base as SpanishTemplateBase];
+    const spanishName = SPANISH_TEMPLATE_NAMES[base];
     if (!spanishName) {
       throw new Error(`[whatsapp] template espanhol não mapeado: ${base}`);
     }
@@ -87,9 +97,14 @@ export function localizedTemplateName(base: string, locale?: string): string {
   return base;
 }
 
-export function localizedTemplateParams(base: string, params: Record<string, string>, locale?: string): Record<string, string> {
+export function localizedTemplateParams(base: WhatsAppTemplateBase, params: Record<string, string>, locale?: string): Record<string, string> {
+  const received = Object.keys(params).sort();
+  const expected = [...TEMPLATE_PARAM_KEYS[base]].sort();
+  if (received.length !== expected.length || received.some((key, index) => key !== expected[index])) {
+    throw new Error(`[whatsapp] parâmetros inválidos para ${base}: esperado ${expected.join(",") || "nenhum"}`);
+  }
   if (validatedTemplateLocale(locale) !== "es") return params;
-  const names = SPANISH_PARAM_NAMES[base as SpanishTemplateBase];
+  const names = SPANISH_PARAM_NAMES[base];
   if (!names) {
     throw new Error(`[whatsapp] parâmetros de template espanhol não mapeados: ${base}`);
   }
@@ -113,7 +128,58 @@ export async function sendText(to: string, message: string): Promise<boolean> {
  *  usuário), então quase sempre caem fora da janela de 24h — no WABA
  *  precisam ir como template aprovado, não texto livre. Evolution (API não
  *  oficial) não tem essa restrição, então continua mandando texto normal. */
-export async function sendReminderTemplate(to: string, templateName: string, renderedText: string, params: Record<string, string>, locale?: string): Promise<boolean> {
+export type ReminderTemplateDispatch = {
+  templateName: "lembrete_assessor" | "lbte_empresarial" | "lbt_pessoal";
+  renderedText: string;
+  params: Record<string, string>;
+};
+
+/** Decide de forma única qual template de lembrete usar. O cron interno e o
+ * endpoint de cron compartilham esta função para não divergirem em idioma,
+ * variáveis ou finalidade do disparo. */
+export function buildReminderTemplateDispatch(input: {
+  message: string;
+  recipientType: string;
+  mode: "personal" | "business";
+  ownerName?: string;
+  locale?: string;
+}): ReminderTemplateDispatch {
+  const { message, recipientType, mode, ownerName, locale } = input;
+  if (recipientType !== "self") {
+    const sender = ownerName || (locale === "es" ? "alguien" : "alguém");
+    return {
+      templateName: "lembrete_assessor",
+      renderedText: locale === "es"
+        ? `🔔 Aviso programado por ${sender}\n\n${message}\n\nEste aviso fue solicitado previamente en Zelo.`
+        : locale === "pt-PT"
+          ? `🔔 Lembrete de ${sender}: ${message} — Zelo Assessor`
+          : `🔔 Lembrete de ${sender}: ${message} — Zelo Assessor`,
+      params: { remetente: sender, lembrete: message },
+    };
+  }
+  if (mode === "business") {
+    return {
+      templateName: "lbte_empresarial",
+      renderedText: locale === "es"
+        ? renderSpanishBusinessReminder(message)
+        : locale === "pt-PT"
+          ? `🔔 Zelo — Lembrete empresarial configurado\n\nA tua empresa precisa: ${message}\n\nLembrete empresarial agendado no Zelo.`
+          : `🔔 Zelo — Lembrete empresarial configurado\n\nSua empresa precisa: ${message}\n\nLembrete empresarial agendado no Zelo.`,
+      params: { lembrete: message },
+    };
+  }
+  return {
+    templateName: "lbt_pessoal",
+    renderedText: locale === "es"
+      ? `🔔 Aviso personal\n\n${message}\n\nEste aviso fue programado previamente en Zelo.`
+      : locale === "pt-PT"
+        ? `🔔 Zelo — Lembrete que configuraste\n\nPrecisas de: ${message}\n\nLembrete pessoal agendado por ti no Zelo.`
+        : `🔔 Zelo — Lembrete que você configurou\n\nVocê precisa: ${message}\n\nLembrete pessoal agendado por você no Zelo.`,
+    params: { texto: message },
+  };
+}
+
+export async function sendReminderTemplate(to: string, templateName: WhatsAppTemplateBase, renderedText: string, params: Record<string, string>, locale?: string): Promise<boolean> {
   const provider = (await getConfig()).provider;
   let ok: boolean;
   if (provider === "waba") {

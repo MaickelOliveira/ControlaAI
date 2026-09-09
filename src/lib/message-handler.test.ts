@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { listNumberLabel, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked } from "./message-handler";
+import { listNumberLabel, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
+import { replyHelp } from "./bot-replies";
 
 describe("phoneMatches", () => {
   it("matches identical numbers", () => {
@@ -90,5 +91,20 @@ describe("WhatsApp list numbering", () => {
     expect(listNumberLabel(8)).toBe("9️⃣");
     expect(listNumberLabel(9)).toBe("10.");
     expect(listNumberLabel(12)).toBe("13.");
+  });
+});
+
+describe("localized WhatsApp help and errors", () => {
+  it("splits the complete Spanish help into messages accepted by WhatsApp", () => {
+    const chunks = splitWhatsAppMessage(replyHelp("es"));
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(chunk => chunk.length <= 3500)).toBe(true);
+    expect(chunks.join("\n")).toContain("Zelo — tu asesor personal");
+  });
+
+  it("never returns the Portuguese processing error to a Spanish account", () => {
+    const reply = replyProcessingError("es");
+    expect(reply).toContain("Tuve un problema");
+    expect(reply).not.toMatch(/Pode mandar|registrado do jeito certo|me avise/);
   });
 });

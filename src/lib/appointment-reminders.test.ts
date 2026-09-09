@@ -28,6 +28,17 @@ describe("parseAppointmentReminderRequest", () => {
     });
   });
 
+  it("supports equivalent Spanish reminders", () => {
+    expect(parseAppointmentReminderRequest("Avísame una hora antes de la reunión con Ana")).toEqual({
+      offsetMinutes: 60,
+      keyword: "reunión con Ana",
+    });
+    expect(parseAppointmentReminderRequest("Recuérdame treinta minutos antes del médico")).toEqual({
+      offsetMinutes: 30,
+      keyword: "médico",
+    });
+  });
+
   it("keeps a reminder from a newly-created appointment even without a repeated title", () => {
     expect(parseAppointmentReminderRequest("Tenho uma reunião dia 9 às 17h. Me avisa uma hora antes.")).toEqual({
       offsetMinutes: 60,
@@ -49,6 +60,7 @@ describe("appointment reminder scheduling", () => {
     expect(formatReminderOffset(15)).toBe("15 minutos");
     expect(formatReminderOffset(60)).toBe("1 hora");
     expect(formatReminderOffset(90)).toBe("1h30");
+    expect(formatReminderOffset(1_440, "es")).toBe("1 día");
   });
 });
 

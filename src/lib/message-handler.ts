@@ -35,8 +35,8 @@ import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import { createAppointment, getUpcomingAppointments, getAppointmentsInRange, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
 import { appointmentReminderAt, formatReminderOffset, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
 import { createMeetEvent } from "@/lib/google-meet";
+import { addMeetToGoogleCalendarEvent } from "@/lib/google-calendar";
 import { isConnected } from "@/lib/google-oauth";
-import { generateMeetAta } from "@/lib/ai-processor";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants } from "@/lib/conversations";
@@ -49,7 +49,7 @@ import {
   replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
   replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
-  replyMeetCreated, replyMeetInvite, replyMeetAtaRequest, replyMeetAtaGenerated,
+  replyMeetCreated, replyMeetInvite,
   replyPersonNotFound, replyWppNameSaved,
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
   replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
@@ -107,24 +107,59 @@ async function wppSend(to: string, message: string): Promise<void> {
   if (!sent) throw new Error(`[message-handler] WhatsApp recusou resposta para ${to.slice(-4)}`);
 }
 
-/** Mantém respostas de histórico dentro do limite prático do WhatsApp sem
- * omitir compras. A quebra privilegia linhas completas. */
-async function wppSendLong(to: string, message: string, maxLength = 3500): Promise<void> {
-  if (message.length <= maxLength) {
-    await wppSend(to, message);
-    return;
-  }
+/** Divide respostas longas antes de enviá-las ao WhatsApp. Além de históricos,
+ * o manual de ajuda completo também ultrapassa o limite aceito pelo provedor.
+ * A quebra privilegia linhas completas e ainda protege contra uma linha única
+ * excepcionalmente longa. */
+export function splitWhatsAppMessage(message: string, maxLength = 3500): string[] {
+  if (message.length <= maxLength) return [message];
+
+  const chunks: string[] = [];
   let chunk = "";
   for (const line of message.split("\n")) {
+    if (line.length > maxLength) {
+      if (chunk) {
+        chunks.push(chunk);
+        chunk = "";
+      }
+      for (let offset = 0; offset < line.length; offset += maxLength) {
+        chunks.push(line.slice(offset, offset + maxLength));
+      }
+      continue;
+    }
+
     const candidate = chunk ? `${chunk}\n${line}` : line;
     if (candidate.length <= maxLength) {
       chunk = candidate;
       continue;
     }
-    if (chunk) await wppSend(to, chunk);
+    if (chunk) chunks.push(chunk);
     chunk = line;
   }
-  if (chunk) await wppSend(to, chunk);
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+/** Mantém respostas dentro do limite prático do WhatsApp sem omitir dados. */
+async function wppSendLong(to: string, message: string, maxLength = 3500): Promise<void> {
+  for (const chunk of splitWhatsAppMessage(message, maxLength)) await wppSend(to, chunk);
+}
+
+export function replyProcessingError(locale?: string): string {
+  if (locale === "es") {
+    return "Tuve un problema al procesar esto. ¿Puedes enviarlo de nuevo? Si vuelve a ocurrir, avísame y confirmaré si quedó registrado correctamente.";
+  }
+  if (locale === "pt-PT") {
+    return "Tive um problema ao processar isto. Podes enviar novamente? Se voltar a acontecer, avisa-me e confirmarei se ficou registado corretamente.";
+  }
+  return "Tive um problema aqui ao processar isso. Pode mandar de novo? Se continuar acontecendo, me avise e eu confirmo se ficou registrado corretamente.";
+}
+
+/** Evita que mensagens excepcionais escritas no handler vazem em outro idioma. */
+function localized(locale: string | undefined, ptBR: string, es: string, ptPT = ptBR): string {
+  if (locale === "es") return es;
+  if (locale === "pt-PT") return ptPT;
+  return ptBR;
 }
 
 /** Pergunta qual compromisso o usuário quis dizer quando a busca por
@@ -136,13 +171,17 @@ async function askWhichAppointment(
   from: string, userId: string,
   matches: Appointment[], action: "update" | "delete" | "done" | "add_meet" | "set_reminder",
   actionLabel: string, patch?: Record<string, unknown>,
-  options?: { reminderOffsetMinutes?: number; mode?: "personal" | "business" },
+  options?: { reminderOffsetMinutes?: number; mode?: "personal" | "business"; locale?: string },
 ): Promise<void> {
   const list = matches.map(a => ({ id: a.id, title: a.title, startAt: a.startAt, location: a.location }));
   await setPendingAction(from, { type: "appointment_selection", userId, action, patch, appointments: list, ...options });
-  let msg = `🗓️ Encontrei ${matches.length} compromissos. Qual deseja ${actionLabel}?\n\n`;
+  let msg = options?.locale === "es"
+    ? `🗓️ Encontré ${matches.length} citas. ¿Cuál quieres ${actionLabel}?\n\n`
+    : `🗓️ Encontrei ${matches.length} compromissos. Qual deseja ${actionLabel}?\n\n`;
   matches.forEach((a, i) => { msg += `*${i + 1}.* ${a.title} — ${formatDateTimeBR(a.startAt)}\n`; });
-  msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
+  msg += options?.locale === "es"
+    ? `\nResponde con el número o el nombre. ⏱ _Válido durante 5 minutos._`
+    : `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
   await wppSend(from, msg);
 }
 
@@ -170,27 +209,36 @@ function vehicleIdentity(vehicle: { brand: string; model: string; year: number; 
 
 async function askWhichVehicle(
   from: string, userId: string, vehicles: Vehicle[], action: "update" | "delete",
-  mode: "personal" | "business", patch?: VehicleUpdateInput,
+  mode: "personal" | "business", patch?: VehicleUpdateInput, locale?: string,
 ): Promise<void> {
   await setPendingAction(from, {
     type: "vehicle_selection", userId, mode, action, patch, vehicles: pendingVehicleRows(vehicles),
   });
-  let msg = `🚗 Encontrei ${vehicles.length} veículos. Qual deseja ${action === "delete" ? "excluir" : "alterar"}?\n\n`;
+  let msg = locale === "es"
+    ? `🚗 Encontré ${vehicles.length} vehículos. ¿Cuál quieres ${action === "delete" ? "eliminar" : "cambiar"}?\n\n`
+    : `🚗 Encontrei ${vehicles.length} veículos. Qual deseja ${action === "delete" ? "excluir" : "alterar"}?\n\n`;
   vehicles.forEach((v, i) => { msg += `*${i + 1}.* ${vehicleIdentity(v)}\n`; });
-  msg += `\nResponda com o número, modelo, marca ou placa. ⏱ _Válido por 5 min._`;
+  msg += locale === "es"
+    ? `\nResponde con el número, modelo, marca o matrícula. ⏱ _Válido durante 5 minutos._`
+    : `\nResponda com o número, modelo, marca ou placa. ⏱ _Válido por 5 min._`;
   await wppSend(from, msg);
 }
 
-async function askVehiclePatch(from: string, userId: string, vehicle: Vehicle, mode: "personal" | "business"): Promise<void> {
+async function askVehiclePatch(from: string, userId: string, vehicle: Vehicle, mode: "personal" | "business", locale?: string): Promise<void> {
   await setPendingAction(from, {
     type: "vehicle_selection", userId, mode, action: "update", awaitingPatch: true,
     vehicles: pendingVehicleRows([vehicle]),
   });
-  await wppSend(from, `✏️ O que deseja alterar no *${vehicle.brand} ${vehicle.model}*?\n\nExemplos:\n• _placa para ABC1D23_\n• _km para 45.000_\n• _ano para 2022_\n• _combustível para flex_`);
+  await wppSend(from, locale === "es"
+    ? `✏️ ¿Qué quieres cambiar en *${vehicle.brand} ${vehicle.model}*?\n\nEjemplos:\n• _matrícula a ABC1D23_\n• _kilometraje a 45.000_\n• _año a 2022_\n• _combustible a flex_`
+    : `✏️ O que deseja alterar no *${vehicle.brand} ${vehicle.model}*?\n\nExemplos:\n• _placa para ABC1D23_\n• _km para 45.000_\n• _ano para 2022_\n• _combustível para flex_`);
 }
 
-async function sendVehicleUpdated(from: string, vehicle: Vehicle): Promise<void> {
-  await wppSend(from, `✅ *Veículo atualizado!*\n\n🚗 ${vehicleIdentity(vehicle)}\n⛽ ${FUEL_TYPE_LABEL[vehicle.fuelType]}\n🛣️ ${vehicle.currentKm.toLocaleString("pt-BR")} km\n${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`);
+async function sendVehicleUpdated(from: string, vehicle: Vehicle, locale?: string): Promise<void> {
+  const fuelEs: Record<string, string> = { gasoline: "Gasolina", ethanol: "Etanol", diesel: "Diésel", electric: "Eléctrico", flex: "Flex" };
+  await wppSend(from, locale === "es"
+    ? `✅ *¡Vehículo actualizado!*\n\n🚗 ${vehicleIdentity(vehicle)}\n⛽ ${fuelEs[vehicle.fuelType] || vehicle.fuelType}\n🛣️ ${vehicle.currentKm.toLocaleString("es-419")} km\n${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Personal"}`
+    : `✅ *Veículo atualizado!*\n\n🚗 ${vehicleIdentity(vehicle)}\n⛽ ${FUEL_TYPE_LABEL[vehicle.fuelType]}\n🛣️ ${vehicle.currentKm.toLocaleString("pt-BR")} km\n${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`);
 }
 
 function localDatePart(iso: string): string {
@@ -231,7 +279,9 @@ async function scheduleAppointmentReminder(
 ): Promise<void> {
   const scheduledAt = appointmentReminderAt(appointment.startAt, offsetMinutes);
   if (new Date(scheduledAt).getTime() <= Date.now()) {
-    await wppSend(from, `⚠️ Não consigo programar esse aviso porque ${formatReminderOffset(offsetMinutes)} antes de *${appointment.title}* já passou.`);
+    await wppSend(from, localized(locale,
+      `⚠️ Não consigo programar esse aviso porque ${formatReminderOffset(offsetMinutes)} antes de *${appointment.title}* já passou.`,
+      `⚠️ No puedo programar este aviso porque el momento de ${formatReminderOffset(offsetMinutes, "es")} antes de *${appointment.title}* ya pasó.`));
     return;
   }
   const message = `Compromisso: ${appointment.title}`;
@@ -240,36 +290,64 @@ async function scheduleAppointmentReminder(
     userId, message, phone: from, scheduledAt, repeat: "none", mode, recipientType: "self",
     recipientName: requester?.name || requester?.relation,
   });
-  await wppSend(from, `${replyReminderSet(message, scheduledAt, "none", undefined, locale)}\n\n⏰ Isso corresponde a ${formatReminderOffset(offsetMinutes)} antes do compromisso.`);
+  await wppSend(from, `${replyReminderSet(message, scheduledAt, "none", undefined, locale)}\n\n${localized(locale,
+    `⏰ Isso corresponde a ${formatReminderOffset(offsetMinutes)} antes do compromisso.`,
+    `⏰ Esto corresponde a ${formatReminderOffset(offsetMinutes, "es")} antes de la cita.`)}`);
 }
 
 /** Cria o link do Google Meet pra um compromisso já existente — extraído
  *  pra ser reaproveitado tanto no caminho direto (1 compromisso encontrado)
  *  quanto na resolução da desambiguação (usuário escolheu entre vários). */
-async function performAddMeet(appt: Appointment, userId: string, from: string): Promise<void> {
+async function performAddMeet(appt: Appointment, userId: string, from: string, locale?: string): Promise<void> {
   if (appt.meetLink) {
-    await wppSend(from, `ℹ️ *${appt.title}* já tem um link do Meet:\n🔗 ${appt.meetLink}`);
+    await wppSend(from, localized(locale,
+      `ℹ️ *${appt.title}* já tem um link do Meet:\n🔗 ${appt.meetLink}`,
+      `ℹ️ *${appt.title}* ya tiene un enlace de Meet:\n🔗 ${appt.meetLink}`));
     return;
   }
   if (!appt.endAt) {
-    await wppSend(from, `⚠️ O compromisso *${appt.title}* não tem horário de fim definido. Edite-o pela agenda para adicionar a hora de término e tente novamente.`);
+    await wppSend(from, localized(locale,
+      `⚠️ O compromisso *${appt.title}* não tem horário de fim definido. Edite-o pela agenda para adicionar a hora de término e tente novamente.`,
+      `⚠️ La cita *${appt.title}* no tiene una hora de finalización. Edítala en la agenda, añade la hora de finalización e inténtalo de nuevo.`));
     return;
   }
   if (!await isConnected(userId)) {
-    await wppSend(from, `🔗 Sua conta Google não está conectada.\n\nAcesse *Configurações → Integrações* para conectar e criar links do Meet.`);
+    await wppSend(from, localized(locale,
+      "🔗 Sua conta Google não está conectada.\n\nAcesse *Configurações → Integrações* para conectar e criar links do Meet.",
+      "🔗 Tu cuenta de Google no está conectada.\n\nEntra en *Configuración → Integraciones* para conectarla y crear enlaces de Meet."));
     return;
   }
-  await wppSend(from, `⏳ Criando link do Google Meet para *${appt.title}*...`);
+  await wppSend(from, localized(locale,
+    `⏳ Criando link do Google Meet para *${appt.title}*...`,
+    `⏳ Creando el enlace de Google Meet para *${appt.title}*...`));
   try {
-    const meetResult = await createMeetEvent({
-      userId, title: appt.title, description: appt.description,
-      startAt: appt.startAt, endAt: appt.endAt, attendees: [],
+    const result = appt.calendarEventId
+      ? {
+          meetLink: await addMeetToGoogleCalendarEvent({
+            userId,
+            calendarEventId: appt.calendarEventId,
+            googleCalendarId: appt.googleCalendarId,
+          }),
+          calendarEventId: appt.calendarEventId,
+          googleCalendarId: appt.googleCalendarId,
+        }
+      : await createMeetEvent({
+          userId, title: appt.title, description: appt.description,
+          startAt: appt.startAt, endAt: appt.endAt, attendees: [],
+        });
+    await updateAppointment(appt.id, userId, {
+      meetLink: result.meetLink,
+      calendarEventId: result.calendarEventId,
+      googleCalendarId: result.googleCalendarId,
     });
-    await updateAppointment(appt.id, userId, { meetLink: meetResult.meetLink, calendarEventId: meetResult.calendarEventId });
-    await wppSend(from, `✅ *Meet adicionado!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${meetResult.meetLink}`);
+    await wppSend(from, localized(locale,
+      `✅ *Meet adicionado!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${result.meetLink}`,
+      `✅ *¡Meet añadido!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${result.meetLink}`));
   } catch (e) {
     console.error("[agenda_add_meet]", e);
-    await wppSend(from, `❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.`);
+    await wppSend(from, localized(locale,
+      "❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.",
+      "❌ No pude crear el Google Meet. Comprueba en Configuración que tu cuenta de Google siga conectada."));
   }
 }
 
@@ -344,6 +422,7 @@ export type IncomingMessage = {
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
   const from = msg.from;
+  let responseLocale: string | undefined;
   try {
     let messageText = msg.text;
 
@@ -358,6 +437,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       // Identifica usuário antes de processar o arquivo
       const fileUser = await getUserByWppPhone(from);
       if (fileUser && hasAccess(fileUser)) {
+        responseLocale = fileUser.locale;
         const buffer = msg.fileBuffer!;
         const mimeType = msg.fileMimeType || "application/octet-stream";
         const defaultExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("image") ? ".jpg" : "";
@@ -527,7 +607,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           if (caption && !hasSaveIntent) messageText = caption;
         } catch (e) {
           console.error("[drive] erro ao salvar arquivo:", e);
-          await wppSend(from, "❌ Não consegui salvar o arquivo. Tente novamente.");
+          await wppSend(from, localized(fileUser.locale, "❌ Não consegui salvar o arquivo. Tente novamente.", "❌ No pude guardar el archivo. Inténtalo de nuevo."));
         }
       }
       // Se não há legenda/caption para processar, encerra aqui
@@ -627,6 +707,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       await wppSend(from, replyPhoneNotLinked(from));
       return;
     }
+    responseLocale = user.locale;
 
     // ── Verifica acesso (trial vencido OU desativado pelo admin) ──
     if (!hasAccess(user)) {
@@ -721,10 +802,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             await wppSend(from, replyFileSaved(pending.suggestedName, suggestedFolder, user.locale));
           } catch (e) {
             console.error("[drive] erro ao salvar comprovante:", e);
-            await wppSend(from, "❌ Não consegui guardar o comprovante. Tente novamente.");
+            await wppSend(from, localized(user.locale, "❌ Não consegui guardar o comprovante. Tente novamente.", "❌ No pude guardar el comprobante. Inténtalo de nuevo."));
           }
         } else {
-          await wppSend(from, "Combinado, não vou guardar esse comprovante. 👍");
+          await wppSend(from, localized(user.locale, "Combinado, não vou guardar esse comprovante. 👍", "De acuerdo, no guardaré este comprobante. 👍"));
         }
         return;
       }
@@ -771,8 +852,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (Object.keys(patch).length > 0) {
           await clearPendingAction(from);
           const updated = await updateVehicle(pending.vehicles[0].id, user.id, patch);
-          if (updated) await sendVehicleUpdated(from, updated);
-          else await wppSend(from, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.");
+          if (updated) await sendVehicleUpdated(from, updated, user.locale);
+          else await wppSend(from, localized(user.locale, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.", "❌ No pude actualizar este vehículo. No se modificó nada; inténtalo de nuevo."));
           return;
         }
         // Não prende outros comandos na pergunta pendente. Se a resposta não
@@ -788,25 +869,25 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const deleted = await deleteVehicle(chosen.id, user.id);
             await wppSend(from, deleted
               ? `🗑️ *Veículo excluído!*\n\n🚗 ${vehicleIdentity(chosen)}\n\n_Os lançamentos já registrados em Finanças foram mantidos no histórico._`
-              : "❌ Não consegui excluir esse veículo agora. Nada foi modificado; tente novamente.");
+              : localized(user.locale, "❌ Não consegui excluir esse veículo agora. Nada foi modificado; tente novamente.", "❌ No pude eliminar este vehículo. No se modificó nada; inténtalo de nuevo."));
             return;
           }
 
           if (vehicleAction === "update") {
             if (pending.patch && Object.keys(pending.patch).length > 0) {
               const updated = await updateVehicle(chosen.id, user.id, pending.patch);
-              if (updated) await sendVehicleUpdated(from, updated);
-              else await wppSend(from, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.");
+              if (updated) await sendVehicleUpdated(from, updated, user.locale);
+              else await wppSend(from, localized(user.locale, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.", "❌ No pude actualizar este vehículo. No se modificó nada; inténtalo de nuevo."));
             } else {
               const fullVehicle = (await getVehiclesByUser(user.id)).find(v => v.id === chosen.id);
-              if (fullVehicle) await askVehiclePatch(from, user.id, fullVehicle, pending.mode as "personal" | "business");
-              else await wppSend(from, "❌ Esse veículo não está mais cadastrado.");
+              if (fullVehicle) await askVehiclePatch(from, user.id, fullVehicle, pending.mode as "personal" | "business", user.locale);
+              else await wppSend(from, localized(user.locale, "❌ Esse veículo não está mais cadastrado.", "❌ Este vehículo ya no está registrado."));
             }
             return;
           }
 
           if (!pending.expenseData) {
-            await wppSend(from, "❌ Não encontrei os dados do gasto. Envie o valor novamente.");
+            await wppSend(from, localized(user.locale, "❌ Não encontrei os dados do gasto. Envie o valor novamente.", "❌ No encontré los datos del gasto. Envía el valor de nuevo."));
             return;
           }
           const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
@@ -939,7 +1020,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         } else if (pending.action === "add_meet") {
           await clearPendingAction(from);
           const full = await getAppointmentById(chosenAppt.id, user.id);
-          if (full) await performAddMeet(full, user.id, from);
+          if (full) await performAddMeet(full, user.id, from, user.locale);
           else await wppSend(from, "❌ Não consegui mais localizar esse compromisso. Digite *meus compromissos* para conferir.");
         } else if (pending.action === "set_reminder") {
           await clearPendingAction(from);
@@ -969,14 +1050,21 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // ── Confirmação de "apagar todo o histórico" (ação irreversível — exige
     // uma frase exata, não um "sim" qualquer, pra reduzir confirmação acidental) ──
     if (pending?.type === "confirm_clear_history" && pending.userId === user.id) {
-      const confirmed = messageText.trim().toLowerCase() === "apagar tudo";
+      const confirmationText = messageText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const confirmed = confirmationText === "apagar tudo" || confirmationText === "borrar todo";
       await clearPendingAction(from);
       if (confirmed) {
         const deleted = await deleteAllFinances(user.id, pending.mode);
-        const modeLabel = pending.mode === "personal" ? "pessoal" : pending.mode === "business" ? "empresarial" : "pessoal e empresarial";
-        await wppSend(from, `🗑️ Pronto. Apaguei ${deleted} lançamento${deleted === 1 ? "" : "s"} do histórico ${modeLabel}. Não tem como desfazer isso.`);
+        const modeLabel = user.locale === "es"
+          ? pending.mode === "personal" ? "personal" : pending.mode === "business" ? "empresarial" : "personal y empresarial"
+          : pending.mode === "personal" ? "pessoal" : pending.mode === "business" ? "empresarial" : "pessoal e empresarial";
+        await wppSend(from, user.locale === "es"
+          ? `🗑️ Listo. Borré ${deleted} ${deleted === 1 ? "movimiento" : "movimientos"} del historial ${modeLabel}. Esta acción no se puede deshacer.`
+          : `🗑️ Pronto. Apaguei ${deleted} lançamento${deleted === 1 ? "" : "s"} do histórico ${modeLabel}. Não tem como desfazer isso.`);
       } else {
-        await wppSend(from, "Ok, não apaguei nada. Se quiser tentar de novo, é só pedir.");
+        await wppSend(from, user.locale === "es"
+          ? "De acuerdo, no borré nada. Si quieres intentarlo de nuevo, solo tienes que pedirlo."
+          : "Ok, não apaguei nada. Se quiser tentar de novo, é só pedir.");
       }
       return;
     }
@@ -992,7 +1080,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       if (pending.action === "edit" && !hasPatch && pending.awaitingPatch) {
         const patch = parseFinancePatchFromText(messageText);
         if (Object.keys(patch).length === 0) {
-          await wppSend(from, `❓ Não entendi o que alterar. Ex: _"80 reais"_ ou _"categoria Lazer"_`);
+          await wppSend(from, localized(user.locale,
+            `❓ Não entendi o que alterar. Ex: _"80 reais"_ ou _"categoria Lazer"_`,
+            `❓ No entendí qué quieres cambiar. Ej.: _"80 dólares"_ o _"categoría Ocio"_`,
+          ));
           return;
         }
         await clearPendingAction(from);
@@ -1010,7 +1101,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           } else {
             await wppSend(from, `✏️ *${updatedItems.length} lançamentos atualizados!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
           }
-        } else await wppSend(from, "❌ Não consegui atualizar os lançamentos selecionados. Nada foi modificado; tente novamente.");
+        } else await wppSend(from, localized(user.locale, "❌ Não consegui atualizar os lançamentos selecionados. Nada foi modificado; tente novamente.", "❌ No pude actualizar los movimientos seleccionados. No se modificó nada; inténtalo de nuevo."));
         return;
       }
 
@@ -1055,7 +1146,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             } else {
               await wppSend(from, `✏️ *${updatedItems.length} lançamentos atualizados!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
             }
-          } else await wppSend(from, "❌ Não consegui atualizar os lançamentos selecionados. Nada foi modificado; tente novamente.");
+          } else await wppSend(from, localized(user.locale, "❌ Não consegui atualizar os lançamentos selecionados. Nada foi modificado; tente novamente.", "❌ No pude actualizar los movimientos seleccionados. No se modificó nada; inténtalo de nuevo."));
         } else if (pending.action === "delete") {
           let deletedCount = 0;
           for (const c of chosen) {
@@ -1070,7 +1161,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             } else {
               await wppSend(from, `🗑️ *${deletedCount} lançamentos excluídos!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
             }
-          } else await wppSend(from, "❌ Não consegui excluir os lançamentos selecionados. Nada foi apagado; tente novamente.");
+          } else await wppSend(from, localized(user.locale, "❌ Não consegui excluir os lançamentos selecionados. Nada foi apagado; tente novamente.", "❌ No pude eliminar los movimientos seleccionados. No se borró nada; inténtalo de nuevo."));
         }
         return;
       }
@@ -1106,11 +1197,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         for (const item of meetItems) {
           let meetLink: string | undefined;
           let calendarEventId: string | undefined;
+          let googleCalendarId: string | undefined;
           if (yes && connected) {
             try {
               const r = await createMeetEvent({ userId: user.id, ...item });
               meetLink = r.meetLink;
               calendarEventId = r.calendarEventId;
+              googleCalendarId = r.googleCalendarId;
             } catch (e) {
               console.error("[meet_confirm]", e);
               failedMeetLinks++;
@@ -1119,7 +1212,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const apt = await createAppointment({
             userId: user.id, title: item.title, description: item.description,
             startAt: item.startAt, endAt: item.endAt, allDay: false, repeat: "none",
-            status: "scheduled", source: "whatsapp", meetLink, calendarEventId,
+            status: "scheduled", source: "whatsapp", meetLink, calendarEventId, googleCalendarId,
           });
           confirmations.push(replyMeetCreated(apt, undefined, user.locale));
           for (const attendee of item.attendees.filter(attendee => attendee.phone)) {
@@ -1142,22 +1235,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
-    // ── Resposta de ata de reunião ──
-    if (pending?.type === "meet_ata" && pending.userId === user.id) {
-      if (messageText) {
-        await clearPendingAction(from);
-        const ata = await generateMeetAta(messageText, pending.meetTitle, [], user.locale);
-        await updateAppointment(pending.meetId, user.id, { ataGenerated: true, ataContent: ata.summary });
-        for (const taskTitle of ata.tasks) {
-          await createTask({ userId: user.id, title: cap(taskTitle), priority: "medium", status: "pending", mode });
-        }
-        await wppSend(from, replyMeetAtaGenerated(pending.meetTitle, ata, user.locale));
-      } else {
-        await wppSend(from, `Para gerar a ata, me envie um *áudio* ou *texto* com o resumo da reunião. ⏱ ${replyMeetAtaRequest(pending.meetTitle, user.locale)}`);
-      }
-      return;
-    }
-
     // ── Confirmação de recorrente/parcela (resposta ao lembrete das 20h) ──
     if (pending?.type === "recurring_confirmation" && pending.userId === user.id) {
       const lower = messageText.toLowerCase().trim();
@@ -1168,12 +1245,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const result = await confirmRecurring(pending.recurringId, user.id);
         if (result) {
           await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
-        } else await wppSend(from, "❌ Não consegui confirmar esse pagamento agora. Nada foi alterado; tente novamente.");
+        } else await wppSend(from, localized(user.locale, "❌ Não consegui confirmar esse pagamento agora. Nada foi alterado; tente novamente.", "❌ No pude confirmar este pago. No se modificó nada; inténtalo de nuevo."));
       } else if (isNo) {
         await clearPendingAction(from);
-        await wppSend(from, "Ok! Quando quiser marcar como pago, acesse *Recorrentes* no dashboard. 👍");
+        await wppSend(from, localized(user.locale, "Ok! Quando quiser marcar como pago, acesse *Recorrentes* no dashboard. 👍", "De acuerdo. Cuando quieras marcarlo como pagado, abre *Recurrentes* en el panel. 👍"));
       } else {
-        await wppSend(from, `Não entendi. Responda *sim* se ${pending.installmentNumber ? "a parcela foi paga" : "foi pago/recebido"} ou *não* para deixar pendente.`);
+        await wppSend(from, localized(user.locale,
+          `Não entendi. Responda *sim* se ${pending.installmentNumber ? "a parcela foi paga" : "foi pago/recebido"} ou *não* para deixar pendente.`,
+          `No entendí. Responde *sí* si ${pending.installmentNumber ? "pagaste la cuota" : "ya se pagó o recibió"}, o *no* para dejarlo pendiente.`,
+        ));
       }
       return;
     }
@@ -1897,7 +1977,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             priority: ai.task?.newPriority,
           });
           if (!updated) {
-            await wppSend(from, "❌ Não consegui atualizar essa tarefa agora. Nada foi modificado; tente novamente.");
+            await wppSend(from, user.locale === "es" ? "❌ No pude actualizar esta tarea. No se modificó nada; inténtalo de nuevo." : "❌ Não consegui atualizar essa tarefa agora. Nada foi modificado; tente novamente.");
           } else if (hasFieldChanges) {
             const due = updated.dueDate ? new Date(`${updated.dueDate}T12:00:00`).toLocaleDateString(user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR") : user.locale === "es" ? "sin plazo" : "sem prazo";
             await wppSend(from, user.locale === "es"
@@ -1907,7 +1987,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             await wppSend(from, replyTaskUpdated(updated, user.locale));
           }
         } else {
-          await wppSend(from, "❓ Tarefa não encontrada. Digite *minhas tarefas* para ver a lista.");
+          await wppSend(from, user.locale === "es" ? "❓ No encontré esa tarea. Escribe *mis tareas* para ver la lista." : "❓ Tarefa não encontrada. Digite *minhas tarefas* para ver a lista.");
         }
         break;
       }
@@ -1919,9 +1999,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const delNumMatch = messageText.match(/(\d+)/);
         if (!taskToDelete && delNumMatch) taskToDelete = await findTaskByNumber(user.id, parseInt(delNumMatch[1]), mode);
         if (taskToDelete && await deleteTask(taskToDelete.id, user.id)) {
-          await wppSend(from, `🗑️ Tarefa excluída.\n\n📌 ${taskToDelete.title}`);
+          await wppSend(from, user.locale === "es" ? `🗑️ Tarea eliminada.\n\n📌 ${taskToDelete.title}` : `🗑️ Tarefa excluída.\n\n📌 ${taskToDelete.title}`);
         } else {
-          await wppSend(from, "❓ Tarefa não encontrada. Digite *minhas tarefas* para ver a lista.");
+          await wppSend(from, user.locale === "es" ? "❓ No encontré esa tarea. Escribe *mis tareas* para ver la lista." : "❓ Tarefa não encontrada. Digite *minhas tarefas* para ver a lista.");
         }
         break;
       }
@@ -1947,14 +2027,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const target = reminderNumber > 0
           ? (await getRemindersByUser(user.id, mode))[reminderNumber - 1] ?? null
           : keyword ? await findReminderByKeyword(user.id, keyword, mode) : null;
-        if (!target) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
+        if (!target) { await wppSend(from, user.locale === "es" ? "❓ No encontré ese recordatorio. Escribe *mis recordatorios* para ver la lista." : "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         const patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat">> = {};
         if (ai.reminder?.message) patch.message = cap(ai.reminder.message);
         if (ai.reminder?.scheduledAt) patch.scheduledAt = spToUTC(ai.reminder.scheduledAt);
         if (ai.reminder?.repeat) patch.repeat = ai.reminder.repeat;
-        if (Object.keys(patch).length === 0) { await wppSend(from, "❓ O que deseja alterar nesse lembrete? Informe a nova mensagem, data, horário ou repetição."); break; }
+        if (Object.keys(patch).length === 0) { await wppSend(from, user.locale === "es" ? "❓ ¿Qué quieres cambiar en este recordatorio? Indica el nuevo mensaje, fecha, hora o repetición." : "❓ O que deseja alterar nesse lembrete? Informe a nova mensagem, data, horário ou repetição."); break; }
         const updated = await updateReminder(target.id, user.id, patch);
-        await wppSend(from, updated ? replyReminderUpdated(updated, user.locale) : "❌ Não consegui atualizar esse lembrete agora. Nada foi modificado; tente novamente.");
+        await wppSend(from, updated ? replyReminderUpdated(updated, user.locale) : user.locale === "es" ? "❌ No pude actualizar este recordatorio. No se modificó nada; inténtalo de nuevo." : "❌ Não consegui atualizar esse lembrete agora. Nada foi modificado; tente novamente.");
         break;
       }
 
@@ -1964,9 +2044,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const delTarget = reminderNumber > 0
           ? (await getRemindersByUser(user.id, mode))[reminderNumber - 1] ?? null
           : delKeyword ? await findReminderByKeyword(user.id, delKeyword, mode) : null;
-        if (!delTarget) { await wppSend(from, "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
+        if (!delTarget) { await wppSend(from, user.locale === "es" ? "❓ No encontré ese recordatorio. Escribe *mis recordatorios* para ver la lista." : "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         const deleted = await deleteReminder(delTarget.id, user.id);
-        await wppSend(from, deleted ? replyReminderDeleted(delTarget.message, user.locale) : "❌ Não consegui excluir esse lembrete agora. Tente novamente.");
+        await wppSend(from, deleted ? replyReminderDeleted(delTarget.message, user.locale) : user.locale === "es" ? "❌ No pude eliminar este recordatorio. Inténtalo de nuevo." : "❌ Não consegui excluir esse lembrete agora. Tente novamente.");
         break;
       }
 
@@ -2085,7 +2165,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const vehicleKeyword = ai.keyword || ai.vehicle?.name || "";
         const allVehicles = await getVehiclesByUser(user.id);
         if (!allVehicles.length) {
-          await wppSend(from, `🚗 Você ainda não tem veículos cadastrados.\n\nCadastre por aqui, por exemplo: _"cadastre um Volkswagen Gol 2020"_.`);
+          await wppSend(from, user.locale === "es"
+            ? `🚗 Todavía no tienes vehículos registrados.\n\nPuedes registrar uno así: _"registra un Volkswagen Gol 2020"_.`
+            : `🚗 Você ainda não tem veículos cadastrados.\n\nCadastre por aqui, por exemplo: _"cadastre um Volkswagen Gol 2020"_.`);
           break;
         }
 
@@ -2093,19 +2175,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           ? await findVehiclesByName(user.id, vehicleKeyword)
           : allVehicles;
         if (!candidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum veículo com *"${vehicleKeyword}"*.\n\nDigite *meus veículos* para conferir a lista.`);
+          await wppSend(from, user.locale === "es" ? `❓ No encontré ningún vehículo con *"${vehicleKeyword}"*.\n\nEscribe *mis vehículos* para ver la lista.` : `❓ Não encontrei nenhum veículo com *"${vehicleKeyword}"*.\n\nDigite *meus veículos* para conferir a lista.`);
           break;
         }
 
         const patch = vehiclePatchFromAi(ai);
         if (candidates.length > 1) {
-          await askWhichVehicle(from, user.id, candidates, "update", mode, patch);
+          await askWhichVehicle(from, user.id, candidates, "update", mode, patch, user.locale);
         } else if (!Object.keys(patch).length) {
-          await askVehiclePatch(from, user.id, candidates[0], candidates[0].mode);
+          await askVehiclePatch(from, user.id, candidates[0], candidates[0].mode, user.locale);
         } else {
           const updated = await updateVehicle(candidates[0].id, user.id, patch);
-          if (updated) await sendVehicleUpdated(from, updated);
-          else await wppSend(from, "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.");
+          if (updated) await sendVehicleUpdated(from, updated, user.locale);
+          else await wppSend(from, user.locale === "es" ? "❌ No pude actualizar este vehículo. No se modificó nada; inténtalo de nuevo." : "❌ Não consegui atualizar esse veículo agora. Nada foi modificado; tente novamente.");
         }
         break;
       }
@@ -2114,7 +2196,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const vehicleKeyword = ai.keyword || ai.vehicle?.name || "";
         const allVehicles = await getVehiclesByUser(user.id);
         if (!allVehicles.length) {
-          await wppSend(from, "🚗 Você não tem veículos cadastrados para excluir.");
+          await wppSend(from, user.locale === "es" ? "🚗 No tienes vehículos registrados para eliminar." : "🚗 Você não tem veículos cadastrados para excluir.");
           break;
         }
 
@@ -2122,14 +2204,16 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           ? await findVehiclesByName(user.id, vehicleKeyword)
           : allVehicles;
         if (!candidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum veículo com *"${vehicleKeyword}"*.\n\nDigite *meus veículos* para conferir a lista.`);
+          await wppSend(from, user.locale === "es" ? `❓ No encontré ningún vehículo con *"${vehicleKeyword}"*.\n\nEscribe *mis vehículos* para ver la lista.` : `❓ Não encontrei nenhum veículo com *"${vehicleKeyword}"*.\n\nDigite *meus veículos* para conferir a lista.`);
         } else if (candidates.length > 1) {
-          await askWhichVehicle(from, user.id, candidates, "delete", mode);
+          await askWhichVehicle(from, user.id, candidates, "delete", mode, undefined, user.locale);
         } else {
           const deleted = await deleteVehicle(candidates[0].id, user.id);
           await wppSend(from, deleted
-            ? `🗑️ *Veículo excluído!*\n\n🚗 ${vehicleIdentity(candidates[0])}\n\n_Os lançamentos já registrados em Finanças foram mantidos no histórico._`
-            : "❌ Não consegui excluir esse veículo agora. Nada foi modificado; tente novamente.");
+            ? user.locale === "es"
+              ? `🗑️ *¡Vehículo eliminado!*\n\n🚗 ${vehicleIdentity(candidates[0])}\n\n_Los movimientos ya registrados en Finanzas se conservaron en el historial._`
+              : `🗑️ *Veículo excluído!*\n\n🚗 ${vehicleIdentity(candidates[0])}\n\n_Os lançamentos já registrados em Finanças foram mantidos no histórico._`
+            : user.locale === "es" ? "❌ No pude eliminar este vehículo. No se modificó nada; inténtalo de nuevo." : "❌ Não consegui excluir esse veículo agora. Nada foi modificado; tente novamente.");
         }
         break;
       }
@@ -2197,7 +2281,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const vDesc = cap(ai.vehicle?.description || ai.finance?.description || vType);
 
         if (!vAmount || vAmount <= 0) {
-          await wppSend(from, `❓ Não consegui identificar o valor do gasto.\n\nTente assim:\n_"Gastei 50 reais de combustível"_\n_"Paguei 300 de manutenção no carro"_`);
+          await wppSend(from, user.locale === "es"
+            ? `❓ No pude identificar el importe del gasto.\n\nPrueba así:\n_"Gasté 50 en combustible"_\n_"Pagué 300 de mantenimiento del auto"_`
+            : `❓ Não consegui identificar o valor do gasto.\n\nTente assim:\n_"Gastei 50 reais de combustível"_\n_"Paguei 300 de manutenção no carro"_`);
           break;
         }
         const vKm = ai.vehicle?.km;
@@ -2211,7 +2297,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (allVehicles.length === 0) {
           const f = await addFinance({ userId: user.id, type: "expense", amount: vAmount, category: "Transporte", description: vDesc, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
           const bal = (await getBalance(user.id, vehicleMode, year, month)).balance;
-          await wppSend(from, `${replyFinanceRegistered(f, bal, user.locale)}\n\n💡 _Dica: cadastre por aqui dizendo "cadastre um Volkswagen Gol 2020" para controlar os gastos separadamente._`);
+          await wppSend(from, `${replyFinanceRegistered(f, bal, user.locale)}\n\n${user.locale === "es" ? "💡 _Consejo: registra el vehículo diciendo «registra un Volkswagen Gol 2020» para controlar sus gastos por separado._" : "💡 _Dica: cadastre por aqui dizendo \"cadastre um Volkswagen Gol 2020\" para controlar os gastos separadamente._"}`);
           break;
         }
 
@@ -2232,8 +2318,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const f = await addFinance({ userId: user.id, type: "expense", amount: vAmount, category: VEHICLE_FINANCE_CATEGORY[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
             await setExpenseFinanceId(targetVehicle.id, newExp.id, f.id);
             const total = getVehicleTotalExpenses(exp);
-            await wppSend(from, `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
-          } else await wppSend(from, "❌ Não consegui registrar o gasto no veículo agora. Nada foi lançado; tente novamente.");
+            await wppSend(from, user.locale === "es" ? `${typeEmoji[vType]} *¡Registrado en ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total del vehículo: ${formatCurrency(total)}` : `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
+          } else await wppSend(from, user.locale === "es" ? "❌ No pude registrar el gasto del vehículo. No se guardó nada; inténtalo de nuevo." : "❌ Não consegui registrar o gasto no veículo agora. Nada foi lançado; tente novamente.");
           break;
         }
 
@@ -2242,9 +2328,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const vehicleList = pendingVehicleRows(allVehicles);
         await setPendingAction(from, { type: "vehicle_selection", userId: user.id, mode: vehicleMode, action: "expense", expenseData, vehicles: vehicleList });
 
-        let msg = `🚗 Você tem ${allVehicles.length} veículos cadastrados. Em qual registrar *${formatCurrency(vAmount)}* de ${vDesc}?\n\n`;
+        let msg = user.locale === "es" ? `🚗 Tienes ${allVehicles.length} vehículos registrados. ¿En cuál registro *${formatCurrency(vAmount)}* de ${vDesc}?\n\n` : `🚗 Você tem ${allVehicles.length} veículos cadastrados. Em qual registrar *${formatCurrency(vAmount)}* de ${vDesc}?\n\n`;
         allVehicles.forEach((v, i) => { msg += `*${i + 1}.* ${v.brand} ${v.model} (${v.year})${v.plate ? ` — ${v.plate}` : ""}\n`; });
-        msg += `\nResponda com o número ou nome do veículo. ⏱ _Válido por 5 min._`;
+        msg += user.locale === "es" ? `\nResponde con el número o nombre del vehículo. ⏱ _Válido durante 5 minutos._` : `\nResponda com o número ou nome do veículo. ⏱ _Válido por 5 min._`;
         await wppSend(from, msg);
         break;
       }
@@ -2252,12 +2338,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "vehicle_query": {
         const vehicles = await getVehiclesByUser(user.id, mode);
         if (!vehicles.length) {
-          await wppSend(from, `🚗 Sem veículos cadastrados.\n\nCadastre por aqui, por exemplo: _"cadastre um Volkswagen Gol 2020"_.`);
+          await wppSend(from, user.locale === "es" ? `🚗 No hay vehículos registrados.\n\nPuedes registrar uno así: _"registra un Volkswagen Gol 2020"_.` : `🚗 Sem veículos cadastrados.\n\nCadastre por aqui, por exemplo: _"cadastre um Volkswagen Gol 2020"_.`);
         } else {
-          let msg = `🚗 *Seus veículos:*\n\n`;
+          let msg = user.locale === "es" ? `🚗 *Tus vehículos:*\n\n` : `🚗 *Seus veículos:*\n\n`;
           vehicles.forEach(v => {
             const total = getVehicleTotalExpenses(v);
-            msg += `• *${v.brand} ${v.model}* (${v.year})\n  Placa: ${v.plate || "—"} | Km: ${v.currentKm.toLocaleString()}\n  Total gastos: ${formatCurrency(total)}\n\n`;
+            msg += user.locale === "es"
+              ? `• *${v.brand} ${v.model}* (${v.year})\n  Matrícula: ${v.plate || "—"} | Km: ${v.currentKm.toLocaleString("es-419")}\n  Total de gastos: ${formatCurrency(total)}\n\n`
+              : `• *${v.brand} ${v.model}* (${v.year})\n  Placa: ${v.plate || "—"} | Km: ${v.currentKm.toLocaleString()}\n  Total gastos: ${formatCurrency(total)}\n\n`;
           });
           await wppSend(from, msg.trim());
         }
@@ -2392,7 +2480,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "grocery_list_check": {
         const names = ai.grocery?.itemNames ?? [];
-        if (!names.length) { await wppSend(from, "❓ Qual item deseja marcar como comprado?"); break; }
+        if (!names.length) { await wppSend(from, user.locale === "es" ? "❓ ¿Qué artículo quieres marcar como comprado?" : "❓ Qual item deseja marcar como comprado?"); break; }
         const pendingItems = (await getShoppingList(user.id)).filter(i => !i.checked);
         const checked: string[] = [];
         const notFound: string[] = [];
@@ -2481,27 +2569,29 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
         if (suggested.length) {
           for (const item of suggested) await addToShoppingList(user.id, cap(item.productName), item.category);
-          await wppSend(from, `🛒 *Lista sugerida com base no que você mais compra:*\n\n${suggested.map(i => `• ${cap(i.productName)}`).join("\n")}\n\nJá adicionei na sua lista de compras!`);
+          await wppSend(from, user.locale === "es"
+            ? `🛒 *Lista sugerida según lo que compras con más frecuencia:*\n\n${suggested.map(i => `• ${cap(i.productName)}`).join("\n")}\n\nYa la agregué a tu lista de compras.`
+            : `🛒 *Lista sugerida com base no que você mais compra:*\n\n${suggested.map(i => `• ${cap(i.productName)}`).join("\n")}\n\nJá adicionei na sua lista de compras!`);
         } else {
           const fallbackKeys = keys.length ? keys : ["mercearia", "hortifruti"];
           let total = 0;
           for (const key of fallbackKeys) total += await addFromTemplate(user.id, key);
           await wppSend(from, total > 0
-            ? `🛒 Ainda não tenho histórico seu de compras — montei uma lista básica (${total} itens) pra começar. Vai ficando mais personalizada conforme você registra suas compras!`
-            : `❓ Não reconheci essas categorias. Tente: mercearia, carnes, hortifruti, laticínios, padaria, bebidas, higiene ou limpeza.`);
+            ? user.locale === "es" ? `🛒 Todavía no tengo tu historial de compras; preparé una lista básica (${total} artículos) para empezar. Se personalizará a medida que registres compras.` : `🛒 Ainda não tenho histórico seu de compras — montei uma lista básica (${total} itens) pra começar. Vai ficando mais personalizada conforme você registra suas compras!`
+            : user.locale === "es" ? `❓ No reconocí esas categorías. Prueba: abarrotes, carnes, frutas y verduras, lácteos, panadería, bebidas, higiene o limpieza.` : `❓ Não reconheci essas categorias. Tente: mercearia, carnes, hortifruti, laticínios, padaria, bebidas, higiene ou limpeza.`);
         }
         break;
       }
 
       case "grocery_price_compare": {
         const productName = ai.grocery?.productName;
-        if (!productName) { await wppSend(from, `❓ Qual produto você quer comparar? Ex: _"quanto pago no detergente"_`); break; }
+        if (!productName) { await wppSend(from, user.locale === "es" ? `❓ ¿Qué producto quieres comparar? Ej.: _"¿cuánto pago por el detergente?"_` : `❓ Qual produto você quer comparar? Ex: _"quanto pago no detergente"_`); break; }
         const cmp = await getPriceComparison(user.id, productName);
         if (!cmp.length) {
-          await wppSend(from, `❓ Não achei *"${productName}"* no seu histórico em mais de um mercado ainda.`);
+          await wppSend(from, user.locale === "es" ? `❓ Todavía no encontré *"${productName}"* en tu historial de más de un supermercado.` : `❓ Não achei *"${productName}"* no seu histórico em mais de um mercado ainda.`);
         } else {
           const item = cmp[0];
-          let msg = `💰 *${cap(item.productName)}* — preço por mercado:\n\n`;
+          let msg = user.locale === "es" ? `💰 *${cap(item.productName)}* — precio por supermercado:\n\n` : `💰 *${cap(item.productName)}* — preço por mercado:\n\n`;
           item.prices.forEach((p, i) => { msg += `${i === 0 ? "🟢" : "⚪"} ${p.storeName} — ${formatCurrency(p.price)}\n`; });
           await wppSend(from, msg.trim());
         }
@@ -2511,13 +2601,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "grocery_store_ranking": {
         const { ranking, method } = await getStorePriceRanking(user.id);
         if (!ranking.length) {
-          await wppSend(from, "❓ Ainda não tenho compras suficientes pra comparar mercados.");
+          await wppSend(from, user.locale === "es" ? "❓ Todavía no tengo suficientes compras para comparar supermercados." : "❓ Ainda não tenho compras suficientes pra comparar mercados.");
         } else {
-          let msg = `🏆 *Ranking de mercados${method === "avg_ticket" ? " (por ticket médio — poucos itens em comum ainda pra comparar preço)" : ""}:*\n\n`;
+          let msg = user.locale === "es"
+            ? `🏆 *Clasificación de supermercados${method === "avg_ticket" ? " (por compra promedio; todavía hay pocos artículos en común para comparar precios)" : ""}:*\n\n`
+            : `🏆 *Ranking de mercados${method === "avg_ticket" ? " (por ticket médio — poucos itens em comum ainda pra comparar preço)" : ""}:*\n\n`;
           ranking.forEach((r, i) => {
             msg += method === "relative_price"
-              ? `${i + 1}. ${r.storeName} — ${Math.round(r.score * 100)}%${i === 0 ? " 🏅 mais barato" : ""}\n`
-              : `${i + 1}. ${r.storeName} — ${formatCurrency(r.score)}/visita\n`;
+              ? `${i + 1}. ${r.storeName} — ${Math.round(r.score * 100)}%${i === 0 ? user.locale === "es" ? " 🏅 más barato" : " 🏅 mais barato" : ""}\n`
+              : `${i + 1}. ${r.storeName} — ${formatCurrency(r.score)}/${user.locale === "es" ? "visita" : "visita"}\n`;
           });
           await wppSend(from, msg.trim());
         }
@@ -2613,7 +2705,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "employee_update": {
         const empKeyword = ai.keyword || ai.employee?.name || "";
         const empTarget = empKeyword ? await findEmployeeByName(user.id, empKeyword) : null;
-        if (!empTarget) { await wppSend(from, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista."); break; }
+        if (!empTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista.", "❓ No encontré a ese empleado. Escribe *mis empleados* para ver la lista.")); break; }
         const empPatch: Partial<Employee> = {};
         if (ai.employee?.newName) empPatch.name = cap(ai.employee.newName);
         if (ai.employee?.role) empPatch.role = cap(ai.employee.role);
@@ -2622,18 +2714,18 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.employee?.phone) empPatch.phone = ai.employee.phone;
         if (ai.employee?.email) empPatch.email = ai.employee.email;
         if (ai.employee?.notes) empPatch.notes = ai.employee.notes;
-        if (Object.keys(empPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o salário da Ana para 2200\"_"); break; }
+        if (Object.keys(empPatch).length === 0) { await wppSend(from, localized(user.locale, "❓ O que deseja alterar? Ex: _\"muda o salário da Ana para 2200\"_", "❓ ¿Qué quieres cambiar? Ej.: _\"cambia el sueldo de Ana a 2200\"_")); break; }
         const empUpdated = await updateEmployee(empTarget.id, user.id, empPatch);
-        await wppSend(from, empUpdated ? replyEmployeeUpdated(empUpdated, user.locale) : "❌ Não consegui atualizar esse funcionário agora. Nada foi modificado; tente novamente.");
+        await wppSend(from, empUpdated ? replyEmployeeUpdated(empUpdated, user.locale) : localized(user.locale, "❌ Não consegui atualizar esse funcionário agora. Nada foi modificado; tente novamente.", "❌ No pude actualizar a este empleado. No se modificó nada; inténtalo de nuevo."));
         break;
       }
 
       case "employee_deactivate": {
         const deactKeyword = ai.keyword || ai.employee?.name || "";
         const deactTarget = deactKeyword ? await findEmployeeByName(user.id, deactKeyword) : null;
-        if (!deactTarget) { await wppSend(from, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista."); break; }
+        if (!deactTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista.", "❓ No encontré a ese empleado. Escribe *mis empleados* para ver la lista.")); break; }
         const deactivated = await updateEmployee(deactTarget.id, user.id, { status: "inactive" });
-        await wppSend(from, deactivated ? replyEmployeeDeactivated(deactivated, user.locale) : "❌ Não consegui desativar esse funcionário agora. Tente novamente.");
+        await wppSend(from, deactivated ? replyEmployeeDeactivated(deactivated, user.locale) : localized(user.locale, "❌ Não consegui desativar esse funcionário agora. Tente novamente.", "❌ No pude desactivar a este empleado. Inténtalo de nuevo."));
         break;
       }
 
@@ -2660,25 +2752,25 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "customer_update": {
         const custKeyword = ai.keyword || ai.customer?.name || "";
         const custTarget = custKeyword ? await findCustomerByName(user.id, custKeyword) : null;
-        if (!custTarget) { await wppSend(from, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista."); break; }
+        if (!custTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista.", "❓ No encontré a ese cliente. Escribe *mis clientes* para ver la lista.")); break; }
         const custPatch: Partial<Customer> = {};
         if (ai.customer?.phone) custPatch.phone = ai.customer.phone;
         if (ai.customer?.email) custPatch.email = ai.customer.email;
         if (ai.customer?.company) custPatch.company = ai.customer.company;
         if (ai.customer?.address) custPatch.address = ai.customer.address;
         if (ai.customer?.notes) custPatch.notes = ai.customer.notes;
-        if (Object.keys(custPatch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o telefone do Pedro para 11988887777\"_"); break; }
+        if (Object.keys(custPatch).length === 0) { await wppSend(from, localized(user.locale, "❓ O que deseja alterar? Ex: _\"muda o telefone do Pedro para 11988887777\"_", "❓ ¿Qué quieres cambiar? Ej.: _\"cambia el teléfono de Pedro a 56912345678\"_")); break; }
         const custUpdated = await updateCustomer(custTarget.id, user.id, custPatch);
-        await wppSend(from, custUpdated ? replyCustomerUpdated(custUpdated, user.locale) : "❌ Não consegui atualizar esse cliente agora. Nada foi modificado; tente novamente.");
+        await wppSend(from, custUpdated ? replyCustomerUpdated(custUpdated, user.locale) : localized(user.locale, "❌ Não consegui atualizar esse cliente agora. Nada foi modificado; tente novamente.", "❌ No pude actualizar a este cliente. No se modificó nada; inténtalo de nuevo."));
         break;
       }
 
       case "customer_deactivate": {
         const custDeactKeyword = ai.keyword || ai.customer?.name || "";
         const custDeactTarget = custDeactKeyword ? await findCustomerByName(user.id, custDeactKeyword) : null;
-        if (!custDeactTarget) { await wppSend(from, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista."); break; }
+        if (!custDeactTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista.", "❓ No encontré a ese cliente. Escribe *mis clientes* para ver la lista.")); break; }
         const custDeactivated = await updateCustomer(custDeactTarget.id, user.id, { status: "inactive" });
-        await wppSend(from, custDeactivated ? replyCustomerDeactivated(custDeactivated, user.locale) : "❌ Não consegui desativar esse cliente agora. Tente novamente.");
+        await wppSend(from, custDeactivated ? replyCustomerDeactivated(custDeactivated, user.locale) : localized(user.locale, "❌ Não consegui desativar esse cliente agora. Tente novamente.", "❌ No pude desactivar a este cliente. Inténtalo de nuevo."));
         break;
       }
 
@@ -2694,7 +2786,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.recurring?.employeePayment) {
           const activeEmployees = await getEmployeesByUser(user.id, "active");
           if (activeEmployees.length === 0) {
-            await wppSend(from, `👥 Você ainda não tem funcionários cadastrados.\n\nPara registrar esse pagamento, primeiro cadastre o funcionário — me diga o nome, cargo e salário. Ex:\n_"cadastra a Ana como vendedora, salário 2000"_`);
+            await wppSend(from, localized(user.locale,
+              `👥 Você ainda não tem funcionários cadastrados.\n\nPara registrar esse pagamento, primeiro cadastre o funcionário — me diga o nome, cargo e salário. Ex:\n_"cadastra a Ana como vendedora, salário 2000"_`,
+              `👥 Todavía no tienes empleados registrados.\n\nPara registrar este pago, primero registra al empleado e indica su nombre, puesto y sueldo. Ej.:\n_"registra a Ana como vendedora, sueldo 2000"_`));
             break;
           }
           let targetEmployee = ai.recurring.employeeName ? await findEmployeeByName(user.id, ai.recurring.employeeName) : null;
@@ -2706,9 +2800,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               recurringData: ai.recurring, originalText: messageText,
               employees: activeEmployees.map(e => ({ id: e.id, name: e.name, role: e.role })),
             });
-            let msg = `👥 Para qual funcionário é esse pagamento?\n\n`;
+            let msg = user.locale === "es" ? `👥 ¿Para qué empleado es este pago?\n\n` : `👥 Para qual funcionário é esse pagamento?\n\n`;
             activeEmployees.forEach((e, i) => { msg += `*${i + 1}.* ${e.name} — ${e.role}\n`; });
-            msg += `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
+            msg += user.locale === "es" ? `\nResponde con el número o el nombre. ⏱ _Válido durante 5 minutos._` : `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
             await wppSend(from, msg);
             break;
           }
@@ -2729,19 +2823,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "recurring_cancel": {
         const keyword = ai.keyword || "";
-        if (!keyword) { await wppSend(from, "❓ Qual recorrente ou parcela deseja cancelar?"); break; }
+        if (!keyword) { await wppSend(from, localized(user.locale, "❓ Qual recorrente ou parcela deseja cancelar?", "❓ ¿Qué movimiento recurrente o cuota quieres cancelar?")); break; }
         const found = await findRecurringByDescription(user.id, keyword);
-        if (!found) { await wppSend(from, `❓ Não encontrei recorrente com *"${keyword}"*.\n\nDigite *minhas parcelas* para ver a lista.`); break; }
+        if (!found) { await wppSend(from, localized(user.locale, `❓ Não encontrei recorrente com *"${keyword}"*.\n\nDigite *minhas parcelas* para ver a lista.`, `❓ No encontré ningún movimiento recurrente con *"${keyword}"*.\n\nEscribe *mis cuotas* para ver la lista.`)); break; }
         await cancelRecurring(found.id, user.id);
-        await wppSend(from, `✅ *${found.description}* cancelado(a)!\n\nSe quiser reativar, acesse *Recorrentes* no dashboard.`);
+        await wppSend(from, localized(user.locale, `✅ *${found.description}* cancelado(a)!\n\nSe quiser reativar, acesse *Recorrentes* no dashboard.`, `✅ *${found.description}* se canceló.\n\nSi quieres reactivarlo, entra en *Recurrentes* en el panel.`));
         break;
       }
 
       case "recurring_edit": {
         const editKw = ai.keyword || ai.recurring?.description || "";
-        if (!editKw) { await wppSend(from, "❓ Qual recorrente ou parcela deseja editar?"); break; }
+        if (!editKw) { await wppSend(from, localized(user.locale, "❓ Qual recorrente ou parcela deseja editar?", "❓ ¿Qué movimiento recurrente o cuota quieres editar?")); break; }
         const editFound = await findRecurringByDescription(user.id, editKw);
-        if (!editFound) { await wppSend(from, `❓ Não encontrei recorrente com *"${editKw}"*.\n\nDigite *minhas parcelas* para ver a lista.`); break; }
+        if (!editFound) { await wppSend(from, localized(user.locale, `❓ Não encontrei recorrente com *"${editKw}"*.\n\nDigite *minhas parcelas* para ver a lista.`, `❓ No encontré ningún movimiento recurrente con *"${editKw}"*.\n\nEscribe *mis cuotas* para ver la lista.`)); break; }
         const patch: Parameters<typeof updateRecurring>[2] = {};
         if (ai.recurring?.amount) patch.amount = ai.recurring.amount;
         if (ai.recurring?.description) patch.description = cap(ai.recurring.description);
@@ -2749,11 +2843,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.recurring?.dayOfMonth) patch.dayOfMonth = ai.recurring.dayOfMonth;
         if (ai.recurring?.repeatUnit) patch.repeatUnit = ai.recurring.repeatUnit;
         if (ai.recurring?.totalInstallments) patch.totalInstallments = ai.recurring.totalInstallments;
-        if (Object.keys(patch).length === 0) { await wppSend(from, "❓ O que deseja alterar? Ex: _\"muda o netflix para 65 reais\"_ ou _\"a academia é só até dezembro, 5 meses\"_"); break; }
+        if (Object.keys(patch).length === 0) { await wppSend(from, localized(user.locale, "❓ O que deseja alterar? Ex: _\"muda o netflix para 65 reais\"_ ou _\"a academia é só até dezembro, 5 meses\"_", "❓ ¿Qué quieres cambiar? Ej.: _\"cambia Netflix a 65 dólares\"_ o _\"el gimnasio termina en diciembre, 5 meses\"_")); break; }
         const editUpdated = await updateRecurring(editFound.id, user.id, patch);
         if (editUpdated) {
-          await wppSend(from, `✏️ *${editUpdated.description}* atualizado!\n\n💰 Novo valor: ${formatCurrency(editUpdated.amount)}`);
-        } else await wppSend(from, "❌ Não consegui atualizar esse recorrente agora. Nada foi modificado; tente novamente.");
+          await wppSend(from, localized(user.locale, `✏️ *${editUpdated.description}* atualizado!\n\n💰 Novo valor: ${formatCurrency(editUpdated.amount)}`, `✏️ *${editUpdated.description}* se actualizó.\n\n💰 Nuevo importe: ${formatCurrency(editUpdated.amount)}`));
+        } else await wppSend(from, localized(user.locale, "❌ Não consegui atualizar esse recorrente agora. Nada foi modificado; tente novamente.", "❌ No pude actualizar este movimiento recurrente. No se modificó nada; inténtalo de nuevo."));
         break;
       }
 
@@ -2783,14 +2877,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "drive_rename": {
         const newName = ai.keyword || "";
-        if (!newName) { await wppSend(from, "❓ Qual o novo nome para o arquivo?"); break; }
+        if (!newName) { await wppSend(from, localized(user.locale, "❓ Qual o novo nome para o arquivo?", "❓ ¿Cuál será el nuevo nombre del archivo?")); break; }
         const recentFile = await getRecentFile(user.id);
-        if (!recentFile) { await wppSend(from, "❓ Não encontrei nenhum arquivo recente no Drive."); break; }
+        if (!recentFile) { await wppSend(from, localized(user.locale, "❓ Não encontrei nenhum arquivo recente no Drive.", "❓ No encontré ningún archivo reciente en Drive.")); break; }
         // Gera um nome de arquivo "limpo" a partir da descrição (sem caracteres especiais)
         const ext = recentFile.originalName.includes(".") ? recentFile.originalName.slice(recentFile.originalName.lastIndexOf(".")) : "";
         const cleanName = newName.toLowerCase().replace(/[^a-z0-9\s\-_]/g, "").replace(/\s+/g, "_").slice(0, 60) + ext;
         await updateFile(recentFile.id, user.id, { originalName: cleanName, description: newName });
-        await wppSend(from, `✅ *Arquivo renomeado!*\n\n📄 ${cleanName}\n💬 Descrição: ${newName}\n\nJá está atualizado no *📁 Drive*. Para encontrar depois: _"ache ${newName}"_`);
+        await wppSend(from, localized(user.locale, `✅ *Arquivo renomeado!*\n\n📄 ${cleanName}\n💬 Descrição: ${newName}\n\nJá está atualizado no *📁 Drive*. Para encontrar depois: _"ache ${newName}"_`, `✅ *¡Archivo renombrado!*\n\n📄 ${cleanName}\n💬 Descripción: ${newName}\n\nYa está actualizado en *📁 Drive*. Para encontrarlo después: _"busca ${newName}"_`));
         break;
       }
 
@@ -2809,10 +2903,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "agenda_update": {
         const keyword = ai.keyword || "";
-        if (!keyword) { await wppSend(from, "❓ Qual compromisso deseja alterar?"); break; }
+        if (!keyword) { await wppSend(from, localized(user.locale, "❓ Qual compromisso deseja alterar?", "❓ ¿Qué cita quieres cambiar?")); break; }
         const matches = await findAppointmentsByKeyword(user.id, keyword);
         if (matches.length === 0) {
-          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
+          await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${keyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
           const patch = appointmentPatchFromAi(ai, matches[0]);
           if (Object.keys(patch).length === 0) {
@@ -2821,44 +2915,46 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               appointments: [{ id: matches[0].id, title: matches[0].title, startAt: matches[0].startAt, location: matches[0].location }],
               awaitingPatch: true, mode,
             });
-            await wppSend(from, `Certo, encontrei *${matches[0].title}*. O que deseja alterar?\n\nExemplos:\n• _muda para dia 10 às 15h_\n• _altera o local para Escritório_\n• _me avisa 1 hora antes_`);
+            await wppSend(from, localized(user.locale, `Certo, encontrei *${matches[0].title}*. O que deseja alterar?\n\nExemplos:\n• _muda para dia 10 às 15h_\n• _altera o local para Escritório_\n• _me avisa 1 hora antes_`, `Encontré *${matches[0].title}*. ¿Qué quieres cambiar?\n\nEjemplos:\n• _cámbiala al día 10 a las 15:00_\n• _cambia el lugar a Oficina_\n• _avísame 1 hora antes_`));
             break;
           }
           const updated = await updateAppointment(matches[0].id, user.id, patch);
-          await wppSend(from, updated ? replyAgendaUpdated(updated, user.locale) : "❌ Não consegui alterar o compromisso agora. Nada foi modificado; tente novamente.");
+          await wppSend(from, updated ? replyAgendaUpdated(updated, user.locale) : localized(user.locale, "❌ Não consegui alterar o compromisso agora. Nada foi modificado; tente novamente.", "❌ No pude cambiar esta cita. No se modificó nada; inténtalo de nuevo."));
         } else {
           const patch = appointmentPatchFromAi(ai);
-          await askWhichAppointment(from, user.id, matches, "update", `reagendar/alterar`, patch);
+          await askWhichAppointment(from, user.id, matches, "update", user.locale === "es" ? "reprogramar o cambiar" : "reagendar/alterar", patch, { locale: user.locale });
         }
         break;
       }
 
       case "agenda_delete": {
         const keyword = ai.keyword || "";
-        if (!keyword) { await wppSend(from, "❓ Qual compromisso deseja cancelar?"); break; }
+        if (!keyword) { await wppSend(from, localized(user.locale, "❓ Qual compromisso deseja cancelar?", "❓ ¿Qué cita quieres cancelar?")); break; }
         const matches = await findAppointmentsByKeyword(user.id, keyword);
         if (matches.length === 0) {
-          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
+          await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${keyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
           const deleted = await deleteAppointment(matches[0].id, user.id);
-          await wppSend(from, deleted ? replyAgendaDeleted(matches[0].title, user.locale) : "❌ Não consegui cancelar esse compromisso agora. Tente novamente.");
+          await wppSend(from, deleted ? replyAgendaDeleted(matches[0].title, user.locale) : localized(user.locale, "❌ Não consegui cancelar esse compromisso agora. Tente novamente.", "❌ No pude cancelar esta cita. Inténtalo de nuevo."));
         } else {
-          await askWhichAppointment(from, user.id, matches, "delete", "cancelar");
+          await askWhichAppointment(from, user.id, matches, "delete", "cancelar", undefined, { locale: user.locale });
         }
         break;
       }
 
       case "agenda_done": {
         const doneKeyword = ai.keyword || "";
-        if (!doneKeyword) { await wppSend(from, "❓ Qual compromisso deseja marcar como feito?"); break; }
+        if (!doneKeyword) { await wppSend(from, localized(user.locale, "❓ Qual compromisso deseja marcar como feito?", "❓ ¿Qué cita quieres marcar como realizada?")); break; }
         const matches = await findAppointmentsByKeyword(user.id, doneKeyword);
         if (matches.length === 0) {
-          await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${doneKeyword}"*.\n\nDigite *meus compromissos* para ver a lista.`);
+          await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${doneKeyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${doneKeyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
           const updated = await updateAppointment(matches[0].id, user.id, { status: "done" });
-          await wppSend(from, updated ? `✅ Marquei como realizado.\n\n📅 ${matches[0].title}` : "❌ Não consegui marcar esse compromisso como realizado. Tente novamente.");
+          await wppSend(from, updated
+            ? localized(user.locale, `✅ Marquei como realizado.\n\n📅 ${matches[0].title}`, `✅ La marqué como realizada.\n\n📅 ${matches[0].title}`)
+            : localized(user.locale, "❌ Não consegui marcar esse compromisso como realizado. Tente novamente.", "❌ No pude marcar esta cita como realizada. Inténtalo de nuevo."));
         } else {
-          await askWhichAppointment(from, user.id, matches, "done", "marcar como feito");
+          await askWhichAppointment(from, user.id, matches, "done", user.locale === "es" ? "marcar como realizada" : "marcar como feito", undefined, { locale: user.locale });
         }
         break;
       }
@@ -2870,11 +2966,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           ? await findAppointmentsByKeyword(user.id, addMeetKeyword)
           : (await getUpcomingAppointments(user.id, 1));
         if (addMeetMatches.length === 0) {
-          await wppSend(from, `❓ Não encontrei o compromisso${addMeetKeyword ? ` com *"${addMeetKeyword}"*` : ""}.\n\nDigite *meus compromissos* para ver a lista.`);
+          await wppSend(from, localized(user.locale,
+            `❓ Não encontrei o compromisso${addMeetKeyword ? ` com *"${addMeetKeyword}"*` : ""}.\n\nDigite *meus compromissos* para ver a lista.`,
+            `❓ No encontré la cita${addMeetKeyword ? ` con *"${addMeetKeyword}"*` : ""}.\n\nEscribe *mis citas* para ver la lista.`,
+          ));
         } else if (addMeetMatches.length === 1) {
-          await performAddMeet(addMeetMatches[0], user.id, from);
+          await performAddMeet(addMeetMatches[0], user.id, from, user.locale);
         } else {
-          await askWhichAppointment(from, user.id, addMeetMatches, "add_meet", "adicionar o Meet");
+          await askWhichAppointment(from, user.id, addMeetMatches, "add_meet", user.locale === "es" ? "añadir Google Meet" : "adicionar o Meet", undefined, { locale: user.locale });
         }
         break;
       }
@@ -2882,7 +2981,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "meet_create": {
         const rawMeetItems = ai.meetItems?.length ? ai.meetItems : ai.meetData ? [ai.meetData] : [];
         if (!rawMeetItems.length || rawMeetItems.some(item => !item.startDate || !item.startTime)) {
-          await wppSend(from, `🗓️ Me diga a data e horário da reunião!\n\nEx: _"reunião amanhã às 14h"_\nEx: _"meet hoje às 16h com João (11 99999-9999)"_`);
+          await wppSend(from, localized(user.locale, `🗓️ Me diga a data e horário da reunião!\n\nEx: _"reunião amanhã às 14h"_\nEx: _"meet hoje às 16h com João (11 99999-9999)"_`, `🗓️ Indícame la fecha y la hora de la reunión.\n\nEj.: _"reunión mañana a las 14:00"_\nEj.: _"Meet hoy a las 16:00 con Juan (+56 9 1234 5678)"_`));
           break;
         }
         const pendingMeetItems = rawMeetItems.slice(0, 30).map(d => {
@@ -2925,8 +3024,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "mode_switch": {
         if (phoneAccess !== "both") {
-          const accessLabel = phoneAccess === "personal" ? "pessoal" : "empresarial";
-          await wppSend(from, `❌ Você só tem acesso ao modo *${accessLabel}* nessa conta.`);
+          const accessLabel = phoneAccess === "personal"
+            ? (user.locale === "es" ? "personal" : "pessoal")
+            : "empresarial";
+          await wppSend(from, user.locale === "es"
+            ? `❌ Solo tienes acceso al modo *${accessLabel}* en esta cuenta.`
+            : user.locale === "pt-PT"
+              ? `❌ Só tens acesso ao modo *${accessLabel}* nesta conta.`
+              : `❌ Você só tem acesso ao modo *${accessLabel}* nessa conta.`);
           break;
         }
         const newMode = ai.mode || (mode === "personal" ? "business" : "personal");
@@ -2939,7 +3044,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.response) {
           await wppSend(from, ai.response);
         } else {
-          await wppSend(from, replyHelp(user.locale));
+          await wppSendLong(from, replyHelp(user.locale));
         }
         break;
       }
@@ -2960,7 +3065,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       case "help": {
-        await wppSend(from, replyHelp(user.locale));
+        await wppSendLong(from, replyHelp(user.locale));
         break;
       }
 
@@ -2996,46 +3101,55 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Ação irreversível — nunca decide sozinho o modo por engano.
         // Sem sinal explícito na mensagem (nem da IA, nem no texto cru),
         // pergunta em vez de assumir "os dois" ou só um dos modos.
-        const lowerMsg = messageText.toLowerCase();
+        const lowerMsg = messageText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         let clearMode: "personal" | "business" | "both" | null = ai.mode ?? null;
         if (!clearMode) {
-          if (/\bpessoal\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b/.test(lowerMsg)) clearMode = "personal";
-          else if (/\bempresa(rial)?\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b/.test(lowerMsg)) clearMode = "business";
-          else if (/\bos dois\b|\btudo\b|\bambos\b/.test(lowerMsg)) clearMode = "both";
+          if (/\b(?:pessoal|personal)\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b|\blos dos\b|\btodo\b/.test(lowerMsg)) clearMode = "personal";
+          else if (/\bempresa(rial)?\b|\bnegocio\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b|\blos dos\b|\btodo\b/.test(lowerMsg)) clearMode = "business";
+          else if (/\bos dois\b|\btudo\b|\bambos\b|\blos dos\b|\btodo\b/.test(lowerMsg)) clearMode = "both";
         }
         if (!clearMode) {
-          await wppSend(from, "❓ Isso vai apagar seu histórico financeiro. É do modo *pessoal*, *empresa*, ou *os dois*?");
+          await wppSend(from, user.locale === "es"
+            ? "❓ Esto borrará tu historial financiero. ¿Es del modo *personal*, *empresarial* o *los dos*?"
+            : "❓ Isso vai apagar seu histórico financeiro. É do modo *pessoal*, *empresa*, ou *os dois*?");
           break;
         }
 
         const count = await countFinances(user.id, clearMode);
         if (count === 0) {
-          await wppSend(from, "Não encontrei nenhum lançamento pra apagar nesse modo.");
+          await wppSend(from, user.locale === "es" ? "No encontré ningún movimiento para borrar en ese modo." : "Não encontrei nenhum lançamento pra apagar nesse modo.");
           break;
         }
-        const modeLabel = clearMode === "personal" ? "pessoal" : clearMode === "business" ? "empresarial" : "pessoal e empresarial";
+        const modeLabel = user.locale === "es"
+          ? clearMode === "personal" ? "personal" : clearMode === "business" ? "empresarial" : "personal y empresarial"
+          : clearMode === "personal" ? "pessoal" : clearMode === "business" ? "empresarial" : "pessoal e empresarial";
         await setPendingAction(from, { type: "confirm_clear_history", userId: user.id, mode: clearMode, count });
-        await wppSend(from, `⚠️ Isso vai apagar *${count} lançamento${count === 1 ? "" : "s"}* do histórico ${modeLabel} — despesas e receitas, de vez, sem como desfazer.\n\nSe tiver certeza, responda exatamente *apagar tudo*. Qualquer outra coisa cancela.`);
+        await wppSend(from, user.locale === "es"
+          ? `⚠️ Esto borrará *${count} ${count === 1 ? "movimiento" : "movimientos"}* del historial ${modeLabel} — gastos e ingresos, definitivamente.\n\nSi estás seguro, responde exactamente *borrar todo*. Cualquier otra respuesta cancela la acción.`
+          : `⚠️ Isso vai apagar *${count} lançamento${count === 1 ? "" : "s"}* do histórico ${modeLabel} — despesas e receitas, de vez, sem como desfazer.\n\nSe tiver certeza, responda exatamente *apagar tudo*. Qualquer outra coisa cancela.`);
         break;
       }
 
       default: {
-        const lower = messageText.toLowerCase();
-        if (lower.includes("ajuda") || lower === "?") {
-          await wppSend(from, replyHelp(user.locale));
-        } else if (lower.includes("saldo") || lower.includes("resumo")) {
+        const lower = messageText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (lower.includes("ajuda") || lower.includes("ayuda") || lower === "help" || lower === "?") {
+          await wppSendLong(from, replyHelp(user.locale));
+        } else if (lower.includes("saldo") || lower.includes("resumo") || lower.includes("resumen")) {
           const personal = await getBalance(user.id, "personal", year, month);
           const business = await getBalance(user.id, "business", year, month);
           await wppSend(from, replyBalance(personal, business, undefined, undefined, user.locale));
-        } else if (lower.includes("extrato") || lower.includes("últimos") || lower.includes("ultimos")) {
+        } else if (lower.includes("extrato") || lower.includes("extracto") || lower.includes("ultimos")) {
           const recents = await getRecentTransactions(user.id, mode, 10);
           if (!recents.length) {
-            await wppSend(from, "📋 Nenhum lançamento encontrado ainda.");
+            await wppSend(from, user.locale === "es" ? "📋 Todavía no encontré ningún movimiento." : "📋 Nenhum lançamento encontrado ainda.");
           } else {
-            let msg = `📋 *Últimos lançamentos (${mode === "business" ? "Empresa" : "Pessoal"}):*\n\n`;
+            let msg = user.locale === "es"
+              ? `📋 *Últimos movimientos (${mode === "business" ? "Empresa" : "Personal"}):*\n\n`
+              : `📋 *Últimos lançamentos (${mode === "business" ? "Empresa" : "Pessoal"}):*\n\n`;
             recents.forEach((f, i) => {
               const emoji = f.type === "income" ? "💰" : "💸";
-              msg += `${i + 1}. ${emoji} ${f.description} — ${formatCurrency(f.amount)}\n   📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${f.category}\n\n`;
+              const dateLocale = user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR";
+              msg += `${i + 1}. ${emoji} ${f.description} — ${formatCurrency(f.amount)}\n   📅 ${new Date(f.date + "T12:00:00").toLocaleDateString(dateLocale)} · ${f.category}\n\n`;
             });
             await wppSend(from, msg.trim());
           }
@@ -3050,7 +3164,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
   } catch (e) {
     console.error("[message-handler]", e);
     if (from) {
-      try { await wppSend(from, "Ops, deu um problema aqui do meu lado tentando processar isso. 🙏 Pode mandar de novo? Se continuar acontecendo, me avisa que eu confirmo se ficou registrado do jeito certo."); } catch { /* ignora */ }
+      if (!responseLocale) {
+        try { responseLocale = (await getUserByWppPhone(from))?.locale; } catch { /* usa o DDI abaixo */ }
+      }
+      try { await wppSend(from, replyProcessingError(responseLocale ?? localeForWhatsAppPhone(from))); } catch { /* ignora */ }
     }
     return;
   }

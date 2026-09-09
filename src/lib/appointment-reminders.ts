@@ -27,6 +27,19 @@ const NUMBER_WORDS: Record<string, number> = {
   trinta: 30,
   quarenta: 40,
   cinquenta: 50,
+  uno: 1,
+  una: 1,
+  dos: 2,
+  cuatro: 4,
+  siete: 7,
+  ocho: 8,
+  nueve: 9,
+  diez: 10,
+  quince: 15,
+  veinte: 20,
+  treinta: 30,
+  cuarenta: 40,
+  cincuenta: 50,
 };
 
 function withoutAccents(text: string): string {
@@ -41,7 +54,7 @@ function amountFrom(raw: string | undefined): number | null {
 
 export function parseAppointmentReminderRequest(text: string): AppointmentReminderRequest | null {
   const normalized = withoutAccents(text);
-  const verbRe = /\b(?:avisa|avise|avisar|lembra|lembre|lembrar)\b/g;
+  const verbRe = /\b(?:avisa|avise|avisar|avisame|lembra|lembre|lembrar|recuerda|recuerdame|recordar)\b/g;
   const beforeIndex = normalized.lastIndexOf("antes");
   const verbMatches = [...normalized.matchAll(verbRe)].filter(match => (match.index ?? -1) < beforeIndex);
   const lastVerb = verbMatches.at(-1);
@@ -54,11 +67,11 @@ export function parseAppointmentReminderRequest(text: string): AppointmentRemind
   const durationClause = normalized.slice(lastVerb.index, beforeIndex);
 
   let offsetMinutes: number | null = null;
-  if (/\bmeia\s+hora\b/.test(durationClause)) {
+  if (/\b(?:meia|media)\s+hora\b/.test(durationClause)) {
     offsetMinutes = 30;
   } else {
-    const hours = durationClause.match(/\b(\d{1,2}|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez)\s*(?:h\b|hora(?:s)?\b)/);
-    const minutes = durationClause.match(/\b(\d{1,3}|quinze|vinte|trinta|quarenta|cinquenta)\s*(?:min\b|minuto(?:s)?\b)/);
+    const hours = durationClause.match(/\b(\d{1,2}|um|uma|dois|duas|uno|una|dos|tres|quatro|cuatro|cinco|seis|sete|siete|oito|ocho|nove|nueve|dez|diez)\s*(?:h\b|hora(?:s)?\b)/);
+    const minutes = durationClause.match(/\b(\d{1,3}|quinze|quince|vinte|veinte|trinta|treinta|quarenta|cuarenta|cinquenta|cincuenta)\s*(?:min\b|minuto(?:s)?\b)/);
     const hourAmount = amountFrom(hours?.[1]);
     const minuteAmount = amountFrom(minutes?.[1]);
     if (hourAmount !== null || minuteAmount !== null) {
@@ -71,10 +84,10 @@ export function parseAppointmentReminderRequest(text: string): AppointmentRemind
 
   // Preserva acentos no termo usado na busca ("reunião" deve encontrar
   // "Reunião"), removendo apenas artigos/possessivos e pontuação final.
-  const keywordMatch = text.match(/\bantes\s+d(?:a|o|e)\s+(.+?)\s*[.!?]*$/i);
+  const keywordMatch = text.match(/\bantes\s+(?:d(?:a|o|e)|de\s+la|del)\s+(.+?)\s*[.!?]*$/i);
   const keyword = keywordMatch?.[1]
     ?.trim()
-    .replace(/^(?:a|o|minha|meu|essa|esse|aquele|aquela)\s+/i, "")
+    .replace(/^(?:a|o|minha|meu|essa|esse|aquele|aquela|la|el|mi|esta|este|esa|ese)\s+/i, "")
     .replace(/[.!?]+$/g, "")
     .trim();
 
@@ -85,10 +98,10 @@ export function appointmentReminderAt(startAt: string, offsetMinutes: number): s
   return new Date(new Date(startAt).getTime() - offsetMinutes * 60_000).toISOString();
 }
 
-export function formatReminderOffset(offsetMinutes: number): string {
+export function formatReminderOffset(offsetMinutes: number, locale?: string): string {
   if (offsetMinutes % 1_440 === 0) {
     const days = offsetMinutes / 1_440;
-    return `${days} dia${days === 1 ? "" : "s"}`;
+    return `${days} ${locale === "es" ? "día" : "dia"}${days === 1 ? "" : "s"}`;
   }
   if (offsetMinutes % 60 === 0) {
     const hours = offsetMinutes / 60;

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { meetLink, calendarEventId } = await createMeetEvent({
+    const { meetLink, calendarEventId, googleCalendarId } = await createMeetEvent({
       userId: session.sub, title, description, startAt, endAt, attendees: attendees || [],
     });
     const meet = await createMeet({
@@ -54,6 +54,9 @@ export async function POST(req: NextRequest) {
       repeat: "none",
       status: "scheduled",
       source: "web",
+      meetLink,
+      calendarEventId,
+      googleCalendarId,
     });
     return NextResponse.json(meet, { status: 201 });
   } catch (e) {

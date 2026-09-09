@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   markReminderFailed: vi.fn(),
   markReminderSkippedForInactiveUser: vi.fn(),
   sendReminderTemplate: vi.fn(),
+  buildReminderTemplateDispatch: vi.fn(),
   acquireCronLock: vi.fn(),
   releaseCronLock: vi.fn(),
   getUserById: vi.fn(),
@@ -19,7 +20,10 @@ vi.mock("@/lib/reminders", () => ({
   markReminderFailed: mocks.markReminderFailed,
   markReminderSkippedForInactiveUser: mocks.markReminderSkippedForInactiveUser,
 }));
-vi.mock("@/lib/whatsapp", () => ({ sendReminderTemplate: mocks.sendReminderTemplate }));
+vi.mock("@/lib/whatsapp", () => ({
+  sendReminderTemplate: mocks.sendReminderTemplate,
+  buildReminderTemplateDispatch: mocks.buildReminderTemplateDispatch,
+}));
 vi.mock("@/lib/cron-lock", () => ({ acquireCronLock: mocks.acquireCronLock, releaseCronLock: mocks.releaseCronLock }));
 vi.mock("@/lib/users", () => ({ getUserById: mocks.getUserById, hasAccess: mocks.hasAccess }));
 
@@ -47,6 +51,11 @@ describe("cron de lembretes e assinatura", () => {
     mocks.releaseCronLock.mockResolvedValue(undefined);
     mocks.getDueReminders.mockResolvedValue([reminder]);
     mocks.getUserById.mockResolvedValue({ id: "user-1", status: "inactive", name: "Cliente" });
+    mocks.buildReminderTemplateDispatch.mockReturnValue({
+      templateName: "lbt_pessoal",
+      renderedText: "Lembrete",
+      params: { texto: "Tomar remédio" },
+    });
   });
 
   it("does not send and advances a reminder owned by an inactive account", async () => {
@@ -68,6 +77,11 @@ describe("cron de lembretes e assinatura", () => {
     await GET(new NextRequest("http://localhost/api/cron/reminders?secret=test-secret"));
 
     expect(mocks.sendReminderTemplate).toHaveBeenCalledTimes(1);
+    expect(mocks.buildReminderTemplateDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      message: "Tomar remédio",
+      recipientType: "self",
+      mode: "personal",
+    }));
     expect(mocks.markReminderSent).toHaveBeenCalledWith("reminder-1", "daily");
     expect(mocks.markReminderSkippedForInactiveUser).not.toHaveBeenCalled();
   });

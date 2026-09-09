@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
 
   let meetLink: string | undefined;
   let calendarEventId: string | undefined;
+  let googleCalendarId: string | undefined;
 
   if (withMeet && endAt) {
     if (!(await isConnected(session.sub))) {
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
       });
       meetLink = result.meetLink;
       calendarEventId = result.calendarEventId;
+      googleCalendarId = result.googleCalendarId;
     } catch (e) {
       console.error("[agenda POST meet]", e);
       return NextResponse.json({ error: "Erro ao criar Google Meet. Verifique a conexão Google." }, { status: 500 });
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest) {
     source: "web",
     meetLink,
     calendarEventId,
+    googleCalendarId,
   });
 
   return NextResponse.json(appointment, { status: 201 });

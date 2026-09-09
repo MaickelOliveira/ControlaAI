@@ -371,16 +371,16 @@ export function parseFinanceChoice(
   if (!isNaN(num) && num >= 1 && num <= candidates.length) return num - 1;
 
   // "último", "ultimo", "mais recente", "last", "recente"
-  if (/^(último|ultimo|mais recente|recente|last|o último|o ultimo)$/.test(t)) return 0;
+  if (/^(último|ultimo|mais recente|más reciente|mas reciente|recente|last|o último|o ultimo|el último|el ultimo)$/.test(t)) return 0;
 
   // Tentativa de match por data: "04/07", "4/7", "04-07", "4 de julho", "hoje", "ontem"
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-  if (t === "hoje" || t === "today") {
+  if (t === "hoje" || t === "hoy" || t === "today") {
     const idx = candidates.findIndex(c => c.date === today);
     if (idx !== -1) return idx;
   }
-  if (t === "ontem" || t === "yesterday") {
+  if (t === "ontem" || t === "ayer" || t === "yesterday") {
     const idx = candidates.findIndex(c => c.date === yesterday);
     if (idx !== -1) return idx;
   }
@@ -399,6 +399,8 @@ export function parseFinanceChoice(
     janeiro: "01", fevereiro: "02", março: "03", marco: "03", abril: "04",
     maio: "05", junho: "06", julho: "07", agosto: "08", setembro: "09",
     outubro: "10", novembro: "11", dezembro: "12",
+    enero: "01", febrero: "02", marzo: "03", mayo: "05", junio: "06",
+    julio: "07", septiembre: "09", octubre: "10", noviembre: "11", diciembre: "12",
   };
   const monthMatch = t.match(/^(\d{1,2})\s+(?:de\s+)?(\w+)$/);
   if (monthMatch) {
@@ -433,12 +435,12 @@ export function parseFinanceChoiceMulti(
     /\s+(?:(?:do|no)\s+dia|de\s+la\s+fecha|del\s+dia)\s+\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s*$/,
     "",
   );
-  if (/^(todos|tudo|all)$/.test(t)) return candidates.map((_, i) => i);
+  if (/^(todos|todas|tudo|todo|all)$/.test(t)) return candidates.map((_, i) => i);
 
-  const tokens = t.split(/\s*,\s*|\s+e\s+|\s+ou\s+/).map(s => s.trim()).filter(Boolean);
+  const tokens = t.split(/\s*,\s*|\s+(?:e|y)\s+|\s+(?:ou|o)\s+/).map(s => s.trim()).filter(Boolean);
   const indices = new Set<number>();
   for (const token of tokens) {
-    const rangeMatch = token.match(/^(\d+)\s*(?:a|ao|até|ate|-)\s*(\d+)$/);
+    const rangeMatch = token.match(/^(\d+)\s*(?:a|ao|al|até|ate|hasta|-)\s*(\d+)$/);
     if (rangeMatch) {
       let start = parseInt(rangeMatch[1], 10);
       let end = parseInt(rangeMatch[2], 10);
@@ -475,7 +477,7 @@ export function parseFinancePatchFromText(text: string): Record<string, unknown>
   const patch: Record<string, unknown> = {};
   const t = text.trim();
 
-  const descMatch = t.match(/(?:descri[çc][ãa]o|nome)\s+(?:para|pra)\s+(.+)/i);
+  const descMatch = t.match(/(?:descri[çc][ãa]o|descripci[oó]n|nome|nombre)\s+(?:para|pra|por|a)\s+(.+)/i);
   if (descMatch) patch.description = descMatch[1].trim();
 
   const amount = parseAmountBR(t);
@@ -483,7 +485,15 @@ export function parseFinancePatchFromText(text: string): Record<string, unknown>
 
   const lower = t.toLowerCase();
   const allCategories = [...CATEGORIES_EXPENSE, ...CATEGORIES_INCOME];
-  const category = allCategories.find((c) => lower.includes(c.toLowerCase()));
+  const categoryAliases: Record<string, string> = {
+    alimentacion: "Alimentação", vivienda: "Moradia", salud: "Saúde", educacion: "Educação",
+    ocio: "Lazer", ropa: "Vestuário", tecnologia: "Tecnologia", servicios: "Serviços",
+    impuestos: "Impostos", empleados: "Funcionários", proveedores: "Fornecedores", otros: "Outros",
+    salario: "Salário", ventas: "Vendas", inversiones: "Investimentos", alquiler: "Aluguel",
+  };
+  const normalized = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const category = allCategories.find((c) => normalized.includes(c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")))
+    || Object.entries(categoryAliases).find(([alias]) => normalized.includes(alias))?.[1];
   if (category) patch.category = category;
 
   const destinationMode = parseFinanceDestinationMode(t);
@@ -496,7 +506,7 @@ export function parseFinancePatchFromText(text: string): Record<string, unknown>
  *  Retorna true, false, ou null se não reconhecer a resposta. */
 export function parseYesNo(text: string): boolean | null {
   const t = text.trim().toLowerCase();
-  if (/^(sim|s|ss|isso|pode|manda|salva|guarda|claro|com certeza|quero|yes|y|ok|beleza|manda ver)\b/.test(t)) return true;
+  if (/^(sim|s|ss|sí|si|isso|eso|pode|puede|hazlo|manda|envia|salva|guarda|claro|por supuesto|com certeza|quiero|quero|yes|y|ok|vale|beleza|manda ver)\b/.test(t)) return true;
   if (/^(n[ãa]o|nao|n|não quero|nunca|no)\b/.test(t)) return false;
   return null;
 }
@@ -520,32 +530,32 @@ export function parseVehiclePatchFromText(text: string): VehicleUpdateInput {
   const patch: VehicleUpdateInput = {};
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-  const plate = text.match(/\b(?:placa)(?:\s+(?:para|pra|é|e|:))?\s*([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i)?.[1];
+  const plate = text.match(/\b(?:placa)(?:\s+(?:para|pra|por|a|é|es|e|:))?\s*([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i)?.[1];
   if (plate) patch.plate = plate.replace(/[- ]/g, "").toUpperCase();
 
-  const brand = text.match(/\bmarca(?:\s+(?:para|pra|é|e|:))?\s+([^,;]+)$/i)?.[1]?.trim();
+  const brand = text.match(/\bmarca(?:\s+(?:para|pra|por|a|é|es|e|:))?\s+([^,;]+)$/i)?.[1]?.trim();
   if (brand) patch.brand = brand;
 
-  const model = text.match(/\bmodelo(?:\s+(?:para|pra|é|e|:))?\s+([^,;]+)$/i)?.[1]?.trim();
+  const model = text.match(/\bmodelo(?:\s+(?:para|pra|por|a|é|es|e|:))?\s+([^,;]+)$/i)?.[1]?.trim();
   if (model) patch.model = model;
 
-  const year = text.match(/\bano(?:\s+(?:para|pra|é|e|:))?\s+((?:19|20)\d{2})\b/i)?.[1];
+  const year = text.match(/\b(?:ano|a[ñn]o)(?:\s+(?:para|pra|por|a|é|es|e|:))?\s+((?:19|20)\d{2})\b/i)?.[1];
   if (year) patch.year = Number(year);
 
-  const km = text.match(/\b(?:km|quilometragem|hod[oô]metro)(?:\s+(?:para|pra|é|e|:))?\s+([\d.]+)\b/i)?.[1];
+  const km = text.match(/\b(?:km|quilometragem|kilometraje|hod[oô]metro|od[oó]metro)(?:\s+(?:para|pra|por|a|é|es|e|:))?\s+([\d.]+)\b/i)?.[1];
   if (km) patch.currentKm = Number(km.replace(/\./g, ""));
 
-  const notes = text.match(/\b(?:nota|notas|observa[çc][ãa]o|observa[çc][õo]es)(?:\s+(?:para|pra|é|e|:))?\s+(.+)$/i)?.[1]?.trim();
+  const notes = text.match(/\b(?:nota|notas|observa[çc][ãa]o|observa[çc][õo]es|observaci[oó]n|observaciones)(?:\s+(?:para|pra|por|a|é|es|e|:))?\s+(.+)$/i)?.[1]?.trim();
   if (notes) patch.notes = notes;
 
-  if (/\beletric[oa]\b/.test(normalized)) patch.fuelType = "electric";
+  if (/\b(?:eletric[oa]|electric[oa])\b/.test(normalized)) patch.fuelType = "electric";
   else if (/\bdiesel\b/.test(normalized)) patch.fuelType = "diesel";
-  else if (/\betanol|alcool\b/.test(normalized)) patch.fuelType = "ethanol";
+  else if (/\betanol|alcool|alcohol\b/.test(normalized)) patch.fuelType = "ethanol";
   else if (/\bgasolina\b/.test(normalized)) patch.fuelType = "gasoline";
   else if (/\bflex\b/.test(normalized)) patch.fuelType = "flex";
 
   if (/\b(modo\s+)?empresa|empresarial\b/.test(normalized)) patch.mode = "business";
-  else if (/\b(modo\s+)?pessoal\b/.test(normalized)) patch.mode = "personal";
+  else if (/\b(modo\s+)?(?:pessoal|personal)\b/.test(normalized)) patch.mode = "personal";
 
   return patch;
 }

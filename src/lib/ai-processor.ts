@@ -318,6 +318,40 @@ export type AIResult = {
   confidence: number;
 };
 
+/** Faz reuniões novas seguirem a mesma confirmação opcional de Google Meet
+ * em todos os idiomas. O modelo alternava entre agenda_create e meet_create
+ * para frases equivalentes, principalmente em espanhol. */
+export function normalizeMeetingCreation(message: string, result: AIResult): AIResult {
+  if (result.intent !== "agenda_create") return result;
+  const normalized = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (!/\b(?:reuniao|reunion|videoconferencia|videochamada|videollamada)\b/.test(normalized)) return result;
+  const convert = (agenda: AgendaData): MeetData => ({
+    title: agenda.title,
+    description: agenda.description,
+    startDate: agenda.startDate,
+    startTime: agenda.startTime,
+    endDate: agenda.endDate,
+    endTime: agenda.endTime,
+    duration: 60,
+    attendees: [],
+  });
+  if (result.agendaItems?.length) {
+    return {
+      ...result,
+      intent: "meet_create",
+      meetItems: result.agendaItems.map(convert),
+      agendaItems: undefined,
+      agendaData: undefined,
+    };
+  }
+  return {
+    ...result,
+    intent: "meet_create",
+    meetData: convert(result.agendaData || {}),
+    agendaData: undefined,
+  };
+}
+
 /** Reconhece pesquisas atuais sem depender do classificador.
  * Além de pedidos explícitos, cobre a forma curta que as pessoas usam no
  * WhatsApp ("dólar hoje", "Balneário Camboriú hoje", "clima em Bogotá").
@@ -522,14 +556,14 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
   if (/\bultima\s+semana\b|\bsemana\s+(?:passada|anterior|pasada)\b/.test(normalized)) {
     return { from: shiftYmd(weekFrom, -7), to: shiftYmd(weekTo, -7) };
   }
-  if (/\b(?:esta|essa|nesta|nessa|desta|atual)\s+semana\b|\bsemana\s+atual\b|\bna\s+semana\b/.test(normalized)) {
+  if (/\b(?:esta|essa|nesta|nessa|desta|atual)\s+semana\b|\bsemana\s+(?:atual|actual)\b|\bna\s+semana\b/.test(normalized)) {
     return { from: weekFrom, to: weekTo };
   }
   if (/\bproximo\s+mes\b|\bmes\s+(?:que\s+vem|seguinte|que\s+viene|siguiente)\b/.test(normalized)) return monthBounds(1);
   if (/\bultimo\s+mes\b|\bmes\s+(?:passado|anterior|pasado)\b/.test(normalized)) return monthBounds(-1);
   if (/\b(?:este|esse|neste|nesse|deste|atual)\s+mes\b|\bmes\s+atual\b/.test(normalized)) return monthBounds(0);
 
-  if (/\b(?:ano\s+que\s+vem|proximo\s+ano|ano\s+siguiente)\b/.test(normalized)) {
+  if (/\b(?:ano\s+que\s+vem|proximo\s+ano|ano\s+que\s+viene|ano\s+siguiente)\b/.test(normalized)) {
     const year = anchor.getFullYear() + 1;
     return { from: `${year}-01-01`, to: `${year}-12-31` };
   }
@@ -537,7 +571,7 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
     const year = anchor.getFullYear() - 1;
     return { from: `${year}-01-01`, to: `${year}-12-31` };
   }
-  if (/\b(?:este|esse|neste|nesse|deste|atual)\s+ano\b|\bano\s+atual\b/.test(normalized)) {
+  if (/\b(?:este|esse|neste|nesse|deste|atual|actual)\s+ano\b|\bano\s+(?:atual|actual)\b/.test(normalized)) {
     return { from: `${anchor.getFullYear()}-01-01`, to: toYmd(anchor) };
   }
 
@@ -609,6 +643,37 @@ export function getExplicitUpcomingFinanceQueryResult(message: string): AIResult
     confidence: 1,
     financeType,
     ...(mode ? { mode } : {}),
+  };
+}
+
+/** Confirma um lançamento futuro que a pessoa informa ter pago/recebido
+ * antes da data prevista. Este atalho precisa rodar antes da consulta de
+ * pendências: em espanhol, "ya pagué ... pendiente" contém justamente a
+ * palavra que poderia fazer o classificador tratar a frase como consulta. */
+export function getExplicitFinanceConfirmPendingResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const mentionsPending = /\b(?:pendente|pendentes|agendad[oa]s?|programad[oa]s?|previst[oa]s?|pendiente|pendientes)\b/.test(normalized);
+  const alreadyCompleted = /\b(?:ja\s+(?:paguei|pagamos|recebi|recebemos)|ya\s+(?:pague|pagamos|cobre|cobramos|recibi|recibimos))\b/.test(normalized);
+  const explicitConfirmation = /\b(?:confirm(?:a|e|ar)|antecip(?:a|e|ar)|confirma|confirmar|adelanta|adelantar)\b[\s\S]*\b(?:pagamento|recebimento|cobranca|pago|cobro|ingreso|factura|cuenta)\b/.test(normalized);
+  if (!(mentionsPending && alreadyCompleted) && !explicitConfirmation) return null;
+
+  const financeType: "income" | "expense" = /\b(?:recebi|recebemos|recebimento|cobranca|cobrei|cobramos|cobre|cobramos|recibi|recibimos|cobro|ingreso)\b/.test(normalized)
+    ? "income"
+    : "expense";
+  const keyword = text
+    .replace(/^\s*(?:(?:j[aá]|ya)\s+)?(?:paguei|pagamos|recebi|recebemos|pagu[eé]|cobr[eé]|cobramos|recib[ií]|recibimos)\s+/iu, "")
+    .replace(/^\s*(?:confirma|confirme|confirmar|antecipa|antecipe|antecipar|adelanta|adelantar)\s+(?:o|a|el|la)?\s*/i, "")
+    .replace(/\s+(?:que\s+)?(?:estava|estaba)\s+(?:agendad[oa]|programad[oa]|pendente|pendiente).*$/i, "")
+    .replace(/\s+(?:agendad[oa]|programad[oa]|pendente|pendiente).*$/i, "")
+    .replace(/^(?:o|a|os|as|el|la|los|las)\s+/i, "")
+    .trim().replace(/[.!?]+$/, "");
+
+  return {
+    intent: "finance_confirm_pending",
+    confidence: 1,
+    financeType,
+    ...(keyword ? { keyword } : {}),
   };
 }
 
@@ -828,11 +893,11 @@ export function getExplicitGroceryListManagementResult(message: string): AIResul
 export function getExplicitLastGroceryPurchaseResult(message: string): AIResult | null {
   const text = message.trim().replace(/[?!.,;:]+$/, "");
   const normalized = normalizeCapabilityText(text);
-  const asksLatest = /\bultima\s+(?:compra|vez)\b|\b(?:compra|vez)\s+mais\s+recente\b/.test(normalized);
+  const asksLatest = /\bultima\s+(?:compra|vez)\b|\b(?:compra|vez)\s+(?:mais|mas)\s+recente\b/.test(normalized);
   const hasPurchaseQuestion = /\b(gastei|paguei|comprei|compra|itens?|produtos?|articulos?|compre)\b/.test(normalized);
   if (!asksLatest || !hasPurchaseQuestion) return null;
 
-  const storeName = text.match(/(?:[úu]ltima\s+compra|compra\s+mais\s+recente)\s+(?:do|da|no|na|em|del|en)\s+(.+)$/i)?.[1]
+  const storeName = text.match(/(?:[úu]ltima\s+compra|compra\s+(?:mais|m[aá]s)\s+recente)\s+(?:do|da|no|na|em|del|en)\s+(.+)$/i)?.[1]
     || text.match(/(?:gastei|paguei|comprei|compre)\s+(?:no|na|do|da|em|del|en)\s+(.+?)\s+(?:na\s+|da\s+|la\s+)?[úu]ltima\s+vez$/i)?.[1]
     || text.match(/(?:no|na|do|da|em|del|en)\s+(.+?)\s+(?:na\s+|da\s+|la\s+)?[úu]ltima\s+vez$/i)?.[1];
   const cleanStore = storeName?.replace(/^(?:minha|mi)\s+/i, "").trim();
@@ -927,6 +992,28 @@ function groceryCategoryFromQuery(normalized: string): GroceryCategory | undefin
   return categories.find(([pattern]) => pattern.test(normalized))?.[1];
 }
 
+/** Perguntas de total gasto no supermercado precisam ir ao agregador de
+ * compras, e não à listagem de itens de cada compra. */
+export function getExplicitGrocerySpendQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const asksTotal = /\b(?:quanto|cuanto|valor|total)\b[\s\S]*\b(?:gastei|gaste|paguei|pague|gastado|pagado)\b|\b(?:quanto|cuanto)\s+(?:eu\s+)?(?:gastei|gaste|paguei|pague)\b/.test(normalized);
+  const grocerySubject = /\b(?:supermercado|mercado|compras?\s+(?:de|do|del|no|en)\s+(?:supermercado|mercado)|compras?\s+do\s+mes)\b/.test(normalized);
+  const latest = /\b(?:ultima|penultima|antepenultima|mais\s+recente|mas\s+reciente)\b/.test(normalized);
+  if (!asksTotal || !grocerySubject || latest) return null;
+
+  const period = getExplicitRelativePeriod(message, anchor) ?? explicitPurchaseCalendarPeriod(message, anchor);
+  const storeName = extractGroceryStoreFromHistory(message);
+  return {
+    intent: "grocery_spend_query",
+    confidence: 1,
+    grocery: {
+      ...(period ? { period } : {}),
+      ...(storeName ? { storeName } : {}),
+      queryDetail: "total",
+    },
+  };
+}
+
 /** Atalho determinístico para consultas ao histórico de compras. Garante os
  * filtros essenciais mesmo quando o classificador externo interpreta
  * "todas", "últimas 3" ou "penúltima" de forma inconsistente. */
@@ -940,24 +1027,28 @@ export function getExplicitGroceryHistoryQueryResult(message: string, anchor: Da
   const hasQuerySignal = /\b(o\s+que|que\s+(?:eu\s+)?(?:comprei|compre|compras?)|quais?|qual|cuales?|quanto|cuanto|mostre|mostrar|muestra|dime|liste|listar|historico|historial|minhas?|mis|todas?|todos?|ultimas?|penultima|antepenultima)\b/.test(normalized);
   const isShoppingList = /\blista\s+(?:de|do|da|del)\s+(?:compras?|supermercado)\b/.test(normalized);
   const isMutation = /\b(registr|cadastr|adicion|inclu|anot|apag|exclu|delet|remov|alter|edit|corrig)\w*/.test(normalized);
-  const isSingleLatest = /\b(?:ultima|mais\s+recente)\s+compra\b|\bcompra\s+mais\s+recente\b/.test(normalized);
+  const isSingleLatest = /\b(?:ultima|(?:mais|mas)\s+recente)\s+compra\b|\bcompra\s+(?:mais|mas)\s+recente\b/.test(normalized);
   if (!hasPurchaseSubject || !hasQuerySignal || isShoppingList || isMutation || isSingleLatest) return null;
 
   const period = getExplicitRelativePeriod(message, anchor) ?? explicitPurchaseCalendarPeriod(message, anchor);
   const storeName = extractGroceryStoreFromHistory(message);
-  const numberWords: Record<string, number> = { uma: 1, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, una: 1, dos: 2 };
-  const latestCount = normalized.match(/\bultimas?\s+(\d+|uma|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|una|dos)\s+compras?\b/);
+  const numberWords: Record<string, number> = {
+    uma: 1, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10,
+    una: 1, dos: 2, cuatro: 4, siete: 7, ocho: 8, nueve: 9, diez: 10,
+  };
+  const latestCount = normalized.match(/\bultimas?\s+(\d+|uma|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|una|dos|cuatro|siete|ocho|nueve|diez)\s+compras?\b/);
   let purchaseLimit = latestCount ? (Number(latestCount[1]) || numberWords[latestCount[1]]) : undefined;
   let purchaseOffset: number | undefined;
   if (/\bantepenultima\s+compra\b/.test(normalized)) { purchaseLimit = 1; purchaseOffset = 2; }
-  else if (/\bpenultima\s+compra\b|\bsegunda\s+compra\s+mais\s+recente\b/.test(normalized)) { purchaseLimit = 1; purchaseOffset = 1; }
+  else if (/\bpenultima\s+compra\b|\bsegunda\s+compra\s+(?:mais|mas)\s+recente\b/.test(normalized)) { purchaseLimit = 1; purchaseOffset = 1; }
   const asksForItems = /\b(o\s+que|que\s+compre|quais?|itens?|produtos?|articulos?|comprei|compre)\b/.test(normalized);
   const asksOnlyTotal = /\b(quanto|valor|total|gastei|paguei)\b/.test(normalized) && !asksForItems;
   const allHistory = !period && (/\b(todas?(?:\s+(?:as?|minhas?|mis)){0,2}\s+compras?|todo\s+(?:(?:o|meu|mi)\s+)?historico|historial\s+completo)\b/.test(normalized) || !!storeName || !!purchaseLimit || purchaseOffset !== undefined);
   const category = groceryCategoryFromQuery(normalized);
 
+  const isSpendSummary = asksOnlyTotal && !purchaseLimit && purchaseOffset === undefined;
   return {
-    intent: "grocery_history_query",
+    intent: isSpendSummary ? "grocery_spend_query" : "grocery_history_query",
     confidence: 1,
     grocery: {
       ...(storeName ? { storeName } : {}),
@@ -995,7 +1086,7 @@ export function getExplicitDailySummaryResult(message: string, anchor: Date = no
 
 function supportInsidePlatformLine(locale?: string): string {
   if (locale === "es") {
-    return "Si necesitas ayuda, entra al panel de Zelo y abre *Suporte* en la esquina inferior derecha.";
+    return "Si necesitas ayuda, entra al panel de Zelo y abre *Soporte* en la esquina inferior derecha.";
   }
   if (locale === "pt-PT") {
     return "Se precisares de ajuda, entra no painel do Zelo e abre o *Suporte* no canto inferior direito.";
@@ -1015,32 +1106,47 @@ function addDaysToBRDate(days: number): string {
  * mesmo se o provedor de IA estiver indisponível ou se houver outro assunto
  * no histórico. Formatos mais ambíguos continuam sendo classificados pela IA. */
 export function getExplicitTaskCreateResult(message: string): AIResult | null {
-  const match = message.trim().match(/^tarefa\s*(?:[:.\-–—]\s*|\s+)(.+)$/i);
+  const trimmed = message.trim();
+  const match = trimmed.match(/^(?:tarefa|tarea)\s*(?:[:.\-–—]\s*|\s+)(.+)$/i)
+    ?? trimmed.match(/^(?:tengo\s+que|necesito|debo)\s+(.+)$/i);
   if (!match) return null;
 
   const body = match[1].trim();
-  if (!body || /\b(conclu\w*|complet\w*|finaliz\w*|feit[ao]s?|apag\w*|exclu\w*|remov\w*|list\w*|minhas?)\b/i.test(body)) {
+  if (!body || /\b(conclu\w*|complet\w*|finaliz\w*|termin\w*|feit[ao]s?|hech[ao]s?|apag\w*|exclu\w*|remov\w*|elimin\w*|borr\w*|list\w*|minhas?|mis)\b/i.test(body)) {
     return null;
   }
 
   const normalized = normalizeCapabilityText(body);
   let dueDate: string | undefined;
-  if (/\bamanha\b/.test(normalized)) dueDate = addDaysToBRDate(1);
-  else if (/\bhoje\b/.test(normalized)) dueDate = addDaysToBRDate(0);
-  else if (/\b(segunda|terca|quarta|quinta|sexta|sabado|domingo)(?:-feira)?\b|\bdia\s+\d{1,2}\b|\b\d{1,2}\/\d{1,2}\b/.test(normalized)) {
+  if (/\b(?:amanha|manana)\b/.test(normalized)) dueDate = addDaysToBRDate(1);
+  else if (/\b(?:hoje|hoy)\b/.test(normalized)) dueDate = addDaysToBRDate(0);
+  else if (/\b(segunda|terca|quarta|quinta|sexta|sabado|domingo|lunes|martes|miercoles|jueves|viernes)(?:-feira)?\b/.test(normalized)) {
+    const weekdayNames: Record<string, number> = {
+      domingo: 0, segunda: 1, lunes: 1, terca: 2, martes: 2,
+      quarta: 3, miercoles: 3, quinta: 4, jueves: 4,
+      sexta: 5, viernes: 5, sabado: 6,
+    };
+    const weekday = Object.entries(weekdayNames).find(([name]) => new RegExp(`\\b${name}(?:-feira)?\\b`).test(normalized));
+    if (weekday) {
+      const [year, month, day] = todayStrBR().split("-").map(Number);
+      const base = new Date(Date.UTC(year, month - 1, day));
+      const days = (weekday[1] - base.getUTCDay() + 7) % 7 || 7;
+      dueDate = addDaysToBRDate(days);
+    }
+  } else if (/\bdia\s+\d{1,2}\b|\b\d{1,2}\/\d{1,2}\b/.test(normalized)) {
     return null;
   }
 
   const title = body
-    .replace(/^(?:tem\s+que|preciso(?:\s+de)?|devo)\s+/i, "")
-    .replace(/\s*(?:,\s*)?(?:(?:para|at[eé])\s+)?(?:hoje|amanh[ãa])\s*[.!?]*$/i, "")
+    .replace(/^(?:tem\s+que|preciso(?:\s+de)?|devo|tengo\s+que|necesito|debo)\s+/i, "")
+    .replace(/\s*(?:,\s*)?(?:\b(?:para|at[eé]|el|na|no)\b\s+)?(?:hoje|amanh[ãa]|hoy|ma[ñn]ana|segunda(?:-feira)?|ter[cç]a(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|s[aá]bado|domingo|lunes|martes|mi[eé]rcoles|jueves|viernes)\s*[.!?]*$/i, "")
     .trim()
     .replace(/[.!?]+$/, "");
   if (!title) return null;
 
-  const priority = /\b(urgente|importante|prioridade|quanto antes)\b/.test(normalized)
+  const priority = /\b(urgente|importante|prioridade|prioridad|quanto antes|cuanto antes)\b/.test(normalized)
     ? "high"
-    : /\b(sem pressa|quando der|nao urgente)\b/.test(normalized)
+    : /\b(sem pressa|quando der|nao urgente|sin prisa|cuando puedas|no urgente)\b/.test(normalized)
       ? "low"
       : "medium";
 
@@ -1049,6 +1155,43 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
     confidence: 1,
     task: { title, priority, ...(dueDate ? { dueDate } : {}) },
   };
+}
+
+/** Protege consultas de assinaturas/parcelas recorrentes em espanhol para
+ * que "consulta" não seja confundido com pesquisa na internet. */
+export function getExplicitRecurringQueryResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const subject = /\b(recurrentes?|recorrentes?|suscripci(?:on|ones)|assinaturas?|mensualidades?|cuotas?|parcelas?)\b/.test(normalized);
+  const query = /^(?:muestra|mostrar|lista|listar|consulta|consultar|busca|buscar|cuales?|que|mis|meus|minhas)\b/.test(normalized)
+    || /\b(?:que|cuales?)\s+(?:cuotas?|parcelas?|suscripciones?)\b/.test(normalized);
+  const mutation = /\b(cancela|cancelar|elimina|eliminar|borra|borrar|cambia|cambiar|edita|editar|crea|crear|registra|registrar)\b/.test(normalized);
+  if (!subject || !query || mutation) return null;
+
+  const keyword = message.match(/\b(?:suscripci[oó]n|assinatura)\s+(?:de\s+)?(.+?)[?!.]*$/i)?.[1]?.trim();
+  return { intent: "recurring_query", confidence: 1, ...(keyword ? { keyword } : {}) };
+}
+
+/** Renomear documento é uma ação do Drive, mesmo quando o arquivo é uma
+ * fatura; sem esta regra, "fatura/factura" pode parecer edição financeira. */
+export function getExplicitDriveRenameResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const directRename = /\b(?:renomeia|renomeie|renomear|renombra|renombre|renombrar)\b/.test(normalized);
+  const rename = directRename || /\b(?:cambia|cambie|cambiar|muda|mude|mudar|pon|poner)\b/.test(normalized);
+  const nameField = /\b(?:nome|nombre)\b/.test(normalized);
+  const fileSubject = /\b(?:arquivo|archivo|ficheiro|drive|pdf|documento|comprovante|comprobante|factura|fatura)\b/.test(normalized);
+  if (!rename || (!directRename && !nameField && !/\bpon\b/.test(normalized)) || !fileSubject) return null;
+  const keyword = message.match(/\b(?:para|por|como|a)\s+(.+?)[.!?]*$/i)?.[1]?.trim();
+  return { intent: "drive_rename", confidence: 1, ...(keyword ? { keyword } : {}) };
+}
+
+/** Consultas explícitas de arquivos não dependem do classificador externo. */
+export function getExplicitDriveSearchResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const fileSubject = /\b(?:arquivos?|archivos?|ficheiros?|drive|pdf|documentos?|comprovantes?|comprobantes?|facturas?|faturas?|contrato)\b/.test(normalized);
+  const query = /\b(?:busca|buscar|busque|encontra|encontrar|encuentra|encontrar|procura|procurar|mostra|mostrar|muestra|muestrame|lista|listar)\b/.test(normalized);
+  const mutation = /\b(?:renomeia|renomear|renombra|renombrar|cambia|cambiar|muda|mudar|pon|poner|elimina|eliminar|apaga|apagar)\b/.test(normalized);
+  if (!fileSubject || !query || mutation) return null;
+  return { intent: "drive_search", confidence: 1, keyword: message.trim().replace(/[.!?]+$/, "") };
 }
 
 /** Pedidos explícitos para montar uma lista devem virar tarefas separadas.
@@ -1201,14 +1344,14 @@ export function getExplicitUnscheduledReminderResult(
   return { intent: "reminder_set", confidence: 1, reminder: {} };
 }
 
-const VEHICLE_NOUN_RE = /\b(ve[ií]culo|carro|moto|caminh[ãa]o|van)\b/i;
-const VEHICLE_EXPENSE_RE = /\b(gasto|despesa|abastec|paguei|comprei|troca|manuten[çc][ãa]o|revis[ãa]o|conserto|oficina|ipva|imposto|[óo]leo|pneu)\b/i;
+const VEHICLE_NOUN_RE = /\b(ve[ií]culo|carro|moto|caminh[ãa]o|van|veh[ií]culo|auto|coche|cami[oó]n)\b/i;
+const VEHICLE_EXPENSE_RE = /\b(gasto|despesa|abastec|paguei|comprei|troca|manuten[çc][ãa]o|revis[ãa]o|conserto|oficina|ipva|imposto|[óo]leo|pneu|gast[eé]|pagu[eé]|compr[eé]|mantenimiento|reparaci[oó]n|arreglo|taller|impuesto|aceite|neum[aá]tico|combustible)\b/i;
 
 function parseFuelType(text: string): VehicleData["fuelType"] | undefined {
   const normalized = normalizeCapabilityText(text);
-  if (/\beletric[oa]\b/.test(normalized)) return "electric";
+  if (/\b(?:eletric[oa]|electric[oa])\b/.test(normalized)) return "electric";
   if (/\bdiesel\b/.test(normalized)) return "diesel";
-  if (/\betanol|alcool\b/.test(normalized)) return "ethanol";
+  if (/\betanol|alcool|alcohol\b/.test(normalized)) return "ethanol";
   if (/\bgasolina\b/.test(normalized)) return "gasoline";
   if (/\bflex\b/.test(normalized)) return "flex";
   return undefined;
@@ -1217,9 +1360,154 @@ function parseFuelType(text: string): VehicleData["fuelType"] | undefined {
 function cleanVehicleTarget(value?: string): string | undefined {
   if (!value) return undefined;
   const cleaned = value
-    .replace(/\b(meu|minha|o|a|um|uma|ve[ií]culo|carro|moto|caminh[ãa]o|van)\b/gi, " ")
+    .replace(/\b(meu|minha|o|a|um|uma|mi|mis|el|la|un|una|ve[ií]culo|carro|moto|caminh[ãa]o|van|veh[ií]culo|auto|coche|cami[oó]n)\b/gi, " ")
     .replace(/\s+/g, " ").trim().replace(/[.,;:!?]+$/, "");
   return cleaned || undefined;
+}
+
+/** CRUD essencial de funcionários em PT-BR e espanhol. Mantém os comandos
+ * operacionais mesmo durante uma indisponibilidade transitória do provedor
+ * de IA e garante o mesmo resultado nos modos pessoal e empresarial. */
+export function getExplicitEmployeeCrudResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const hasEmployeeWord = /\b(?:funcionari[oa]s?|colaborador(?:es|as)?|empregad[oa]s?|emplead[oa]s?|trabajador(?:es|as)?|equipe|equipo)\b/.test(normalized);
+  // Campos como nome, telefone e e-mail também existem em clientes e
+  // arquivos. Só são de funcionário quando a frase disser isso; cargo e
+  // salário são os únicos campos suficientemente específicos por si só.
+  const hasOtherEntity = /\b(?:cliente|clienta|customer|arquivo|archivo|ficheiro|drive|pdf|documento|comprovante|factura|fatura)\b/.test(normalized);
+  const cleanName = (value?: string) => value
+    ?.replace(/^(?:o|a|os|as|el|la|los|las|ao|al|do|da|de|del)\s+/i, "")
+    .replace(/^(?:funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+/i, "")
+    .replace(/\s+(?:com|con|como|para|a)\s+.*$/i, "")
+    .trim().replace(/[.,;:!?]+$/, "") || undefined;
+
+  const deactivate = /\b(?:desativ(?:a|ar|e)|remov(?:a|er|e)|exclu(?:a|ir)|elimin(?:a|ar|e)|desactiv(?:a|ar|e)|retir(?:a|ar|e))\b/.test(normalized);
+  if (deactivate && hasEmployeeWord) {
+    const name = cleanName(text.match(/\b(?:funcionari[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+)$/i)?.[1]
+      || text.match(/\b(?:desativ\w*|remov\w*|exclu\w*|elimin\w*|desactiv\w*|retir\w*)\s+(?:a[ol]?\s+)?(.+)$/i)?.[1]);
+    return { intent: "employee_deactivate", confidence: 1, ...(name ? { keyword: name, employee: { name } } : {}) };
+  }
+
+  const update = /\b(?:alter(?:a|ar|e)|mud(?:a|ar|e)|atualiz(?:a|ar|e)|edit(?:a|ar|e)|modific(?:a|ar|e)|cambi(?:a|ar|e)|actualiz(?:a|ar|e))\b/.test(normalized);
+  const hasExclusiveEmployeeField = /\b(?:salario|sueldo|cargo|funcao|puesto)\b/.test(normalized);
+  if (update && !hasOtherEntity && (hasEmployeeWord || hasExclusiveEmployeeField)) {
+    const employee: EmployeeData = {};
+    let name: string | undefined;
+    const salary = text.match(/\b(?:sal[aá]rio|sueldo)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)\s+(?:para|a)\s+(?:[$€]\s*)?(\d[\d.,]*)/i);
+    const role = text.match(/\b(?:cargo|fun[çc][aã]o|puesto)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)\s+(?:para|a)\s+(.+)$/i);
+    const phone = text.match(/\b(?:telefone|tel[eé]fono)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)(?:\s+(?:para|a)\s+([+\d][\d\s().-]{7,}))?$/i);
+    const email = text.match(/\b(?:e-?mail|correo)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)(?:\s+(?:para|a)\s+([^\s]+@[^\s]+))?$/i);
+    if (salary) {
+      name = cleanName(salary[1]);
+      employee.salary = Number(salary[2].replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+    } else if (role) {
+      name = cleanName(role[1]);
+      employee.role = role[2].trim().replace(/[.!?]+$/, "");
+    } else if (phone) {
+      name = cleanName(phone[1]);
+      if (phone[2]) employee.phone = phone[2].replace(/\D/g, "");
+    } else if (email) {
+      name = cleanName(email[1]);
+      if (email[2]) employee.email = email[2].trim();
+    } else {
+      name = cleanName(text.match(/\b(?:funcionari[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?:\s+(?:para|a|com|con)\b|$)/i)?.[1]);
+    }
+    if (name) employee.name = name;
+    return { intent: "employee_update", confidence: 1, employee, ...(name ? { keyword: name } : {}) };
+  }
+
+  const create = /\b(?:cadastr(?:a|ar|e)|registr(?:a|ar|e)|adicion(?:a|ar|e)|inclu(?:a|ir)|contrat(?:a|ar|e)|agreg(?:a|ar|ue)|anad(?:e|ir)|incorpor(?:a|ar|e))\b/.test(normalized);
+  const asRole = text.match(/\b(?:adicion\w*|inclu\w*|contrat\w*|agreg\w*|a[ñn]ad\w*|incorpor\w*)\s+(?:a(?:o|l)?\s+)?(.+?)\s+como\s+(.+)$/i);
+  if (create && (hasEmployeeWord || (asRole && !/\b(?:cliente|clienta|customer)\b/i.test(asRole[2])))) {
+    const employee: EmployeeData = {};
+    const named = text.match(/\b(?:funcionari[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?=\s+(?:com|con|como|sal[aá]rio|sueldo|cargo|puesto)\b|$)/i);
+    employee.name = cleanName(named?.[1] || asRole?.[1]);
+    const role = text.match(/\b(?:como|cargo|puesto)\s+(?:de\s+)?([^,;]+?)(?=\s+(?:com|con)\s+(?:sal[aá]rio|sueldo)\b|$)/i)?.[1];
+    const salary = text.match(/\b(?:sal[aá]rio|sueldo)(?:\s+de)?\s+(?:[$€]\s*)?(\d[\d.,]*)/i)?.[1];
+    if (role) employee.role = role.trim();
+    if (salary) employee.salary = Number(salary.replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+    return { intent: "employee_create", confidence: 1, employee };
+  }
+
+  const list = hasEmployeeWord && /\b(?:mostr(?:a|ar|e)|list(?:a|ar|e)|ver|consult(?:a|ar|e)|quantos?|cuantos?|meus|minhas|mis|todos?|todas?)\b/.test(normalized);
+  return list ? { intent: "employee_list", confidence: 1 } : null;
+}
+
+/** CRUD essencial de clientes em PT-BR e espanhol. Além de garantir paridade,
+ * evita que telefone/e-mail de cliente sejam enviados ao fluxo de funcionário. */
+export function getExplicitCustomerCrudResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const hasCustomer = /\b(?:clientes?|clientas?|customer)\b/.test(normalized);
+  const hasCompanyRecord = /\b(?:empresa|companhia|compania)\s+[\p{L}\d]/u.test(normalized);
+  if (!hasCustomer && !hasCompanyRecord) return null;
+
+  const cleanName = (value?: string) => value
+    ?.replace(/^(?:o|a|os|as|el|la|los|las|ao|al|do|da|de|del)\s+/i, "")
+    .replace(/^(?:cliente|clienta|empresa|companhia|compa[ñn]ia)\s+/i, "")
+    .replace(/\s+(?:com|con|como|para|a)\s+.*$/i, "")
+    .trim().replace(/[.,;:!?]+$/, "") || undefined;
+  const customer: CustomerData = {};
+  const named = text.match(/\b(?:cliente|clienta|empresa|companhia|compa[ñn][ií]a)\s+(.+?)(?=\s+(?:com|con|como|telefone|tel[eé]fono|correo|e-?mail|da\s+empresa|de\s+la\s+empresa)\b|$)/i);
+  const name = cleanName(named?.[1]);
+  if (name) customer.name = name;
+
+  const deactivate = /\b(?:desativ(?:a|ar|e)|remov(?:a|er|e)|exclu(?:a|ir)|elimin(?:a|ar|e)|desactiv(?:a|ar|e)|retir(?:a|ar|e))\b/.test(normalized);
+  if (deactivate) return { intent: "customer_deactivate", confidence: 1, customer, ...(name ? { keyword: name } : {}) };
+
+  const update = /\b(?:alter(?:a|ar|e)|mud(?:a|ar|e)|atualiz(?:a|ar|e)|edit(?:a|ar|e)|modific(?:a|ar|e)|cambi(?:a|ar|e)|actualiz(?:a|ar|e))\b/.test(normalized);
+  if (update) {
+    const phone = text.match(/\b(?:telefone|tel[eé]fono)\b[\s\S]*?(?:para|a)\s+([+\d][\d\s().-]{7,})/i)?.[1];
+    const email = text.match(/\b(?:e-?mail|correo)\b[\s\S]*?(?:para|a)\s+([^\s]+@[^\s]+)/i)?.[1];
+    if (phone) customer.phone = phone.replace(/\D/g, "");
+    if (email) customer.email = email.trim().replace(/[.,;:!?]+$/, "");
+    return { intent: "customer_update", confidence: 1, customer, ...(name ? { keyword: name } : {}) };
+  }
+
+  const create = /\b(?:cadastr(?:a|ar|e)|registr(?:a|ar|e)|adicion(?:a|ar|e)|inclu(?:a|ir)|agreg(?:a|ar|ue)|anad(?:e|ir))\b/.test(normalized);
+  if (create) {
+    const phone = text.match(/\b(?:telefone|tel[eé]fono)(?:\s+de)?\s+([+\d][\d\s().-]{7,})/i)?.[1];
+    const email = text.match(/\b(?:e-?mail|correo)(?:\s+de)?\s+([^\s]+@[^\s]+)/i)?.[1];
+    if (phone) customer.phone = phone.replace(/\D/g, "");
+    if (email) customer.email = email.trim().replace(/[.,;:!?]+$/, "");
+    return { intent: "customer_create", confidence: 1, customer };
+  }
+
+  const list = hasCustomer && /\b(?:mostr(?:a|ar|e)|list(?:a|ar|e)|ver|consult(?:a|ar|e)|quantos?|cuantos?|meus|minhas|mis|todos?|todas?)\b/.test(normalized)
+    && !/\b(?:busca|buscar|procura|procurar|datos|dados)\b/.test(normalized);
+  if (list) return { intent: "customer_list", confidence: 1 };
+
+  const query = /\b(?:busca|buscar|procura|procurar|encontra|encontrar|dados|datos|informacoes|informaciones|mostr(?:a|ar|e)|ver|consulta|consultar)\b/.test(normalized);
+  return query ? { intent: "customer_query", confidence: 1, ...(name ? { keyword: name, customer } : {}) } : null;
+}
+
+/** Troca explícita entre os modos pessoal e empresarial. Se a conversa está
+ * no meio da edição de um lançamento, "mudar para a conta empresarial" é o
+ * destino daquele lançamento e deve continuar no fluxo financeiro. */
+export function getExplicitModeSwitchResult(
+  message: string,
+  history: { role: "user" | "assistant"; content: string }[] = [],
+): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const wantsChange = /\b(?:muda|mude|mudar|troca|troque|trocar|passa|passe|passar|ir|usar|usa|quero|cambia|cambie|cambiar|pasa|pase|pasar|quiero)\b/.test(normalized);
+  const target = /\b(?:empresarial|empresa|business)\b/.test(normalized)
+    ? "business"
+    : /\b(?:pessoal|personal)\b/.test(normalized)
+      ? "personal"
+      : undefined;
+  if (!wantsChange || !target) return null;
+
+  const financeObject = /\b(?:gasto|despesa|receita|lancamento|movimento|conta\s+de\s+(?:agua|luz|telefone|internet)|factura|fatura|ingreso|egreso)\b/.test(normalized);
+  const recentContext = history.slice(-4).map(item => normalizeCapabilityText(item.content)).join(" ");
+  const editingFinance = /\b(?:o que deseja alterar|que deseas cambiar|lancamento atualizado|movimiento actualizado|encontrei|encontre)\b/.test(recentContext);
+  if (financeObject || editingFinance) return null;
+
+  const explicitMode = /\b(?:modo|conta|cuenta)\b/.test(normalized);
+  const conciseSwitch = normalized.split(/\s+/).length <= 7 && /^(?:muda|mude|troca|troque|passa|passe|ir|usar|usa|quero|cambia|cambie|pasa|pase|quiero)/.test(normalized);
+  return explicitMode || conciseSwitch
+    ? { intent: "mode_switch", confidence: 1, mode: target }
+    : null;
 }
 
 /** Atalho para comandos explícitos de CRUD de veículo. Além de reduzir a
@@ -1229,58 +1517,61 @@ function cleanVehicleTarget(value?: string): string | undefined {
 export function getExplicitVehicleCrudResult(message: string): AIResult | null {
   const text = message.trim();
   const normalized = normalizeCapabilityText(text);
+  // Uma explicação sobre como usar a função não é um cadastro real. Deixa o
+  // classificador responder como tutorial em vez de abrir campos do veículo.
+  if (/\b(?:como|explique|explica|explicame)\b[\s\S]*\b(?:cadastrar|registrar|adicionar|agregar|anadir|incluir|criar|crear)\b/.test(normalized)) return null;
   const hasVehicleContext = VEHICLE_NOUN_RE.test(text)
     || /\b(placa|quilometragem|hodometro)\b/.test(normalized);
   if (!hasVehicleContext) return null;
 
-  const isDelete = /\b(excluir|exclua|apagar|apague|remover|remova|deletar|delete)\b/.test(normalized);
+  const isDelete = /\b(excluir|exclua|apagar|apague|remover|remova|deletar|delete|eliminar|elimina|elimine|borrar|borra|borre)\b/.test(normalized);
   if (isDelete) {
-    const afterNoun = text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van)\b\s+(.+)$/i)?.[1];
+    const afterNoun = text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van|veh[ií]culo|auto|coche|cami[oó]n)\b\s+(.+)$/i)?.[1];
     const keyword = cleanVehicleTarget(afterNoun);
     return { intent: "vehicle_delete", confidence: 1, ...(keyword ? { keyword } : {}) };
   }
 
-  const isUpdate = /\b(alterar|altere|editar|edite|mudar|mude|atualizar|atualize|corrigir|corrija)\b/.test(normalized);
+  const isUpdate = /\b(alterar|altere|editar|edite|mudar|mude|atualizar|atualize|corrigir|corrija|cambiar|cambia|cambie|modificar|modifica|modifique|actualizar|actualiza|actualice|corregir|corrige|corrija)\b/.test(normalized);
   if (isUpdate) {
     const vehicle: VehicleData = {};
-    const plateChange = text.match(/placa\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i);
-    const brandChange = text.match(/marca\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([^,;]+)$/i);
-    const modelChange = text.match(/modelo\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([^,;]+)$/i);
-    const yearChange = text.match(/ano\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+((?:19|20)\d{2})\b/i);
-    const kmChange = text.match(/(?:km|quilometragem|hod[oô]metro)\s+(?:do|da)?\s*(.+?)\s+(?:para|pra)\s+([\d.]+)\s*(?:km)?\b/i);
+    const plateChange = text.match(/placa\s+(?:(?:do|da|del|de\s+la)\s+)?(.+?)\s+(?:para|pra|por|a)\s+([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i);
+    const brandChange = text.match(/marca\s+(?:(?:do|da|del|de\s+la)\s+)?(.+?)\s+(?:para|pra|por|a)\s+([^,;]+)$/i);
+    const modelChange = text.match(/modelo\s+(?:(?:do|da|del|de\s+la)\s+)?(.+?)\s+(?:para|pra|por|a)\s+([^,;]+)$/i);
+    const yearChange = text.match(/(?:ano|a[ñn]o)\s+(?:(?:do|da|del|de\s+la)\s+)?(.+?)\s+(?:para|pra|por|a)\s+((?:19|20)\d{2})\b/i);
+    const kmChange = text.match(/(?:km|quilometragem|kilometraje|hod[oô]metro|od[oó]metro)\s+(?:(?:do|da|del|de\s+la)\s+)?(.+?)\s+(?:para|pra|por|a)\s+([\d.]+)\s*(?:km)?\b/i);
     if (plateChange) vehicle.plate = plateChange[2].replace(/[- ]/g, "").toUpperCase();
     if (brandChange) vehicle.brand = brandChange[2].trim();
     if (modelChange) vehicle.model = modelChange[2].trim();
     if (yearChange) vehicle.year = Number(yearChange[2]);
     if (kmChange) vehicle.currentKm = Number(kmChange[2].replace(/\./g, ""));
     const fuelType = parseFuelType(
-      text.match(/(?:combust[ií]vel|motoriza[çc][ãa]o).*(?:para|pra)\s+(.+)$/i)?.[1]
-      || text.match(/(?:para|pra)\s+(gasolina|etanol|[áa]lcool|diesel|el[eé]tric[oa]|flex)\b/i)?.[1]
+      text.match(/(?:combust[ií]vel|combustible|motoriza[çc][ãa]o|motorizaci[oó]n).*(?:para|pra|por|a)\s+(.+)$/i)?.[1]
+      || text.match(/(?:para|pra|por|a)\s+(gasolina|etanol|[áa]lcool|alcohol|diesel|el[eé]ctric[oa]|flex)\b/i)?.[1]
       || "",
     );
     if (fuelType) vehicle.fuelType = fuelType;
-    if (/\bpara\s+(?:o\s+)?(?:modo\s+)?empresa\b|\bpara\s+empresarial\b/.test(normalized)) vehicle.newMode = "business";
-    if (/\bpara\s+(?:o\s+)?modo\s+pessoal\b/.test(normalized)) vehicle.newMode = "personal";
+    if (/\b(?:para|a)\s+(?:(?:o|el)\s+)?(?:modo\s+)?empresa\b|\b(?:para|a)\s+(?:empresarial|negocio)\b/.test(normalized)) vehicle.newMode = "business";
+    if (/\b(?:para|a)\s+(?:(?:o|el)\s+)?(?:modo\s+)?(?:pessoal|personal)\b/.test(normalized)) vehicle.newMode = "personal";
 
     const target = plateChange?.[1] || brandChange?.[1] || modelChange?.[1] || yearChange?.[1] || kmChange?.[1]
-      || text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van)\b\s+(.+?)(?:\s+(?:para|pra|com)\b|$)/i)?.[1];
+      || text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van|veh[ií]culo|auto|coche|cami[oó]n)\b\s+(.+?)(?:\s+(?:para|pra|por|a|com|con)\b|$)/i)?.[1];
     const keyword = cleanVehicleTarget(target);
-    const mentionsSpecificField = /\b(placa|marca|modelo|ano|km|quilometragem|hodometro|combustivel|motorizacao)\b/.test(normalized);
+    const mentionsSpecificField = /\b(placa|marca|modelo|ano|km|quilometragem|kilometraje|hodometro|odometro|combustivel|combustible|motorizacao|motorizacion)\b/.test(normalized);
     // Ordem/frase complexa: deixa o classificador completo extrair os campos
     // em vez de interceptar e devolver uma alteração vazia.
     if (mentionsSpecificField && !Object.keys(vehicle).length) return null;
     return { intent: "vehicle_update", confidence: 1, vehicle, ...(keyword ? { keyword } : {}) };
   }
 
-  const isCreate = /\b(cadastrar|cadastre|registrar|registre|adicionar|adicione|incluir|inclua|novo|nova)\b/.test(normalized);
+  const isCreate = /\b(cadastrar|cadastre|registrar|registre|adicionar|adicione|incluir|inclua|novo|nova|agregar|agrega|agregue|anadir|anade|incluye|incluir|nuevo|nueva)\b/.test(normalized);
   if (!isCreate || VEHICLE_EXPENSE_RE.test(text)) return null;
 
   const vehicle: VehicleData = {};
   const brand = text.match(/\bmarca\s+([^,;]+?)(?=\s+modelo\b|\s+ano\b|\s+placa\b|$)/i)?.[1]?.trim();
   const model = text.match(/\bmodelo\s+([^,;]+?)(?=\s+marca\b|\s+ano\b|\s+placa\b|$)/i)?.[1]?.trim();
-  const year = text.match(/\b(?:ano\s+)?((?:19|20)\d{2})\b/)?.[1];
+  const year = text.match(/\b(?:(?:ano|a[ñn]o)\s+)?((?:19|20)\d{2})\b/)?.[1];
   const plate = text.match(/\bplaca\s+([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}|[A-Z]{3}[- ]?\d{4})\b/i)?.[1];
-  const km = text.match(/\b([\d.]+)\s*(?:km|quil[oô]metros?)\b/i)?.[1];
+  const km = text.match(/\b([\d.]+)\s*(?:km|quil[oô]metros?|kil[oó]metros?)\b/i)?.[1];
   if (brand) vehicle.brand = brand;
   if (model) vehicle.model = model;
   if (year) vehicle.year = Number(year);
@@ -1289,17 +1580,17 @@ export function getExplicitVehicleCrudResult(message: string): AIResult | null {
   const fuelType = parseFuelType(text);
   if (fuelType) vehicle.fuelType = fuelType;
   if (/\b(empresa|empresarial)\b/.test(normalized)) vehicle.mode = "business";
-  else if (/\bpessoal\b/.test(normalized)) vehicle.mode = "personal";
+  else if (/\b(?:pessoal|personal)\b/.test(normalized)) vehicle.mode = "personal";
 
   // Formato natural sem rótulos: "cadastre um Volkswagen Gol 2020".
   if (!vehicle.brand && !vehicle.model) {
-    const free = text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van)\b\s+(.+)$/i)?.[1]
-      ?.replace(/\b(?:ano|placa)\s+/gi, "")
+    const free = text.match(/\b(?:ve[ií]culo|carro|moto|caminh[ãa]o|van|veh[ií]culo|auto|coche|cami[oó]n)\b\s+(.+)$/i)?.[1]
+      ?.replace(/\b(?:ano|a[ñn]o|placa)\s+/gi, "")
       .replace(/\b(?:19|20)\d{2}\b/g, "")
       .replace(/\b[A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2}\b/gi, "")
-      .replace(/\b[\d.]+\s*(?:km|quil[oô]metros?)\b/gi, "")
-      .replace(/\b(gasolina|etanol|[áa]lcool|diesel|el[eé]tric[oa]|flex|pessoal|empresa|empresarial)\b/gi, "")
-      .replace(/\b(com|de|do|da)\b/gi, "")
+      .replace(/\b[\d.]+\s*(?:km|quil[oô]metros?|kil[oó]metros?)\b/gi, "")
+      .replace(/\b(gasolina|etanol|[áa]lcool|alcohol|diesel|el[eé]ctric[oa]|flex|pessoal|personal|empresa|empresarial)\b/gi, "")
+      .replace(/\b(com|con|de|do|da|del)\b/gi, "")
       .replace(/\s+/g, " ").trim();
     const parts = free?.split(" ").filter(Boolean) || [];
     if (parts.length === 1) vehicle.model = parts[0];
@@ -1329,25 +1620,25 @@ export function getUnsupportedBankConnectionResponse(
   const previousUser = normalizeCapabilityText(lastUserMessage);
 
   const mentionsOpenFinance = /\bopen\s*(finance|banking)\b/.test(current);
-  const mentionsBankAccount = /\bcontas?\s+bancari[ao]s?\b/.test(current);
-  const mentionsBankOrCard = /\b(bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?)\b/.test(current);
-  const setupVerb = /\b(conect\w*|integr\w*|vincul\w*|sincron\w*|acess\w*|adicion\w*|cadastr\w*)\b/;
+  const mentionsBankAccount = /\b(?:contas?\s+bancari[ao]s?|cuentas?\s+bancarias?)\b/.test(current);
+  const mentionsBankOrCard = /\b(bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?|tarjetas?(?:\s+de\s+credito)?)\b/.test(current);
+  const setupVerb = /\b(conect\w*|integr\w*|vincul\w*|sincron\w*|acess\w*|acced\w*|adicion\w*|anad\w*|agreg\w*|cadastr\w*|registr\w*)\b/;
   const asksForSetup = setupVerb.test(current);
-  const cannotFindSetup = /\b(nao\s+encontr\w*|onde|local)\b/.test(current)
+  const cannotFindSetup = /\b(nao\s+encontr\w*|no\s+encuentr\w*|onde|donde|local|ubicacion)\b/.test(current)
     && (asksForSetup || mentionsBankAccount || mentionsBankOrCard);
   const priorBankSetup = /\bopen\s*(finance|banking)\b/.test(previousUser)
-    || (/\b(contas?\s+bancari[ao]s?|bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?)\b/.test(previousUser)
+    || (/\b(contas?\s+bancari[ao]s?|cuentas?\s+bancarias?|bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?|tarjetas?(?:\s+de\s+credito)?)\b/.test(previousUser)
       && setupVerb.test(previousUser));
   const followUpText = current.replace(/[?!.,;:]+/g, " ").replace(/\s+/g, " ").trim();
   const shortFollowUp = current.length <= 100
     && (
-      /^(?:e\s+)?(?:onde|como)(?:\s+eu)?(?:\s+(?:faco|acho|encontro|acesso|ativo|conecto|adiciono|cadastro|fica))?(?:\s+para\s+(?:fazer|acessar|ativar|conectar|adicionar|cadastrar))?(?:\s+(?:isso|essa\s+opcao|esse\s+menu|essa\s+funcao|la))?$/.test(followUpText)
-      || /^(?:e\s+)?nao\s+(?:encontrei|achei)(?:\s+(?:isso|essa\s+opcao|esse\s+menu|essa\s+funcao))?$/.test(followUpText)
+      /^(?:(?:e|y)\s+)?(?:onde|donde|como)(?:\s+(?:eu|yo))?(?:\s+(?:faco|acho|encontro|acesso|ativo|conecto|adiciono|cadastro|fica|hago|encuentro|accedo|activo|agrego|registro|esta))?(?:\s+(?:para|pra)\s+(?:fazer|acessar|ativar|conectar|adicionar|cadastrar|hacer|acceder|activar|agregar|registrar))?(?:\s+(?:isso|essa\s+opcao|esse\s+menu|essa\s+funcao|eso|esa\s+opcion|ese\s+menu|esa\s+funcion|la))?$/.test(followUpText)
+      || /^(?:(?:e|y)\s+)?(?:nao\s+(?:encontrei|achei)|no\s+(?:encontre|lo\s+encuentro))(?:\s+(?:isso|essa\s+opcao|esse\s+menu|essa\s+funcao|eso|esa\s+opcion|ese\s+menu|esa\s+funcion))?$/.test(followUpText)
     );
   const genericAccountSetup = current.length <= 100
-    && /\bcontas?\b/.test(current)
+    && /\b(?:contas?|cuentas?)\b/.test(current)
     && setupVerb.test(current)
-    && !/\b(luz|agua|internet|boleto|pagar|recorrente|despesa|gasto)\b/.test(current);
+    && !/\b(luz|agua|internet|boleto|pagar|recorrente|recurrente|despesa|gasto|factura)\b/.test(current);
 
   if (
     !mentionsOpenFinance
@@ -1488,6 +1779,19 @@ PRIORIDADE DE INTERPRETAÇÃO:
 
 REGISTROS EM LOTE: sempre que a pessoa pedir dois ou mais registros da mesma função, extraia TODOS, sem pedir novamente os dados que já foram ditos. Use estes arrays: finances, tasks, reminders, goals, vehicles, vehicleExpenses, recurrings, agendaItems, meetItems, groceryPurchases, employees, customers ou categoryNames. Use o campo singular equivalente somente para um registro. Esta regra vale igualmente em português brasileiro, espanhol neutro e português de Portugal.
 
+EQUIVALÊNCIA TOTAL EM ESPANHOL: toda ação descrita abaixo em português também deve ser reconhecida em espanhol neutro latino-americano, sem traduzir a resposta para português. Considere, entre outras, estas famílias equivalentes:
+- criar/registrar/anotar/adicionar → crear/registrar/anotar/agregar/añadir/incluir;
+- consultar/listar/mostrar/pesquisar → consultar/listar/mostrar/buscar/investigar/averiguar;
+- alterar/editar/corrigir/mover → cambiar/editar/corregir/modificar/mover/actualizar;
+- excluir/apagar/remover/cancelar/limpar → eliminar/borrar/quitar/cancelar/vaciar/limpiar;
+- tarefa/lembrete/agenda/reunião → tarea/recordatorio/agenda/reunión;
+- receita/despesa/saldo/extrato/conta → ingreso/gasto/saldo/extracto/cuenta;
+- veículo/carro/caminhão/quilometragem → vehículo/auto/coche/camión/kilometraje;
+- lista de compras/mercado/produto → lista de compras/supermercado/mercado/producto/artículo;
+- funcionário/cliente/meta/parcela → empleado/cliente/meta/cuota;
+- hoje/amanhã/ontem/semana que vem/mês passado → hoy/mañana/ayer/semana que viene/mes pasado.
+Palavras como “ayuda”, “soporte”, “qué puedes hacer” e “instrucciones” são pedidos de ajuda. Uma continuação curta em espanhol (“allí”, “ahí”, “esa”, “lo anterior”, “y mañana”, “la segunda”) deve usar o contexto recente exatamente como a equivalente em português. A resposta livre em espanhol deve ser integralmente em espanhol; nunca misture rótulos, erros ou instruções em português.
+
 ⚠️ CONTINUAÇÃO DE AÇÃO: quando a mensagem vier no formato "Pedido original" + "Informação complementar", una todas as partes como um único comando. A informação complementar responde à pergunta feita pelo sistema; preserve a intenção original e complete somente os campos novos.
 
 INTENÇÕES POSSÍVEIS:
@@ -1532,13 +1836,13 @@ INTENÇÕES POSSÍVEIS:
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
-- agenda_create: agendar um ou vários compromissos, reuniões, consultas ou eventos. Use "agendaData" para um e "agendaItems" para vários, com título, startDate, startTime e campos opcionais em cada item.
+- agenda_create: agendar um ou vários compromissos, consultas ou eventos que NÃO sejam reuniões. Use "agendaData" para um e "agendaItems" para vários, com título, startDate, startTime e campos opcionais em cada item.
 - agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
 - agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: "reunião", "consulta") — NUNCA inclua dia/data/hora no keyword, já que a busca compara com o título salvo (que não tem essas palavras) e um keyword mais longo que o título nunca bate. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
 - agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "reagendar a reunião para segunda às 10h" extraia keyword: "reunião", NÃO "reunião para segunda") e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
 - agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "apaga o compromisso de sexta" extraia keyword: "compromisso", NÃO "compromisso de sexta"; de "cancelar a reunião de amanhã" extraia "reunião", NÃO "reunião de amanhã").
 - agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com APENAS o nome/assunto do compromisso, sem dia/data/hora. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
-- meet_create: criar uma reunião do Google Meet ("criar meet amanhã às 14h", "meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). Diferente de agenda_create — esse cria um link real do Google Meet.
+- meet_create: criar qualquer reunião nova, com ou sem pedido explícito de Google Meet ("reunião amanhã às 14h", "reunión mañana a las 14", "criar meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). O sistema perguntará no idioma do cliente se ele quer incluir o link do Google Meet. Uma consulta/cita ou evento comum continua sendo agenda_create.
 - vehicle_create: cadastrar um ou vários veículos novos. Use "vehicle" para um e "vehicles" para vários. Inclua brand, model, year, plate, fuelType e currentKm quando informados. Marca, modelo e ano serão perguntados item por item se faltarem.
 - vehicle_update: alterar os dados de um veículo existente ("altere a placa do Gol para ABC1D23", "muda o km da moto para 35000", "quero alterar meu veículo"). Use "keyword" com marca, modelo ou placa do veículo original e em "vehicle" SOMENTE os novos campos. Para mudar entre pessoal e empresa, use "vehicle.newMode". Se a pessoa só disser que quer alterar, sem dizer o campo, deixe os novos campos vazios: o sistema perguntará.
 - vehicle_delete: excluir um veículo ("exclua o Gol", "remova minha moto"). Use "keyword" com marca, modelo ou placa quando houver. Se não identificar qual, o sistema mostrará a lista.
@@ -2636,11 +2940,32 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   const explicitTask = getExplicitTaskCreateResult(message);
   if (explicitTask) return explicitTask;
 
+  const explicitDriveRename = getExplicitDriveRenameResult(message);
+  if (explicitDriveRename) return explicitDriveRename;
+
+  const explicitDriveSearch = getExplicitDriveSearchResult(message);
+  if (explicitDriveSearch) return explicitDriveSearch;
+
+  const explicitModeSwitch = getExplicitModeSwitchResult(message, ctx?.history);
+  if (explicitModeSwitch) return explicitModeSwitch;
+
+  const explicitCustomer = getExplicitCustomerCrudResult(message);
+  if (explicitCustomer) return explicitCustomer;
+
+  const explicitEmployee = getExplicitEmployeeCrudResult(message);
+  if (explicitEmployee) return explicitEmployee;
+
   const explicitVehicle = getExplicitVehicleCrudResult(message);
   if (explicitVehicle) return explicitVehicle;
 
+  const explicitRecurringQuery = getExplicitRecurringQueryResult(message);
+  if (explicitRecurringQuery) return explicitRecurringQuery;
+
   const explicitFinanceDetail = getExplicitFinanceDetailResult(message, ctx?.history);
   if (explicitFinanceDetail) return withExplicitRelativePeriod(message, explicitFinanceDetail);
+
+  const explicitConfirmPending = getExplicitFinanceConfirmPendingResult(message);
+  if (explicitConfirmPending) return explicitConfirmPending;
 
   const explicitUpcomingFinance = getExplicitUpcomingFinanceQueryResult(message);
   if (explicitUpcomingFinance) return explicitUpcomingFinance;
@@ -2653,6 +2978,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitLastGroceryPurchase = getExplicitLastGroceryPurchaseResult(message);
   if (explicitLastGroceryPurchase) return explicitLastGroceryPurchase;
+
+  const explicitGrocerySpend = getExplicitGrocerySpendQueryResult(message);
+  if (explicitGrocerySpend) return explicitGrocerySpend;
 
   const explicitGroceryHistory = getExplicitGroceryHistoryQueryResult(message);
   if (explicitGroceryHistory) return explicitGroceryHistory;
@@ -2697,19 +3025,30 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
       generationConfig: { temperature: 0.1 }, // classificador — não texto criativo
     });
 
-    const result = await model.generateContent(
-      `${buildVolatileContext(ctx)}\n\nMensagem do usuário: "${message}"`
-    );
+    const prompt = `${buildVolatileContext(ctx)}\n\nMensagem do usuário: "${message}"`;
+    let result: GenerateContentResult | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        result = await model.generateContent(prompt);
+        break;
+      } catch (error) {
+        const detail = String(error);
+        const retryable = /\b(?:429|500|502|503|504)\b|service unavailable|temporarily unavailable|resource exhausted/i.test(detail);
+        if (!retryable || attempt === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 250 : 750));
+      }
+    }
+    if (!result) throw new Error("Gemini did not return a result");
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    const parsed = withExplicitFinanceDestinationMode(
+    const parsed = normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
       message,
       withExplicitFinanceType(
         message,
         withExplicitRelativePeriod(message, JSON.parse(text) as AIResult),
       ),
-    );
+    ));
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   } catch (e) {

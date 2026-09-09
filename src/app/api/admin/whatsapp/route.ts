@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getAdminSession as getSession } from "@/lib/auth";
 import { getConfig, saveConfig, type WhatsAppConfig } from "@/lib/whatsapp-config";
-import { checkConnection, getQrCode } from "@/lib/whatsapp";
+import {
+  checkConnection,
+  getQrCode,
+  languageCodeFor,
+  localizedTemplateName,
+  localizedTemplateParams,
+  type WhatsAppTemplateBase,
+} from "@/lib/whatsapp";
 import { createOrRestartInstance } from "@/lib/evolution";
 import { sendTemplate } from "@/lib/waba";
 import { detectBotNumber } from "@/lib/bot-info";
@@ -113,26 +120,41 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "testTemplate") {
-    const { template, phone } = body as { template?: string; phone?: string };
+    const { template, phone, locale } = body as { template?: WhatsAppTemplateBase; phone?: string; locale?: "pt-BR" | "es" };
     if (!phone) return NextResponse.json({ error: "Informe um telefone" }, { status: 400 });
-    const testParams: Record<string, Record<string, string>> = {
-      lbt_pessoal: { texto: "Teste de disparo do Zelo 🔔" },
-      lembrete_compromisso: { compromisso: "Compromisso de teste", horario: "14:30" },
-      lembrete_compromisso15: { compromisso: "Compromisso de teste", horario: "14:30" },
-      cbr_recorrente: { descricao: "Teste de cobrança", valor: "R$ 99,90", data: new Date().toLocaleDateString("pt-BR") },
+    const safeLocale = locale === "es" ? "es" : "pt-BR";
+    const spanish = safeLocale === "es";
+    const testParams: Record<WhatsAppTemplateBase, Record<string, string>> = {
+      lembrete_assessor: {
+        remetente: spanish ? "Equipo Zelo" : "Equipe Zelo",
+        lembrete: spanish ? "Mensaje de prueba de Zelo" : "Mensagem de teste do Zelo",
+      },
+      lbte_empresarial: { lembrete: spanish ? "Revisar los compromisos de la empresa" : "Revisar os compromissos da empresa" },
+      lbt_pessoal: { texto: spanish ? "Prueba de envío de Zelo 🔔" : "Teste de disparo do Zelo 🔔" },
+      lembrete_compromisso: { compromisso: spanish ? "Evento de prueba" : "Compromisso de teste", horario: "14:30" },
+      lembrete_compromisso15: { compromisso: spanish ? "Evento de prueba" : "Compromisso de teste", horario: "14:30" },
+      cbr_recorrente: {
+        descricao: spanish ? "Cobro de prueba" : "Teste de cobrança",
+        valor: spanish ? "USD 99.90" : "R$ 99,90",
+        data: new Date().toLocaleDateString(spanish ? "es" : "pt-BR"),
+      },
+      boas_vindas_cadastro2: {},
     };
     const params = template ? testParams[template] : undefined;
     if (!params) return NextResponse.json({ error: "Template inválido" }, { status: 400 });
-    const result = await sendTemplate(phone, template!, "pt_BR", params);
+    const templateName = localizedTemplateName(template!, safeLocale);
+    const localizedParams = localizedTemplateParams(template!, params, safeLocale);
+    const languageCode = languageCodeFor(safeLocale);
+    const result = await sendTemplate(phone, templateName, languageCode, localizedParams);
     // Esse envio chama waba.sendTemplate direto (não passa pela fachada
     // src/lib/whatsapp.ts), então precisa logar no Inbox manualmente — senão
     // a mensagem sai pro WhatsApp do destinatário mas nunca aparece na
     // conversa dele no /admin/inbox.
     if (result.ok) {
-      const preview = `🧪 Teste de template "${template}"\n${Object.entries(params).map(([k, v]) => `${k}: ${v}`).join("\n")}`;
+      const preview = `🧪 Teste de template "${templateName}" (${languageCode})\n${Object.entries(localizedParams).map(([k, v]) => `${k}: ${v}`).join("\n")}`;
       await addMessage(phone, { role: "assistant", content: preview, ts: Date.now() });
     }
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, templateName, languageCode });
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 });

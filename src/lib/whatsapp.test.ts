@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   languageCodeFor,
+  buildReminderTemplateDispatch,
   localizedTemplateName,
   localizedTemplateParams,
   renderSpanishBusinessReminder,
   SPANISH_BUSINESS_REMINDER_TEMPLATE_BODY,
   SPANISH_TEMPLATE_NAMES,
   SPANISH_WELCOME_TEMPLATE_TEXT,
+  type WhatsAppTemplateBase,
 } from "./whatsapp";
 
 describe("Spanish WhatsApp templates", () => {
@@ -29,12 +31,47 @@ describe("Spanish WhatsApp templates", () => {
   });
 
   it("blocks an unmapped Spanish template instead of falling back to Portuguese", () => {
-    expect(() => localizedTemplateName("modelo_sem_mapeamento", "es")).toThrow(
+    expect(() => localizedTemplateName("modelo_sem_mapeamento" as WhatsAppTemplateBase, "es")).toThrow(
       "template espanhol não mapeado",
     );
     expect(() => localizedTemplateName("lembrete_assessor", "fr")).toThrow(
       "locale de template não suportado",
     );
+  });
+
+  it("routes personal, business and third-party reminders to the correct Spanish templates", () => {
+    expect(buildReminderTemplateDispatch({
+      message: "Tomar el medicamento",
+      recipientType: "self",
+      mode: "personal",
+      locale: "es",
+    })).toEqual({
+      templateName: "lbt_pessoal",
+      renderedText: "🔔 Aviso personal\n\nTomar el medicamento\n\nEste aviso fue programado previamente en Zelo.",
+      params: { texto: "Tomar el medicamento" },
+    });
+
+    expect(buildReminderTemplateDispatch({
+      message: "Revisar el flujo de caja",
+      recipientType: "self",
+      mode: "business",
+      locale: "es",
+    })).toMatchObject({
+      templateName: "lbte_empresarial",
+      params: { lembrete: "Revisar el flujo de caja" },
+    });
+
+    expect(buildReminderTemplateDispatch({
+      message: "Enviar el informe",
+      recipientType: "employee",
+      mode: "business",
+      ownerName: "Carlos",
+      locale: "es",
+    })).toEqual({
+      templateName: "lembrete_assessor",
+      renderedText: "🔔 Aviso programado por Carlos\n\nEnviar el informe\n\nEste aviso fue solicitado previamente en Zelo.",
+      params: { remetente: "Carlos", lembrete: "Enviar el informe" },
+    });
   });
 
   it("sends the exact named parameters registered in the Spanish Meta templates", () => {
@@ -64,7 +101,7 @@ describe("Spanish WhatsApp templates", () => {
 
     expect(() => localizedTemplateParams("lbte_empresarial", {
       campo_portugues_inesperado: "valor",
-    }, "es")).toThrow("parâmetro espanhol não mapeado");
+    }, "es")).toThrow("parâmetros inválidos para lbte_empresarial");
   });
 
   it("instructs the customer how to connect WhatsApp after account activation", () => {
