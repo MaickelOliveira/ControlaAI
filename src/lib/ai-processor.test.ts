@@ -365,6 +365,39 @@ describe("task lists and scheduled reminders", () => {
       .toMatchObject({ intent: "reminder_set", reminder: { message: "confirmar el pago" } });
   });
 
+  it("schedules a common reminder exactly one hour before the stated time", () => {
+    const result = getExplicitScheduledReminderResult(
+      "Me lembre de tomar remédio amanhã às 9, me lembra uma hora antes",
+    );
+    expect(result).toMatchObject({
+      intent: "reminder_set",
+      reminder: { message: "tomar remédio", repeat: "none" },
+    });
+    expect(result?.reminder?.scheduledAt).toMatch(/^\d{4}-\d{2}-\d{2}T08:00:00$/);
+  });
+
+  it("applies a fifteen-minute advance to a Spanish reminder", () => {
+    const result = getExplicitScheduledReminderResult(
+      "Recuérdame tomar el medicamento mañana a las 9, avísame 15 minutos antes",
+    );
+    expect(result).toMatchObject({
+      intent: "reminder_set",
+      reminder: { message: "tomar el medicamento", repeat: "none" },
+    });
+    expect(result?.reminder?.scheduledAt).toMatch(/^\d{4}-\d{2}-\d{2}T08:45:00$/);
+  });
+
+  it("keeps the stated time when no advance was requested", () => {
+    const result = getExplicitScheduledReminderResult(
+      "Me lembre amanhã de tomar remédio às 18",
+    );
+    expect(result).toMatchObject({
+      intent: "reminder_set",
+      reminder: { message: "tomar remédio", repeat: "none" },
+    });
+    expect(result?.reminder?.scheduledAt).toMatch(/^\d{4}-\d{2}-\d{2}T18:00:00$/);
+  });
+
   it("creates a Spanish task list item by item", () => {
     expect(getExplicitTaskListCreateResult("Crea una lista de tareas: estudiar, ordenar el escritorio y llamar a Ana")?.tasks?.map(task => task.title))
       .toEqual(["estudiar", "ordenar el escritorio", "llamar a Ana"]);

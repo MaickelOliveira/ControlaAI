@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   appointmentReminderAt,
   formatReminderOffset,
+  isAgendaReminderTarget,
+  isStandaloneAppointmentReminderRequest,
   parseAppointmentReminderRequest,
 } from "./appointment-reminders";
-import { replyAppointmentReminder } from "./bot-replies";
+import { replyAgendaCreated, replyAgendaReminderPolicy, replyAppointmentReminder } from "./bot-replies";
 
 describe("parseAppointmentReminderRequest", () => {
   it("understands the exact reported one-hour reminder", () => {
@@ -49,6 +51,20 @@ describe("parseAppointmentReminderRequest", () => {
   it("does not claim a reminder when the duration is missing", () => {
     expect(parseAppointmentReminderRequest("me avisa antes da reunião")).toBeNull();
   });
+
+  it("separates Agenda alerts from ordinary reminders", () => {
+    const meeting = parseAppointmentReminderRequest("Me avisa uma hora antes da reunião.")!;
+    const medicine = parseAppointmentReminderRequest("Me lembre uma hora antes de tomar o remédio.")!;
+    expect(isAgendaReminderTarget(meeting)).toBe(true);
+    expect(isAgendaReminderTarget(medicine)).toBe(false);
+  });
+
+  it("distinguishes a direct reminder from a new appointment with a reminder", () => {
+    expect(isStandaloneAppointmentReminderRequest("Me avisa uma hora antes da reunião.")).toBe(true);
+    expect(isStandaloneAppointmentReminderRequest("Avísame una hora antes de la reunión.")).toBe(true);
+    expect(isStandaloneAppointmentReminderRequest("Marque uma reunião amanhã e me avise uma hora antes.")).toBe(false);
+    expect(isStandaloneAppointmentReminderRequest("Crea una reunión mañana y avísame una hora antes.")).toBe(false);
+  });
 });
 
 describe("appointment reminder scheduling", () => {
@@ -87,5 +103,17 @@ describe("Spanish appointment template text", () => {
     expect(replyAppointmentReminder(appointment, "15 minutos", "es")).toBe(
       "⏰ Evento en breve\n\nReunión con el contador comenzará en aproximadamente 15 minutos, a las 14:30.\n\nEste aviso corresponde a un evento registrado previamente en tu agenda de Zelo.",
     );
+  });
+
+  it("explains the fixed Agenda alerts in the correct language", () => {
+    expect(replyAgendaReminderPolicy("pt-BR")).toContain("*2 horas antes* e *15 minutos antes*");
+    expect(replyAgendaReminderPolicy("pt-BR")).not.toContain("Las reuniones");
+    expect(replyAgendaReminderPolicy("es")).toContain("*2 horas antes* y *15 minutos antes*");
+    expect(replyAgendaReminderPolicy("es")).not.toContain("Os compromissos");
+  });
+
+  it("includes both automatic alerts when an appointment is created", () => {
+    expect(replyAgendaCreated(appointment, "pt-BR")).toContain("*2 horas antes* e *15 minutos antes*");
+    expect(replyAgendaCreated(appointment, "es")).toContain("*2 horas antes* y *15 minutos antes*");
   });
 });

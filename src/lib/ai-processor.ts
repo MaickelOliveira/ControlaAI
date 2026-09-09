@@ -1262,6 +1262,18 @@ export function getExplicitScheduledReminderResult(message: string): AIResult | 
   if (hour === undefined || hour > 23 || minute > 59) return null;
 
   const date = addDaysToBRDate(/^(?:amanha|manana)$/.test(dateToken) ? 1 : 0);
+  const advanceMatch = normalized.match(/\b(?:me\s+)?(?:lembra|lembre|avisa|avise|recuerdame|recordarme|avisame)?\s*(\d{1,3}|um|uma|uno|una|quinze|quince|trinta|treinta)\s*(h|hr|hrs|hora|horas|min|minuto|minutos)\s+antes\b/);
+  const advanceWords: Record<string, number> = {
+    um: 1, uma: 1, uno: 1, una: 1,
+    quinze: 15, quince: 15, trinta: 30, treinta: 30,
+  };
+  const advanceAmount = advanceMatch
+    ? /^\d+$/.test(advanceMatch[1]) ? Number(advanceMatch[1]) : advanceWords[advanceMatch[1]]
+    : 0;
+  const advanceMinutes = advanceMatch
+    ? /^(?:h|hr|hrs|hora|horas)$/.test(advanceMatch[2]) ? advanceAmount * 60 : advanceAmount
+    : 0;
+
   let content = text
     .replace(/^\p{L}[\p{L}\s'-]{0,40},\s*/u, "")
     .replace(/^\s*(?:(?:me\s+)?(?:lembra|lembre)(?:-me)?|recu[eé]rdame|recordarme)\s*/i, "")
@@ -1270,16 +1282,31 @@ export function getExplicitScheduledReminderResult(message: string): AIResult | 
     .replace(/^\s*\d{1,2}(?::\d{2})?\s*(?:horas?\s+)?(?:da|de\s+la)\s+(?:tarde|manh[ãa]|mañana|noite|noche)\s*[.,;:]?\s*/i, "")
     .replace(/^\s*(?:(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2})?|\d{1,2}h(?:\d{2})?)\s*[.,;:]?\s*/i, "")
     .replace(/^\s*(?:de|para|que)\s+/i, "")
+    // No formato natural "me lembre de X amanhã às 9, uma hora antes",
+    // data e antecedência vêm depois do assunto. Elas definem o disparo e
+    // não podem virar parte do texto enviado no lembrete.
+    .replace(/(?:hoje|hoy|amanh[ãa]|ma[ñn]ana)(?=\s|[,.;:]|$)\s*(?:(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2})?|\d{1,2}h(?:\d{2})?)?/gi, " ")
+    .replace(/(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2})?|\b\d{1,2}h(?:\d{2})?\b/gi, " ")
+    .replace(/(?:,?\s*(?:e|y)?\s*(?:me\s+)?(?:lembra|lembre|avisa|avise|recu[eé]rdame|recordarme|av[ií]same)?\s*)?(?:\d{1,3}|um|uma|uno|una|quinze|quince|trinta|treinta)\s*(?:h|hr|hrs|hora|horas|min|minuto|minutos)\s+antes\b/gi, " ")
+    .replace(/^\s*(?:de|para|que)\s+/i, "")
+    .replace(/\s+/g, " ")
     .trim().replace(/[.!?]+$/, "");
   if (!content) content = text.replace(/^[^,.;:]+[,.;:]\s*/, "").trim();
   if (!content || content === text) return null;
+
+  let scheduledAt = `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
+  if (advanceMinutes > 0) {
+    const [targetYear, targetMonth, targetDay] = date.split("-").map(Number);
+    const shifted = new Date(Date.UTC(targetYear, targetMonth - 1, targetDay, hour, minute) - advanceMinutes * 60_000);
+    scheduledAt = shifted.toISOString().slice(0, 19);
+  }
 
   return {
     intent: "reminder_set",
     confidence: 1,
     reminder: {
       message: content,
-      scheduledAt: `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`,
+      scheduledAt,
       repeat: "none",
     },
   };
@@ -3127,6 +3154,36 @@ Consulta iniciada em ${searchedAt} (horário de Brasília).`;
   } catch (error) {
     console.error("[ai-processor] Erro na pesquisa web:", String(error));
     return failure;
+  }
+}
+
+/** Identifica o objeto/produto visível numa imagem para transformar perguntas
+ * como "quanto custa esse remédio?" em uma pesquisa textual específica. */
+export async function identifyImageSubject(
+  buffer: Buffer,
+  mimeType: string,
+  locale?: string,
+): Promise<string | null> {
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  const instruction = locale === "es"
+    ? "Identifica el producto u objeto principal de la imagen. Incluye marca, nombre, presentación, concentración y cantidad cuando sean visibles."
+    : "Identifique o produto ou objeto principal da imagem. Inclua marca, nome, apresentação, concentração e quantidade quando estiverem visíveis.";
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0 } });
+    const result = await model.generateContent([
+      `${instruction}\nRetorne somente uma descrição curta e pesquisável. Se não for possível identificar com segurança, retorne exatamente: NAO_IDENTIFICADO`,
+      { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
+    ]);
+    const subject = result.response.text().trim().replace(/^['"]|['"]$/g, "");
+    if (!subject || /^NAO_IDENTIFICADO$/i.test(subject)) return null;
+    return subject.slice(0, 240);
+  } catch (error) {
+    console.error("[ai-processor] Erro ao identificar imagem:", String(error));
+    return null;
   }
 }
 

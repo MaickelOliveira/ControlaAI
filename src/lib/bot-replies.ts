@@ -767,9 +767,22 @@ export function replyAgendaCreated(a: Appointment, locale?: string): string {
       : isPtPt(locale) ? "\n\n⚠️ Foi guardado no Zelo, mas não consegui sincronizá-lo com o Google Calendar. Volta a ligar o Google nas Definições."
         : "\n\n⚠️ Foi salvo no Zelo, mas não consegui sincronizar com o Google Calendar. Reconecte o Google em Configurações."
     : "";
-  if (isEs(locale)) return `Agendado en tu calendario.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${syncWarning}`;
-  if (isPtPt(locale)) return `Marcado na tua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${syncWarning}`;
-  return `Marcado na sua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${syncWarning}`;
+  const reminderNotice = isEs(locale)
+    ? "\n\n🔔 Avisos automáticos: *2 horas antes* y *15 minutos antes*."
+    : "\n\n🔔 Avisos automáticos: *2 horas antes* e *15 minutos antes*.";
+  if (isEs(locale)) return `Agendado en tu calendario.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${reminderNotice}${syncWarning}`;
+  if (isPtPt(locale)) return `Marcado na tua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${reminderNotice}${syncWarning}`;
+  return `Marcado na sua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${reminderNotice}${syncWarning}`;
+}
+
+export function replyAgendaReminderPolicy(locale?: string): string {
+  if (isEs(locale)) {
+    return "🔔 Las reuniones y citas de la Agenda ya tienen dos avisos automáticos: *2 horas antes* y *15 minutos antes*.\n\nPara un recordatorio común, sí puedes elegir el horario exacto.";
+  }
+  if (isPtPt(locale)) {
+    return "🔔 As reuniões e os compromissos da Agenda já têm dois avisos automáticos: *2 horas antes* e *15 minutos antes*.\n\nNum lembrete comum, podes escolher o horário exato.";
+  }
+  return "🔔 As reuniões e os compromissos da Agenda já têm dois avisos automáticos: *2 horas antes* e *15 minutos antes*.\n\nEm um lembrete comum, você pode escolher o horário exato.";
 }
 
 export function replyAgendaList(appointments: Appointment[], locale?: string): string {
@@ -857,16 +870,16 @@ export function replyMeetCreated(meet: MeetLike, attendees?: Array<{ phone?: str
   if (isEs(locale)) {
     const inviteNote = withPhones > 0 ? `\n👥 Ya avisé a ${withPhones} participante${withPhones > 1 ? "s" : ""} por WhatsApp` : "";
     const emailNote = withEmails > 0 ? `\n📧 Invitación por correo enviada a ${withEmails} participante${withEmails > 1 ? "s" : ""}` : "";
-    return `${meet.meetLink ? "Reunión agendada, con Google Meet." : "Evento agendado."}\n\n📅 *${meet.title}*\n🕒 ${start}${endStr}${meetStr}${inviteNote}${emailNote}`;
+    return `${meet.meetLink ? "Reunión agendada, con Google Meet." : "Evento agendado."}\n\n📅 *${meet.title}*\n🕒 ${start}${endStr}${meetStr}${inviteNote}${emailNote}\n\n🔔 Avisos automáticos: *2 horas antes* y *15 minutos antes*.`;
   }
   if (isPtPt(locale)) {
     const inviteNote = withPhones > 0 ? `\n👥 Já avisei ${withPhones} participante${withPhones > 1 ? "s" : ""} pelo WhatsApp` : "";
     const emailNote = withEmails > 0 ? `\n📧 Convite por e-mail enviado a ${withEmails} participante${withEmails > 1 ? "s" : ""}` : "";
-    return `${meet.meetLink ? "Reunião marcada, com Google Meet." : "Compromisso marcado."}\n\n📅 *${meet.title}*\n🕒 ${start}${endStr}${meetStr}${inviteNote}${emailNote}`;
+    return `${meet.meetLink ? "Reunião marcada, com Google Meet." : "Compromisso marcado."}\n\n📅 *${meet.title}*\n🕒 ${start}${endStr}${meetStr}${inviteNote}${emailNote}\n\n🔔 Avisos automáticos: *2 horas antes* e *15 minutos antes*.`;
   }
   const inviteNote = withPhones > 0 ? `\n👥 Já avisei ${withPhones} participante${withPhones > 1 ? "s" : ""} pelo WhatsApp` : "";
   const emailNote = withEmails > 0 ? `\n📧 Convite por e-mail enviado para ${withEmails} participante${withEmails > 1 ? "s" : ""}` : "";
-  return `${meet.meetLink ? "Reunião marcada, com Google Meet." : "Compromisso marcado."}\n\n📅 *${meet.title}*\n🕒 ${start}${endStr}${meetStr}${inviteNote}${emailNote}`;
+  return `${meet.meetLink ? "Reunião marcada, com Google Meet." : "Compromisso marcado."}\n\n📅 *${meet.title}*\n🕒 ${start}${endStr}${meetStr}${inviteNote}${emailNote}\n\n🔔 Avisos automáticos: *2 horas antes* e *15 minutos antes*.`;
 }
 
 export function replyMeetInvite(meet: MeetLike, name: string, locale?: string): string {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listNumberLabel, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, splitWhatsAppMessage } from "./message-handler";
+import { listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
@@ -106,5 +106,22 @@ describe("localized WhatsApp help and errors", () => {
     const reply = replyProcessingError("es");
     expect(reply).toContain("Tuve un problema");
     expect(reply).not.toMatch(/Pode mandar|registrado do jeito certo|me avise/);
+  });
+});
+
+describe("image instructions", () => {
+  it.each([
+    ["guardar no Drive", "save"],
+    ["salva essa foto", "save"],
+    ["quanto custa esse remédio?", "search"],
+    ["quanto está esse remédio?", "search"],
+    ["pesquise o preço", "search"],
+    ["¿cuánto cuesta este medicamento?", "search"],
+    ["busca el precio", "search"],
+    ["guárdala en Drive", "save"],
+    ["identifique o produto", "describe"],
+    ["¿qué es esto?", "describe"],
+  ] as const)("maps %s to %s", (message, expected) => {
+    expect(parseImageAction(message)).toBe(expected);
   });
 });

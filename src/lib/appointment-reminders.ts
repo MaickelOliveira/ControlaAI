@@ -94,6 +94,28 @@ export function parseAppointmentReminderRequest(text: string): AppointmentRemind
   return { offsetMinutes, keyword: keyword || undefined };
 }
 
+/**
+ * Pedidos que começam diretamente pelo verbo de aviso referem-se a um
+ * compromisso já cadastrado ("me avisa uma hora antes da reunião"). Essa
+ * distinção permite resolver o lembrete antes de chamar o classificador de
+ * IA, que pode interpretar "avisa" como uma edição genérica da agenda.
+ *
+ * Mensagens que primeiro criam o compromisso ("marque uma reunião amanhã e
+ * me avise uma hora antes") continuam no fluxo normal de agenda_create.
+ */
+export function isStandaloneAppointmentReminderRequest(text: string): boolean {
+  const normalized = withoutAccents(text).trim();
+  return /^(?:(?:por favor|porfa)\s*,?\s*)?(?:(?:voce|tu)\s+)?(?:me\s+)?(?:avisa|avise|avisar|avisame|lembra|lembre|lembrar|recuerda|recuerdame|recordar)\b/.test(normalized);
+}
+
+/** Separa avisos da Agenda de lembretes comuns. A Agenda tem sua própria
+ * política automática (2h e 15min); outros assuntos continuam livres para
+ * usar exatamente o horário solicitado no módulo de Lembretes. */
+export function isAgendaReminderTarget(request: AppointmentReminderRequest, text = ""): boolean {
+  const target = withoutAccents(`${request.keyword ?? ""} ${text}`);
+  return /\b(?:agenda|compromisso|compromisos?|reuniao|reuniones?|meet|consulta|cita|evento|eventos?|videoconferencia)\b/.test(target);
+}
+
 export function appointmentReminderAt(startAt: string, offsetMinutes: number): string {
   return new Date(new Date(startAt).getTime() - offsetMinutes * 60_000).toISOString();
 }

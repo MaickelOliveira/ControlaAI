@@ -1,13 +1,13 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { resolveAccountForFinance } from "@/lib/accounts";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
-import { createReminder, getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
+import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
 import {
@@ -33,7 +33,7 @@ import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinance
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import { createAppointment, getUpcomingAppointments, getAppointmentsInRange, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
-import { appointmentReminderAt, formatReminderOffset, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
+import { formatReminderOffset, isAgendaReminderTarget, isStandaloneAppointmentReminderRequest, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
 import { createMeetEvent } from "@/lib/google-meet";
 import { addMeetToGoogleCalendarEvent } from "@/lib/google-calendar";
 import { isConnected } from "@/lib/google-oauth";
@@ -48,7 +48,7 @@ import {
   replyTrialExpired, replyAccountInactive, replyUnknown, replyLowConfidence,
   replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
-  replyAgendaList, replyAgendaUpdated, replyAgendaDeleted,
+  replyAgendaList, replyAgendaUpdated, replyAgendaDeleted, replyAgendaReminderPolicy,
   replyMeetCreated, replyMeetInvite,
   replyPersonNotFound, replyWppNameSaved,
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
@@ -145,6 +145,34 @@ async function wppSendLong(to: string, message: string, maxLength = 3500): Promi
   for (const chunk of splitWhatsAppMessage(message, maxLength)) await wppSend(to, chunk);
 }
 
+export type ImageAction = "save" | "search" | "describe";
+
+export function parseImageAction(text: string): ImageAction | null {
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  if (/\b(?:salva(?:r|la|lo)?|guarda(?:r|la|lo)?|archiva(?:r|la|lo)?|arquiva(?:r)?|almacena(?:r|la|lo)?|drive)\b/.test(normalized)) return "save";
+  if (/\b(?:pesquisa|pesquisar|pesquise|procura|procurar|busca|buscar|preco|precio|valor|custa|cuesta|cotacao|cotizacion|investiga|investigar)\b|\bquanto\s+(?:esta|e|sai|custa)\b|\bcuanto\s+(?:esta|vale|sale|cuesta)\b/.test(normalized)) return "search";
+  if (/\b(?:descreve|descreva|descrever|identifica|identifique|identificar|analisa|analise|analisar|o que e|que e isso|describe|identifica|analiza|analice|que es)\b/.test(normalized)) return "describe";
+  return null;
+}
+
+function isImageSearchRequest(text?: string): boolean {
+  return !!text && parseImageAction(text) === "search";
+}
+
+async function researchImage(from: string, buffer: Buffer, mimeType: string, request: string, locale?: string): Promise<void> {
+  const subject = await identifyImageSubject(buffer, mimeType, locale);
+  if (!subject) {
+    await wppSend(from, localized(locale,
+      "❓ Não consegui identificar o produto com segurança nessa imagem. Envie uma foto mais nítida, mostrando o nome, a marca e a embalagem.",
+      "❓ No pude identificar el producto con seguridad en esta imagen. Envía una foto más nítida que muestre el nombre, la marca y el envase."));
+    return;
+  }
+  const query = localized(locale,
+    `${request}. Produto identificado na imagem: ${subject}. Pesquise preços atuais no Brasil e envie lojas, valores e links para conferir.`,
+    `${request}. Producto identificado en la imagen: ${subject}. Busca precios actuales en el país del usuario y envía tiendas, importes y enlaces para comprobar.`);
+  await wppSendLong(from, await generateWebSearchResponse(query, locale));
+}
+
 export function replyProcessingError(locale?: string): string {
   if (locale === "es") {
     return "Tuve un problema al procesar esto. ¿Puedes enviarlo de nuevo? Si vuelve a ocurrir, avísame y confirmaré si quedó registrado correctamente.";
@@ -175,9 +203,17 @@ async function askWhichAppointment(
 ): Promise<void> {
   const list = matches.map(a => ({ id: a.id, title: a.title, startAt: a.startAt, location: a.location }));
   await setPendingAction(from, { type: "appointment_selection", userId, action, patch, appointments: list, ...options });
+  // O rótulo do lembrete é derivado da própria ação pendente. Assim, mesmo
+  // que um classificador tenha chamado este fluxo como edição, nunca exibimos
+  // "reagendar/alterar" quando o que será feito é configurar um aviso.
+  const resolvedActionLabel = action === "set_reminder" && options?.reminderOffsetMinutes
+    ? options.locale === "es"
+      ? `configurar el aviso ${formatReminderOffset(options.reminderOffsetMinutes, "es")} antes`
+      : `configurar o aviso de ${formatReminderOffset(options.reminderOffsetMinutes)} antes`
+    : actionLabel;
   let msg = options?.locale === "es"
-    ? `🗓️ Encontré ${matches.length} citas. ¿Cuál quieres ${actionLabel}?\n\n`
-    : `🗓️ Encontrei ${matches.length} compromissos. Qual deseja ${actionLabel}?\n\n`;
+    ? `🗓️ Encontré ${matches.length} citas. ¿Cuál quieres ${resolvedActionLabel}?\n\n`
+    : `🗓️ Encontrei ${matches.length} compromissos. Qual deseja ${resolvedActionLabel}?\n\n`;
   matches.forEach((a, i) => { msg += `*${i + 1}.* ${a.title} — ${formatDateTimeBR(a.startAt)}\n`; });
   msg += options?.locale === "es"
     ? `\nResponde con el número o el nombre. ⏱ _Válido durante 5 minutos._`
@@ -267,32 +303,6 @@ function appointmentPatchFromAi(ai: AIResult, current?: Appointment): Parameters
   if (data.location) patch.location = data.location;
   if (data.description) patch.description = data.description;
   return patch;
-}
-
-async function scheduleAppointmentReminder(
-  appointment: Pick<Appointment, "title" | "startAt">,
-  offsetMinutes: number,
-  userId: string,
-  from: string,
-  mode: "personal" | "business",
-  locale?: string,
-): Promise<void> {
-  const scheduledAt = appointmentReminderAt(appointment.startAt, offsetMinutes);
-  if (new Date(scheduledAt).getTime() <= Date.now()) {
-    await wppSend(from, localized(locale,
-      `⚠️ Não consigo programar esse aviso porque ${formatReminderOffset(offsetMinutes)} antes de *${appointment.title}* já passou.`,
-      `⚠️ No puedo programar este aviso porque el momento de ${formatReminderOffset(offsetMinutes, "es")} antes de *${appointment.title}* ya pasó.`));
-    return;
-  }
-  const message = `Compromisso: ${appointment.title}`;
-  const requester = (await getPhonesForUser(userId)).find(link => phoneMatches(link.phone, from));
-  await createReminder({
-    userId, message, phone: from, scheduledAt, repeat: "none", mode, recipientType: "self",
-    recipientName: requester?.name || requester?.relation,
-  });
-  await wppSend(from, `${replyReminderSet(message, scheduledAt, "none", undefined, locale)}\n\n${localized(locale,
-    `⏰ Isso corresponde a ${formatReminderOffset(offsetMinutes)} antes do compromisso.`,
-    `⏰ Esto corresponde a ${formatReminderOffset(offsetMinutes, "es")} antes de la cita.`)}`);
 }
 
 /** Cria o link do Google Meet pra um compromisso já existente — extraído
@@ -447,9 +457,43 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const nameFromCaption = caption?.match(/(?:salva|salvar|guarda|guardar|arquiva|arquivar|nomeia|nomear|chama|chame)\s+(?:isso\s+|ele\s+|esse\s+arquivo\s+)?(?:de|como)\s+(.+)/i)?.[1]?.trim();
         const originalName = nameFromCaption ? `${nameFromCaption}${defaultExt}` : (msg.fileName || `arquivo_${Date.now()}${defaultExt}`);
 
-        // Verifica se o usuário pediu explicitamente para guardar no Drive
-        const SAVE_KEYWORDS = ["guarda", "salva", "arquiva", "armazena", "salvar", "guardar", "arquivar", "arquivo", "pasta", "drive"];
-        const hasSaveIntent = !!caption && SAVE_KEYWORDS.some(k => caption.toLowerCase().includes(k));
+        // A mesma classificação atende português e espanhol e evita que uma
+        // ordem como "guárdala en Drive" seja confundida com leitura de
+        // comprovante ou pesquisa.
+        const requestedImageAction = caption?.trim() ? parseImageAction(caption) : null;
+        const hasSaveIntent = requestedImageAction === "save";
+
+        // Sem instrução, a imagem fica temporariamente guardada enquanto o
+        // usuário escolhe o que fazer. Nunca arquiva automaticamente algo que
+        // ele talvez quisesse pesquisar ou apenas identificar.
+        if (mimeType.includes("image") && !caption?.trim()) {
+          await setPendingAction(from, {
+            type: "image_action",
+            userId: fileUser.id,
+            fileBase64: buffer.toString("base64"),
+            mimeType,
+            originalName,
+          });
+          await wppSend(from, localized(fileUser.locale,
+            "🖼️ Recebi a imagem. O que você quer fazer com ela?\n\n• *guardar no Drive*\n• *pesquisar o preço*\n• *identificar o que aparece*",
+            "🖼️ Recibí la imagen. ¿Qué quieres hacer con ella?\n\n• *guardarla en Drive*\n• *buscar el precio*\n• *identificar lo que aparece*"));
+          return;
+        }
+
+        // Perguntas de preço/pesquisa usam primeiro a visão para identificar
+        // o produto e depois uma busca pública atual com fontes e links.
+        if (mimeType.includes("image") && isImageSearchRequest(caption)) {
+          await researchImage(from, buffer, mimeType, caption!, fileUser.locale);
+          return;
+        }
+
+        if (mimeType.includes("image") && requestedImageAction === "describe") {
+          const subject = await identifyImageSubject(buffer, mimeType, fileUser.locale);
+          await wppSend(from, subject
+            ? localized(fileUser.locale, `🔎 Identifiquei na imagem: *${subject}*.`, `🔎 Identifiqué en la imagen: *${subject}*.`)
+            : localized(fileUser.locale, "❓ Não consegui identificar a imagem com segurança. Envie uma foto mais nítida.", "❓ No pude identificar la imagen con seguridad. Envía una foto más nítida."));
+          return;
+        }
 
         // Fatura de cartão/extrato costuma vir em PDF, ou o usuário avisa na legenda —
         // nesses casos tenta extrair TODOS os lançamentos de uma vez (em vez de assumir
@@ -773,6 +817,57 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const pending = await getPendingAction(from);
     let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
 
+    // ── Imagem enviada sem legenda: só executa a ação depois que a pessoa
+    // disser se quer guardar, pesquisar ou identificar. ──
+    if (pending?.type === "image_action" && pending.userId === user.id) {
+      const imageAction = parseImageAction(messageText);
+      const cancelImage = /^(?:cancelar|cancela|deixa pra l[áa]|cancelar|no|não|nao)$/i.test(messageText.trim());
+      if (cancelImage) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale, "Combinado, não fiz nada com a imagem.", "De acuerdo, no hice nada con la imagen."));
+        return;
+      }
+      if (!imageAction) {
+        await setPendingAction(from, {
+          type: "image_action", userId: user.id, fileBase64: pending.fileBase64,
+          mimeType: pending.mimeType, originalName: pending.originalName,
+        });
+        await wppSend(from, localized(user.locale,
+          "❓ O que devo fazer com a imagem? Responda *guardar no Drive*, *pesquisar o preço* ou *identificar*.",
+          "❓ ¿Qué debo hacer con la imagen? Responde *guardar en Drive*, *buscar el precio* o *identificar*."));
+        return;
+      }
+
+      const buffer = Buffer.from(pending.fileBase64, "base64");
+      await clearPendingAction(from);
+      if (imageAction === "search") {
+        await researchImage(from, buffer, pending.mimeType, messageText, user.locale);
+        return;
+      }
+      if (imageAction === "describe") {
+        const subject = await identifyImageSubject(buffer, pending.mimeType, user.locale);
+        await wppSend(from, subject
+          ? localized(user.locale, `🔎 Identifiquei na imagem: *${subject}*.`, `🔎 Identifiqué en la imagen: *${subject}*.`)
+          : localized(user.locale, "❓ Não consegui identificar a imagem com segurança. Envie uma foto mais nítida.", "❓ No pude identificar la imagen con seguridad. Envía una foto más nítida."));
+        return;
+      }
+
+      const folders = await getFolders(user.id);
+      const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
+      const { folder, keywords, suggestedName } = await categorizeDriveFile(
+        buffer, pending.mimeType, pending.originalName,
+        folderNames.length ? folderNames : ["Documentos", "Comprovantes", "Contratos", "Fotos", "Outros"],
+      );
+      const targetFolder = await getFolderByName(user.id, folder);
+      await saveFile({
+        userId: user.id, folderId: targetFolder?.id ?? null,
+        originalName: suggestedName, mimeType: pending.mimeType, size: buffer.length,
+        aiKeywords: keywords, source: "whatsapp", buffer,
+      });
+      await wppSend(from, replyFileSaved(suggestedName, folder, user.locale));
+      return;
+    }
+
     // ── Aguardando confirmação de guardar comprovante (foto/documento) no Drive ──
     if (pending?.type === "receipt_save" && pending.userId === user.id) {
       const answer = parseYesNo(messageText);
@@ -976,7 +1071,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const reminderRequest = parseAppointmentReminderRequest(messageText);
         if (reminderRequest) {
           await clearPendingAction(from);
-          await scheduleAppointmentReminder(full, reminderRequest.offsetMinutes, user.id, from, pending.mode || mode, user.locale);
+          await wppSend(from, replyAgendaReminderPolicy(user.locale));
           return;
         }
 
@@ -1024,11 +1119,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           else await wppSend(from, "❌ Não consegui mais localizar esse compromisso. Digite *meus compromissos* para conferir.");
         } else if (pending.action === "set_reminder") {
           await clearPendingAction(from);
-          if (pending.reminderOffsetMinutes) {
-            await scheduleAppointmentReminder(chosenAppt, pending.reminderOffsetMinutes, user.id, from, pending.mode || mode, user.locale);
-          } else {
-            await wppSend(from, "❓ Não consegui identificar quanto tempo antes você quer ser avisado. Tente: _me avisa 1 hora antes_.");
-          }
+          await wppSend(from, replyAgendaReminderPolicy(user.locale));
         }
         return;
       } else {
@@ -1040,7 +1131,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Uma escolha inválida deve receber orientação, não cair no
         // classificador como se "1" fosse um comando novo.
         if (/^\d+$/.test(messageText.trim()) || messageText.trim().length <= 40) {
-          await wppSend(from, `❓ Não reconheci essa opção. Responda com um número de *1 a ${pending.appointments.length}* ou com o nome do compromisso.`);
+          await wppSend(from, localized(user.locale,
+            `❓ Não reconheci essa opção. Responda com um número de *1 a ${pending.appointments.length}* ou com o nome do compromisso.`,
+            `❓ No reconocí esa opción. Responde con un número del *1 al ${pending.appointments.length}* o con el nombre de la cita.`));
           return;
         }
         await clearPendingAction(from);
@@ -1296,6 +1389,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
+    // Um pedido direto de aviso para um compromisso existente é totalmente
+    // determinístico. Resolve antes da IA para que "me avisa uma hora antes
+    // da reunião" nunca possa cair no intent genérico agenda_update.
+    const directAppointmentReminder = parseAppointmentReminderRequest(messageText);
+    if (directAppointmentReminder
+      && isStandaloneAppointmentReminderRequest(messageText)
+      && isAgendaReminderTarget(directAppointmentReminder, messageText)) {
+      await wppSend(from, replyAgendaReminderPolicy(user.locale));
+      return;
+    }
+
     // ── Processa com IA ──
     // A mensagem atual já foi gravada em addMessage() acima (linha ~179),
     // então o histórico já vem com ela como último item — removemos antes
@@ -1310,31 +1414,18 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       : classifiedAi;
     console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
 
-    // Pedido relativo a compromisso ("me avisa 1 hora antes da reunião"):
-    // se for uma criação, o slot-filling agenda o lembrete junto. Se for um
-    // compromisso existente, resolve o alvo aqui sem depender do intent que
-    // o modelo escolheu — evitando agenda_update com patch vazio.
+    // A Agenda usa sempre seus dois avisos automáticos (2h e 15min). Pedidos
+    // de antecedência para lembretes COMUNS continuam no intent reminder_set
+    // e respeitam exatamente o intervalo solicitado.
     const appointmentReminderRequest = parseAppointmentReminderRequest(messageText);
-    if (appointmentReminderRequest && ai.intent === "agenda_create") {
-      ai.agendaData = { ...(ai.agendaData || {}), reminderMinutesBefore: appointmentReminderRequest.offsetMinutes };
-    } else if (appointmentReminderRequest) {
-      const reminderKeyword = appointmentReminderRequest.keyword || ai.keyword || ai.agendaData?.title;
-      if (!reminderKeyword) {
-        await wppSend(from, "❓ De qual compromisso você está falando? Exemplo: _me avisa 1 hora antes da reunião com o cliente_.");
+    if (appointmentReminderRequest && isAgendaReminderTarget(appointmentReminderRequest, messageText)) {
+      if (ai.intent === "agenda_create" || ai.intent === "meet_create") {
+        if (ai.agendaData) ai.agendaData.reminderMinutesBefore = undefined;
+        if (ai.agendaItems) ai.agendaItems = ai.agendaItems.map(item => ({ ...item, reminderMinutesBefore: undefined }));
+      } else {
+        await wppSend(from, replyAgendaReminderPolicy(user.locale));
         return;
       }
-      const reminderMatches = await findAppointmentsByKeyword(user.id, reminderKeyword);
-      if (reminderMatches.length === 0) {
-        await wppSend(from, `❓ Não encontrei nenhum compromisso com *"${reminderKeyword}"*. Digite *meus compromissos* para conferir a agenda.`);
-      } else if (reminderMatches.length === 1) {
-        await scheduleAppointmentReminder(reminderMatches[0], appointmentReminderRequest.offsetMinutes, user.id, from, mode, user.locale);
-      } else {
-        await askWhichAppointment(
-          from, user.id, reminderMatches, "set_reminder", `configurar o aviso de ${formatReminderOffset(appointmentReminderRequest.offsetMinutes)} antes`,
-          undefined, { reminderOffsetMinutes: appointmentReminderRequest.offsetMinutes, mode },
-        );
-      }
-      return;
     }
 
     // Validação central antes de qualquer mutação: se uma ação ainda não tem

@@ -167,6 +167,18 @@ export type PendingInvoiceImport = {
   expiresAt: string;
 };
 
+/** Imagem enviada sem legenda. O arquivo fica temporariamente nesta ação
+ * enquanto o bot pergunta se deve guardar, pesquisar ou apenas identificar. */
+export type PendingImageAction = {
+  type: "image_action";
+  phone: string;
+  userId: string;
+  fileBase64: string;
+  mimeType: string;
+  originalName: string;
+  expiresAt: string;
+};
+
 /** Intents que podem abrir um fluxo de perguntas (slot-filling) quando a
  *  mensagem original não trouxer todos os campos que mudam comportamento. */
 export type SlotFillIntent =
@@ -250,7 +262,7 @@ export type PendingAccountSelection = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingAccountSelection | PendingClearHistory;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingAccountSelection | PendingClearHistory;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -273,6 +285,7 @@ type PendingActionInput =
   | Omit<PendingWppLinkInfo, "phone" | "expiresAt">
   | Omit<PendingReceiptSave, "phone" | "expiresAt">
   | Omit<PendingInvoiceImport, "phone" | "expiresAt">
+  | Omit<PendingImageAction, "phone" | "expiresAt">
   | Omit<PendingSlotFill, "phone" | "expiresAt">
   | Omit<PendingActionContinuation, "phone" | "expiresAt">
   | Omit<PendingEmployeePaymentSelect, "phone" | "expiresAt">
@@ -283,6 +296,7 @@ const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   recurring_confirmation: TTL_RECURRING_MS,
   meet_ata: TTL_MEET_ATA_MS,
   invoice_import: TTL_INVOICE_MS,
+  image_action: TTL_SLOT_FILL_MS,
   slot_fill: TTL_SLOT_FILL_MS,
   action_continuation: TTL_SLOT_FILL_MS,
 };
