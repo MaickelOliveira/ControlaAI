@@ -254,6 +254,15 @@ export async function getTransactionsInRange(userId: string, mode: FinanceMode, 
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/** Visão financeira restrita a uma conta manual. É usada tanto no extrato
+ * quanto em perguntas combinadas como "quanto gastei de iFood no Nubank?". */
+export async function getAccountTransactionsInRange(
+  userId: string, mode: FinanceMode, accountId: string, from?: string, to?: string,
+): Promise<Finance[]> {
+  return (await getTransactionsInRange(userId, mode, from, to))
+    .filter(item => item.accountId === accountId);
+}
+
 export async function getByCategory(userId: string, mode: FinanceMode, type: FinanceType, year?: number, month?: number, registeredBy?: string): Promise<Record<string, number>> {
   let items = (await getFinancesByUser(userId, mode, registeredBy)).filter(f => f.type === type && isPostedFinance(f));
   if (year && month) {

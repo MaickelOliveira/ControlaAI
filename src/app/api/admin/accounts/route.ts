@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
-  getAccountsByUser, createAccount, updateAccount, deleteAccount, setDefaultAccount,
-  getInvoicesByAccount, getInvoiceTotal, markInvoicePaid, type AccountType,
+  getAccountsByUser, getManualAccountsByUser, createAccount, updateAccount, deleteAccount, setDefaultAccount,
+  getInvoicesByAccount, getInvoiceTotal, markInvoicePaid,
 } from "@/lib/accounts";
 
 export async function GET(req: NextRequest) {
@@ -11,18 +11,26 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const mode = (searchParams.get("mode") as "personal" | "business" | null) || undefined;
+  if (mode && mode !== "personal" && mode !== "business") return NextResponse.json({ error: "mode inválido" }, { status: 400 });
   const view = searchParams.get("view") || "list";
 
   if (view === "invoices") {
     const accountId = searchParams.get("accountId");
     if (!accountId) return NextResponse.json({ error: "accountId obrigatório" }, { status: 400 });
+    const owned = (await getAccountsByUser(session.sub)).some(account => account.id === accountId);
+    if (!owned) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
     const invoices = await getInvoicesByAccount(accountId);
     const withTotals = await Promise.all(invoices.map(async inv => ({ ...inv, total: await getInvoiceTotal(inv.id) })));
     return NextResponse.json(withTotals);
   }
 
   // list (padrão) — contas do modo, cada uma já com a fatura em aberto/atual resumida (se cartão)
-  const accounts = await getAccountsByUser(session.sub, mode);
+  const accounts = mode
+    ? await getManualAccountsByUser(session.sub, mode)
+    : (await Promise.all([
+        getManualAccountsByUser(session.sub, "personal"),
+        getManualAccountsByUser(session.sub, "business"),
+      ])).flat();
   const withInvoice = await Promise.all(accounts.map(async a => {
     if (a.type !== "credit_card") return { ...a, currentInvoice: null };
     const invoices = await getInvoicesByAccount(a.id);
@@ -40,27 +48,31 @@ export async function POST(req: NextRequest) {
   const { action, ...body } = await req.json();
 
   if (action === "create") {
-    const { mode, name, type, creditLimit, closingDay, dueDay } = body as {
-      mode: "personal" | "business"; name: string; type: AccountType; creditLimit?: number; closingDay?: number; dueDay?: number;
-    };
-    if (!mode || !name || !type) return NextResponse.json({ error: "mode, name e type obrigatórios" }, { status: 400 });
-    if (type === "credit_card" && (!closingDay || !dueDay)) {
-      return NextResponse.json({ error: "closingDay e dueDay obrigatórios para cartão de crédito" }, { status: 400 });
+    const { mode, name } = body as { mode: "personal" | "business"; name: string };
+    if ((mode !== "personal" && mode !== "business") || !name?.trim()) return NextResponse.json({ error: "mode e name obrigatórios" }, { status: 400 });
+    try {
+      const account = await createAccount({ userId: session.sub, mode, name: name.trim(), type: "bank" });
+      return NextResponse.json(account, { status: 201 });
+    } catch {
+      return NextResponse.json({ error: "Já existe uma conta com esse nome." }, { status: 409 });
     }
-    const account = await createAccount({ userId: session.sub, mode, name, type, creditLimit, closingDay, dueDay });
-    return NextResponse.json(account, { status: 201 });
   }
 
   if (action === "update") {
-    const { id, name, creditLimit, closingDay, dueDay } = body;
+    const { id, name } = body;
     if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
-    const account = await updateAccount(id, session.sub, { name, creditLimit, closingDay, dueDay });
+    const account = await updateAccount(id, session.sub, { name });
     return account ? NextResponse.json(account) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   }
 
   if (action === "delete") {
     const { id } = body;
     if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+    const accounts = await getAccountsByUser(session.sub);
+    const target = accounts.find(account => account.id === id);
+    if (target?.name.toLocaleLowerCase() === "dinheiro") {
+      return NextResponse.json({ error: "A conta Dinheiro é a carteira básica e não pode ser excluída." }, { status: 400 });
+    }
     await deleteAccount(id, session.sub);
     return NextResponse.json({ ok: true });
   }

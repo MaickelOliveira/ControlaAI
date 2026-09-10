@@ -77,6 +77,11 @@ export type Intent =
   | "help"
   | "category_create"
   | "finance_clear_history"
+  | "account_create"
+  | "account_list"
+  | "account_update"
+  | "account_delete"
+  | "account_set_default"
   | "unknown";
 
 export type GoalData = {
@@ -124,12 +129,11 @@ export type FinanceData = {
 };
 
 export type AccountData = {
-  name?: string; // nome dado pelo usuário, ex: "Nubank", "Cartão Inter"
-  type?: "bank" | "credit_card";
-  creditLimit?: number; // só faz sentido em credit_card
-  closingDay?: number; // só faz sentido em credit_card — dia do mês (1-28) em que a fatura fecha
-  dueDay?: number; // só faz sentido em credit_card — dia do mês (1-28) em que a fatura vence
+  name?: string; // nome dado pelo usuário, ex: "Dinheiro", "Nubank"
+  newName?: string; // account_update: novo nome
+  type?: "bank"; // contas são carteiras manuais; cartão de crédito não é oferecido
   mode?: "personal" | "business"; // detectado automaticamente
+  useContext?: boolean; // "nessa conta"/"en esa cuenta": resolve pelo histórico ou pergunta
 };
 
 export type TaskData = {
@@ -406,12 +410,145 @@ export function getExplicitWebSearchResult(message: string, history?: WebSearchH
     hasContextualWebReference(message)
     || (/^(?:e|y)\b/.test(normalized) && /\b(?:hoje|hoy|amanha|manana|semana|fim de semana|fin de semana|mes|m[eê]s)\b/.test(normalized))
   );
-  const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|recebi|recibi|ganhei|comprei|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|conta da empresa|cuenta de la empresa|drive)\w*/.test(normalized);
+  const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|pagar|recebi|recibi|receber|cobrar|ganhei|comprei|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|coloc|coloqu|bot|lanc|agreg|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|contas? a receber|contas? a pagar|cuentas? por cobrar|cuentas? por pagar|conta da empresa|cuenta de la empresa|drive)\w*/.test(normalized);
 
   if (!(asksToSearch && mentionsWeb) && !(hasLiveInformationSubject || terseCurrentSubject || contextualFollowUp) || isInternalOrMutation) return null;
 
   const keyword = contextualWebSearchKeyword(message, history);
   return keyword ? { intent: "web_search", confidence: 1, keyword } : null;
+}
+
+function parseNaturalMoney(raw: string): number | null {
+  const compact = raw.replace(/\s/g, "").replace(/[^\d.,-]/g, "");
+  if (!compact || !/\d/.test(compact)) return null;
+  const comma = compact.lastIndexOf(",");
+  const dot = compact.lastIndexOf(".");
+  let normalized = compact;
+  if (comma >= 0 && dot >= 0) {
+    const decimal = comma > dot ? "," : ".";
+    normalized = compact
+      .replace(decimal === "," ? /\./g : /,/g, "")
+      .replace(decimal, ".");
+  } else if (comma >= 0) {
+    normalized = compact.replace(/\./g, "").replace(",", ".");
+  } else if (dot >= 0 && /^-?\d{1,3}(?:\.\d{3})+$/.test(compact)) {
+    normalized = compact.replace(/\./g, "");
+  }
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function financeDateFromNaturalText(message: string, anchor: Date, pending: boolean): string {
+  const normalized = normalizeCapabilityText(message);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const toYmd = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const shift = (days: number) => {
+    const date = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 12, 0, 0);
+    date.setDate(date.getDate() + days);
+    return toYmd(date);
+  };
+  if (/\b(?:amanha|manana)\b/.test(normalized)) return shift(1);
+  if (/\b(?:ontem|ayer)\b/.test(normalized)) return shift(-1);
+  if (/\b(?:hoje|hoy)\b/.test(normalized)) return shift(0);
+
+  const fullDate = normalized.match(/\b(?:dia\s+)?(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+  const dayOnly = normalized.match(/\b(?:dia|el)\s+(\d{1,2})(?![\d/.-])/);
+  // Sem data explícita, mantém vazio. O handler registra como pendente sem
+  // postagem automática, em vez de fingir que o vencimento é hoje.
+  if (!fullDate && !dayOnly) return "";
+  const day = Number(fullDate?.[1] ?? dayOnly?.[1]);
+  const month = Number(fullDate?.[2] ?? (anchor.getMonth() + 1));
+  let year = fullDate?.[3] ? Number(fullDate[3]) : anchor.getFullYear();
+  if (year < 100) year += 2000;
+  let candidate = new Date(year, month - 1, day, 12, 0, 0);
+  if (candidate.getFullYear() !== year || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return "";
+  if (!fullDate?.[3] && pending) {
+    const today = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 12, 0, 0);
+    if (candidate < today) candidate = new Date(year + 1, month - 1, day, 12, 0, 0);
+  }
+  return toYmd(candidate);
+}
+
+function categoryForNaturalFinance(description: string, type: "income" | "expense"): string {
+  const normalized = normalizeCapabilityText(description);
+  if (type === "income") {
+    if (/\baluguel|alquiler\b/.test(normalized)) return "Aluguel";
+    if (/\breembolso\b/.test(normalized)) return "Reembolso";
+    if (/\bsalari|sueldo\b/.test(normalized)) return "Salário";
+    if (/\b(?:servic\w*|cliente|vendas?|ventas?)\b/.test(normalized)) return /\bservic/.test(normalized) ? "Serviços" : "Vendas";
+    if (/\binvest\b/.test(normalized)) return "Investimentos";
+    return "Outros";
+  }
+  if (/\baluguel|alquiler|casa|moradia|condominio\b/.test(normalized)) return "Moradia";
+  if (/\bmercado|comida|almoco|jantar|ifood|rappi|restaurante\b/.test(normalized)) return "Alimentação";
+  if (/\bfarmacia|remedio|medicamento|consulta|saude\b/.test(normalized)) return "Saúde";
+  if (/\buber|combustivel|gasolina|transporte|onibus|passagem\b/.test(normalized)) return "Transporte";
+  if (/\bfornecedor|proveedor\b/.test(normalized)) return "Fornecedores";
+  if (/\bfuncionari|emplead|salario|sueldo\b/.test(normalized)) return "Funcionários";
+  if (/\bmarketing|anuncio|publicidade\b/.test(normalized)) return "Marketing";
+  if (/\bimposto|taxa|tributo\b/.test(normalized)) return "Impostos";
+  if (/\bservic\b/.test(normalized)) return "Serviços";
+  return "Outros";
+}
+
+/** Interpreta lançamentos futuros escritos do jeito comum no WhatsApp.
+ * Esse caminho não depende do modelo e impede palavras dentro do nome do
+ * cliente (por exemplo, "Uss(Tempo)") de acionarem pesquisa na internet. */
+export function getExplicitPendingFinanceRegisterResult(message: string, anchor: Date = nowBR()): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const incomePending = /\b(?:contas?\s+a\s+receber|a\s+receber|pra\s+(?:eu\s+)?receber|para\s+(?:eu\s+)?receber|vou\s+receber|falta\s+receber|me\s+deve|cliente\s+.+\s+(?:me\s+)?(?:deve|paga|vai\s+(?:me\s+)?pagar|ficou\s+de\s+pagar)|por\s+cobrar|cuentas?\s+por\s+cobrar|voy\s+a\s+(?:recibir|cobrar)|tengo\s+que\s+cobrar|cliente\s+.+\s+(?:me\s+)?(?:debe|pagara|va\s+a\s+(?:pagarme|pagar)))\b/.test(normalized);
+  let expensePending = /\b(?:contas?\s+a\s+pagar|a\s+pagar|pra\s+(?:eu\s+)?pagar|para\s+(?:eu\s+)?pagar|vou\s+pagar|preciso\s+pagar|devo\s+pagar|tenho\s+que\s+pagar|por\s+pagar|cuentas?\s+por\s+pagar|voy\s+a\s+pagar|tengo\s+que\s+pagar|debo\s+pagar|necesito\s+pagar)\b/.test(normalized);
+  // "O cliente vai pagar" é dinheiro que entra. O trecho "a pagar" não
+  // pode transformá-lo numa despesa de quem está registrando.
+  if (incomePending && /\bcliente\b[\s\S]*\b(?:me\s+deve|vai\s+(?:me\s+)?pagar|me\s+debe|va\s+a\s+(?:pagarme|pagar))\b/.test(normalized)) {
+    expensePending = false;
+  }
+  if (incomePending === expensePending) return null;
+
+  // Perguntas sobre pendências pertencem a finance_upcoming; aqui entram
+  // apenas ordens de registro ou afirmações de que alguém deve/irá pagar.
+  if (/^\s*(?:quanto|quantos?|quais?|qual|o\s+que|como|cuanto|cuantos?|cuales?|que|como)\b/.test(normalized)) return null;
+  let moneyMatch = text.match(/\b(?:valor|monto|importe|quantia)\s*(?:de\s*)?(?:r\$|us\$|\$|€)?\s*(\d[\d.\s]*(?:,\d{1,2})?)/i)
+    ?? text.match(/(?:R\$|US\$|\$|€)\s*(\d[\d.\s]*(?:,\d{1,2})?)/i)
+    ?? text.match(/(\d[\d.\s]*(?:[.,]\d{1,2})?)\s*(?:reais|real|d[oó]lares?|pesos?|euros?)\b/i);
+  if (!moneyMatch) {
+    moneyMatch = [...text.matchAll(/(?<![\d/:])(\d+(?:[.,]\d{1,2})?)(?![\d/:])/g)]
+      .find(match => !/(?:\bdia|\bel)\s*$/i.test(text.slice(Math.max(0, (match.index ?? 0) - 8), match.index))) ?? null;
+  }
+  const amount = moneyMatch ? parseNaturalMoney(moneyMatch[1]) : null;
+  if (!amount) return null;
+
+  const type: "income" | "expense" = incomePending ? "income" : "expense";
+  const mode: UserMode | undefined = /\b(?:empresa|empresarial|negocio)\b/.test(normalized)
+    ? "business"
+    : /\b(?:pessoal|personal)\b/.test(normalized) ? "personal" : undefined;
+  let description = text
+    .replace(/^\s*(?:por\s+favor\s+)?(?:col(?:ocar|oca|oque)|bot(?:ar|a|e)|lan[çc](?:ar|a|e)|registr(?:ar|a|e)|cadastr(?:ar|a|e)|anot(?:ar|a|e)|adicion(?:ar|a|e)|inclu(?:ir|a|e)|agreg(?:ar|a|ue)|a[nñ]ad(?:ir|e)|pon(?:er|ga|lo)?|mete(?:r)?)\s*/i, "")
+    .replace(/\b(?:em|nas?|no|en|a|la|las)?\s*(?:contas?\s+a\s+(?:receber|pagar)|cuentas?\s+por\s+(?:cobrar|pagar))\b/ig, " ")
+    .replace(/\b(?:a|pra|para)\s+(?:eu\s+)?(?:receber|pagar)\b|\bpor\s+(?:cobrar|pagar)\b|\b(?:vou|voy\s+a)\s+(?:receber|pagar|recibir|cobrar)\b|\b(?:vai\s+(?:me\s+)?pagar|va\s+a\s+(?:pagarme|pagar))\b|\b(?:tenho|tengo)\s+que\s+(?:pagar|cobrar)\b|\b(?:preciso|devo|necesito|debo)\s+pagar\b|\bme\s+(?:deve|debe)\b/ig, " ")
+    .replace(/\b(?:empresarial|empresa|negocio|pessoal|personal)\b/ig, " ")
+    .replace(moneyMatch![0], " ")
+    .replace(/\b(?:e\s+)?(?:vence|vencimento|recebe|receber|paga|pagar|cobra|cobrar)\s*(?:em|no|na|el|en\s+el)?\s*(?:dia)?\s*\d{1,2}(?:[/-]\d{1,2}(?:[/-]\d{2,4})?)?\b/ig, " ")
+    .replace(/\b(?:no|na|para|pra|el|en\s+el)?\s*dia\s+\d{1,2}(?:[/-]\d{1,2}(?:[/-]\d{2,4})?)?\b/ig, " ")
+    .replace(/\b(?:em|para|no|na|el|en)?\s*\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/ig, " ")
+    .replace(/\b(?:hoje|amanha|ontem|hoy|manana|ayer)\b/ig, " ")
+    .replace(/^\s*(?:tenho|temos|tengo|do|da|de|del)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,;:.-]+|[\s,;:.-]+$/g, "")
+    .trim();
+  if (!description) description = type === "income" ? "Valor a receber" : "Conta a pagar";
+
+  const finance: FinanceData = {
+    type,
+    amount,
+    category: categoryForNaturalFinance(description, type),
+    description,
+    date: financeDateFromNaturalText(text, anchor, true),
+    pending: true,
+    ...(mode ? { mode } : {}),
+  };
+  return { intent: "finance_register", confidence: 1, finance, ...(mode ? { mode } : {}) };
 }
 
 /** Dados mínimos que não podem ser adivinhados em buscas sensíveis a data
@@ -491,8 +628,8 @@ export function getExplicitFinanceTypeSignal(message: string): "income" | "expen
   const receivedBill = /\b(?:recebi|recebemos|recebeu|receberam)\s+(?:(?:uma?|a)\s+)?(?:conta|fatura|cobranca|boleto)\b|\b(?:recibi|recibimos|recibio|recibieron)\s+(?:(?:una?|la)\s+)?(?:cuenta|factura|cobro)\b/.test(normalized);
   if (receivedBill) return "expense";
 
-  const hasIncomeSignal = /\b(?:recebi|recebemos|recebeu|receberam|ganhei|ganhamos|ganhou|ganharam|faturei|faturamos|faturou|faturaram|vendi|vendemos|vendeu|venderam|lucrei|lucramos|lucrou|lucraram|arrecadei|arrecadamos|arrecadou|cobrei|cobramos|depositaram|creditaram|entrou|caiu\s+(?:o\s+pagamento|na\s+conta)|pagamento\s+recebido|valor\s+recebido|pix\s+recebido|transferencia\s+recebida|comissao\s+recebida|reembolso\s+recebido|estorno\s+recebido|recibi|recibimos|recibio|recibieron|gane|ganamos|gano|ganaron|ingreso|entro|cayo\s+(?:el\s+pago|en\s+la\s+cuenta)|me\s+pagaron|cobre|cobramos|facture|facturamos|vendimos|vendio|obtuv(?:e|imos|o)\s+(?:una\s+)?ganancia|depositaron|acreditaron|pago\s+recibido|valor\s+recibido|transferencia\s+recibida|comision\s+recibida|reembolso\s+recibido)\b/.test(normalized);
-  const hasExpenseSignal = /\b(?:comprei|compramos|comprou|compraram|paguei|pagamos|pagou|pagaram|gastei|gastamos|gastou|gastaram|adquiri|adquirimos|adquiriu|desembolsei|desembolsamos|desembolsou|quitei|quitamos|quitou|contratei|contratamos|contratou|assinei|assinamos|assinou|abasteci|abastecemos|abasteceu|saiu\s+da\s+conta|foi\s+debitado|foi\s+cobrado|me\s+cobraram|debitaram|descontaram|fiz(?:emos)?\s+uma\s+compra|tive(?:mos)?\s+uma\s+despesa|compre|compramos|compro|compraron|pague|pagamos|gaste|gastamos|gasto|gastaron|adquiri|adquirimos|adquirio|desembolse|desembolsamos|desembolso|liquide|liquidamos|liquido|contrate|contratamos|contrato|me\s+suscribi|nos\s+suscribimos|cargue\s+combustible|salio\s+de\s+la\s+cuenta|fue\s+debitado|fue\s+cobrado|me\s+cobraron|debitaron|descontaron|hice|hicimos)\b/.test(normalized);
+  const hasIncomeSignal = /\b(?:recebi|recebemos|recebeu|receberam|a\s+receber|pra\s+receber|para\s+receber|vou\s+receber|contas?\s+a\s+receber|ganhei|ganhamos|ganhou|ganharam|faturei|faturamos|faturou|faturaram|vendi|vendemos|vendeu|venderam|lucrei|lucramos|lucrou|lucraram|arrecadei|arrecadamos|arrecadou|cobrei|cobramos|depositaram|creditaram|entrou|caiu\s+(?:o\s+pagamento|na\s+conta)|pagamento\s+recebido|valor\s+recebido|pix\s+recebido|transferencia\s+recebida|comissao\s+recebida|reembolso\s+recebido|estorno\s+recebido|recibi|recibimos|recibio|recibieron|por\s+cobrar|cuentas?\s+por\s+cobrar|voy\s+a\s+(?:recibir|cobrar)|gane|ganamos|gano|ganaron|ingreso|entro|cayo\s+(?:el\s+pago|en\s+la\s+cuenta)|me\s+pagaron|cobre|cobramos|facture|facturamos|vendimos|vendio|obtuv(?:e|imos|o)\s+(?:una\s+)?ganancia|depositaron|acreditaron|pago\s+recibido|valor\s+recibido|transferencia\s+recibida|comision\s+recibida|reembolso\s+recibido)\b/.test(normalized);
+  const hasExpenseSignal = /\b(?:comprei|compramos|comprou|compraram|paguei|pagamos|pagou|pagaram|a\s+pagar|pra\s+pagar|para\s+pagar|vou\s+pagar|contas?\s+a\s+pagar|gastei|gastamos|gastou|gastaram|adquiri|adquirimos|adquiriu|desembolsei|desembolsamos|desembolsou|quitei|quitamos|quitou|contratei|contratamos|contratou|assinei|assinamos|assinou|abasteci|abastecemos|abasteceu|saiu\s+da\s+conta|foi\s+debitado|foi\s+cobrado|me\s+cobraram|debitaram|descontaram|fiz(?:emos)?\s+uma\s+compra|tive(?:mos)?\s+uma\s+despesa|compre|compramos|compro|compraron|pague|pagamos|por\s+pagar|cuentas?\s+por\s+pagar|voy\s+a\s+pagar|gaste|gastamos|gasto|gastaron|adquiri|adquirimos|adquirio|desembolse|desembolsamos|desembolso|liquide|liquidamos|liquido|contrate|contratamos|contrato|me\s+suscribi|nos\s+suscribimos|cargue\s+combustible|salio\s+de\s+la\s+cuenta|fue\s+debitado|fue\s+cobrado|me\s+cobraron|debitaron|descontaron|hice|hicimos)\b/.test(normalized);
 
   // Uma mensagem pode listar entradas e saídas juntas. Nesse caso, o modelo
   // precisa conservar o tipo individual de cada item, sem sobrescrita global.
@@ -1649,7 +1786,9 @@ export function getUnsupportedBankConnectionResponse(
   const mentionsOpenFinance = /\bopen\s*(finance|banking)\b/.test(current);
   const mentionsBankAccount = /\b(?:contas?\s+bancari[ao]s?|cuentas?\s+bancarias?)\b/.test(current);
   const mentionsBankOrCard = /\b(bancos?|cart(?:ao|oes)(?:\s+de\s+credito)?|tarjetas?(?:\s+de\s+credito)?)\b/.test(current);
-  const setupVerb = /\b(conect\w*|integr\w*|vincul\w*|sincron\w*|acess\w*|acced\w*|adicion\w*|anad\w*|agreg\w*|cadastr\w*|registr\w*)\b/;
+  // Só conexão/sincronização bancária é indisponível. Cadastrar uma conta
+  // manual (Dinheiro, Nubank, Caixa...) é uma função normal do Zelo.
+  const setupVerb = /\b(conect\w*|integr\w*|vincul\w*|sincron\w*|acess\w*|acced\w*|import\w*)\b/;
   const asksForSetup = setupVerb.test(current);
   const cannotFindSetup = /\b(nao\s+encontr\w*|no\s+encuentr\w*|onde|donde|local|ubicacion)\b/.test(current)
     && (asksForSetup || mentionsBankAccount || mentionsBankOrCard);
@@ -1678,10 +1817,10 @@ export function getUnsupportedBankConnectionResponse(
   }
 
   const limitation = locale === "es"
-    ? "Por el momento, no es posible registrar ni conectar cuentas bancarias o tarjetas en Zelo. Zelo no utiliza Open Finance ni Open Banking."
+    ? "Puedes crear y usar cuentas manuales en Zelo, pero no es posible conectarlas o sincronizarlas directamente con bancos. Zelo no utiliza Open Finance ni Open Banking."
     : locale === "pt-PT"
-      ? "Neste momento, não é possível registar nem ligar contas bancárias ou cartões no Zelo. O Zelo não utiliza Open Finance nem Open Banking."
-      : "No momento, não é possível cadastrar nem conectar contas bancárias ou cartões no Zelo. O Zelo não utiliza Open Finance nem Open Banking.";
+      ? "Pode criar e usar contas manuais no Zelo, mas não é possível ligá-las ou sincronizá-las diretamente com bancos. O Zelo não utiliza Open Finance nem Open Banking."
+      : "Você pode criar e usar contas manuais no Zelo, mas não é possível conectá-las ou sincronizá-las diretamente com bancos. O Zelo não utiliza Open Finance nem Open Banking.";
 
   return `${limitation}\n\n${supportInsidePlatformLine(locale)}`;
 }
@@ -1822,7 +1961,7 @@ Palavras como “ayuda”, “soporte”, “qué puedes hacer” e “instrucci
 ⚠️ CONTINUAÇÃO DE AÇÃO: quando a mensagem vier no formato "Pedido original" + "Informação complementar", una todas as partes como um único comando. A informação complementar responde à pergunta feita pelo sistema; preserve a intenção original e complete somente os campos novos.
 
 INTENÇÕES POSSÍVEIS:
-- finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular).
+- finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular). Se mencionar uma conta manual ("no Nubank", "en la cuenta Caja"), preencha finance.accountHint com o nome.
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser MOVER o lançamento entre pessoal e empresa (ex: "muda para a conta da empresa", "passe as contas de água para o empresarial", "pasa a la cuenta personal"), use "finance.newMode" com o DESTINO ("business" ou "personal"); "finance.mode" nunca representa o destino da mudança. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Se o usuário disser que o TIPO está errado — era despesa, não receita, ou vice-versa (ex: "isso é despesa, não receita", "errei, é gasto"), inclua "finance.type" com o tipo certo ("income" ou "expense"). Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
   ⚠️ CORREÇÃO EM LOTE do que acabou de ser registrado: se a mensagem for uma correção CURTA e GENÉRICA, sem citar a descrição de um lançamento específico, logo depois de você (o assistente) ter confirmado um registro — de 1 lançamento OU de vários de uma vez (ex: usuário registrou várias despesas e depois manda só "tá errado, são despesas", "errei, isso tudo é receita", "na verdade é a receber", "muda pra despesa") — marque "bulkCorrectLastBatch": true e preencha em "finance" SOMENTE os campos que mudaram (type e/ou pending e/ou category — o que a mensagem indicar). NÃO invente "keyword" nesse caso (deixe vazio) — o sistema já sabe aplicar a correção em cima do que foi registrado por último, um ou vários, sem precisar buscar por nome. Só use isso quando o histórico deixar claro que a mensagem é sobre o registro mais recente, não sobre um lançamento antigo específico.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X"). ⚠️ Se o pedido for genérico e curto, sem citar a descrição de um lançamento específico, logo depois de você ter confirmado um registro — de 1 lançamento OU de vários de uma vez (ex: "apaga isso", "apaga esses lançamentos", "remove tudo que acabei de mandar", "cancela esses"), marque "bulkCorrectLastBatch": true e NÃO invente "keyword" — o sistema apaga todo o registro mais recente (um ou vários) de uma vez. Só use isso quando ficar claro pelo histórico que é sobre o registro mais recente, não sobre um lançamento antigo específico.
@@ -1901,7 +2040,9 @@ INTENÇÕES POSSÍVEIS:
 - web_search: pesquisar informações públicas e atuais na internet, como preços e disponibilidade de produtos/remédios, passagens, hotéis, serviços, horários, notícias, endereços ou comparações. Use "keyword" com a pesquisa COMPLETA, reunindo a mensagem atual e o contexto recente quando necessário. Se faltar um dado indispensável para a busca (ex.: data/origem/destino de viagem; nome/apresentação do medicamento; cidade quando a disponibilidade local importar), use "response" para fazer UMA pergunta objetiva e não invente o dado. Não use para consultar dados internos do Zelo, arquivos do Drive ou histórico financeiro. Não ofereça diagnóstico, prescrição nem alteração de dose de medicamentos.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa", "como acesso o painel/site", "qual o site/link do Zelo", "estou conectado no Google", "como conecto o Google", "verificar conexão do Google"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos, funcionalidades ou endereços/links que não existem). ⚠️ Se a resposta precisar citar o endereço do painel, use EXATAMENTE o "Endereço do painel web" informado no início da mensagem — nunca invente um domínio diferente.
-  ⚠️ LIMITES DO PRODUTO: neste momento NÃO é possível cadastrar, acessar, conectar ou sincronizar contas bancárias/cartões no Zelo. O Zelo NÃO usa e NÃO oferecerá instruções de Open Finance/Open Banking. Nunca mande procurar menus como "Conexões", "Integrações Bancárias" ou "Minhas Contas" e nunca crie um passo a passo bancário. Para esse pedido, informe a indisponibilidade e oriente: "Acesse o painel do Zelo e abra o *Suporte* no canto inferior direito."
+  CONTAS MANUAIS: é possível criar, listar, renomear, excluir e definir como padrão contas manuais (ex.: Dinheiro, Nubank, Caixa). Não há cartão de crédito. O Zelo NÃO conecta nem sincroniza bancos e NÃO usa Open Finance/Open Banking. Para conexão bancária, explique apenas essa limitação.
+  - account_create/account_list/account_update/account_delete/account_set_default: use account.name; em update use também account.newName. Funciona em português e espanhol.
+  - Consultas por conta continuam como finance_query ou finance_detail e usam account.name. Para "nessa conta"/"en esa cuenta", use account.useContext=true; o sistema recupera a conta da conversa ou pergunta qual.
   ⚠️ Se o usuário perguntar sobre qualquer funcionalidade que não esteja descrita nestas instruções, ou se você não tiver informação confirmada para responder, NÃO improvise. Diga que não consegue confirmar por ali e oriente a acessar o painel do Zelo e abrir o *Suporte* no canto inferior direito.
   ⚠️ Pergunta sobre "adicionar/incluir uma pessoa" é ambígua e o sistema tem DUAS coisas diferentes pra isso — explique as duas, deixando claro que são coisas distintas:
   1) Cadastrar como registro no painel, SEM a pessoa poder falar com o bot (funcionário: "cadastra a Ana como vendedora, salário 2000"; cliente: "cadastra o cliente Pedro, telefone 11999999999"; participante de reunião/Meet: ao criar o Meet, junto com o convite; lembrete pra outra pessoa: "lembra a Milena de pagar amanhã às 10h").
@@ -2954,6 +3095,113 @@ OU genérico:
 }`;
 }
 
+function cleanManualAccountName(value: string): string {
+  return value
+    .replace(/\b(?:semana|mes|m[eê]s|ano|hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana)\b[\s\S]*$/i, "")
+    .replace(/\b(?:como|como sendo|como la|como el)\s+(?:padr[aã]o|predeterminada?)\b[\s\S]*$/i, "")
+    .replace(/[.!?,;:]+$/g, "")
+    .trim();
+}
+
+function accountModeFromText(normalized: string): UserMode | undefined {
+  if (/\b(?:empresa|empresarial|negocio)\b/.test(normalized)) return "business";
+  if (/\b(?:pessoal|personal)\b/.test(normalized)) return "personal";
+  return undefined;
+}
+
+/** Comandos de contas manuais e consultas por conta em PT/ES. Mantê-los
+ * determinísticos evita que frases curtas como "nessa conta" sejam tratadas
+ * como integração bancária ou como saldo geral. */
+export function getExplicitAccountCommandResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const mode = accountModeFromText(normalized);
+  const accountWord = /\b(?:conta|cuenta)s?\b/;
+  if (!accountWord.test(normalized)) return null;
+
+  // "Conta de luz" e equivalentes são lançamentos/recorrências, não uma
+  // carteira chamada "de luz". Deixa esses pedidos seguirem para Finanças.
+  if (/\b(?:conta|cuenta)\s+(?:de|da|do)\s+(?:luz|agua|internet|telefone|celular|aluguel|condominio|gas|electricidad|telefono|alquiler)\b/.test(normalized)) return null;
+
+  const listPattern = /\b(?:listar?|liste|mostr(?:e|ar)|ver|quais|cuales|muestra|mostrar|ver)\b[\s\S]*\b(?:conta|cuenta)s\b|^(?:minhas contas|mis cuentas)$/;
+  if (listPattern.test(normalized) && !/\b(?:a|por)\s+(?:pagar|receber|cobrar)\b|\b(?:pendentes?|pendientes?|recorrentes?|recurrentes?)\b/.test(normalized)) {
+    return { intent: "account_list", confidence: 1, ...(mode ? { mode } : {}) };
+  }
+
+  const create = text.match(/(?:crie|criar|cadastre|cadastrar|adicione|adicionar|registre|registrar|crea|crear|registra|registrar|agrega|agregar|añade|anade|añadir|anadir)\s+(?:uma|a|la|una)?\s*(?:nova\s+|nueva\s+)?(?:conta|cuenta)\s+(?:chamada|llamada|com\s+o\s+nome|con\s+el\s+nombre\s+de)?\s*["“”']?(.+?)["“”']?\s*$/i);
+  if (create) {
+    const name = cleanManualAccountName(create[1]);
+    return { intent: "account_create", confidence: 1, account: { name, type: "bank", mode }, ...(mode ? { mode } : {}) };
+  }
+  if (/\b(?:crie|criar|cadastre|cadastrar|adicione|adicionar|registre|registrar|crea|crear|registra|registrar|agrega|agregar|añade|anade|añadir|anadir)\b[\s\S]*\b(?:conta|cuenta)\b/.test(normalized)) {
+    return { intent: "account_create", confidence: 1, account: { type: "bank", mode }, ...(mode ? { mode } : {}) };
+  }
+
+  const rename = text.match(/(?:renomeie|renomear|mude|mudar|altere|alterar|cambia|cambie|cambiar|renombra|renombrar)\s+(?:a|la)?\s*(?:conta|cuenta)\s+["“”']?(.+?)["“”']?\s+(?:para|por|a)\s+["“”']?(.+?)["“”']?\s*$/i);
+  if (rename) {
+    return { intent: "account_update", confidence: 1, account: { name: cleanManualAccountName(rename[1]), newName: cleanManualAccountName(rename[2]), mode }, ...(mode ? { mode } : {}) };
+  }
+  if (/\b(?:editar?|alterar?|renomear?|cambiar?|renombrar?)\b[\s\S]*\b(?:conta|cuenta)\b/.test(normalized)) {
+    return { intent: "account_update", confidence: 1, account: { mode }, ...(mode ? { mode } : {}) };
+  }
+
+  const remove = text.match(/(?:exclua|excluir|remova|remover|apague|apagar|elimina|eliminar|borra|borrar)\s+(?:a|la)?\s*(?:conta|cuenta)\s+["“”']?(.+?)["“”']?\s*$/i);
+  if (remove) {
+    return { intent: "account_delete", confidence: 1, account: { name: cleanManualAccountName(remove[1]), mode }, ...(mode ? { mode } : {}) };
+  }
+  if (/\b(?:excluir?|remover?|apagar?|eliminar?|borrar?)\b[\s\S]*\b(?:conta|cuenta)\b/.test(normalized)) {
+    return { intent: "account_delete", confidence: 1, account: { mode }, ...(mode ? { mode } : {}) };
+  }
+
+  const makeDefault = text.match(/(?:defina|definir|marque|marcar|use|usar|establece|establecer|marca|usar?)\s+(?:a|la)?\s*(?:conta|cuenta)\s+["“”']?(.+?)["“”']?\s+(?:como|de)\s+(?:padr[aã]o|principal|predeterminada?)/i);
+  if (makeDefault) {
+    return { intent: "account_set_default", confidence: 1, account: { name: cleanManualAccountName(makeDefault[1]), mode }, ...(mode ? { mode } : {}) };
+  }
+
+  const hasQuery = /\b(?:quanto|cuanto|saldo|extrato|extracto|movimentos?|movimientos?|gastei|gastou|gasto|gast[eé]|recebi|recebeu|recib[ií]|ingres[eoó])\b/.test(normalized);
+  if (!hasQuery) return null;
+
+  const contextual = /\b(?:nessa|nesta|dessa|desta|essa|esta|esa)\s+(?:conta|cuenta)\b/.test(normalized);
+  const namedMatch = text.match(/(?:na|da|pela|nesta|nessa|desta|dessa|en\s+la|de\s+la|por\s+la)\s+(?:conta|cuenta)\s+["“”']?([^"“”'?!,]+?)["“”']?(?=\s+(?:na|da|de|do|com|con|semana|m[eê]s|mes|ano|hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana)\b|[?!,.]|$)/i)
+    ?? text.match(/(?:conta|cuenta)\s+["“”']?([^"“”'?!,]+?)["“”']?(?=\s+(?:semana|m[eê]s|mes|ano|hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana)\b|[?!,.]|$)/i);
+  const name = namedMatch && !/^(?:pessoal|personal|da empresa|de la empresa|empresarial)$/i.test(namedMatch[1].trim())
+    ? cleanManualAccountName(namedMatch[1])
+    : undefined;
+  if (!name && !contextual) return null;
+
+  const keywordMatch = text.match(/(?:gastei|gastou|gast[eé]|gasto)\s+(?:quanto\s+)?(?:de|com|con)\s+(.+?)\s+(?:nessa|nesta|dessa|desta|na|da|en\s+esa|en\s+esta|en\s+la|de\s+la)\s+(?:conta|cuenta)/i)
+    ?? text.match(/(?:conta|cuenta)\s+[^?!,]+?\s+(?:de|com|con|en)\s+(.+?)(?=\s+(?:semana|m[eê]s|mes|ano|hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana)\b|[?!,.]|$)/i);
+  const keyword = keywordMatch ? cleanManualAccountName(keywordMatch[1]) : undefined;
+  const intent: Intent = /\b(?:extrato|extracto|movimentos?|movimientos?)\b/.test(normalized) ? "finance_detail" : "finance_query";
+  const result: AIResult = {
+    intent,
+    confidence: 1,
+    financeType: /\b(?:recebi|recebeu|recib|ingres)\w*/.test(normalized) ? "income" : "expense",
+    account: { name, useContext: contextual && !name, mode },
+    ...(keyword ? { keyword } : {}),
+    ...(mode ? { mode } : {}),
+  };
+  return withExplicitRelativePeriod(message, result);
+}
+
+export function withExplicitFinanceAccount(message: string, result: AIResult): AIResult {
+  if (result.intent !== "finance_register") return result;
+  const normalized = normalizeCapabilityText(message);
+  const contextual = /\b(?:nessa|nesta|dessa|desta|essa|esta|esa)\s+(?:conta|cuenta)\b/.test(normalized);
+  const match = message.match(/(?:na|pela|nesta|nessa|en\s+la|por\s+la)\s+(?:conta|cuenta)\s+["“”']?([^"“”'?!,]+?)["“”']?(?=\s+(?:hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana|dia)\b|[?!,.]|$)/i);
+  const name = match && !/^(?:pessoal|personal|da empresa|de la empresa|empresarial)$/i.test(match[1].trim())
+    ? cleanManualAccountName(match[1])
+    : undefined;
+  if (!name && !contextual) return result;
+  const patchFinance = (finance: FinanceData): FinanceData => name ? { ...finance, accountHint: name } : finance;
+  return {
+    ...result,
+    ...(result.finance ? { finance: patchFinance(result.finance) } : {}),
+    ...(result.finances ? { finances: result.finances.map(patchFinance) } : {}),
+    account: { ...(result.account ?? {}), name, useContext: contextual && !name },
+  };
+}
+
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
   const explicitUnscheduledReminder = getExplicitUnscheduledReminderResult(message, ctx?.history);
   if (explicitUnscheduledReminder) return explicitUnscheduledReminder;
@@ -2975,6 +3223,12 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitModeSwitch = getExplicitModeSwitchResult(message, ctx?.history);
   if (explicitModeSwitch) return explicitModeSwitch;
+
+  const explicitAccount = getExplicitAccountCommandResult(message);
+  if (explicitAccount) return explicitAccount;
+
+  const explicitPendingFinance = getExplicitPendingFinanceRegisterResult(message);
+  if (explicitPendingFinance) return explicitPendingFinance;
 
   const explicitCustomer = getExplicitCustomerCrudResult(message);
   if (explicitCustomer) return explicitCustomer;
@@ -3069,13 +3323,13 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    const parsed = normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
+    const parsed = withExplicitFinanceAccount(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
       message,
       withExplicitFinanceType(
         message,
         withExplicitRelativePeriod(message, JSON.parse(text) as AIResult),
       ),
-    ));
+    )));
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   } catch (e) {
@@ -3214,14 +3468,14 @@ ${historyText}
 
 MENSAGEM ATUAL QUE NÃO FOI ENTENDIDA: "${message}"
 
-O que você sabe fazer (só pra te orientar, não repita essa lista pronta): registrar/editar/apagar despesas e receitas (inclusive marcar algo como "a receber"/"a pagar" ainda não recebido), ver saldo e extrato, tarefas, lembretes (inclusive pra outra pessoa), metas financeiras, gastos de veículo, contas recorrentes/parceladas, funcionários e clientes (cadastro no painel), lista de compras de mercado, agenda/reuniões no Google Meet, pesquisar informações públicas atuais na internet com fontes, vincular o WhatsApp de outra pessoa à conta (código de 4 dígitos via "vincular número" ou em Configurações).
+O que você sabe fazer (só pra te orientar, não repita essa lista pronta): registrar/editar/apagar despesas e receitas (inclusive marcar algo como "a receber"/"a pagar" ainda não recebido), criar/listar/renomear/excluir contas manuais e consultar gastos por conta, ver saldo e extrato, tarefas, lembretes (inclusive pra outra pessoa), metas financeiras, gastos de veículo, contas recorrentes/parceladas, funcionários e clientes (cadastro no painel), lista de compras de mercado, agenda/reuniões no Google Meet, pesquisar informações públicas atuais na internet com fontes, vincular o WhatsApp de outra pessoa à conta (código de 4 dígitos via "vincular número" ou em Configurações).
 
 Instruções:
 - Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.
 - Se a mensagem for vaga/sem relação clara com nada acima, faça 1 pergunta objetiva e específica ao que ela disse pra entender a intenção (não uma lista de todos os comandos possíveis).
 - No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
 - ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Se o pedido não estiver claramente coberto pela lista ou faltar informação confirmada, diga isso com naturalidade e oriente a pessoa a entrar no painel do Zelo e abrir o *Suporte* no canto inferior direito. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
-- ⚠️ Não existe conexão/cadastro de contas bancárias ou cartões e não existe Open Finance/Open Banking no Zelo. Nunca invente menus ou instruções para essas funcionalidades.
+- Existem contas manuais, mas não existe cartão de crédito nem conexão/sincronização bancária via Open Finance/Open Banking. Nunca invente integração bancária.
 - Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
 
   try {

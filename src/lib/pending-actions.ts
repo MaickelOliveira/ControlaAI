@@ -257,7 +257,9 @@ export type PendingAccountSelection = {
   phone: string;
   userId: string;
   mode: string;
-  action: "query" | "set_default" | "invoice_query" | "invoice_pay";
+  action: "resume_ai";
+  ai: AIResult;
+  originalText: string;
   accounts: Array<{ id: string; name: string; type: string }>;
   expiresAt: string;
 };

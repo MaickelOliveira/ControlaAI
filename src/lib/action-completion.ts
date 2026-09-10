@@ -81,6 +81,16 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
       return null;
     }
 
+    case "account_create":
+      return hasText(ai.account?.name) ? null : say(locale, "🏦 Qual nome deseja dar à conta?", "🏦 ¿Qué nombre quieres darle a la cuenta?");
+    case "account_update":
+      if (!hasText(ai.account?.name)) return say(locale, "🏦 Qual conta deseja renomear?", "🏦 ¿Qué cuenta quieres renombrar?");
+      return hasText(ai.account?.newName) ? null : say(locale, "✏️ Qual será o novo nome da conta?", "✏️ ¿Cuál será el nuevo nombre de la cuenta?");
+    case "account_delete":
+      return hasText(ai.account?.name) ? null : say(locale, "🗑️ Qual conta deseja excluir?", "🗑️ ¿Qué cuenta quieres eliminar?");
+    case "account_set_default":
+      return hasText(ai.account?.name) ? null : say(locale, "⭐ Qual conta deseja definir como padrão?", "⭐ ¿Qué cuenta quieres establecer como predeterminada?");
+
     case "task_create": {
       const tasks = ai.tasks?.length ? ai.tasks : ai.task ? [ai.task] : [];
       if (!tasks.length) return say(locale, "📌 Qual tarefa deseja criar?", "📌 ¿Qué tarea quieres crear?");

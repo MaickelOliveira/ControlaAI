@@ -3,6 +3,7 @@ import {
   getExplicitDailySummaryResult,
   getExplicitFinanceDetailResult,
   getExplicitFinanceConfirmPendingResult,
+  getExplicitPendingFinanceRegisterResult,
   getExplicitFinanceTypeSignal,
   getExplicitEmployeeCrudResult,
   getExplicitCustomerCrudResult,
@@ -20,6 +21,7 @@ import {
   getExplicitTaskListCreateResult,
   getExplicitScheduledReminderResult,
   getExplicitUpcomingFinanceQueryResult,
+  getExplicitAccountCommandResult,
   getExplicitUnscheduledReminderResult,
   getExplicitVehicleCrudResult,
   getExplicitWebSearchResult,
@@ -29,6 +31,7 @@ import {
   normalizeMeetingCreation,
   processMessage,
   withExplicitFinanceDestinationMode,
+  withExplicitFinanceAccount,
   withExplicitFinanceType,
 } from "./ai-processor";
 
@@ -44,6 +47,63 @@ describe("pending finance confirmation parity", () => {
 
   it("does not hijack an ordinary expense that was already paid", () => {
     expect(getExplicitFinanceConfirmPendingResult("Ya pagué la luz hoy")).toBeNull();
+  });
+});
+
+describe("natural pending finance registration", () => {
+  const anchor = new Date(2026, 8, 10, 12, 0, 0);
+
+  it("understands the exact real-world wording without treating Tempo as weather", async () => {
+    const message = "Colocar em contas a receber empresarial Cliente Uss(Tempo) valor R$461,80 receber no dia 24/10";
+    expect(getExplicitPendingFinanceRegisterResult(message, anchor)).toMatchObject({
+      intent: "finance_register",
+      mode: "business",
+      finance: {
+        type: "income",
+        amount: 461.8,
+        category: "Vendas",
+        description: "Cliente Uss(Tempo)",
+        date: "2026-10-24",
+        mode: "business",
+        pending: true,
+      },
+    });
+    expect(getExplicitWebSearchResult(message)).toBeNull();
+    expect(await processMessage(message)).toMatchObject({ intent: "finance_register", finance: { amount: 461.8, pending: true } });
+  });
+
+  it.each([
+    ["Lança R$ 461,80 do cliente USS para receber dia 24/10 na empresa", "income", 461.8, "business"],
+    ["Tenho 461,80 reais pra receber do cliente USS em 24/10", "income", 461.8, undefined],
+    ["Cliente USS me deve R$461,80 e paga dia 24/10", "income", 461.8, undefined],
+    ["Adiciona nas contas a pagar da empresa fornecedor ABC valor R$900 dia 30/09", "expense", 900, "business"],
+    ["Tenho 250 reais para pagar de internet dia 15/10", "expense", 250, undefined],
+    ["Coloque cliente Ana 850 pra receber em 15/10 na empresa", "income", 850, "business"],
+    ["Anota pra eu receber 90 do João amanhã", "income", 90, undefined],
+    ["Bota 1200 pra pagar fornecedor XPTO dia 25 na empresa", "expense", 1200, "business"],
+    ["Cliente Marcos vai me pagar 560 dia 28/09", "income", 560, undefined],
+    ["Preciso pagar 95 de telefone no dia 18/09", "expense", 95, undefined],
+    ["Agrega en cuentas por cobrar de la empresa Cliente Sol monto $320 el 24/10", "income", 320, "business"],
+    ["Tengo 180 dólares por cobrar del cliente Juan el 20/10", "income", 180, undefined],
+    ["Pon en cuentas por pagar proveedor ACME importe $700 el 30/09", "expense", 700, undefined],
+    ["Cliente Juan me debe $430 y va a pagar el 29/09", "income", 430, undefined],
+    ["Necesito pagar $210 de internet el 22/09", "expense", 210, undefined],
+  ])("classifies natural variation: %s", (message, type, amount, mode) => {
+    expect(getExplicitPendingFinanceRegisterResult(message, anchor)).toMatchObject({
+      intent: "finance_register",
+      finance: { type, amount, pending: true, ...(mode ? { mode } : {}) },
+    });
+    expect(getExplicitWebSearchResult(message)).toBeNull();
+  });
+
+  it("does not turn pending queries into new records", () => {
+    expect(getExplicitPendingFinanceRegisterResult("Quanto tenho a receber esta semana?", anchor)).toBeNull();
+    expect(getExplicitPendingFinanceRegisterResult("Quais contas tenho a pagar?", anchor)).toBeNull();
+  });
+
+  it("keeps a receivable without a date pending instead of inventing today", () => {
+    expect(getExplicitPendingFinanceRegisterResult("Tenho R$ 500 para receber do João", anchor))
+      .toMatchObject({ intent: "finance_register", finance: { amount: 500, pending: true, date: "" } });
   });
 });
 
@@ -669,7 +729,8 @@ describe("getUnsupportedBankConnectionResponse", () => {
       "Não encontrei o local para conectar contas bancárias.",
     );
 
-    expect(response).toContain("não é possível cadastrar nem conectar contas bancárias");
+    expect(response).toContain("criar e usar contas manuais");
+    expect(response).toContain("não é possível conectá-las ou sincronizá-las");
     expect(response).toContain("não utiliza Open Finance nem Open Banking");
     expect(response).toContain("*Suporte* no canto inferior direito");
     expect(response).not.toContain("Configurações");
@@ -680,7 +741,7 @@ describe("getUnsupportedBankConnectionResponse", () => {
     expect(getUnsupportedBankConnectionResponse("Como ativo o Open Finance?"))
       .toContain("*Suporte* no canto inferior direito");
     expect(getUnsupportedBankConnectionResponse("Como adicionar contas?"))
-      .toContain("não é possível cadastrar nem conectar contas bancárias");
+      .toBeNull();
   });
 
   it("short-circuits processMessage without depending on the AI provider", async () => {
@@ -697,7 +758,7 @@ describe("getUnsupportedBankConnectionResponse", () => {
       [{ role: "user", content: "Quero conectar minha conta bancária." }],
     );
 
-    expect(response).toContain("não é possível cadastrar nem conectar contas bancárias");
+    expect(response).toContain("não é possível conectá-las ou sincronizá-las");
   });
 
   it("does not let an old bank question hijack a new task or help request", () => {
@@ -722,6 +783,69 @@ describe("getUnsupportedBankConnectionResponse", () => {
     expect(getUnsupportedBankConnectionResponse("Como conecto o Google Agenda?")).toBeNull();
     expect(getUnsupportedBankConnectionResponse("Como registrar a conta de luz?"))
       .toBeNull();
+  });
+});
+
+describe("manual account commands", () => {
+  it.each([
+    ["Cadastre uma conta Nubank", { intent: "account_create", account: { name: "Nubank" } }],
+    ["Crea una cuenta Caja", { intent: "account_create", account: { name: "Caja" } }],
+    ["Liste minhas contas", { intent: "account_list" }],
+    ["Muestra mis cuentas", { intent: "account_list" }],
+    ["Renomeie a conta Nubank para Viagens", { intent: "account_update", account: { name: "Nubank", newName: "Viagens" } }],
+    ["Cambia la cuenta Caja a Efectivo", { intent: "account_update", account: { name: "Caja", newName: "Efectivo" } }],
+    ["Exclua a conta Viagens", { intent: "account_delete", account: { name: "Viagens" } }],
+    ["Elimina la cuenta Viajes", { intent: "account_delete", account: { name: "Viajes" } }],
+    ["Defina a conta Nubank como padrão", { intent: "account_set_default", account: { name: "Nubank" } }],
+    ["Establece la cuenta Caja como predeterminada", { intent: "account_set_default", account: { name: "Caja" } }],
+  ])("classifies %s", (message, expected) => {
+    expect(getExplicitAccountCommandResult(message)).toMatchObject(expected);
+  });
+
+  it("filters queries by account, merchant and relative period", () => {
+    expect(getExplicitAccountCommandResult("quanto gastei na conta Nubank semana passada"))
+      .toMatchObject({ intent: "finance_query", account: { name: "Nubank" }, financeType: "expense", period: { from: "2026-08-31", to: "2026-09-06" } });
+    expect(getExplicitAccountCommandResult("quanto gastei de ifood nessa conta"))
+      .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "ifood" });
+    expect(getExplicitAccountCommandResult("quanto gastou de ifoode nessa conta"))
+      .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "ifoode" });
+    expect(getExplicitAccountCommandResult("quanto gastou semana passada nessa conta"))
+      .toMatchObject({ intent: "finance_query", account: { useContext: true }, period: { from: "2026-08-31", to: "2026-09-06" } });
+    expect(getExplicitAccountCommandResult("cuánto gasté con Rappi en esa cuenta"))
+      .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "Rappi" });
+    expect(getExplicitAccountCommandResult("quanto gastei na conta Nubank com ifood semana passada"))
+      .toMatchObject({ intent: "finance_query", account: { name: "Nubank" }, keyword: "ifood", period: { from: "2026-08-31", to: "2026-09-06" } });
+    expect(getExplicitAccountCommandResult("extrato da conta Nubank"))
+      .toMatchObject({ intent: "finance_detail", account: { name: "Nubank" } });
+  });
+
+  it.each([
+    "quanto gastei nessa conta hoje",
+    "quanto saiu dessa conta ontem",
+    "saldo desta conta",
+    "extrato dessa conta",
+    "movimentos nesta conta",
+    "cuánto gasté en esa cuenta hoy",
+    "saldo de esta cuenta",
+    "extracto de esa cuenta",
+    "movimientos en esta cuenta",
+  ])("recognizes contextual account query: %s", message => {
+    expect(getExplicitAccountCommandResult(message)).toMatchObject({ account: { useContext: true } });
+  });
+
+  it("attaches named or contextual accounts to finance registrations", () => {
+    const base = { intent: "finance_register" as const, confidence: 1, finance: { type: "expense" as const, amount: 60, category: "Saúde", description: "Farmácia", date: "2026-09-10" } };
+    expect(withExplicitFinanceAccount("Gastei 60 na farmácia pela conta Nubank", base))
+      .toMatchObject({ finance: { accountHint: "Nubank" }, account: { name: "Nubank" } });
+    expect(withExplicitFinanceAccount("Gasté 60 en farmacia en esa cuenta", base))
+      .toMatchObject({ account: { useContext: true } });
+  });
+
+  it("keeps business mode separate from a manual account name", () => {
+    expect(getExplicitAccountCommandResult("quanto gastei na conta da empresa")).toBeNull();
+    expect(getExplicitAccountCommandResult("registrar conta de luz de 120 reais")).toBeNull();
+    expect(getExplicitAccountCommandResult("apague a conta de internet")).toBeNull();
+    expect(getExplicitAccountCommandResult("quais contas tenho a pagar?")).toBeNull();
   });
 });
 

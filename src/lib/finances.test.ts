@@ -36,6 +36,10 @@ describe("expandMerchantAliases", () => {
     expect(expandMerchantAliases("IFOOD")).toEqual(["ifood", "ifd", "i food"]);
   });
 
+  it("tolerates a trailing typo in iFood", () => {
+    expect(expandMerchantAliases("ifoode")).toEqual(["ifood", "ifd", "i food"]);
+  });
+
   it("returns just the lowercased term when there is no known alias", () => {
     expect(expandMerchantAliases("Padaria do Zé")).toEqual(["padaria do zé"]);
   });

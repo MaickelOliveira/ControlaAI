@@ -219,6 +219,15 @@ Cuéntame qué pasó y yo lo anoto:
 • _"Movimientos de la empresa"_ → gastos de la cuenta empresa
 
 ━━━━━━━━━━━━━━━
+🏦 *CUENTAS MANUALES*
+• _"Crea una cuenta Caja"_ → registro una cuenta
+• _"Mis cuentas"_ → muestro las cuentas disponibles
+• _"Gasté 60 en farmacia en la cuenta Caja"_ → registro en esa cuenta
+• _"¿Cuánto gasté en iFood en esa cuenta la semana pasada?"_ → filtro por cuenta, comercio y período
+• _"Renombra la cuenta Caja a Efectivo"_ / _"Elimina la cuenta Viajes"_
+Si tienes una sola cuenta, la uso automáticamente; si tienes varias, te pregunto cuál. No hay conexión bancaria ni tarjetas de crédito.
+
+━━━━━━━━━━━━━━━
 ✏️ *CORREGIR O BORRAR*
 ¿Te equivocaste en un valor? Sin problema, yo lo ajusto:
 • _"Corrige el súper a 80"_ → cambio el valor
@@ -330,6 +339,15 @@ Conta-me o que aconteceu que eu registo:
 • _"Extrato detalhado da empresa"_ → gastos da conta empresa
 
 ━━━━━━━━━━━━━━━
+🏦 *CONTAS MANUAIS*
+• _"Cria uma conta Caixa"_ → registo uma conta
+• _"As minhas contas"_ → mostro as contas disponíveis
+• _"Gastei 60 na farmácia pela conta Caixa"_ → registo nessa conta
+• _"Quanto gastei no iFood nessa conta na semana passada?"_ → filtro por conta, comerciante e período
+• _"Renomeia a conta Caixa para Dinheiro"_ / _"Elimina a conta Viagens"_
+Se tiveres uma só conta, uso-a automaticamente; se tiveres várias, pergunto qual. Não há ligação bancária nem cartões de crédito.
+
+━━━━━━━━━━━━━━━
 ✏️ *CORRIGIR OU APAGAR*
 Enganaste-te num valor? Sem problema, eu ajusto:
 • _"Corrige o supermercado para 80 euros"_ → altero o valor
@@ -438,6 +456,15 @@ Me conte o que aconteceu que eu anoto:
 • _"Extrato detalhado"_ → cada gasto separado por categoria
 • _"No que gastei mais?"_ → uma análise com dicas
 • _"Extrato detalhado da empresa"_ → gastos da conta empresa
+
+━━━━━━━━━━━━━━━
+🏦 *CONTAS MANUAIS*
+• _"Crie uma conta Caixa"_ → cadastro uma conta
+• _"Minhas contas"_ → mostro as contas disponíveis
+• _"Gastei 60 na farmácia pela conta Caixa"_ → registro nessa conta
+• _"Quanto gastei no iFood nessa conta na semana passada?"_ → filtro por conta, comerciante e período
+• _"Renomeie a conta Caixa para Dinheiro"_ / _"Exclua a conta Viagens"_
+Se houver uma única conta, uso automaticamente; se houver várias, pergunto qual. Não há conexão bancária nem cartão de crédito.
 
 ━━━━━━━━━━━━━━━
 ✏️ *CORRIGIR OU APAGAR*

@@ -119,7 +119,7 @@ const Icons = {
 const BASE_NAV = [
   { href: "/pt/dashboard", label: "Dashboard", icon: Icons.home },
   { href: "/pt/dashboard/financas", label: "Finanças", icon: Icons.chart },
-  // "Contas" (bancos/cartões) em standby — ver src/app/dashboard/contas/page.tsx
+  { href: "/pt/dashboard/contas", label: "Contas", icon: Icons.wallet },
   { href: "/pt/dashboard/tarefas", label: "Tarefas", icon: Icons.tasks },
   { href: "/pt/dashboard/metas", label: "Metas", icon: Icons.target },
   { href: "/pt/dashboard/veiculos", label: "Veículos", icon: Icons.car },

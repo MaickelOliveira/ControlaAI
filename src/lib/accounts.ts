@@ -225,27 +225,60 @@ export async function closeDueInvoices(): Promise<CardInvoice[]> {
 // ── Resolução de conta pra um lançamento ──────────────
 export type ResolvedAccount = { accountId?: string; cardInvoiceId?: string; ambiguous?: Account[] };
 
-/** Chamada antes de addFinance em cada domínio que registra despesa: tenta
- *  achar a conta pelo nome dito (accountHint); sem hint ou sem match, cai
- *  na conta padrão do modo; sem nenhuma conta cadastrada ainda, devolve
- *  vazio (comportamento idêntico a hoje, sem conta nenhuma). Se a conta
- *  resolvida for cartão, já resolve a fatura do ciclo também. */
-export async function resolveAccountForFinance(userId: string, mode: FinanceMode, accountHint?: string, date?: string): Promise<ResolvedAccount> {
+/** Garante que todo modo tenha uma carteira manual básica. A criação é
+ * idempotente pelo índice único (user_id, mode, lower(name)); isso também
+ * atende contas antigas sem exigir que o cliente abra a tela de Contas. */
+export async function ensureCashAccount(userId: string, mode: FinanceMode): Promise<Account | null> {
+  const existing = await findAccountByName(userId, mode, "Dinheiro", "bank");
+  let cash = existing[0] ?? null;
+  try {
+    if (!cash) cash = await createAccount({ userId, mode, name: "Dinheiro", type: "bank", makeDefault: true });
+  } catch {
+    // Outra requisição pode ter criado a mesma conta entre o SELECT e INSERT.
+    cash = (await findAccountByName(userId, mode, "Dinheiro", "bank"))[0] ?? null;
+  }
+  if (cash) {
+    // Antes da liberação de Contas, os lançamentos não tinham account_id.
+    // Eles passam a pertencer a Dinheiro, preservando totais e permitindo
+    // consultar imediatamente o histórico dessa conta.
+    await getSupabase().from("finances").update({ account_id: cash.id })
+      .eq("user_id", userId).eq("mode", mode).is("account_id", null);
+  }
+  return cash;
+}
+
+/** Contas disponíveis na versão atual. Cartões antigos permanecem no banco
+ * para preservar o histórico, mas não são oferecidos para novos lançamentos. */
+export async function getManualAccountsByUser(userId: string, mode: FinanceMode): Promise<Account[]> {
+  await ensureCashAccount(userId, mode);
+  return (await getAccountsByUser(userId, mode)).filter(account => account.type === "bank");
+}
+
+/** Chamada antes de addFinance: resolve um nome explícito; com uma conta usa
+ * automaticamente, e com várias devolve todas para o handler perguntar. */
+export async function resolveAccountForFinance(userId: string, mode: FinanceMode, accountHint?: string): Promise<ResolvedAccount> {
   let account: Account | null = null;
 
+  const accounts = await getManualAccountsByUser(userId, mode);
+
   if (accountHint) {
-    const matches = await findAccountByName(userId, mode, accountHint);
+    const lowerHint = accountHint.trim().toLocaleLowerCase();
+    const matches = accounts.filter(candidate => {
+      const lowerName = candidate.name.toLocaleLowerCase();
+      return lowerName.includes(lowerHint) || lowerHint.includes(lowerName);
+    });
     if (matches.length === 1) account = matches[0];
     else if (matches.length > 1) return { ambiguous: matches };
-    // 0 matches: ignora o hint, cai no padrão abaixo
+    else return { ambiguous: accounts };
   }
 
-  if (!account) account = await getDefaultAccount(userId, mode);
+  // Com uma única conta a escolha é automática. Com duas ou mais, nunca
+  // adivinha nem usa silenciosamente a padrão: pergunta ao cliente.
+  if (!account && accounts.length === 1) {
+    account = accounts[0];
+    if (!account.isDefault) await setDefaultAccount(userId, mode, account.id);
+  }
+  if (!account && accounts.length > 1) return { ambiguous: accounts };
   if (!account) return {};
-
-  if (account.type === "credit_card") {
-    const invoice = await findOrCreateInvoiceForDate(account.id, date ?? toYMD(new Date()));
-    return { accountId: account.id, cardInvoiceId: invoice.id };
-  }
   return { accountId: account.id };
 }
