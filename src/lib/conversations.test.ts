@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { phoneVariants } from "./conversations";
+import {
+  CUSTOMER_SERVICE_WINDOW_MS,
+  isCustomerServiceWindowOpen,
+  phoneVariants,
+} from "./conversations";
 
 describe("phoneVariants", () => {
   it.each([
@@ -17,5 +21,37 @@ describe("phoneVariants", () => {
     expect(variants).toContain("5511987654321");
     expect(variants).toContain("11987654321");
     expect(variants).toContain("551187654321");
+  });
+});
+
+describe("isCustomerServiceWindowOpen", () => {
+  const now = new Date("2026-09-10T20:00:00-03:00").getTime();
+
+  it("opens the window from the last customer message", () => {
+    expect(isCustomerServiceWindowOpen([
+      { role: "user", ts: now - CUSTOMER_SERVICE_WINDOW_MS + 1 },
+      { role: "assistant", ts: now - 1_000 },
+    ], now)).toBe(true);
+  });
+
+  it("does not let an assistant message renew an expired window", () => {
+    expect(isCustomerServiceWindowOpen([
+      { role: "user", ts: now - CUSTOMER_SERVICE_WINDOW_MS },
+      { role: "assistant", ts: now - 1_000 },
+    ], now)).toBe(false);
+  });
+
+  it("keeps the window closed when the customer has never replied", () => {
+    expect(isCustomerServiceWindowOpen([
+      { role: "assistant", ts: now - 1_000 },
+    ], now)).toBe(false);
+  });
+
+  it("uses the most recent inbound message", () => {
+    expect(isCustomerServiceWindowOpen([
+      { role: "user", ts: now - CUSTOMER_SERVICE_WINDOW_MS * 2 },
+      { role: "assistant", ts: now - 10_000 },
+      { role: "user", ts: now - 5_000 },
+    ], now)).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { getConfig } from "@/lib/whatsapp-config";
 import * as evolution from "@/lib/evolution";
 import * as waba from "@/lib/waba";
-import { addMessage } from "@/lib/conversations";
+import { addMessage, hasOpenCustomerServiceWindow } from "@/lib/conversations";
 
 /** Facade agnóstica de provider — dezenas de call-sites no bot (switch de
  *  intenções em message-handler.ts) usam só sendText/sendFile e não
@@ -124,10 +124,9 @@ export async function sendText(to: string, message: string): Promise<boolean> {
   return ok;
 }
 
-/** Lembretes são sempre proativos (nunca respondem a uma mensagem do
- *  usuário), então quase sempre caem fora da janela de 24h — no WABA
- *  precisam ir como template aprovado, não texto livre. Evolution (API não
- *  oficial) não tem essa restrição, então continua mandando texto normal. */
+/** Lembretes são proativos, mas podem cair dentro de uma janela de atendimento
+ * aberta por uma mensagem recente do cliente. Dentro das 24h usamos o texto
+ * completo da Zelo; fora delas usamos obrigatoriamente o template aprovado. */
 export type ReminderTemplateDispatch = {
   templateName: "lembrete_assessor" | "lbte_empresarial" | "lbt_pessoal";
   renderedText: string;
@@ -184,17 +183,33 @@ export async function sendReminderTemplate(to: string, templateName: WhatsAppTem
   let ok: boolean;
   if (provider === "waba") {
     const localizedName = localizedTemplateName(templateName, locale);
-    const result = await waba.sendTemplate(
-      to,
-      localizedName,
-      languageCodeFor(locale),
-      localizedTemplateParams(templateName, params, locale),
-      defaultCountryIsoFor(locale),
-    );
-    ok = result.ok;
-    // wamid aqui é o único jeito de casar esse envio com o evento de status
-    // (sent/delivered/read/failed) que chega depois, assíncrono, no webhook.
-    if (ok) console.log(`[whatsapp] template ${localizedName} aceito, msg=${result.messageId}`);
+    const localizedParams = localizedTemplateParams(templateName, params, locale);
+    const countryIso = defaultCountryIsoFor(locale);
+    const windowOpen = await hasOpenCustomerServiceWindow(to);
+
+    if (windowOpen) {
+      ok = await waba.sendText(to, renderedText, countryIso);
+      if (ok) console.log(`[whatsapp] texto livre enviado dentro da janela de 24h (${localizedName})`);
+    } else {
+      ok = false;
+    }
+
+    // A janela pode vencer entre a consulta e o envio. Se o texto livre for
+    // rejeitado, tenta imediatamente o template, que também é a única opção
+    // quando não existe mensagem recebida nas últimas 24 horas.
+    if (!ok) {
+      const result = await waba.sendTemplate(
+        to,
+        localizedName,
+        languageCodeFor(locale),
+        localizedParams,
+        countryIso,
+      );
+      ok = result.ok;
+      // wamid aqui é o único jeito de casar esse envio com o evento de status
+      // (sent/delivered/read/failed) que chega depois, assíncrono, no webhook.
+      if (ok) console.log(`[whatsapp] template ${localizedName} aceito, msg=${result.messageId}`);
+    }
   } else {
     ok = await evolution.sendText(to, renderedText, defaultCountryIsoFor(locale));
   }
@@ -216,7 +231,6 @@ export const SPANISH_WELCOME_TEMPLATE_TEXT =
   "Si no encuentras el correo o necesitas ayuda, escribe a contato@zelogestaointeligente.com.br.";
 
 export async function sendWelcomeTemplate(to: string, locale?: string): Promise<boolean> {
-  const provider = (await getConfig()).provider;
   const texts: Record<string, string> = {
     "pt-BR":
       "Oi! 👋 Sou o Zelo, seu assistente financeiro e de tarefas direto no WhatsApp.\n\n" +
@@ -233,17 +247,7 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
     es: SPANISH_WELCOME_TEMPLATE_TEXT,
   };
   const renderedText = texts[locale ?? "pt-BR"] ?? texts["pt-BR"];
-  let ok: boolean;
-  if (provider === "waba") {
-    const templateName = localizedTemplateName("boas_vindas_cadastro2", locale);
-    const result = await waba.sendTemplate(to, templateName, languageCodeFor(locale), {}, defaultCountryIsoFor(locale));
-    ok = result.ok;
-    if (ok) console.log(`[whatsapp] template ${templateName} aceito, msg=${result.messageId}`);
-  } else {
-    ok = await evolution.sendText(to, renderedText, defaultCountryIsoFor(locale));
-  }
-  if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
-  return ok;
+  return sendReminderTemplate(to, "boas_vindas_cadastro2", renderedText, {}, locale);
 }
 
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {

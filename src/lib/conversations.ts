@@ -22,6 +22,18 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 // registrado — depois disso, é seguro demais assumir que a pessoa ainda
 // está falando do mesmo lançamento/lote.
 const LAST_FINANCE_BATCH_TTL_MS = 30 * 60 * 1000;
+export const CUSTOMER_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** A janela de atendimento da Cloud API é aberta exclusivamente por uma
+ * mensagem recebida do cliente. Mensagens enviadas pela Zelo atualizam a
+ * atividade da conversa, mas não renovam essas 24 horas. */
+export function isCustomerServiceWindowOpen(
+  messages: Pick<ChatMessage, "role" | "ts">[],
+  now = Date.now(),
+): boolean {
+  const lastInbound = [...messages].reverse().find(message => message.role === "user");
+  return !!lastInbound && now >= lastInbound.ts && now - lastInbound.ts < CUSTOMER_SERVICE_WINDOW_MS;
+}
 
 /** Normaliza telefone gerando variantes brasileiras legadas (com/sem 55 e
  *  com/sem 9º dígito), mas preserva números internacionais já completos.
@@ -91,6 +103,13 @@ export async function getHistory(phone: string): Promise<ChatMessage[]> {
   if (!found) return [];
   if (Date.now() - found.conv.lastActivity > MAX_AGE_MS) return [];
   return found.conv.messages;
+}
+
+/** Consulta a última mensagem RECEBIDA para decidir entre texto livre e
+ * template aprovado em disparos proativos da API oficial. */
+export async function hasOpenCustomerServiceWindow(phone: string, now = Date.now()): Promise<boolean> {
+  const found = await findConversation(phone);
+  return found ? isCustomerServiceWindowOpen(found.conv.messages, now) : false;
 }
 
 export async function getAllConversations(): Promise<Array<{
