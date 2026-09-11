@@ -88,13 +88,14 @@ export type CreateRecurringInput = Omit<RecurringTransaction, "id" | "paidInstal
 
 export async function createRecurring(data: CreateRecurringInput): Promise<RecurringTransaction> {
   const nextDueDate = data.nextDueDate || calcFirstDueDate(data.startDate, data.dayOfMonth);
-  const row = {
+  const row: Record<string, unknown> = {
     id: randomUUID(), user_id: data.userId, type: data.type, amount: data.amount, total_amount: data.totalAmount,
     category: data.category, description: data.description, mode: data.mode, recurrence_type: data.recurrenceType,
     total_installments: data.totalInstallments, paid_installments: 0, repeat_unit: data.repeatUnit,
     day_of_month: data.dayOfMonth, start_date: data.startDate, next_due_date: nextDueDate, status: "active",
-    source: data.source, employee_id: data.employeeId ?? null,
+    source: data.source,
   };
+  if (data.employeeId !== undefined) row.employee_id = data.employeeId;
   const { data: inserted, error } = await getSupabase().from("recurring_transactions").insert(row).select("*").single();
   if (error) throw new Error(`[recurring] createRecurring falhou: ${error.message}`);
   return fromRow(inserted as Row);

@@ -293,6 +293,20 @@ export type PendingAccountSelection = {
   expiresAt: string;
 };
 
+/** O usuário escolheu cadastrar uma conta enquanto havia outra ação em
+ * andamento (por exemplo, um gasto). Depois de receber o nome, o bot cria a
+ * conta e retoma a ação original já usando essa conta. Sem resumeAi, atende o
+ * comando avulso "cadastrar conta" que ainda não informou o nome. */
+export type PendingAccountCreateName = {
+  type: "account_create_name";
+  phone: string;
+  userId: string;
+  mode: string;
+  resumeAi?: AIResult;
+  originalText?: string;
+  expiresAt: string;
+};
+
 /** Depois de cadastrar uma nova conta, confirma se a conta padrão atual deve
  * ser mantida ou se a nova deve assumir como padrão. */
 export type PendingAccountDefaultConfirm = {
@@ -307,7 +321,7 @@ export type PendingAccountDefaultConfirm = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountDefaultConfirm | PendingClearHistory;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountDefaultConfirm | PendingClearHistory;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -337,6 +351,7 @@ type PendingActionInput =
   | Omit<PendingFinanceEmployeeSelect, "phone" | "expiresAt">
   | Omit<PendingFinanceEmployeeCreate, "phone" | "expiresAt">
   | Omit<PendingAccountSelection, "phone" | "expiresAt">
+  | Omit<PendingAccountCreateName, "phone" | "expiresAt">
   | Omit<PendingAccountDefaultConfirm, "phone" | "expiresAt">
   | Omit<PendingClearHistory, "phone" | "expiresAt">;
 
@@ -418,6 +433,15 @@ export function parseAccountChoice(
   accounts: Array<{ id: string; name: string; type: string }>
 ): number {
   return choiceIndexByLabels(text, accounts, a => [a.name]);
+}
+
+/** Detecta a opção textual oferecida junto da lista de contas. Retorna null
+ * quando não é um pedido de cadastro, string vazia quando falta o nome e o
+ * nome quando a pessoa já responde tudo de uma vez. */
+export function parseAccountCreateRequest(text: string): string | null {
+  const match = text.trim().match(/^(?:quero\s+)?(?:cadastrar|cadastre|cadastra|criar|crie|cria|adicionar|adicione|adiciona|registrar|registre|registra|crear|crea|agregar|agrega|a[nñ]adir|a[nñ]ade)\s+(?:(?:uma|una|a|la)\s+)?(?:(?:nova|nueva)\s+)?(?:conta|cuenta)\b(?:\s+(?:chamada|llamada|com\s+o\s+nome|con\s+el\s+nombre(?:\s+de)?))?\s*(.*)$/i);
+  if (!match) return null;
+  return match[1].replace(/^["“”']+|["“”'.!?;,]+$/g, "").trim();
 }
 
 export function parseAccountDefaultChoice(

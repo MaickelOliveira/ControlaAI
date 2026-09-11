@@ -228,6 +228,16 @@ Cuéntame qué pasó y yo lo anoto:
 Si tienes una sola cuenta, la uso automáticamente; si tienes varias, te pregunto cuál. No hay conexión bancaria ni tarjetas de crédito.
 
 ━━━━━━━━━━━━━━━
+🛒 *SUPERMERCADO*
+• _"Agrega arroz, leche y huevos a mi lista"_ → creo o completo la lista
+• _"Ya compré arroz y leche"_ → marco esos artículos
+• _"Quita huevos de la lista"_ / _"Cambia 1 leche por 3"_
+• _"Terminé la compra en Lider, gasté 180"_ → cierro la compra y registro el gasto
+• _"¿Qué compré la última vez?"_ / _"¿Cuánto gasté en Lider este mes?"_
+• _"¿Dónde pagué menos por el arroz?"_ → comparo tu historial
+También puedo leer una foto clara del recibo y separar los productos.
+
+━━━━━━━━━━━━━━━
 ✏️ *CORREGIR O BORRAR*
 ¿Te equivocaste en un valor? Sin problema, yo lo ajusto:
 • _"Corrige el súper a 80"_ → cambio el valor
@@ -247,11 +257,13 @@ Te aviso automáticamente el día del vencimiento. 🔔
 
 ━━━━━━━━━━━━━━━
 🚗 *GASTOS DE VEHÍCULO*
-Si tienes un auto o moto registrado en el panel:
+• _"Registra mi Toyota Corolla 2022, patente ABC123"_ → registro el vehículo
+• _"Mis vehículos"_ → muestro los registrados
 • _"Cargué 80 de nafta"_ → registro combustible
 • _"Pagué 300 de service"_ → mantenimiento
 • _"Seguro del auto 1200"_ → seguro
 • _"Pagué 800 de patente"_ → impuesto
+Si tienes más de un vehículo, te pregunto cuál. También puedes cambiar los datos o eliminar uno por su nombre.
 
 ━━━━━━━━━━━━━━━
 📋 *TAREAS*
@@ -282,6 +294,7 @@ Te aviso en el momento justo:
 • _"Mis eventos"_ → lo que está agendado
 • _"Reagendar la reunión para el lunes a las 10"_ → cambio el horario
 • _"Cancela la consulta del viernes"_ → la elimino
+Los eventos de agenda avisan automáticamente *2 horas antes* y *15 minutos antes*.
 
 ━━━━━━━━━━━━━━━
 🎥 *REUNIÓN POR VIDEO (Google Meet)*
@@ -293,8 +306,9 @@ Quien tenga WhatsApp vinculado recibe la invitación automáticamente.
 
 ━━━━━━━━━━━━━━━
 📁 *ARCHIVOS (Drive inteligente)*
-• Envía cualquier foto, PDF o documento → yo lo guardo y organizo
-• Recibo o factura → ya lo registro como gasto
+• Envía una imagen sin texto → te pregunto si quieres guardarla, identificarla o buscar algo
+• Foto con _"¿cuánto cuesta este medicamento?"_ → identifico y busco precios actuales
+• Recibo o factura → leo los datos y te indico lo que se registrará
 • Para que solo lo guarde, sin registrar nada: envíalo con el texto _"guarda"_
 • _"Busca el contrato de Juan"_ → te devuelvo el archivo
 • _"Guarda como contrato firmado"_ → renombro el último archivo
@@ -312,6 +326,16 @@ Separo las finanzas de la empresa de las personales:
 • _"Modo empresa"_ → los próximos registros van a la empresa
 • _"Modo personal"_ → vuelvo a los gastos personales
 El modo actual siempre aparece en mis respuestas.
+
+━━━━━━━━━━━━━━━
+👥 *EMPLEADOS Y CLIENTES — MODO EMPRESA*
+• _"Registra a Luana como vendedora, salario 1800"_ → creo el empleado
+• _"Pagué 1800 de salario a Luana desde la cuenta Caja"_ → registro y vinculo el pago
+• _"No era Rafael, era Luana"_ → corrijo el empleado del último pago
+• _"Mis empleados"_ / _"Desactiva al empleado Rafael"_
+En la ficha del empleado aparecen los pagos recibidos, con valor y fecha.
+• _"Registra al cliente Pedro, teléfono..."_ → creo el cliente
+• _"Mis clientes"_ / _"Cambia el teléfono de Pedro..."_ / _"Desactiva al cliente Pedro"_
 
 ━━━━━━━━━━━━━━━
 Háblame como quieras — sin formalidad, sin comando memorizado. Yo entiendo.`;
@@ -348,6 +372,16 @@ Conta-me o que aconteceu que eu registo:
 Se tiveres uma só conta, uso-a automaticamente; se tiveres várias, pergunto qual. Não há ligação bancária nem cartões de crédito.
 
 ━━━━━━━━━━━━━━━
+🛒 *SUPERMERCADO*
+• _"Adiciona arroz, leite e ovos à minha lista"_ → crio ou completo a lista
+• _"Já comprei arroz e leite"_ → marco esses artigos
+• _"Remove os ovos da lista"_ / _"Muda 1 leite para 3"_
+• _"Terminei as compras no Continente, gastei 180"_ → fecho a compra e registo a despesa
+• _"O que comprei da última vez?"_ / _"Quanto gastei no Continente este mês?"_
+• _"Onde paguei menos pelo arroz?"_ → comparo o teu histórico
+Também consigo ler uma fotografia nítida do talão e separar os produtos.
+
+━━━━━━━━━━━━━━━
 ✏️ *CORRIGIR OU APAGAR*
 Enganaste-te num valor? Sem problema, eu ajusto:
 • _"Corrige o supermercado para 80 euros"_ → altero o valor
@@ -367,11 +401,13 @@ Aviso-te automaticamente no dia do vencimento. 🔔
 
 ━━━━━━━━━━━━━━━
 🚗 *DESPESAS COM VEÍCULO*
-Se tens carro ou mota registados no painel:
+• _"Regista o meu Toyota Corolla 2022, matrícula AA-00-AA"_ → registo o veículo
+• _"Os meus veículos"_ → mostro os registados
 • _"Abasteci 80 euros"_ → registo combustível
 • _"Paguei 300 de revisão ao carro"_ → manutenção
 • _"Seguro do carro 1200"_ → seguro
 • _"Paguei 800 de imposto do carro"_ → imposto
+Se tiveres mais de um veículo, pergunto qual. Também podes alterar os dados ou apagar um pelo nome.
 
 ━━━━━━━━━━━━━━━
 📋 *TAREFAS*
@@ -402,6 +438,7 @@ Queres poupar para algo? Eu acompanho por ti:
 • _"Os meus compromissos"_ → o que está agendado
 • _"Reagendar a reunião para segunda-feira às 10h"_ → mudo o horário
 • _"Cancela a consulta de sexta-feira"_ → removo
+Os compromissos da agenda avisam automaticamente *2 horas antes* e *15 minutos antes*.
 
 ━━━━━━━━━━━━━━━
 🎥 *REUNIÃO POR VÍDEO (Google Meet)*
@@ -413,8 +450,9 @@ Quem tem WhatsApp associado recebe o convite automaticamente.
 
 ━━━━━━━━━━━━━━━
 📁 *FICHEIROS (Drive inteligente)*
-• Envia qualquer foto, PDF ou documento → eu guardo e organizo
-• Recibo ou fatura → já registo como despesa
+• Envia uma imagem sem texto → pergunto se queres guardar, identificar ou pesquisar algo
+• Fotografia com _"quanto custa este medicamento?"_ → identifico e pesquiso preços atuais
+• Recibo ou fatura → leio os dados e mostro o que será registado
 • Para eu só guardar, sem lançar nada: envia com a legenda _"guarda"_
 • _"Encontra o contrato do João"_ → devolvo-te o ficheiro
 • _"Guarda como contrato assinado"_ → renomeio o último ficheiro
@@ -432,6 +470,16 @@ Separo as finanças da empresa das tuas pessoais:
 • _"Modo empresa"_ → os próximos registos vão para a empresa
 • _"Modo pessoal"_ → volto às despesas pessoais
 O modo atual aparece sempre nas minhas respostas.
+
+━━━━━━━━━━━━━━━
+👥 *FUNCIONÁRIOS E CLIENTES — MODO EMPRESA*
+• _"Regista a Luana como vendedora, salário 1800"_ → crio o funcionário
+• _"Paguei 1800 de salário à Luana pela conta Caixa"_ → registo e associo o pagamento
+• _"Não era o Rafael, era a Luana"_ → corrijo o funcionário do último pagamento
+• _"Os meus funcionários"_ / _"Desativa o funcionário Rafael"_
+Na ficha do funcionário aparecem os pagamentos recebidos, com valor e data.
+• _"Regista o cliente Pedro, telefone..."_ → crio o cliente
+• _"Os meus clientes"_ / _"Muda o telefone do Pedro..."_ / _"Desativa o cliente Pedro"_
 
 ━━━━━━━━━━━━━━━
 Podes falar comigo à tua maneira — sem formalidade, sem comando decorado. Eu entendo.`;
@@ -467,6 +515,16 @@ Me conte o que aconteceu que eu anoto:
 Se houver uma única conta, uso automaticamente; se houver várias, pergunto qual. Não há conexão bancária nem cartão de crédito.
 
 ━━━━━━━━━━━━━━━
+🛒 *SUPERMERCADO*
+• _"Coloque arroz, leite e ovos na minha lista"_ → crio ou completo a lista
+• _"Já comprei arroz e leite"_ → marco esses itens
+• _"Tire os ovos da lista"_ / _"Mude 1 leite para 3"_
+• _"Terminei a compra no Muffato, gastei 180"_ → fecho a compra e registro a despesa
+• _"O que comprei da última vez?"_ / _"Quanto gastei no Muffato este mês?"_
+• _"Onde paguei menos no arroz?"_ → comparo seu histórico
+Também consigo ler uma foto nítida do cupom e separar os produtos.
+
+━━━━━━━━━━━━━━━
 ✏️ *CORRIGIR OU APAGAR*
 Errou um valor? Sem problema, eu ajusto:
 • _"Corrige o ifood para 80 reais"_ → altero o valor
@@ -486,11 +544,13 @@ Eu aviso automaticamente no dia do vencimento. 🔔
 
 ━━━━━━━━━━━━━━━
 🚗 *GASTOS COM VEÍCULO*
-Se você tem carro ou moto cadastrado no painel:
+• _"Cadastre meu Toyota Corolla 2022, placa ABC1D23"_ → cadastro o veículo
+• _"Meus veículos"_ → mostro os cadastrados
 • _"Abasteci 80 reais"_ → registro combustível
 • _"Paguei 300 de revisão no carro"_ → manutenção
 • _"Seguro do carro 1200"_ → seguro
 • _"Paguei 800 de IPVA"_ → imposto
+Se houver mais de um veículo, pergunto qual. Você também pode alterar dados ou excluir um pelo nome.
 
 ━━━━━━━━━━━━━━━
 📋 *TAREFAS*
@@ -521,6 +581,7 @@ Quer juntar dinheiro para algo? Eu acompanho pra você:
 • _"Meus compromissos"_ → o que está agendado
 • _"Reagendar reunião para segunda às 10h"_ → mudo o horário
 • _"Cancela a consulta de sexta"_ → removo
+Os compromissos da agenda avisam automaticamente *2 horas antes* e *15 minutos antes*.
 
 ━━━━━━━━━━━━━━━
 🎥 *REUNIÃO POR VÍDEO (Google Meet)*
@@ -532,8 +593,9 @@ Quem tem WhatsApp vinculado recebe o convite automaticamente.
 
 ━━━━━━━━━━━━━━━
 📁 *ARQUIVOS (Drive inteligente)*
-• Envie qualquer foto, PDF ou documento → eu guardo e organizo
-• Nota fiscal ou boleto → já registro como despesa
+• Envie uma imagem sem texto → pergunto se quer guardar, identificar ou pesquisar algo
+• Foto com _"quanto custa esse remédio?"_ → identifico e pesquiso preços atuais
+• Nota fiscal ou boleto → leio os dados e mostro o que será registrado
 • Pra eu só guardar, sem lançar nada: mande com legenda _"salva"_ ou _"guarda"_
 • _"Ache o contrato do João"_ → te devolvo o arquivo
 • _"Salva como contrato assinado"_ → renomeio o último arquivo
@@ -553,7 +615,87 @@ Separo as finanças da empresa das suas pessoais:
 O modo atual sempre aparece nas minhas respostas.
 
 ━━━━━━━━━━━━━━━
+👥 *FUNCIONÁRIOS E CLIENTES — MODO EMPRESA*
+• _"Cadastre a Luana como vendedora, salário 1800"_ → cadastro a funcionária
+• _"Paguei 1800 de salário para Luana pela conta Caixa"_ → registro e vinculo o pagamento
+• _"Não era o Rafael, era a Luana"_ → corrijo o funcionário do último pagamento
+• _"Meus funcionários"_ / _"Desative o funcionário Rafael"_
+Na ficha do funcionário aparecem os pagamentos recebidos, com valor e data.
+• _"Cadastre o cliente Pedro, telefone..."_ → cadastro o cliente
+• _"Meus clientes"_ / _"Mude o telefone do Pedro..."_ / _"Desative o cliente Pedro"_
+
+━━━━━━━━━━━━━━━
 Pode falar comigo do seu jeito — sem formalidade, sem comando decorado. Eu entendo.`;
+}
+
+/** Orientação prática enviada no primeiro acesso junto do manual completo.
+ * Os exemplos negativos não servem para restringir a linguagem natural, mas
+ * para mostrar quais dados não podem ser adivinhados com segurança. */
+export function replyFirstUseTips(locale?: string): string {
+  if (isEs(locale)) {
+    return `━━━━━━━━━━━━━━━
+✅ *CÓMO PEDIR PARA OBTENER EL RESULTADO CORRECTO*
+Puedes hablar naturalmente. Siempre que sea posible, incluye: *qué quieres hacer + dato principal + valor + fecha + cuenta/persona*, cuando corresponda.
+
+✅ Buenos ejemplos:
+• _"Gasté 60 en farmacia hoy, desde la cuenta Caja"_
+• _"Recuérdame tomar el medicamento mañana a las 18"_
+• _"Agenda una reunión con Ana el viernes a las 15 durante una hora"_
+• _"Busca el precio de Losartán 50 mg en Montevideo"_
+• _"Cambia el último gasto a la cuenta Itaú"_
+
+⚠️ *EVITA MENSAJES SIN EL DATO PRINCIPAL*
+• Evita: _"Anota 60"_ → mejor: _"Gasté 60 en farmacia"_.
+• Evita: _"Recuérdamelo"_ sin decir qué y cuándo → mejor: _"Recuérdame pagar la luz mañana a las 9"_.
+• Evita: _"Agenda con Ana"_ sin fecha y hora → informa cuándo debe ocurrir.
+• Evita: _"Cambia eso"_ si no acabamos de hablar del registro → menciona el nombre, la fecha o _"el último movimiento"_.
+• Evita responder solo _"1"_ después de que una lista haya vencido; pide la lista nuevamente.
+• Para varias acciones, usa frases separadas: _"Gasté 40 en comida. Crea una tarea para llamar a Juan mañana"_.
+
+Si falta información, te preguntaré antes de ejecutar. Para volver a ver este manual, escribe *ayuda*.`;
+  }
+  if (isPtPt(locale)) {
+    return `━━━━━━━━━━━━━━━
+✅ *COMO PEDIR PARA OBTER O RESULTADO CERTO*
+Podes falar naturalmente. Sempre que possível, inclui: *o que queres fazer + dado principal + valor + data + conta/pessoa*, quando se aplicar.
+
+✅ Bons exemplos:
+• _"Gastei 60 na farmácia hoje, pela conta Caixa"_
+• _"Lembra-me de tomar o medicamento amanhã às 18h"_
+• _"Marca reunião com a Ana sexta-feira às 15h durante uma hora"_
+• _"Pesquisa o preço de Losartan 50 mg em Lisboa"_
+• _"Muda a última despesa para a conta Millennium"_
+
+⚠️ *EVITA MENSAGENS SEM O DADO PRINCIPAL*
+• Evita: _"Regista 60"_ → melhor: _"Gastei 60 na farmácia"_.
+• Evita: _"Lembra-me disso"_ sem dizer o quê e quando.
+• Evita: _"Marca com a Ana"_ sem data e hora.
+• Evita: _"Muda isso"_ se já não estivermos a falar do registo; menciona o nome, a data ou _"o último movimento"_.
+• Evita responder apenas _"1"_ depois de a lista expirar; pede a lista novamente.
+• Para várias ações, usa frases separadas: _"Gastei 40 em alimentação. Cria uma tarefa para ligar ao João amanhã"_.
+
+Se faltar informação, pergunto antes de executar. Para voltares a ver este manual, escreve *ajuda*.`;
+  }
+  return `━━━━━━━━━━━━━━━
+✅ *COMO PEDIR PARA DAR TUDO CERTO*
+Pode falar naturalmente. Sempre que possível, inclua: *o que quer fazer + dado principal + valor + data + conta/pessoa*, quando fizer sentido.
+
+✅ Bons exemplos:
+• _"Gastei 60 na farmácia hoje pela conta Inter"_
+• _"Me lembre de tomar o remédio amanhã às 18h"_
+• _"Agende reunião com a Ana sexta às 15h por uma hora"_
+• _"Pesquise o preço de Losartana 50 mg em Curitiba"_
+• _"Mude o último gasto para a conta Itaú"_
+
+⚠️ *EVITE MENSAGENS SEM O DADO PRINCIPAL*
+• Evite: _"Anota 60"_ → melhor: _"Gastei 60 na farmácia"_.
+• Evite: _"Me lembra disso"_ sem dizer o quê e quando → melhor: _"Me lembre de pagar a luz amanhã às 9h"_.
+• Evite: _"Agenda com a Ana"_ sem data e horário → informe quando deve acontecer.
+• Evite: _"Muda isso"_ quando o lançamento não acabou de ser citado → diga o nome, a data ou _"o último lançamento"_.
+• Evite responder apenas _"1"_ depois que uma lista vencer; peça a lista novamente.
+• Para várias ações, use frases separadas: _"Gastei 40 com alimentação. Crie uma tarefa para ligar ao João amanhã"_.
+
+Se faltar informação, vou perguntar antes de executar. Para ver este manual novamente, digite *ajuda*.`;
 }
 
 export function replyOnboardingWelcome(locale?: string): string {

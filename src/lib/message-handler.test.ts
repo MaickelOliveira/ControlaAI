@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
+import { accountSelectionMessage, buildFirstUseGuideMessages, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
@@ -92,6 +92,24 @@ describe("new account default confirmation", () => {
   });
 });
 
+describe("account selection guidance", () => {
+  const accounts = [
+    { id: "cash", userId: "u1", mode: "personal" as const, name: "Dinheiro", type: "bank" as const, isDefault: true, createdAt: "2026-09-10" },
+  ];
+
+  it("explains how to register a new account in Portuguese", () => {
+    const message = accountSelectionMessage(accounts, "pt-BR");
+    expect(message).toContain("cadastrar conta");
+    expect(message).toContain("cadastrar conta Itaú");
+  });
+
+  it("provides the same option in Spanish", () => {
+    const message = accountSelectionMessage(accounts, "es");
+    expect(message).toContain("registrar cuenta");
+    expect(message).not.toContain("cadastrar conta");
+  });
+});
+
 describe("unlinked phone language", () => {
   it("sends only Portuguese to a Brazilian number", () => {
     const reply = replyPhoneNotLinked("+55 (88) 82316-735");
@@ -141,6 +159,26 @@ describe("WhatsApp link flow expiration warning", () => {
     const reply = replyWppLinkStep(step, "es", "Junior");
     expect(reply).toContain("un máximo de *5 minutos*");
     expect(reply).not.toContain("Responda esta etapa");
+  });
+});
+
+describe("first-use guide after WhatsApp linking", () => {
+  it.each([
+    ["pt-BR", "GUIA DE USO", "EVITE MENSAGENS", "FUNCIONÁRIOS E CLIENTES"],
+    ["pt-PT", "GUIA DE USO", "EVITA MENSAGENS", "FUNCIONÁRIOS E CLIENTES"],
+    ["es", "GUÍA DE USO", "EVITA MENSAJES", "EMPLEADOS Y CLIENTES"],
+  ] as const)("is complete, ordered and WhatsApp-safe in %s", (locale, title, warning, peopleSection) => {
+    const messages = buildFirstUseGuideMessages(locale);
+    const fullGuide = messages.join("\n");
+    expect(messages.length).toBeGreaterThanOrEqual(3);
+    expect(messages.every(message => message.length <= 3500)).toBe(true);
+    expect(messages[0]).toContain(`${title} — 1/${messages.length}`);
+    expect(messages.at(-1)).toContain(`${messages.length}/${messages.length}`);
+    expect(fullGuide).toContain(warning);
+    expect(fullGuide).toContain(peopleSection);
+    expect(fullGuide).toContain("SUPERMERCADO");
+    expect(fullGuide).toMatch(/Drive inteligente/i);
+    expect(fullGuide).toMatch(/PESQUIS|BUSCAR EN INTERNET/);
   });
 });
 

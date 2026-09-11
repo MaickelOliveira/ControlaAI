@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseFinanceChoiceMulti, parseFinanceEmployeeChoice, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
+import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseAccountCreateRequest, parseFinanceChoiceMulti, parseFinanceEmployeeChoice, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
 
 describe("parseYesNo", () => {
   it("recognizes affirmative answers", () => {
@@ -34,6 +34,22 @@ describe("parseFinanceEmployeeChoice", () => {
 
   it("rejects an unrelated answer", () => {
     expect(parseFinanceEmployeeChoice("amanhã", employees)).toBeNull();
+  });
+});
+
+describe("parseAccountCreateRequest", () => {
+  it.each([
+    ["cadastrar conta", ""],
+    ["cadastrar uma conta Inter", "Inter"],
+    ["crie a conta chamada Itaú", "Itaú"],
+    ["registrar cuenta", ""],
+    ["registrar cuenta Santander", "Santander"],
+  ])("understands %s", (message, expected) => {
+    expect(parseAccountCreateRequest(message)).toBe(expected);
+  });
+
+  it("does not confuse an account choice with a create request", () => {
+    expect(parseAccountCreateRequest("Dinheiro")).toBeNull();
   });
 });
 

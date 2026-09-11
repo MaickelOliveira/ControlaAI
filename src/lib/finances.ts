@@ -149,15 +149,17 @@ async function load(userId?: string, filters: { mode?: FinanceMode; registeredBy
 }
 
 export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promise<Finance> {
-  const row = {
+  const row: Record<string, unknown> = {
     id: randomUUID(), user_id: data.userId, type: data.type, amount: data.amount,
     category: data.category, description: data.description, date: data.date,
     mode: data.mode, source: data.source, pending: data.status === "pending",
     auto_post: data.autoPost !== false,
     registered_by: data.registeredBy,
     account_id: data.accountId ?? null, card_invoice_id: data.cardInvoiceId ?? null,
-    employee_id: data.employeeId ?? null,
   };
+  // Compatibilidade durante a implantação da migração: lançamentos comuns
+  // não mencionam a coluna nova. Quando há vínculo explícito, ela é enviada.
+  if (data.employeeId !== undefined) row.employee_id = data.employeeId;
   const { data: inserted, error } = await getSupabase().from("finances").insert(row).select("*").single();
   if (error) throw new Error(`[finances] addFinance falhou: ${error.message}`);
   return fromRow(inserted as Row);

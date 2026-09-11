@@ -19,7 +19,7 @@ import {
 } from "@/lib/grocery";
 import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseAccountChoice, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
@@ -54,6 +54,7 @@ import {
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
   replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
   replyCustomerList, replyCustomerInfo, replyCustomerUpdated, replyCustomerDeactivated,
+  replyFirstUseTips,
 } from "@/lib/bot-replies";
 
 export function phoneMatches(stored: string, incoming: string): boolean {
@@ -161,6 +162,17 @@ export function splitWhatsAppMessage(message: string, maxLength = 3500): string[
   }
   if (chunk) chunks.push(chunk);
   return chunks;
+}
+
+/** Manual inicial propositalmente dividido e numerado. Assim o WhatsApp não
+ * corta conteúdo e a pessoa sabe a ordem mesmo se as mensagens chegarem com
+ * pequeno intervalo entre elas. */
+export function buildFirstUseGuideMessages(locale?: string): string[] {
+  const chunks = splitWhatsAppMessage(`${replyHelp(locale)}\n\n${replyFirstUseTips(locale)}`, 2600);
+  return chunks.map((chunk, index) => {
+    const title = locale === "es" ? "GUÍA DE USO" : "GUIA DE USO";
+    return `📘 *${title} — ${index + 1}/${chunks.length}*\n\n${chunk}`;
+  });
 }
 
 /** Mantém respostas dentro do limite prático do WhatsApp sem omitir dados. */
@@ -432,10 +444,41 @@ async function resolveAccountFields(
   return { accountId: resolved.accountId, cardInvoiceId: resolved.cardInvoiceId };
 }
 
-function accountSelectionMessage(accounts: Account[], locale?: string): string {
+export function accountSelectionMessage(accounts: Account[], locale?: string): string {
   const heading = locale === "es" ? "🏦 ¿Qué cuenta quieres usar?" : "🏦 Qual conta deseja usar?";
   const instruction = locale === "es" ? "Responde con el número o el nombre." : "Responda com o número ou nome.";
-  return `${heading}\n\n${accounts.map((account, index) => `${listNumberLabel(index)} ${account.name}${account.isDefault ? " ⭐" : ""}`).join("\n")}\n\n${instruction}\n⏱ _${locale === "es" ? "Válido durante 5 minutos" : "Válido por 5 min"}._`;
+  const createHint = locale === "es"
+    ? "➕ Para registrar una nueva, responde *registrar cuenta*. Si ya sabes el nombre, puedes escribir, por ejemplo: *registrar cuenta Itaú*."
+    : "➕ Para cadastrar uma nova, responda *cadastrar conta*. Se já souber o nome, pode escrever, por exemplo: *cadastrar conta Itaú*.";
+  return `${heading}\n\n${accounts.map((account, index) => `${listNumberLabel(index)} ${account.name}${account.isDefault ? " ⭐" : ""}`).join("\n")}\n\n${instruction}\n${createHint}\n⏱ _${locale === "es" ? "Válido durante 5 minutos" : "Válido por 5 min"}._`;
+}
+
+function accountNameQuestion(locale?: string): string {
+  return locale === "es"
+    ? "🏦 ¿Qué nombre quieres darle a la nueva cuenta?\n\n_Ejemplo: Itaú. Después de registrarla, continuaré la acción automáticamente._"
+    : "🏦 Qual nome deseja dar para a nova conta?\n\n_Exemplo: Itaú. Depois de cadastrar, vou continuar a ação automaticamente._";
+}
+
+function cleanPendingAccountName(text: string): string {
+  const requestedName = parseAccountCreateRequest(text);
+  const candidate = requestedName === null ? text : requestedName;
+  return candidate
+    .replace(/^(?:conta|cuenta)\s+/i, "")
+    .replace(/^["“”']+|["“”'.!?;,]+$/g, "")
+    .trim();
+}
+
+async function createOrReuseAccountForAction(
+  userId: string,
+  mode: FinanceMode,
+  rawName: string,
+): Promise<{ account: Account; created: boolean }> {
+  const name = cap(rawName);
+  const normalized = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const matches = await findAccountByName(userId, mode, name, "bank");
+  const existing = matches.find(account => account.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase() === normalized);
+  if (existing) return { account: existing, created: false };
+  return { account: await createAccount({ userId, mode, name, type: "bank" }), created: true };
 }
 
 function accountDefaultConfirmationMessage(currentName: string, newName: string, locale?: string): string {
@@ -862,6 +905,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         await wppSend(from, isSpanish
           ? `✅ *¡WhatsApp vinculado correctamente!*\n\n${linkName} (${linkRelation}) ya puede usar Zelo por aquí, con acceso a ${accessLabel}.`
           : `✅ *WhatsApp vinculado com sucesso!*\n\n${linkName} (${linkRelation}) já pode usar o Zelo por aqui, com acesso a ${accessLabel}.`);
+        const firstUseGuide = buildFirstUseGuideMessages(linkOwner?.locale);
+        await wppSend(from, isSpanish
+          ? `📚 Ahora te enviaré la guía completa en *${firstUseGuide.length} partes*, con ejemplos de todos los servicios y de cómo hacer pedidos claros.`
+          : `📚 Agora vou enviar o guia completo em *${firstUseGuide.length} partes*, com exemplos de todos os serviços e de como fazer pedidos claros.`);
+        for (const guideMessage of firstUseGuide) await wppSend(from, guideMessage);
         return;
       }
     }
@@ -942,6 +990,46 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     let employeeSelectionResume: AIResult | null = null;
 
     if (pending?.type === "account_selection" && pending.userId === user.id) {
+      const requestedAccountName = parseAccountCreateRequest(messageText);
+      if (requestedAccountName !== null) {
+        if (!requestedAccountName) {
+          await setPendingAction(from, {
+            type: "account_create_name", userId: user.id, mode: pending.mode,
+            resumeAi: pending.ai, originalText: pending.originalText,
+          });
+          await wppSend(from, accountNameQuestion(user.locale));
+          return;
+        }
+        try {
+          const { account, created } = await createOrReuseAccountForAction(
+            user.id,
+            pending.mode as FinanceMode,
+            requestedAccountName,
+          );
+          await clearPendingAction(from);
+          accountSelectionResume = applyAccountToAi(pending.ai, account.name, pending.mode as FinanceMode);
+          messageText = pending.originalText;
+          await wppSend(from, localized(user.locale,
+            created
+              ? `✅ Conta *${account.name}* cadastrada. Vou usá-la neste lançamento.`
+              : `ℹ️ A conta *${account.name}* já estava cadastrada. Vou usá-la neste lançamento.`,
+            created
+              ? `✅ Cuenta *${account.name}* registrada. La usaré en este movimiento.`
+              : `ℹ️ La cuenta *${account.name}* ya estaba registrada. La usaré en este movimiento.`,
+          ));
+        } catch {
+          await setPendingAction(from, {
+            type: "account_selection", userId: user.id, mode: pending.mode,
+            action: "resume_ai", ai: pending.ai, originalText: pending.originalText,
+            accounts: pending.accounts,
+          });
+          await wppSend(from, localized(user.locale,
+            `❌ Não consegui cadastrar a conta *${requestedAccountName}*. Tente outro nome ou escolha uma conta da lista.`,
+            `❌ No pude registrar la cuenta *${requestedAccountName}*. Prueba otro nombre o elige una cuenta de la lista.`,
+          ));
+          return;
+        }
+      } else {
       const choice = parseAccountChoice(messageText, pending.accounts);
       if (choice < 0) {
         await setPendingAction(from, {
@@ -956,6 +1044,59 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const chosen = pending.accounts[choice];
       accountSelectionResume = applyAccountToAi(pending.ai, chosen.name, pending.mode as FinanceMode);
       messageText = pending.originalText;
+      }
+    }
+
+    if (pending?.type === "account_create_name" && pending.userId === user.id) {
+      if (/^(?:cancelar|cancela|deixa pra l[áa]|n[ãa]o|no)$/i.test(messageText.trim())) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale,
+          "Cadastro cancelado. Nenhuma conta foi criada.",
+          "Registro cancelado. No se creó ninguna cuenta."));
+        return;
+      }
+      const name = cleanPendingAccountName(messageText);
+      if (!name || name.length > 80 || /^\d+$/.test(name)) {
+        await setPendingAction(from, {
+          type: "account_create_name", userId: user.id, mode: pending.mode,
+          resumeAi: pending.resumeAi, originalText: pending.originalText,
+        });
+        await wppSend(from, accountNameQuestion(user.locale));
+        return;
+      }
+      if (pending.resumeAi) {
+        try {
+          const { account, created } = await createOrReuseAccountForAction(user.id, pending.mode as FinanceMode, name);
+          await clearPendingAction(from);
+          accountSelectionResume = applyAccountToAi(pending.resumeAi, account.name, pending.mode as FinanceMode);
+          messageText = pending.originalText || messageText;
+          await wppSend(from, localized(user.locale,
+            created
+              ? `✅ Conta *${account.name}* cadastrada. Vou usá-la neste lançamento.`
+              : `ℹ️ A conta *${account.name}* já estava cadastrada. Vou usá-la neste lançamento.`,
+            created
+              ? `✅ Cuenta *${account.name}* registrada. La usaré en este movimiento.`
+              : `ℹ️ La cuenta *${account.name}* ya estaba registrada. La usaré en este movimiento.`,
+          ));
+        } catch {
+          await setPendingAction(from, {
+            type: "account_create_name", userId: user.id, mode: pending.mode,
+            resumeAi: pending.resumeAi, originalText: pending.originalText,
+          });
+          await wppSend(from, localized(user.locale,
+            `❌ Não consegui cadastrar *${name}*. Tente outro nome.`,
+            `❌ No pude registrar *${name}*. Prueba otro nombre.`,
+          ));
+          return;
+        }
+      } else {
+        await clearPendingAction(from);
+        accountSelectionResume = {
+          intent: "account_create", confidence: 1,
+          mode: pending.mode as FinanceMode,
+          account: { name, type: "bank", mode: pending.mode as FinanceMode },
+        };
+      }
     }
 
     if (pending?.type === "account_default_confirm" && pending.userId === user.id) {
@@ -1819,7 +1960,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const accountMode = (ai.account?.mode || ai.mode || mode) as FinanceMode;
         if (phoneAccess !== "both" && accountMode !== mode) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
         const name = ai.account?.name?.trim();
-        if (!name) break;
+        if (!name) {
+          await setPendingAction(from, { type: "account_create_name", userId: user.id, mode: accountMode });
+          await wppSend(from, accountNameQuestion(user.locale));
+          break;
+        }
         try {
           const previousAccounts = await getManualAccountsByUser(user.id, accountMode);
           const previousDefault = previousAccounts.find(account => account.isDefault) ?? previousAccounts[0];
