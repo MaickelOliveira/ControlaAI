@@ -102,6 +102,9 @@ export type Finance = {
   registeredBy?: string; // número de WhatsApp de quem registrou (para contas com vários números vinculados)
   accountId?: string; // conta bancária/cartão associada (src/lib/accounts.ts) — ausente em lançamentos antigos ou quem não cadastrou conta
   cardInvoiceId?: string; // só quando accountId aponta pra um cartão — a fatura do ciclo em que a despesa caiu
+  /** Funcionário ao qual este pagamento/gasto pertence. O vínculo é opcional:
+   *  lançamentos antigos e a escolha explícita "sem funcionário" ficam vazios. */
+  employeeId?: string;
   createdAt: string;
 };
 
@@ -114,7 +117,7 @@ type Row = {
   id: string; user_id: string; type: FinanceType; amount: number; category: string;
   description: string; date: string; mode: FinanceMode; source: FinanceSource;
   pending: boolean; auto_post: boolean; registered_by: string | null; created_at: string;
-  account_id: string | null; card_invoice_id: string | null;
+  account_id: string | null; card_invoice_id: string | null; employee_id: string | null;
 };
 
 function fromRow(r: Row): Finance {
@@ -123,6 +126,7 @@ function fromRow(r: Row): Finance {
     description: r.description, date: r.date, mode: r.mode, source: r.source,
     status: r.pending ? "pending" : "posted", autoPost: r.auto_post, registeredBy: r.registered_by ?? undefined, createdAt: r.created_at,
     accountId: r.account_id ?? undefined, cardInvoiceId: r.card_invoice_id ?? undefined,
+    employeeId: r.employee_id ?? undefined,
   };
 }
 
@@ -152,6 +156,7 @@ export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promi
     auto_post: data.autoPost !== false,
     registered_by: data.registeredBy,
     account_id: data.accountId ?? null, card_invoice_id: data.cardInvoiceId ?? null,
+    employee_id: data.employeeId ?? null,
   };
   const { data: inserted, error } = await getSupabase().from("finances").insert(row).select("*").single();
   if (error) throw new Error(`[finances] addFinance falhou: ${error.message}`);
@@ -334,7 +339,13 @@ export async function deleteAllFinances(userId: string, mode: FinanceMode | "bot
   return count ?? 0;
 }
 
-export async function updateFinance(id: string, userId: string, patch: Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost" | "type" | "mode">>): Promise<Finance | null> {
+export type FinanceUpdatePatch = Partial<Pick<Finance, "amount" | "category" | "description" | "date" | "status" | "autoPost" | "type" | "mode">> & {
+  accountId?: string | null;
+  cardInvoiceId?: string | null;
+  employeeId?: string | null;
+};
+
+export async function updateFinance(id: string, userId: string, patch: FinanceUpdatePatch): Promise<Finance | null> {
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
   if (patch.category !== undefined) rowPatch.category = patch.category;
@@ -344,6 +355,9 @@ export async function updateFinance(id: string, userId: string, patch: Partial<P
   if (patch.autoPost !== undefined) rowPatch.auto_post = patch.autoPost;
   if (patch.type !== undefined) rowPatch.type = patch.type;
   if (patch.mode !== undefined) rowPatch.mode = patch.mode;
+  if (patch.accountId !== undefined) rowPatch.account_id = patch.accountId;
+  if (patch.cardInvoiceId !== undefined) rowPatch.card_invoice_id = patch.cardInvoiceId;
+  if (patch.employeeId !== undefined) rowPatch.employee_id = patch.employeeId;
   const { data, error } = await getSupabase().from("finances").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);

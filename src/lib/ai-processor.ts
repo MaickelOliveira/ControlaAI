@@ -121,6 +121,12 @@ export type FinanceData = {
   /** Modo de destino solicitado em finance_edit; nunca confundir com `mode`. */
   newMode?: "personal" | "business";
   accountHint?: string; // nome da conta/cartão mencionado, ex: "no Nubank", "cartão Inter" — ausente = usa a conta padrão
+  /** Nome citado pelo usuário para vincular um pagamento à ficha do funcionário. */
+  employeeName?: string;
+  /** ID interno resolvido pelo handler. null significa escolha explícita "sem funcionário". */
+  employeeId?: string | null;
+  /** finance_edit: remove o vínculo com funcionário sem excluir o lançamento. */
+  clearEmployee?: boolean;
   // true SE E SOMENTE SE a mensagem indicar explicitamente que o valor
   // ainda NÃO foi recebido/pago de fato (é uma expectativa, não algo que já
   // aconteceu) — ver REGRA "A RECEBER"/PENDENTE abaixo. Sem essa indicação
@@ -208,6 +214,8 @@ export type RecurringData = {
   employeePayment?: boolean;
   /** nome do funcionário, se a mensagem já disser (ex: "pago a Ana 2000") */
   employeeName?: string;
+  /** ID interno resolvido pelo handler; null representa "sem funcionário". */
+  employeeId?: string | null;
 };
 
 export type GroceryItemData = {
@@ -317,6 +325,10 @@ export type AIResult = {
   // "apaga esses lançamentos"), pra aplicar em TODOS eles de uma vez (1 ou
   // vários) em vez de buscar/escolher um por um.
   bulkCorrectLastBatch?: boolean;
+  // Referência explícita ao registro financeiro mais recente. "last" altera
+  // somente o último item, mesmo quando a mensagem anterior registrou um
+  // lote; "batch" é reservado para pedidos plurais sobre todo o lote.
+  lastFinanceReference?: "last" | "batch";
   categoryName?: string; // category_create: nome exato da categoria a criar
   categoryNames?: string[]; // várias categorias pedidas na mesma mensagem
   confidence: number;
@@ -1961,8 +1973,8 @@ Palavras como “ayuda”, “soporte”, “qué puedes hacer” e “instrucci
 ⚠️ CONTINUAÇÃO DE AÇÃO: quando a mensagem vier no formato "Pedido original" + "Informação complementar", una todas as partes como um único comando. A informação complementar responde à pergunta feita pelo sistema; preserve a intenção original e complete somente os campos novos.
 
 INTENÇÕES POSSÍVEIS:
-- finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular). Se mencionar uma conta manual ("no Nubank", "en la cuenta Caja"), preencha finance.accountHint com o nome.
-- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser MOVER o lançamento entre pessoal e empresa (ex: "muda para a conta da empresa", "passe as contas de água para o empresarial", "pasa a la cuenta personal"), use "finance.newMode" com o DESTINO ("business" ou "personal"); "finance.mode" nunca representa o destino da mudança. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Se o usuário disser que o TIPO está errado — era despesa, não receita, ou vice-versa (ex: "isso é despesa, não receita", "errei, é gasto"), inclua "finance.type" com o tipo certo ("income" ou "expense"). Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
+- finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular). Se mencionar uma conta manual ("no Nubank", "en la cuenta Caja"), preencha finance.accountHint com o nome. Em pagamento/gasto de funcionário, use categoria "Funcionários" e, quando a pessoa disser o nome do colaborador, preencha finance.employeeName (ex.: "paguei 700 para a funcionária Luana" → employeeName "Luana").
+- finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Também pode TROCAR A CONTA MANUAL do lançamento (ex: "mude esse último para Inter", "troque a conta desse gasto para Nubank", "cambia el último movimiento a Caja"): nesse caso use "finance.accountHint" com SOMENTE o nome da conta de destino e marque "lastFinanceReference": "last" quando o usuário disser "último", "esse gasto", "esse lançamento" ou "o que acabei de lançar". Para trocar o funcionário vinculado (ex.: "não é Rafael, é Luana"), use finance.employeeName "Luana" e lastFinanceReference "last"; para remover somente o vínculo sem apagar o gasto, use finance.clearEmployee true. Use "lastFinanceReference": "batch" apenas quando ele pedir explicitamente todos/os últimos lançamentos no plural. Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser MOVER o lançamento entre pessoal e empresa (ex: "muda para a conta da empresa", "passe as contas de água para o empresarial", "pasa a la cuenta personal"), use "finance.newMode" com o DESTINO ("business" ou "personal"); "finance.mode" nunca representa o destino da mudança. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Se o usuário disser que o TIPO está errado — era despesa, não receita, ou vice-versa (ex: "isso é despesa, não receita", "errei, é gasto"), inclua "finance.type" com o tipo certo ("income" ou "expense"). Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
   ⚠️ CORREÇÃO EM LOTE do que acabou de ser registrado: se a mensagem for uma correção CURTA e GENÉRICA, sem citar a descrição de um lançamento específico, logo depois de você (o assistente) ter confirmado um registro — de 1 lançamento OU de vários de uma vez (ex: usuário registrou várias despesas e depois manda só "tá errado, são despesas", "errei, isso tudo é receita", "na verdade é a receber", "muda pra despesa") — marque "bulkCorrectLastBatch": true e preencha em "finance" SOMENTE os campos que mudaram (type e/ou pending e/ou category — o que a mensagem indicar). NÃO invente "keyword" nesse caso (deixe vazio) — o sistema já sabe aplicar a correção em cima do que foi registrado por último, um ou vários, sem precisar buscar por nome. Só use isso quando o histórico deixar claro que a mensagem é sobre o registro mais recente, não sobre um lançamento antigo específico.
 - finance_delete: excluir/apagar um lançamento ("apaga o gasto de X", "remove o lançamento do ifood", "cancela a despesa de X"). ⚠️ Se o pedido for genérico e curto, sem citar a descrição de um lançamento específico, logo depois de você ter confirmado um registro — de 1 lançamento OU de vários de uma vez (ex: "apaga isso", "apaga esses lançamentos", "remove tudo que acabei de mandar", "cancela esses"), marque "bulkCorrectLastBatch": true e NÃO invente "keyword" — o sistema apaga todo o registro mais recente (um ou vários) de uma vez. Só use isso quando ficar claro pelo histórico que é sobre o registro mais recente, não sobre um lançamento antigo específico.
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
@@ -3109,6 +3121,97 @@ function accountModeFromText(normalized: string): UserMode | undefined {
   return undefined;
 }
 
+/** Extrai a conta de DESTINO numa edição de lançamento. A palavra "conta"
+ * pode estar implícita quando a referência ao lançamento é inequívoca, como
+ * em "altere esse último para Inter". Não trata valores, categorias nem os
+ * modos pessoal/empresa como nomes de conta. */
+export function getFinanceAccountDestinationHint(message: string): string | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const hasAccountWord = /\b(?:conta|cuenta)s?\b/.test(normalized);
+  if (!hasAccountWord && /\b(?:funcionario|funcionaria|colaborador|colaboradora|empleado|empleada|trabajador|trabajadora)\b/.test(normalized)) return null;
+  const hasLastFinanceReference = /\b(?:(?:esse|este|aquele|o|el)\s+)?(?:ultimo|lancamento|movimento|registro|gasto)\b|\b(?:que|q)\s+(?:eu\s+)?acabei\s+de\s+(?:lancar|registrar)\b|\b(?:que|q)\s+acabo\s+de\s+(?:registrar|anotar)\b/.test(normalized);
+  const hasEditVerb = /\b(?:altere|alterar|mude|mudar|troque|trocar|passe|passar|coloque|colocar|corrija|corrigir|cambia|cambie|cambiar|mueve|mover|pasa|pasar|pon|poner|corrige|corregir)\b/.test(normalized);
+  const directAccountAnswer = /^(?:na|no|pela|en\s+la|por\s+la)?\s*(?:conta|cuenta)\s+(.+)$/i.exec(text);
+
+  if (!directAccountAnswer && (!hasEditVerb || (!hasAccountWord && !hasLastFinanceReference))) return null;
+
+  const destinationMatch = text.match(/^.*\b(?:para|pra|por|en)\s+(?:(?:a|la)\s+)?(?:(?:conta|cuenta)\s+)?["“”']?(.+?)["“”']?\s*[.!?]?$/i)
+    ?? text.match(/^.*\ba\s+(?:(?:a|la)\s+)?(?:(?:conta|cuenta)\s+)?["“”']?(.+?)["“”']?\s*[.!?]?$/i);
+  const destination = directAccountAnswer?.[1]
+    ?? destinationMatch?.[1];
+  if (!destination) return null;
+
+  const cleaned = cleanManualAccountName(destination)
+    .replace(/^(?:a|la)\s+(?:conta|cuenta)\s+/i, "")
+    .trim();
+  const normalizedCleaned = normalizeCapabilityText(cleaned);
+  if (!cleaned
+    || /^(?:pessoal|personal|empresarial|empresa|negocio|da empresa|de la empresa)$/.test(normalizedCleaned)
+    || /^(?:\d+[\d.,]*|r\$\s*\d|\$\s*\d)/.test(normalizedCleaned)
+    || /^(?:categoria|category|categoria)\b/.test(normalizedCleaned)) return null;
+  return cleaned;
+}
+
+/** Atalho determinístico para o caso contextual que não pode abrir a lista
+ * do mês: "altere esse último para Inter". */
+export function getExplicitLastFinanceAccountEditResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const hasLastReference = /\b(?:(?:esse|este|aquele|o|el)\s+)?(?:ultimo|lancamento|movimento|registro|gasto)\b|\b(?:que|q)\s+(?:eu\s+)?acabei\s+de\s+(?:lancar|registrar)\b|\b(?:que|q)\s+acabo\s+de\s+(?:registrar|anotar)\b/.test(normalized);
+  if (!hasLastReference) return null;
+  const accountHint = getFinanceAccountDestinationHint(message);
+  if (!accountHint) return null;
+  const plural = /\b(?:esses|estes|aqueles|ultimos|todos|todas|lancamentos|movimentos|registros|gastos)\b/.test(normalized);
+  return {
+    intent: "finance_edit",
+    confidence: 1,
+    finance: { accountHint } as FinanceData,
+    account: { name: accountHint },
+    lastFinanceReference: plural ? "batch" : "last",
+  };
+}
+
+function cleanEmployeeLinkName(value: string): string {
+  return value
+    .replace(/^(?:o|a|os|as|el|la|los|las)\s+/i, "")
+    .replace(/^(?:funcion[aá]ri[oa]|colaborador(?:a)?|empregad[oa]|emplead[oa]|trabajador(?:a)?)\s+/i, "")
+    .replace(/\s+(?:nesse|neste|desse|deste|ultimo|último)\s+(?:lançamento|lancamento|gasto|movimento).*$/i, "")
+    .replace(/[.!?,;:]+$/g, "")
+    .trim();
+}
+
+/** Correção contextual do colaborador do lançamento mais recente. É
+ * determinística porque frases curtas como "não é Rafael, é Luana" não podem
+ * cair no CRUD global de funcionários nem abrir a lista do mês. */
+export function getExplicitLastFinanceEmployeeEditResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const hasLastReference = /\b(?:(?:esse|este|aquele|o|el)\s+)?(?:ultimo|lancamento|movimento|movimiento|registro|gasto|pagamento|pago)\b|\b(?:esse|este|ese)\b/.test(normalized);
+
+  const explicitlyWithoutEmployee = /\b(?:sem|sin)\s+(?:funcionario|funcionaria|colaborador|colaboradora|empleado|empleada)\b/.test(normalized);
+  const clearLink = /\b(?:remova|remover|retire|retirar|exclua|excluir|desvincule|desvincular|deixe|deixar|quita|quitar|elimina|eliminar|desvincula|deja|dejar)\b/.test(normalized)
+    && /\b(?:sem|sin|funcionario|funcionaria|colaborador|colaboradora|empleado|empleada)\b/.test(normalized);
+  if (clearLink && (hasLastReference || explicitlyWithoutEmployee)) {
+    return {
+      intent: "finance_edit",
+      confidence: 1,
+      finance: { clearEmployee: true } as FinanceData,
+      lastFinanceReference: "last",
+    };
+  }
+
+  const correction = text.match(/(?:n[ãa]o\s+(?:é|e|foi|era)|no\s+(?:es|fue|era))\s+(?:(?:o|a|el|la)\s+)?(?:(?:funcion[aá]ri[oa]|colaborador(?:a)?|emplead[oa]|trabajador(?:a)?)\s+)?(.+?)\s*(?:,|\s)\s*(?:e\s+sim|mas\s+sim|foi|é|e|sino|fue|es)\s+(?:(?:o|a|el|la)\s+)?(?:(?:funcion[aá]ri[oa]|colaborador(?:a)?|emplead[oa]|trabajador(?:a)?)\s+)?(.+)$/i);
+  const direct = text.match(/(?:altere|alterar|mude|mudar|troque|trocar|corrija|corrigir|cambie|cambiar|cambia|corrige|corregir)\s+(?:(?:o|a|el|la)\s+)?(?:funcion[aá]ri[oa]|colaborador(?:a)?|emplead[oa]|trabajador(?:a)?)\s+(?:d[oa]|de(?:l|\s+la)?|nesse|neste|desse|deste)?\s*(?:[úu]ltimo\s+)?(?:lan[çc]amento|gasto|movimento|movimiento|registro|pago|pagamento)?\s*(?:para|por|a)\s+(.+)$/i);
+  const employeeName = cleanEmployeeLinkName(correction?.[2] ?? direct?.[1] ?? "");
+  if (!employeeName) return null;
+  return {
+    intent: "finance_edit",
+    confidence: 1,
+    finance: { employeeName } as FinanceData,
+    lastFinanceReference: "last",
+  };
+}
+
 /** Comandos de contas manuais e consultas por conta em PT/ES. Mantê-los
  * determinísticos evita que frases curtas como "nessa conta" sejam tratadas
  * como integração bancária ou como saldo geral. */
@@ -3185,13 +3288,14 @@ export function getExplicitAccountCommandResult(message: string): AIResult | nul
 }
 
 export function withExplicitFinanceAccount(message: string, result: AIResult): AIResult {
-  if (result.intent !== "finance_register") return result;
+  if (result.intent !== "finance_register" && result.intent !== "finance_edit") return result;
   const normalized = normalizeCapabilityText(message);
   const contextual = /\b(?:nessa|nesta|dessa|desta|essa|esta|esa)\s+(?:conta|cuenta)\b/.test(normalized);
+  const destinationHint = result.intent === "finance_edit" ? getFinanceAccountDestinationHint(message) : null;
   const match = message.match(/(?:na|pela|nesta|nessa|en\s+la|por\s+la)\s+(?:conta|cuenta)\s+["“”']?([^"“”'?!,]+?)["“”']?(?=\s+(?:hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana|dia)\b|[?!,.]|$)/i);
-  const name = match && !/^(?:pessoal|personal|da empresa|de la empresa|empresarial)$/i.test(match[1].trim())
+  const name = destinationHint ?? (match && !/^(?:pessoal|personal|da empresa|de la empresa|empresarial)$/i.test(match[1].trim())
     ? cleanManualAccountName(match[1])
-    : undefined;
+    : undefined);
   if (!name && !contextual) return result;
   const patchFinance = (finance: FinanceData): FinanceData => name ? { ...finance, accountHint: name } : finance;
   return {
@@ -3223,6 +3327,12 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitModeSwitch = getExplicitModeSwitchResult(message, ctx?.history);
   if (explicitModeSwitch) return explicitModeSwitch;
+
+  const explicitLastFinanceEmployeeEdit = getExplicitLastFinanceEmployeeEditResult(message);
+  if (explicitLastFinanceEmployeeEdit) return explicitLastFinanceEmployeeEdit;
+
+  const explicitLastFinanceAccountEdit = getExplicitLastFinanceAccountEditResult(message);
+  if (explicitLastFinanceAccountEdit) return explicitLastFinanceAccountEdit;
 
   const explicitAccount = getExplicitAccountCommandResult(message);
   if (explicitAccount) return explicitAccount;

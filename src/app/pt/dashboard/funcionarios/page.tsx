@@ -4,6 +4,7 @@ import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Employee = { id: string; name: string; role: string; salary: number; startDate: string; status: string; phone?: string; email?: string; notes?: string };
+type EmployeePayment = { id: string; amount: number; description: string; date: string; status: "posted" | "pending" };
 
 function fmt(v: number) { return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR" }); }
 
@@ -13,6 +14,7 @@ export default function FuncionariosPagePt() {
   const [mode, setMode] = useState<string>("");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [totalPayroll, setTotalPayroll] = useState(0);
+  const [paymentsByEmployee, setPaymentsByEmployee] = useState<Record<string, EmployeePayment[]>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
@@ -23,6 +25,7 @@ export default function FuncionariosPagePt() {
     fetch("/api/admin/employees").then(r => r.json()).then(d => {
       setEmployees(d.employees || []);
       setTotalPayroll(d.totalPayroll || 0);
+      setPaymentsByEmployee(d.paymentsByEmployee || {});
       setLoading(false);
     });
   }
@@ -119,7 +122,7 @@ export default function FuncionariosPagePt() {
             <table className="w-full min-w-[640px]">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  {["Funcionário", "Cargo", "Salário", "Início", "Estado", ""].map(h => (
+                  {["Funcionário", "Cargo", "Salário", "Pagamentos recebidos", "Início", "Estado", ""].map(h => (
                     <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">{h}</th>
                   ))}
                 </tr>
@@ -140,6 +143,19 @@ export default function FuncionariosPagePt() {
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-600">{emp.role}</td>
                     <td className="px-5 py-4 text-sm font-semibold text-slate-800">{fmt(emp.salary)}</td>
+                    <td className="px-5 py-4 text-xs text-slate-500 min-w-[190px]">
+                      {(paymentsByEmployee[emp.id] || []).length === 0 ? "Nenhum pagamento associado" : (
+                        <div className="space-y-1">
+                          {(paymentsByEmployee[emp.id] || []).slice(0, 3).map(payment => (
+                            <p key={payment.id}>
+                              <span className="font-semibold text-slate-700">{fmt(payment.amount)}</span>
+                              {" · "}{new Date(payment.date + "T12:00:00").toLocaleDateString("pt-PT")}
+                              {payment.status === "pending" ? " · Pendente" : ""}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-5 py-4 text-xs text-slate-400">{new Date(emp.startDate + "T12:00:00").toLocaleDateString("pt-PT")}</td>
                     <td className="px-5 py-4">
                       <span className={clsx("text-xs px-2.5 py-1 rounded-full font-medium border",

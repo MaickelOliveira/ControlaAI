@@ -22,6 +22,9 @@ import {
   getExplicitScheduledReminderResult,
   getExplicitUpcomingFinanceQueryResult,
   getExplicitAccountCommandResult,
+  getExplicitLastFinanceAccountEditResult,
+  getExplicitLastFinanceEmployeeEditResult,
+  getFinanceAccountDestinationHint,
   getExplicitUnscheduledReminderResult,
   getExplicitVehicleCrudResult,
   getExplicitWebSearchResult,
@@ -841,11 +844,79 @@ describe("manual account commands", () => {
       .toMatchObject({ account: { useContext: true } });
   });
 
+  it.each([
+    ["altere esse último para Inter", "Inter", "last"],
+    ["mude o último lançamento para a conta Nubank", "Nubank", "last"],
+    ["passe esse gasto para Inter", "Inter", "last"],
+    ["cambia el último movimiento a la cuenta Caja", "Caja", "last"],
+  ] as const)("edits the account of the latest finance directly: %s", (message, account, reference) => {
+    expect(getFinanceAccountDestinationHint(message)).toBe(account);
+    expect(getExplicitLastFinanceAccountEditResult(message)).toMatchObject({
+      intent: "finance_edit",
+      finance: { accountHint: account },
+      account: { name: account },
+      lastFinanceReference: reference,
+    });
+  });
+
+  it.each([
+    ["conta Inter", "Inter"],
+    ["altere a conta Dinheiro para Inter", "Inter"],
+    ["cambia la cuenta Efectivo a Caja", "Caja"],
+  ])("extracts the target account from a pending finance edit: %s", (message, account) => {
+    expect(getFinanceAccountDestinationHint(message)).toBe(account);
+  });
+
+  it("does not mistake ordinary edit values or mode changes for manual accounts", () => {
+    expect(getFinanceAccountDestinationHint("muda para 80 reais")).toBeNull();
+    expect(getFinanceAccountDestinationHint("muda esse último para a conta da empresa")).toBeNull();
+  });
+
+  it("routes the latest-finance account change before generic account commands or the model", async () => {
+    await expect(processMessage("altere esse ultimo para inter")).resolves.toMatchObject({
+      intent: "finance_edit",
+      finance: { accountHint: "inter" },
+      lastFinanceReference: "last",
+      confidence: 1,
+    });
+  });
+
   it("keeps business mode separate from a manual account name", () => {
     expect(getExplicitAccountCommandResult("quanto gastei na conta da empresa")).toBeNull();
     expect(getExplicitAccountCommandResult("registrar conta de luz de 120 reais")).toBeNull();
     expect(getExplicitAccountCommandResult("apague a conta de internet")).toBeNull();
     expect(getExplicitAccountCommandResult("quais contas tenho a pagar?")).toBeNull();
+  });
+});
+
+describe("latest finance employee corrections", () => {
+  it.each([
+    ["não é funcionário Rafael e sim a Luana", "Luana"],
+    ["não foi Rafael, foi Luana", "Luana"],
+    ["troque o funcionário do último lançamento para Luana", "Luana"],
+    ["no es el empleado Rafael sino Luana", "Luana"],
+    ["cambia el empleado del último movimiento a Luana", "Luana"],
+  ])("reassigns the latest payment: %s", async (message, name) => {
+    expect(getExplicitLastFinanceEmployeeEditResult(message)).toMatchObject({
+      intent: "finance_edit",
+      finance: { employeeName: name },
+      lastFinanceReference: "last",
+    });
+    await expect(processMessage(message)).resolves.toMatchObject({
+      intent: "finance_edit",
+      finance: { employeeName: name },
+      lastFinanceReference: "last",
+    });
+  });
+
+  it.each([
+    "remova o funcionário desse lançamento",
+    "deixe esse último gasto sem funcionário",
+    "quita el empleado de ese movimiento",
+  ])("removes only the employee association: %s", message => {
+    expect(getExplicitLastFinanceEmployeeEditResult(message)).toMatchObject({
+      intent: "finance_edit", finance: { clearEmployee: true }, lastFinanceReference: "last",
+    });
   });
 });
 

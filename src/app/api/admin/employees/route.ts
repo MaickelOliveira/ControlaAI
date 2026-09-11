@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { createEmployee, getEmployeesByUser, updateEmployee, getTotalPayroll } from "@/lib/employees";
+import { createEmployee, getEmployeesByUser, updateEmployee, getTotalPayroll, getEmployeePaymentsByUser } from "@/lib/employees";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") as "active" | "inactive" | undefined;
-  const [employees, totalPayroll] = await Promise.all([
+  const [employees, totalPayroll, paymentsByEmployee] = await Promise.all([
     getEmployeesByUser(session.sub, status || undefined),
     getTotalPayroll(session.sub),
+    getEmployeePaymentsByUser(session.sub),
   ]);
-  return NextResponse.json({ employees, totalPayroll });
+  return NextResponse.json({ employees, totalPayroll, paymentsByEmployee });
 }
 
 export async function POST(req: NextRequest) {

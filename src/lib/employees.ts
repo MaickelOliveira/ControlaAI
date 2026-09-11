@@ -17,6 +17,15 @@ export type Employee = {
   createdAt: string;
 };
 
+export type EmployeePayment = {
+  id: string;
+  employeeId: string;
+  amount: number;
+  description: string;
+  date: string;
+  status: "posted" | "pending";
+};
+
 type Row = {
   id: string; user_id: string; name: string; role: string; salary: number; start_date: string;
   status: EmployeeStatus; phone: string | null; email: string | null; notes: string | null; created_at: string;
@@ -68,6 +77,50 @@ export async function getTotalPayroll(userId: string): Promise<number> {
 }
 
 export async function findEmployeeByName(userId: string, name: string): Promise<Employee | null> {
-  const lower = name.toLowerCase();
-  return (await getEmployeesByUser(userId)).find(e => e.name.toLowerCase().includes(lower)) ?? null;
+  return (await findEmployeesByName(userId, name))[0] ?? null;
+}
+
+/** Procura todos os funcionários compatíveis, preferindo nome exato. Não
+ * escolhe silenciosamente quando há homônimos ou nomes parciais ambíguos. */
+export async function findEmployeesByName(userId: string, name: string, status?: EmployeeStatus): Promise<Employee[]> {
+  const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
+  const target = normalize(name);
+  if (!target) return [];
+  const employees = await getEmployeesByUser(userId, status);
+  const exact = employees.filter(employee => normalize(employee.name) === target);
+  if (exact.length) return exact;
+  return employees.filter(employee => {
+    const candidate = normalize(employee.name);
+    return candidate.includes(target) || target.includes(candidate);
+  });
+}
+
+/** Histórico de pagamentos vinculados aos funcionários. A própria despesa em
+ * Finanças é a fonte de verdade; trocar/remover o funcionário atualiza este
+ * histórico automaticamente, sem criar um segundo registro. */
+export async function getEmployeePaymentsByUser(userId: string): Promise<Record<string, EmployeePayment[]>> {
+  const { data, error } = await getSupabase()
+    .from("finances")
+    .select("id,employee_id,amount,description,date,pending,created_at")
+    .eq("user_id", userId)
+    .not("employee_id", "is", null)
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("[employees] getEmployeePaymentsByUser erro:", error.message);
+    return {};
+  }
+  const grouped: Record<string, EmployeePayment[]> = {};
+  for (const row of (data ?? []) as Array<{ id: string; employee_id: string; amount: number; description: string; date: string; pending: boolean }>) {
+    const payment: EmployeePayment = {
+      id: row.id,
+      employeeId: row.employee_id,
+      amount: Number(row.amount),
+      description: row.description,
+      date: row.date,
+      status: row.pending ? "pending" : "posted",
+    };
+    (grouped[row.employee_id] ??= []).push(payment);
+  }
+  return grouped;
 }

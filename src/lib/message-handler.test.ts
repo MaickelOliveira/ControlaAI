@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
-import { parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
+import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
 
 describe("phoneMatches", () => {
@@ -68,6 +68,27 @@ describe("finance mode changes", () => {
       date: "2026-09-07", category: "Moradia", mode: "personal",
     }));
     expect(parseFinanceChoiceMulti("2 e 3 do dia 07/09/2026", candidates)).toEqual([1, 2]);
+  });
+});
+
+describe("new account default confirmation", () => {
+  it.each([
+    ["1", "keep"],
+    ["manter", "keep"],
+    ["Dinheiro", "keep"],
+    ["não", "keep"],
+    ["2", "change"],
+    ["mudar", "change"],
+    ["Inter", "change"],
+    ["sim", "change"],
+    ["mantener", "keep"],
+    ["cambiar", "change"],
+  ] as const)("understands %s as %s", (answer, expected) => {
+    expect(parseAccountDefaultChoice(answer, "Dinheiro", "Inter")).toBe(expected);
+  });
+
+  it("asks again when the answer is unrelated", () => {
+    expect(parseAccountDefaultChoice("talvez amanhã", "Dinheiro", "Inter")).toBeNull();
   });
 });
 

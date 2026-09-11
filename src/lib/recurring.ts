@@ -30,6 +30,7 @@ export type RecurringTransaction = {
   status: "active" | "completed" | "cancelled";
   lastNotifiedDate?: string;
   source: "whatsapp" | "web";
+  employeeId?: string;
   createdAt: string;
 };
 
@@ -38,7 +39,7 @@ type Row = {
   category: string; description: string; mode: "personal" | "business"; recurrence_type: "installment" | "recurring";
   total_installments: number | null; paid_installments: number; repeat_unit: RecurringTransaction["repeatUnit"];
   day_of_month: number | null; start_date: string; next_due_date: string; status: RecurringTransaction["status"];
-  last_notified_date: string | null; source: "whatsapp" | "web"; created_at: string;
+  last_notified_date: string | null; source: "whatsapp" | "web"; employee_id: string | null; created_at: string;
 };
 
 function fromRow(r: Row): RecurringTransaction {
@@ -49,7 +50,7 @@ function fromRow(r: Row): RecurringTransaction {
     totalInstallments: r.total_installments ?? undefined, paidInstallments: r.paid_installments,
     repeatUnit: r.repeat_unit, dayOfMonth: r.day_of_month ?? undefined, startDate: r.start_date,
     nextDueDate: r.next_due_date, status: r.status, lastNotifiedDate: r.last_notified_date ?? undefined,
-    source: r.source, createdAt: r.created_at,
+    source: r.source, employeeId: r.employee_id ?? undefined, createdAt: r.created_at,
   };
 }
 
@@ -92,7 +93,7 @@ export async function createRecurring(data: CreateRecurringInput): Promise<Recur
     category: data.category, description: data.description, mode: data.mode, recurrence_type: data.recurrenceType,
     total_installments: data.totalInstallments, paid_installments: 0, repeat_unit: data.repeatUnit,
     day_of_month: data.dayOfMonth, start_date: data.startDate, next_due_date: nextDueDate, status: "active",
-    source: data.source,
+    source: data.source, employee_id: data.employeeId ?? null,
   };
   const { data: inserted, error } = await getSupabase().from("recurring_transactions").insert(row).select("*").single();
   if (error) throw new Error(`[recurring] createRecurring falhou: ${error.message}`);
@@ -135,6 +136,7 @@ export async function confirmRecurring(id: string, userId: string): Promise<{ up
     date: today,
     mode: rec.mode,
     source: "whatsapp",
+    employeeId: rec.employeeId,
   });
 
   const paidInstallments = rec.paidInstallments + 1;

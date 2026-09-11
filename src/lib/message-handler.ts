@@ -1,7 +1,7 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, type AIResult } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { readFileSync, existsSync } from "fs";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
@@ -17,9 +17,9 @@ import {
   removeShoppingItem, updateShoppingItem,
   type GroceryPurchaseItem, type GroceryCategory,
 } from "@/lib/grocery";
-import { getEmployeesByUser, getTotalPayroll, findEmployeeByName, updateEmployee, type Employee } from "@/lib/employees";
+import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseAccountChoice, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseAccountChoice, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
@@ -438,6 +438,13 @@ function accountSelectionMessage(accounts: Account[], locale?: string): string {
   return `${heading}\n\n${accounts.map((account, index) => `${listNumberLabel(index)} ${account.name}${account.isDefault ? " ⭐" : ""}`).join("\n")}\n\n${instruction}\n⏱ _${locale === "es" ? "Válido durante 5 minutos" : "Válido por 5 min"}._`;
 }
 
+function accountDefaultConfirmationMessage(currentName: string, newName: string, locale?: string): string {
+  if (locale === "es") {
+    return `⭐ La cuenta predeterminada actual es *${currentName}*. ¿Quieres mantenerla o cambiarla por *${newName}*?\n\n1️⃣ Mantener *${currentName}*\n2️⃣ Usar *${newName}* como predeterminada\n\nResponde *1* o *2*.\n⏱ _Válido durante 5 minutos._`;
+  }
+  return `⭐ A conta padrão atual é *${currentName}*. Deseja mantê-la ou trocar para *${newName}*?\n\n1️⃣ Manter *${currentName}*\n2️⃣ Tornar *${newName}* a conta padrão\n\nResponda *1* ou *2*.\n⏱ _Válido por 5 min._`;
+}
+
 function applyAccountToAi(ai: AIResult, accountName: string, selectionMode: FinanceMode): AIResult {
   const finances = ai.finances?.map(item => (item.mode ?? selectionMode) === selectionMode ? { ...item, accountHint: accountName } : item);
   const finance = ai.finance && (ai.finance.mode ?? selectionMode) === selectionMode
@@ -449,6 +456,38 @@ function applyAccountToAi(ai: AIResult, accountName: string, selectionMode: Fina
     ...(finance ? { finance } : {}),
     account: { ...(ai.account ?? {}), name: accountName, useContext: false, mode: selectionMode },
   };
+}
+
+function isEmployeeFinanceData(finance: FinanceData): boolean {
+  const category = finance.category?.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  return finance.type === "expense" && (category === "funcionarios" || category === "empleados");
+}
+
+function applyEmployeeToAi(ai: AIResult, employeeId: string | null, employeeName?: string): AIResult {
+  const patch = (finance: FinanceData): FinanceData => isEmployeeFinanceData(finance)
+    ? { ...finance, employeeId, ...(employeeName ? { employeeName } : {}) }
+    : finance;
+  return {
+    ...ai,
+    ...(ai.finance ? { finance: patch(ai.finance) } : {}),
+    ...(ai.finances ? { finances: ai.finances.map(patch) } : {}),
+  };
+}
+
+function financeEmployeeSelectionMessage(employees: Array<{ name: string; role: string }>, locale?: string): string {
+  const title = locale === "es" ? "👥 ¿A qué empleado corresponde este pago?" : "👥 Para qual funcionário é esse pagamento?";
+  const none = locale === "es" ? "Sin seleccionar empleado" : "Sem selecionar funcionário";
+  const instruction = locale === "es" ? "Responde con el número o el nombre." : "Responda com o número ou nome.";
+  const options = [
+    ...employees.map((employee, index) => `${listNumberLabel(index)} ${employee.name} — ${employee.role}`),
+    `${listNumberLabel(employees.length)} ${none}`,
+  ].join("\n");
+  return `${title}\n\n${options}\n\n${instruction}\n⏱ _${locale === "es" ? "Válido durante 5 minutos" : "Válido por 5 min"}._`;
+}
+
+function employeeLinkLabel(employeeName: string | undefined, cleared: boolean, locale?: string): string {
+  if (cleared) return locale === "es" ? "\n👥 Empleado: *sin seleccionar*" : "\n👥 Funcionário: *sem selecionar*";
+  return employeeName ? `\n👥 ${locale === "es" ? "Empleado" : "Funcionário"}: *${employeeName}*` : "";
 }
 
 function accountFromConversation(accounts: Account[], history: Array<{ role: string; content: string }>): Account | null {
@@ -477,6 +516,32 @@ async function resolveAccountForAi(
     if (contextual) return { account: contextual };
   }
   return accounts.length === 1 ? { account: accounts[0] } : { choices: accounts };
+}
+
+/** Resolve uma troca de conta durante finance_edit. Além de frases completas
+ * ("mude para a conta Inter"), aceita a resposta curta da segunda etapa
+ * ("conta Inter" ou apenas "Inter"). */
+async function resolveFinanceEditAccount(
+  userId: string,
+  mode: FinanceMode,
+  message: string,
+  preferredHint?: string,
+): Promise<{ requested: boolean; account?: Account; choices?: Account[] }> {
+  const accounts = await getManualAccountsByUser(userId, mode);
+  const hint = preferredHint?.trim() || getFinanceAccountDestinationHint(message)?.trim();
+  if (hint) {
+    const matches = await findAccountByName(userId, mode, hint, "bank");
+    if (matches.length === 1) return { requested: true, account: matches[0] };
+    return { requested: true, choices: matches.length > 1 ? matches : accounts };
+  }
+
+  const normalizedMessage = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const mentioned = accounts.filter(account => normalizedMessage.includes(
+    account.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase(),
+  ));
+  if (mentioned.length === 1) return { requested: true, account: mentioned[0] };
+  if (mentioned.length > 1) return { requested: true, choices: mentioned };
+  return { requested: false };
 }
 
 /** Mensagem recebida já normalizada pelo webhook do provider (Evolution ou
@@ -874,6 +939,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const pending = await getPendingAction(from);
     let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
     let accountSelectionResume: AIResult | null = null;
+    let employeeSelectionResume: AIResult | null = null;
 
     if (pending?.type === "account_selection" && pending.userId === user.id) {
       const choice = parseAccountChoice(messageText, pending.accounts);
@@ -890,6 +956,124 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const chosen = pending.accounts[choice];
       accountSelectionResume = applyAccountToAi(pending.ai, chosen.name, pending.mode as FinanceMode);
       messageText = pending.originalText;
+    }
+
+    if (pending?.type === "account_default_confirm" && pending.userId === user.id) {
+      const choice = parseAccountDefaultChoice(
+        messageText,
+        pending.currentAccountName,
+        pending.newAccountName,
+      );
+      if (!choice) {
+        await setPendingAction(from, {
+          type: "account_default_confirm",
+          userId: user.id,
+          mode: pending.mode,
+          currentAccountId: pending.currentAccountId,
+          currentAccountName: pending.currentAccountName,
+          newAccountId: pending.newAccountId,
+          newAccountName: pending.newAccountName,
+        });
+        await wppSend(from, accountDefaultConfirmationMessage(
+          pending.currentAccountName,
+          pending.newAccountName,
+          user.locale,
+        ));
+        return;
+      }
+
+      await clearPendingAction(from);
+      if (choice === "keep") {
+        await wppSend(from, localized(user.locale,
+          `✅ Combinado. *${pending.currentAccountName}* continua como conta padrão.`,
+          `✅ De acuerdo. *${pending.currentAccountName}* sigue siendo la cuenta predeterminada.`,
+        ));
+        return;
+      }
+
+      const changed = await setDefaultAccount(
+        user.id,
+        pending.mode as FinanceMode,
+        pending.newAccountId,
+      );
+      await wppSend(from, changed
+        ? localized(user.locale,
+          `⭐ *${pending.newAccountName}* agora é a conta padrão.`,
+          `⭐ *${pending.newAccountName}* ahora es la cuenta predeterminada.`,
+        )
+        : localized(user.locale,
+          "❌ A conta foi cadastrada, mas não consegui defini-la como padrão agora.",
+          "❌ La cuenta fue registrada, pero no pude establecerla como predeterminada ahora.",
+        ));
+      return;
+    }
+
+    // ── Funcionário de um lançamento financeiro. A opção final da lista é
+    // sempre "sem funcionário", para permitir um gasto empresarial genérico. ──
+    if (pending?.type === "finance_employee_select" && pending.userId === user.id) {
+      const choice = parseFinanceEmployeeChoice(messageText, pending.employees);
+      if (choice === null) {
+        await setPendingAction(from, {
+          type: "finance_employee_select", userId: user.id, mode: pending.mode,
+          action: pending.action, ai: pending.ai, originalText: pending.originalText,
+          financeIds: pending.financeIds, employees: pending.employees,
+        });
+        await wppSend(from, financeEmployeeSelectionMessage(pending.employees, user.locale));
+        return;
+      }
+      await clearPendingAction(from);
+      const chosen = choice === "none" ? null : pending.employees[choice];
+      if (pending.action === "edit_finances") {
+        const updated = [];
+        for (const financeId of pending.financeIds ?? []) {
+          const item = await updateFinance(financeId, user.id, { employeeId: chosen?.id ?? null });
+          if (item) updated.push(item);
+        }
+        await wppSend(from, updated.length
+          ? localized(user.locale,
+            `✅ Colaborador do lançamento atualizado.${employeeLinkLabel(chosen?.name, !chosen, user.locale)}`,
+            `✅ Se actualizó el empleado del movimiento.${employeeLinkLabel(chosen?.name, !chosen, user.locale)}`)
+          : localized(user.locale, "❌ Não consegui atualizar o funcionário desse lançamento.", "❌ No pude actualizar el empleado de ese movimiento."));
+        return;
+      }
+      if (!pending.ai) return;
+      employeeSelectionResume = applyEmployeeToAi(pending.ai, chosen?.id ?? null, chosen?.name);
+      messageText = pending.originalText || messageText;
+    }
+
+    // A correção citou uma pessoa que ainda não existe. Salário é o único
+    // dado obrigatório ausente no cadastro atual; cargo recebe o padrão e pode
+    // ser editado depois por comando ou no painel.
+    if (pending?.type === "finance_employee_create" && pending.userId === user.id) {
+      if (/^(?:cancelar|cancela|deixa pra l[áa]|no|n[ãa]o)$/i.test(messageText.trim())) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale,
+          "Cancelado — mantive o lançamento sem alterar o funcionário. 👍",
+          "Cancelado; mantuve el movimiento sin cambiar el empleado. 👍"));
+        return;
+      }
+      const salary = parseAmountBR(messageText);
+      if (salary === null) {
+        await setPendingAction(from, { ...pending, financeIds: pending.financeIds });
+        await wppSend(from, localized(user.locale,
+          `💰 *${pending.employeeName}* ainda não está cadastrado(a). Qual é o salário para concluir o cadastro e vincular este pagamento?`,
+          `💰 *${pending.employeeName}* todavía no está registrado(a). ¿Cuál es el salario para completar el registro y vincular este pago?`));
+        return;
+      }
+      await clearPendingAction(from);
+      const employee = await createEmployee({
+        userId: user.id, name: cap(pending.employeeName),
+        role: user.locale === "es" ? "Empleado" : "Funcionário",
+        salary, startDate: todayStrBR(), status: "active",
+      });
+      let changed = 0;
+      for (const financeId of pending.financeIds) {
+        if (await updateFinance(financeId, user.id, { employeeId: employee.id })) changed++;
+      }
+      await wppSend(from, localized(user.locale,
+        `✅ Funcionário *${employee.name}* cadastrado com salário de ${formatCurrency(employee.salary)} e vinculado a ${changed === 1 ? "este pagamento" : `${changed} pagamentos`}.`,
+        `✅ Empleado *${employee.name}* registrado con salario de ${formatCurrency(employee.salary)} y vinculado a ${changed === 1 ? "este pago" : `${changed} pagos`}.`));
+      return;
     }
 
     // ── Imagem enviada sem legenda: só executa a ação depois que a pessoa
@@ -1081,14 +1265,18 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
     // ── Verifica seleção de funcionário pendente (pagamento recorrente) ──
     if (pending?.type === "employee_payment_select" && pending.userId === user.id) {
-      const choiceIdx = choiceIndexByLabels(messageText, pending.employees, e => [e.name]);
-      if (choiceIdx >= 0) {
+      const choice = parseFinanceEmployeeChoice(messageText, pending.employees);
+      if (choice !== null) {
         await clearPendingAction(from);
-        const chosen = pending.employees[choiceIdx];
+        const chosen = choice === "none" ? null : pending.employees[choice];
         const resumedAi: AIResult = {
           intent: "recurring_create",
           confidence: 1,
-          recurring: { ...pending.recurringData, description: `Salário - ${chosen.name}`, employeePayment: false, employeeName: undefined },
+          recurring: {
+            ...pending.recurringData,
+            description: chosen ? `Salário - ${chosen.name}` : (pending.recurringData.description || "Funcionário"),
+            employeePayment: false, employeeName: undefined, employeeId: chosen?.id ?? null,
+          },
         };
         const { reply } = await beginSlotFill("recurring_create", resumedAi, { user, userId: user.id, phone: from, mode: pending.mode as "personal" | "business" }, pending.originalText);
         await wppSend(from, reply);
@@ -1247,10 +1435,69 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       // todos os candidatos guardados.
       if (pending.action === "edit" && !hasPatch && pending.awaitingPatch) {
         const patch = parseFinancePatchFromText(messageText);
+        let changedAccountName: string | undefined;
+        let changedEmployeeName: string | undefined;
+        let clearedEmployee = false;
+        const employeeEdit = getExplicitLastFinanceEmployeeEditResult(messageText);
+        if (employeeEdit?.finance?.clearEmployee) {
+          patch.employeeId = null;
+          clearedEmployee = true;
+        } else if (employeeEdit?.finance?.employeeName) {
+          const matches = await findEmployeesByName(user.id, employeeEdit.finance.employeeName, "active");
+          if (matches.length === 1) {
+            patch.employeeId = matches[0].id;
+            changedEmployeeName = matches[0].name;
+          } else if (matches.length > 1) {
+            await setPendingAction(from, {
+              type: "finance_employee_select", userId: user.id,
+              mode: pending.candidates[0]?.mode || mode, action: "edit_finances",
+              financeIds: pending.candidates.map(candidate => candidate.id),
+              employees: matches.map(employee => ({ id: employee.id, name: employee.name, role: employee.role })),
+            });
+            await wppSend(from, financeEmployeeSelectionMessage(matches, user.locale));
+            return;
+          } else {
+            await setPendingAction(from, {
+              type: "finance_employee_create", userId: user.id,
+              mode: pending.candidates[0]?.mode || mode,
+              employeeName: employeeEdit.finance.employeeName,
+              financeIds: pending.candidates.map(candidate => candidate.id),
+            });
+            await wppSend(from, localized(user.locale,
+              `👤 *${employeeEdit.finance.employeeName}* não está cadastrado(a). Qual é o salário para concluir o cadastro e vincular este pagamento?`,
+              `👤 *${employeeEdit.finance.employeeName}* no está registrado(a). ¿Cuál es el salario para completar el registro y vincular este pago?`));
+            return;
+          }
+        }
+        const candidateModes = [...new Set(pending.candidates.map(candidate => candidate.mode))];
+        if (candidateModes.length === 1) {
+          const accountEdit = await resolveFinanceEditAccount(
+            user.id,
+            candidateModes[0] as FinanceMode,
+            messageText,
+          );
+          if (accountEdit.account) {
+            patch.accountId = accountEdit.account.id;
+            patch.cardInvoiceId = null;
+            changedAccountName = accountEdit.account.name;
+          } else if (accountEdit.requested) {
+            await setPendingAction(from, {
+              ...pending,
+              candidates: pending.candidates,
+              awaitingPatch: true,
+            });
+            const choices = accountEdit.choices ?? [];
+            await wppSend(from, localized(user.locale,
+              `❓ Não encontrei essa conta. Contas disponíveis: *${choices.map(account => account.name).join(", ")}*.\n\nResponda, por exemplo: _"conta Inter"_.`,
+              `❓ No encontré esa cuenta. Cuentas disponibles: *${choices.map(account => account.name).join(", ")}*.\n\nResponde, por ejemplo: _"cuenta Caja"_.`,
+            ));
+            return;
+          }
+        }
         if (Object.keys(patch).length === 0) {
           await wppSend(from, localized(user.locale,
-            `❓ Não entendi o que alterar. Ex: _"80 reais"_ ou _"categoria Lazer"_`,
-            `❓ No entendí qué quieres cambiar. Ej.: _"80 dólares"_ o _"categoría Ocio"_`,
+            `❓ Não entendi o que alterar. Ex: _"80 reais"_, _"categoria Lazer"_ ou _"conta Inter"_`,
+            `❓ No entendí qué quieres cambiar. Ej.: _"80 dólares"_, _"categoría Ocio"_ o _"cuenta Caja"_`,
           ));
           return;
         }
@@ -1265,9 +1512,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const modeLabel = updatedItems[0].mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
           if (updatedItems.length === 1) {
             const updated = updatedItems[0];
-            await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+            await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}${changedAccountName ? `\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${changedAccountName}*` : ""}${employeeLinkLabel(changedEmployeeName, clearedEmployee, user.locale)}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
           } else {
-            await wppSend(from, `✏️ *${updatedItems.length} lançamentos atualizados!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+            await wppSend(from, `✏️ *${updatedItems.length} lançamentos atualizados!*${changedAccountName ? `\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${changedAccountName}*` : ""}${employeeLinkLabel(changedEmployeeName, clearedEmployee, user.locale)}\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
           }
         } else await wppSend(from, localized(user.locale, "❌ Não consegui atualizar os lançamentos selecionados. Nada foi modificado; tente novamente.", "❌ No pude actualizar los movimientos seleccionados. No se modificó nada; inténtalo de nuevo."));
         return;
@@ -1291,7 +1538,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           });
           if (chosen.length === 1) {
             const c = chosen[0];
-            await wppSend(from, `🔍 Encontrei: *${c.description}* — ${formatCurrency(c.amount)} (${c.category}) · ${modeLabelFull(c.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+            await wppSend(from, `🔍 Encontrei: *${c.description}* — ${formatCurrency(c.amount)} (${c.category}) · ${modeLabelFull(c.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_\n• _"muda para a conta Inter"_`);
           } else {
             await wppSend(from, `🔍 Selecionados *${chosen.length} lançamentos*.\n\nO que deseja alterar em todos eles? Ex:\n• _"muda categoria para Lazer"_\n• _"marca como a receber"_`);
           }
@@ -1483,7 +1730,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
-    const classifiedAi = accountSelectionResume ?? await processMessage(messageText, { user, history: recentHistory });
+    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, history: recentHistory });
     const ai = actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi;
@@ -1491,7 +1738,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // Reconhece também a forma natural "no Nubank"/"en Caja", sem exigir
     // que a pessoa diga a palavra conta. Os nomes vêm das próprias contas do
     // cliente, portanto não há uma lista fixa de bancos nem adivinhação.
-    if (["finance_register", "finance_query", "balance_query", "finance_detail"].includes(ai.intent)) {
+    if (["finance_register", "finance_edit", "finance_query", "balance_query", "finance_detail"].includes(ai.intent)) {
       const accountMode = (ai.mode || ai.finance?.mode || mode) as FinanceMode;
       const hasHint = ai.account?.name || ai.account?.useContext || ai.finance?.accountHint || ai.finances?.some(item => item.accountHint);
       if (!hasHint) {
@@ -1574,10 +1821,26 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const name = ai.account?.name?.trim();
         if (!name) break;
         try {
+          const previousAccounts = await getManualAccountsByUser(user.id, accountMode);
+          const previousDefault = previousAccounts.find(account => account.isDefault) ?? previousAccounts[0];
           const created = await createAccount({ userId: user.id, mode: accountMode, name: cap(name), type: "bank" });
-          await wppSend(from, localized(user.locale,
+          const createdMessage = localized(user.locale,
             `✅ Conta *${created.name}* cadastrada em ${accountMode === "business" ? "Empresa" : "Pessoal"}.`,
-            `✅ Cuenta *${created.name}* registrada en ${accountMode === "business" ? "Empresa" : "Personal"}.`));
+            `✅ Cuenta *${created.name}* registrada en ${accountMode === "business" ? "Empresa" : "Personal"}.`);
+          if (previousDefault && previousDefault.id !== created.id) {
+            await setPendingAction(from, {
+              type: "account_default_confirm",
+              userId: user.id,
+              mode: accountMode,
+              currentAccountId: previousDefault.id,
+              currentAccountName: previousDefault.name,
+              newAccountId: created.id,
+              newAccountName: created.name,
+            });
+            await wppSend(from, `${createdMessage}\n\n${accountDefaultConfirmationMessage(previousDefault.name, created.name, user.locale)}`);
+          } else {
+            await wppSend(from, `${createdMessage}\n⭐ ${user.locale === "es" ? "Esta es ahora tu cuenta predeterminada." : "Ela agora é sua conta padrão."}`);
+          }
         } catch {
           await wppSend(from, localized(user.locale,
             `❌ Não consegui cadastrar *${name}*. Verifique se já existe uma conta com esse nome.`,
@@ -1654,6 +1917,51 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           break;
         }
 
+        // Pagamentos na categoria Funcionários ficam vinculados à ficha do
+        // colaborador. Com um único ativo a associação é automática; com mais
+        // de um, pergunta e inclui a opção explícita "sem funcionário".
+        const employeeItems = financeItems.filter(fd => isEmployeeFinanceData(fd) && fd.employeeId === undefined);
+        if (employeeItems.length) {
+          const activeEmployees = await getEmployeesByUser(user.id, "active");
+          for (const fd of employeeItems) {
+            if (fd.employeeName) {
+              const matches = await findEmployeesByName(user.id, fd.employeeName, "active");
+              if (matches.length === 1) {
+                fd.employeeId = matches[0].id;
+                fd.employeeName = matches[0].name;
+                continue;
+              }
+              if (matches.length > 1) {
+                await setPendingAction(from, {
+                  type: "finance_employee_select", userId: user.id,
+                  mode: (fd.mode || mode) as FinanceMode, action: "resume_ai",
+                  ai, originalText: messageText,
+                  employees: matches.map(employee => ({ id: employee.id, name: employee.name, role: employee.role })),
+                });
+                await wppSend(from, financeEmployeeSelectionMessage(matches, user.locale));
+                return;
+              }
+            }
+            if (activeEmployees.length === 1) {
+              fd.employeeId = activeEmployees[0].id;
+              fd.employeeName = activeEmployees[0].name;
+              continue;
+            }
+            if (activeEmployees.length > 1) {
+              await setPendingAction(from, {
+                type: "finance_employee_select", userId: user.id,
+                mode: (fd.mode || mode) as FinanceMode, action: "resume_ai",
+                ai, originalText: messageText,
+                employees: activeEmployees.map(employee => ({ id: employee.id, name: employee.name, role: employee.role })),
+              });
+              await wppSend(from, financeEmployeeSelectionMessage(activeEmployees, user.locale));
+              return;
+            }
+            // Não há ninguém cadastrado: mantém o gasto válido e sem vínculo.
+            fd.employeeId = null;
+          }
+        }
+
         // A conta é obrigatória para lançamentos novos. Uma única conta é
         // escolhida automaticamente; com várias, o cliente escolhe. O lote
         // inteiro só começa a ser gravado depois de todas as escolhas, para
@@ -1702,7 +2010,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             category: cap(fd.category) || "Outros", description: cap(fd.description),
             date: financeDate, mode: financeMode, source: "whatsapp",
             status: isPending ? "pending" : "posted", autoPost,
-            registeredBy: from, accountId, cardInvoiceId,
+            registeredBy: from, accountId, cardInvoiceId, employeeId: fd.employeeId ?? undefined,
           });
           await setLastFinanceBatch(from, [{ id: f.id, description: f.description, amount: f.amount, type: f.type }], financeMode);
           const bal = await getBalance(user.id, financeMode, year, month);
@@ -1716,11 +2024,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const label = fd.type === "income" ? "a receber" : "a pagar";
             await wppSend(from, `⏳ *Marcado como ${label}!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n🏦 Conta: *${fd.accountHint}*\n\n_Não entra no saldo. Quando ${fd.type === "income" ? "cair" : "for pago"}, me avisa (ex: "recebi o ${f.description}") que eu confirmo._`);
           } else {
-            await wppSend(from, `${replyFinanceRegistered(f, bal.balance, user.locale)}\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${fd.accountHint}*`);
+            await wppSend(from, `${replyFinanceRegistered(f, bal.balance, user.locale)}\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${fd.accountHint}*${employeeLinkLabel(fd.employeeName, fd.employeeId === null, user.locale)}`);
           }
         } else {
           // Múltiplos lançamentos — registra todos e exibe resumo
-          const registered: Array<Awaited<ReturnType<typeof addFinance>> & { pending: boolean; autoPost: boolean; accountName: string }> = [];
+          const registered: Array<Awaited<ReturnType<typeof addFinance>> & { pending: boolean; autoPost: boolean; accountName: string; employeeName?: string }> = [];
           for (const fd of financeItems) {
             const financeMode = (fd.mode || mode) as "personal" | "business";
             const hasExplicitDate = !!fd.date;
@@ -1733,9 +2041,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               category: cap(fd.category) || "Outros", description: cap(fd.description),
               date: financeDate, mode: financeMode, source: "whatsapp",
               status: isPending ? "pending" : "posted", autoPost,
-              registeredBy: from, accountId, cardInvoiceId,
+              registeredBy: from, accountId, cardInvoiceId, employeeId: fd.employeeId ?? undefined,
             });
-            registered.push({ ...f, pending: isPending, autoPost, accountName: fd.accountHint ?? "Dinheiro" });
+            registered.push({ ...f, pending: isPending, autoPost, accountName: fd.accountHint ?? "Dinheiro", employeeName: fd.employeeName });
           }
           const primaryMode = (financeItems[0].mode || mode) as "personal" | "business";
           await setLastFinanceBatch(from, registered.map(f => ({ id: f.id, description: f.description, amount: f.amount, type: f.type })), primaryMode);
@@ -1749,7 +2057,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           let msg = `✅ *${registered.length} lançamentos registrados!*\n_(${modeLabel})_\n\n`;
           for (const f of posted) {
             const emoji = f.type === "income" ? "💰" : "💸";
-            msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)} · 🏦 ${f.accountName}\n`;
+            msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)} · 🏦 ${f.accountName}${f.employeeName ? ` · 👥 ${f.employeeName}` : ""}\n`;
           }
           if (scheduled.length > 0) {
             msg += `\n⏳ *Agendados (data futura):*\n`;
@@ -1778,6 +2086,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       case "finance_edit": {
         const keyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
         console.log(`[bot] finance_edit keyword="${keyword}" hasAmount=${!!ai.finance?.amount} hasCategory=${!!ai.finance?.category}`);
+        const lastBatch = ai.lastFinanceReference ? await getLastFinanceBatch(from) : null;
 
         const editPatch: Record<string, unknown> = {};
         if (ai.finance?.amount && ai.finance.amount > 0) editPatch.amount = ai.finance.amount;
@@ -1795,25 +2104,129 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           editPatch.autoPost = !!ai.finance.date;
         }
 
+        // Troca/removal do colaborador do último lançamento. Se o nome novo
+        // ainda não existe, não inventa um vínculo: coleta o salário, cadastra
+        // a pessoa e só então conclui a correção.
+        let changedEmployeeName: string | undefined;
+        let clearedEmployee = false;
+        if (ai.finance?.clearEmployee) {
+          editPatch.employeeId = null;
+          clearedEmployee = true;
+        } else if (ai.finance?.employeeName) {
+          const matches = await findEmployeesByName(user.id, ai.finance.employeeName, "active");
+          const targetIds = ai.lastFinanceReference && lastBatch?.items.length
+            ? (ai.lastFinanceReference === "batch" ? lastBatch.items : [lastBatch.items[lastBatch.items.length - 1]]).map(item => item.id)
+            : [];
+          if (matches.length === 1) {
+            editPatch.employeeId = matches[0].id;
+            changedEmployeeName = matches[0].name;
+          } else if (matches.length > 1 && targetIds.length) {
+            await setPendingAction(from, {
+              type: "finance_employee_select", userId: user.id,
+              mode: (lastBatch?.mode || mode) as FinanceMode, action: "edit_finances",
+              financeIds: targetIds,
+              employees: matches.map(employee => ({ id: employee.id, name: employee.name, role: employee.role })),
+            });
+            await wppSend(from, financeEmployeeSelectionMessage(matches, user.locale));
+            break;
+          } else if (targetIds.length) {
+            await setPendingAction(from, {
+              type: "finance_employee_create", userId: user.id,
+              mode: (lastBatch?.mode || mode) as FinanceMode,
+              employeeName: ai.finance.employeeName, financeIds: targetIds,
+            });
+            await wppSend(from, localized(user.locale,
+              `👤 *${ai.finance.employeeName}* não está cadastrado(a). Para cadastrar e vincular este pagamento, qual é o salário?\n\n_Responda o valor ou *cancelar*._`,
+              `👤 *${ai.finance.employeeName}* no está registrado(a). Para registrarlo y vincular este pago, ¿cuál es el salario?\n\n_Responde el importe o *cancelar*._`));
+            break;
+          }
+        }
+
+        // Conta manual é uma dimensão editável do lançamento, assim como
+        // valor e categoria. A referência ao último lançamento fornece o
+        // modo correto sem precisar listar o mês nem pedir qual item é.
+        const requestedAccount = ai.finance?.accountHint
+          || ai.account?.name
+          || getFinanceAccountDestinationHint(messageText)
+          || undefined;
+        let changedAccountName: string | undefined;
+        if (requestedAccount) {
+          const accountMode = (lastBatch?.mode || ai.finance?.mode || ai.mode || mode) as FinanceMode;
+          const accountEdit = await resolveFinanceEditAccount(user.id, accountMode, messageText, requestedAccount);
+          if (accountEdit.account) {
+            editPatch.accountId = accountEdit.account.id;
+            // Cartões não são mais oferecidos. Ao mover para uma conta
+            // manual, remove qualquer associação antiga com fatura.
+            editPatch.cardInvoiceId = null;
+            changedAccountName = accountEdit.account.name;
+          } else {
+            const choices = accountEdit.choices ?? [];
+            if (choices.length) {
+              const resumeAi: AIResult = {
+                ...ai,
+                finance: { ...(ai.finance ?? {}), accountHint: requestedAccount } as NonNullable<AIResult["finance"]>,
+                account: { ...(ai.account ?? {}), name: requestedAccount, mode: accountMode },
+              };
+              await setPendingAction(from, {
+                type: "account_selection", userId: user.id, mode: accountMode,
+                action: "resume_ai", ai: resumeAi, originalText: messageText,
+                accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
+              });
+              await wppSend(from, accountSelectionMessage(choices, user.locale));
+              break;
+            }
+          }
+        }
+
+        // "esse último" é uma referência completa: aplica direto no item
+        // mais recente. Só altera o lote inteiro quando a pessoa usar plural.
+        if (ai.lastFinanceReference && lastBatch?.items.length && Object.keys(editPatch).length > 0) {
+          const targets = ai.lastFinanceReference === "batch"
+            ? lastBatch.items
+            : [lastBatch.items[lastBatch.items.length - 1]];
+          const updatedItems = [];
+          for (const item of targets) {
+            const updated = await updateFinance(item.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
+            if (updated) updatedItems.push(updated);
+          }
+          if (updatedItems.length > 0) {
+            const updatedMode = updatedItems[0].mode as "personal" | "business";
+            const bal = await getBalance(user.id, updatedMode, year, month);
+            const modeLabel = updatedMode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+            if (updatedItems.length === 1) {
+              const updated = updatedItems[0];
+              await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}${changedAccountName ? `\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${changedAccountName}*` : ""}${employeeLinkLabel(changedEmployeeName, clearedEmployee, user.locale)}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+            } else {
+              await wppSend(from, `✏️ *${updatedItems.length} lançamentos atualizados!*${changedAccountName ? `\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${changedAccountName}*` : ""}${employeeLinkLabel(changedEmployeeName, clearedEmployee, user.locale)}\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+            }
+          } else {
+            await wppSend(from, localized(user.locale,
+              "❌ Não consegui atualizar o último lançamento. Nada foi modificado; tente novamente.",
+              "❌ No pude actualizar el último movimiento. No se modificó nada; inténtalo de nuevo.",
+            ));
+          }
+          break;
+        }
+
         // Correção curta e genérica ("tá errado, são despesas") logo depois
         // de um registro — corrige TODOS os lançamentos daquele registro
         // (1 ou vários) de uma vez, sem precisar buscar por nome.
         if (ai.bulkCorrectLastBatch && Object.keys(editPatch).length > 0) {
-          const lastBatch = await getLastFinanceBatch(from);
-          if (lastBatch && lastBatch.items.length > 0) {
+          const bulkBatch = lastBatch ?? await getLastFinanceBatch(from);
+          if (bulkBatch && bulkBatch.items.length > 0) {
             const updatedItems = [];
-            for (const item of lastBatch.items) {
+            for (const item of bulkBatch.items) {
               const updated = await updateFinance(item.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
               if (updated) updatedItems.push(updated);
             }
             if (updatedItems.length > 0) {
-              const bal = await getBalance(user.id, lastBatch.mode, year, month);
-              const modeLabel = lastBatch.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
+              const bal = await getBalance(user.id, bulkBatch.mode, year, month);
+              const modeLabel = bulkBatch.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
               if (updatedItems.length === 1) {
                 const updated = updatedItems[0];
-                await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+                await wppSend(from, `✏️ *Lançamento atualizado!*\n\n📝 ${updated.description}\n💰 ${formatCurrency(updated.amount)}\n🏷️ ${updated.category}${changedAccountName ? `\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${changedAccountName}*` : ""}${employeeLinkLabel(changedEmployeeName, clearedEmployee, user.locale)}\n${modeLabel}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
               } else {
-                await wppSend(from, `✏️ *${updatedItems.length} lançamentos corrigidos!*\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+                await wppSend(from, `✏️ *${updatedItems.length} lançamentos corrigidos!*${changedAccountName ? `\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${changedAccountName}*` : ""}${employeeLinkLabel(changedEmployeeName, clearedEmployee, user.locale)}\n_(${modeLabel})_\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
               }
             } else await wppSend(from, "❌ Não consegui corrigir os últimos lançamentos. Nada foi modificado; tente novamente.");
             break;
@@ -3130,28 +3543,26 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.recurring?.employeePayment) {
           const activeEmployees = await getEmployeesByUser(user.id, "active");
           if (activeEmployees.length === 0) {
-            await wppSend(from, localized(user.locale,
-              `👥 Você ainda não tem funcionários cadastrados.\n\nPara registrar esse pagamento, primeiro cadastre o funcionário — me diga o nome, cargo e salário. Ex:\n_"cadastra a Ana como vendedora, salário 2000"_`,
-              `👥 Todavía no tienes empleados registrados.\n\nPara registrar este pago, primero registra al empleado e indica su nombre, puesto y sueldo. Ej.:\n_"registra a Ana como vendedora, sueldo 2000"_`));
-            break;
+            ai.recurring = { ...ai.recurring, employeePayment: false, employeeName: undefined, employeeId: null };
           }
-          let targetEmployee = ai.recurring.employeeName ? await findEmployeeByName(user.id, ai.recurring.employeeName) : null;
+          let targetEmployee = ai.recurring.employeeName
+            ? (await findEmployeesByName(user.id, ai.recurring.employeeName, "active"))[0] ?? null
+            : null;
           if (!targetEmployee && activeEmployees.length === 1) targetEmployee = activeEmployees[0];
 
-          if (!targetEmployee) {
+          if (activeEmployees.length > 0 && !targetEmployee) {
             await setPendingAction(from, {
               type: "employee_payment_select", userId: user.id, mode,
               recurringData: ai.recurring, originalText: messageText,
               employees: activeEmployees.map(e => ({ id: e.id, name: e.name, role: e.role })),
             });
-            let msg = user.locale === "es" ? `👥 ¿Para qué empleado es este pago?\n\n` : `👥 Para qual funcionário é esse pagamento?\n\n`;
-            activeEmployees.forEach((e, i) => { msg += `*${i + 1}.* ${e.name} — ${e.role}\n`; });
-            msg += user.locale === "es" ? `\nResponde con el número o el nombre. ⏱ _Válido durante 5 minutos._` : `\nResponda com o número ou nome. ⏱ _Válido por 5 min._`;
-            await wppSend(from, msg);
+            await wppSend(from, financeEmployeeSelectionMessage(activeEmployees, user.locale));
             break;
           }
 
-          ai.recurring = { ...ai.recurring, description: `Salário - ${targetEmployee.name}`, employeePayment: false, employeeName: undefined };
+          if (targetEmployee) {
+            ai.recurring = { ...ai.recurring, description: `Salário - ${targetEmployee.name}`, employeePayment: false, employeeName: undefined, employeeId: targetEmployee.id };
+          }
         }
 
         const { reply } = await beginSlotFill("recurring_create", ai, { user, userId: user.id, phone: from, mode }, messageText);

@@ -673,6 +673,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         totalInstallments: r?.totalInstallments,
         lifetime: r?.lifetime ?? false,
         mode: r?.mode ?? ctx.mode,
+        employeeId: r?.employeeId,
       } satisfies Draft;
     },
 
@@ -765,6 +766,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         dayOfMonth: draft.dayOfMonth as number | undefined,
         startDate: (draft.startDate as string) || todayStrBR(),
         source: "whatsapp",
+        employeeId: draft.employeeId as string | undefined,
       });
       return replyRecurringCreated(rec, ctx.user.locale);
     },

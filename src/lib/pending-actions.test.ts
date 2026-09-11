@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseFinanceChoiceMulti, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
+import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseFinanceChoiceMulti, parseFinanceEmployeeChoice, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
 
 describe("parseYesNo", () => {
   it("recognizes affirmative answers", () => {
@@ -16,6 +16,24 @@ describe("parseYesNo", () => {
 
   it("returns null for unrelated text", () => {
     expect(parseYesNo("quanto gastei esse mês")).toBeNull();
+  });
+});
+
+describe("parseFinanceEmployeeChoice", () => {
+  const employees = [
+    { id: "rafael", name: "Rafael Lima", role: "Vendedor" },
+    { id: "luana", name: "Luana", role: "Atendente" },
+  ];
+
+  it.each([
+    ["1", 0], ["Rafael", 0], ["Luana", 1], ["2", 1],
+    ["3", "none"], ["sem funcionário", "none"], ["sin empleado", "none"], ["excluir", "none"],
+  ] as const)("understands %s", (answer, expected) => {
+    expect(parseFinanceEmployeeChoice(answer, employees)).toBe(expected);
+  });
+
+  it("rejects an unrelated answer", () => {
+    expect(parseFinanceEmployeeChoice("amanhã", employees)).toBeNull();
   });
 });
 

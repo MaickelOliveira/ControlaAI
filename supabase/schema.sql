@@ -242,6 +242,13 @@ create table if not exists employees (
 );
 create index if not exists employees_user_idx on employees(user_id);
 
+-- Um pagamento de funcionário continua sendo um lançamento financeiro único.
+-- O vínculo permite exibi-lo também na ficha do colaborador sem duplicar dados.
+alter table finances add column if not exists employee_id uuid references employees(id) on delete set null;
+create index if not exists finances_employee_idx on finances(employee_id);
+alter table recurring_transactions add column if not exists employee_id uuid references employees(id) on delete set null;
+create index if not exists recurring_employee_idx on recurring_transactions(employee_id);
+
 create table if not exists customers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,

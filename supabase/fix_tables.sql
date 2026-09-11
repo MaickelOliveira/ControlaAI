@@ -36,6 +36,11 @@ create table employees (
 );
 create index employees_user_idx on employees(user_id);
 
+alter table finances add column if not exists employee_id uuid references employees(id) on delete set null;
+create index if not exists finances_employee_idx on finances(employee_id);
+alter table recurring_transactions add column if not exists employee_id uuid references employees(id) on delete set null;
+create index if not exists recurring_employee_idx on recurring_transactions(employee_id);
+
 drop table if exists meets cascade;
 create table meets (
   id uuid primary key default gen_random_uuid(),

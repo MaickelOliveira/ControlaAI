@@ -248,6 +248,35 @@ export type PendingEmployeePaymentSelect = {
   expiresAt: string;
 };
 
+/** Escolha de funcionário para um lançamento comum da categoria Funcionários.
+ * Em resume_ai, a despesa ainda não foi gravada; em edit_finances, os IDs já
+ * existem e só falta trocar/remover o vínculo. */
+export type PendingFinanceEmployeeSelect = {
+  type: "finance_employee_select";
+  phone: string;
+  userId: string;
+  mode: string;
+  action: "resume_ai" | "edit_finances";
+  ai?: AIResult;
+  originalText?: string;
+  financeIds?: string[];
+  employees: Array<{ id: string; name: string; role: string }>;
+  expiresAt: string;
+};
+
+/** Um comando de correção citou alguém ainda não cadastrado. Coleta o único
+ * campo obrigatório restante (salário), cria o funcionário e conclui o vínculo
+ * com os lançamentos que motivaram a pergunta. */
+export type PendingFinanceEmployeeCreate = {
+  type: "finance_employee_create";
+  phone: string;
+  userId: string;
+  mode: string;
+  employeeName: string;
+  financeIds: string[];
+  expiresAt: string;
+};
+
 /** Pergunta qual conta/cartão o usuário quis dizer quando o nome citado
  *  (accountHint/keyword) bate em mais de uma conta cadastrada — mesmo padrão
  *  de PendingVehicleSelection/PendingAppointmentSelection. "action" decide o
@@ -264,7 +293,21 @@ export type PendingAccountSelection = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingAccountSelection | PendingClearHistory;
+/** Depois de cadastrar uma nova conta, confirma se a conta padrão atual deve
+ * ser mantida ou se a nova deve assumir como padrão. */
+export type PendingAccountDefaultConfirm = {
+  type: "account_default_confirm";
+  phone: string;
+  userId: string;
+  mode: string;
+  currentAccountId: string;
+  currentAccountName: string;
+  newAccountId: string;
+  newAccountName: string;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountDefaultConfirm | PendingClearHistory;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -291,7 +334,10 @@ type PendingActionInput =
   | Omit<PendingSlotFill, "phone" | "expiresAt">
   | Omit<PendingActionContinuation, "phone" | "expiresAt">
   | Omit<PendingEmployeePaymentSelect, "phone" | "expiresAt">
+  | Omit<PendingFinanceEmployeeSelect, "phone" | "expiresAt">
+  | Omit<PendingFinanceEmployeeCreate, "phone" | "expiresAt">
   | Omit<PendingAccountSelection, "phone" | "expiresAt">
+  | Omit<PendingAccountDefaultConfirm, "phone" | "expiresAt">
   | Omit<PendingClearHistory, "phone" | "expiresAt">;
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
@@ -372,6 +418,36 @@ export function parseAccountChoice(
   accounts: Array<{ id: string; name: string; type: string }>
 ): number {
   return choiceIndexByLabels(text, accounts, a => [a.name]);
+}
+
+export function parseAccountDefaultChoice(
+  text: string,
+  currentAccountName: string,
+  newAccountName: string,
+): "keep" | "change" | null {
+  const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
+  const answer = normalize(text);
+  const current = normalize(currentAccountName);
+  const next = normalize(newAccountName);
+
+  if (answer === current || /^(?:1|manter|mantem|mantenha|continua|continuar|deixa|deixar|atual|keep|mantener|mantenga|dejar|no|nao)$/.test(answer)) return "keep";
+  if (answer === next || /^(?:2|mudar|muda|trocar|troca|alterar|altera|essa|esta|nova|sim|change|cambiar|cambia|esta|nueva|si)$/.test(answer)) return "change";
+  return null;
+}
+
+/** Escolha de funcionário com uma opção virtual adicional: "sem
+ * funcionário". Retorna o índice real, "none", ou null quando não reconhece. */
+export function parseFinanceEmployeeChoice(
+  text: string,
+  employees: Array<{ id: string; name: string; role: string }>,
+): number | "none" | null {
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
+  if (Number(normalized) === employees.length + 1
+    || /^(?:sem|nenhum|nenhuma|sem funcionario|sem colaborador|nao selecionar|remover|excluir|desvincular|sin empleado|ninguno|ninguna|sin seleccionar|quitar|eliminar|desvincular)$/.test(normalized)) {
+    return "none";
+  }
+  const choice = choiceIndexByLabels(text, employees, employee => [employee.name]);
+  return choice >= 0 ? choice : null;
 }
 
 /** Interpreta a resposta do usuário como escolha de lançamento financeiro.
