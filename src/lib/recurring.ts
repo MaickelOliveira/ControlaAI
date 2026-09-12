@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
-import { addFinance } from "./finances";
+import { addFinance, deleteFinance } from "./finances";
 
 const TZ = "America/Sao_Paulo";
 
@@ -56,6 +56,83 @@ function fromRow(r: Row): RecurringTransaction {
 
 function todaySP(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+}
+
+function normalizeMatchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+const MATCH_STOP_WORDS = new Set([
+  "a", "as", "o", "os", "de", "da", "das", "do", "dos", "e", "em", "no", "na", "nos", "nas",
+  "el", "la", "los", "las", "del", "en", "y", "uma", "um", "un", "una",
+  "ja", "ya", "paguei", "pagamos", "pagou", "pago", "paga", "recebi", "recebemos", "recebido", "recebida",
+  "quitei", "quitado", "quitada", "cobrei", "cobramos", "recibi", "recibimos",
+  "conta", "cuenta", "pagamento", "pago", "recebimento", "cobro",
+]);
+
+function descriptionMatchScore(keyword: string, description: string): number {
+  const normalizedKeyword = normalizeMatchText(keyword);
+  const normalizedDescription = normalizeMatchText(description);
+  if (!normalizedKeyword || !normalizedDescription) return 0;
+  if (normalizedKeyword === normalizedDescription) return 3;
+
+  const shortestLength = Math.min(normalizedKeyword.length, normalizedDescription.length);
+  if (shortestLength >= 3 && (
+    normalizedKeyword.includes(normalizedDescription)
+    || normalizedDescription.includes(normalizedKeyword)
+  )) return 2;
+
+  const keywordTerms = normalizedKeyword.split(" ").filter(term => term.length >= 3 && !MATCH_STOP_WORDS.has(term));
+  const descriptionTerms = normalizedDescription.split(" ").filter(term => term.length >= 3 && !MATCH_STOP_WORDS.has(term));
+  if (!keywordTerms.length || !descriptionTerms.length) return 0;
+  const commonTerms = keywordTerms.filter(term => descriptionTerms.includes(term));
+  return commonTerms.length >= Math.min(keywordTerms.length, descriptionTerms.length) ? 1 : 0;
+}
+
+export function descriptionsLikelyMatch(keyword: string, description: string): boolean {
+  return descriptionMatchScore(keyword, description) > 0;
+}
+
+export type DueRecurringMatchOptions = {
+  keyword: string;
+  today?: string;
+  mode?: RecurringTransaction["mode"];
+  type?: RecurringTransaction["type"];
+  amount?: number;
+};
+
+/**
+ * Encontra a ocorrência vencida citada numa mensagem como "paguei o aluguel".
+ * Só devolve o melhor nível de correspondência; empates são mantidos para que
+ * o chamador peça esclarecimento em vez de baixar a conta errada.
+ */
+export function matchDueRecurringTransactions(
+  recurrings: RecurringTransaction[],
+  options: DueRecurringMatchOptions,
+): RecurringTransaction[] {
+  const today = options.today ?? todaySP();
+  const eligible = recurrings.filter(recurring => {
+    if (recurring.status !== "active" || recurring.nextDueDate > today) return false;
+    if (options.mode && recurring.mode !== options.mode) return false;
+    if (options.type && recurring.type !== options.type) return false;
+    if (options.amount !== undefined && Number.isFinite(options.amount)
+      && Math.abs(recurring.amount - options.amount) > 0.005) return false;
+    return true;
+  });
+
+  const ranked = eligible
+    .map(recurring => ({ recurring, score: descriptionMatchScore(options.keyword, recurring.description) }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (!ranked.length) return [];
+  const bestScore = ranked[0].score;
+  return ranked.filter(item => item.score === bestScore).map(item => item.recurring);
 }
 
 function calcNextDueDate(from: string, repeatUnit: RecurringTransaction["repeatUnit"], dayOfMonth?: number): string {
@@ -119,10 +196,33 @@ export async function getRecurringDueToday(): Promise<RecurringTransaction[]> {
   return (data as Row[]).map(fromRow).filter(r => r.lastNotifiedDate !== today);
 }
 
-export async function confirmRecurring(id: string, userId: string): Promise<{ updated: RecurringTransaction; finance: Awaited<ReturnType<typeof addFinance>> } | null> {
+export async function findDueRecurringMatches(
+  userId: string,
+  options: DueRecurringMatchOptions,
+): Promise<RecurringTransaction[]> {
+  const today = options.today ?? todaySP();
+  let query = getSupabase()
+    .from("recurring_transactions")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .lte("next_due_date", today);
+  if (options.mode) query = query.eq("mode", options.mode);
+  if (options.type) query = query.eq("type", options.type);
+  const { data, error } = await query;
+  if (error || !data) return [];
+  return matchDueRecurringTransactions((data as Row[]).map(fromRow), { ...options, today });
+}
+
+export async function confirmRecurring(
+  id: string,
+  userId: string,
+  expectedDueDate?: string,
+): Promise<{ updated: RecurringTransaction; finance: Awaited<ReturnType<typeof addFinance>> } | null> {
   const { data: current, error: readError } = await getSupabase().from("recurring_transactions").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
   if (readError || !current) return null;
   const rec = fromRow(current as Row);
+  if (rec.status !== "active" || (expectedDueDate && rec.nextDueDate !== expectedDueDate)) return null;
 
   const today = todaySP();
   const installmentLabel = rec.recurrenceType === "installment"
@@ -152,8 +252,22 @@ export async function confirmRecurring(id: string, userId: string): Promise<{ up
     rowPatch.last_notified_date = null;
   }
 
-  const { data: updated, error } = await getSupabase().from("recurring_transactions").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
-  if (error || !updated) return null;
+  const { data: updated, error } = await getSupabase()
+    .from("recurring_transactions")
+    .update(rowPatch)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .eq("next_due_date", rec.nextDueDate)
+    .eq("paid_installments", rec.paidInstallments)
+    .select("*")
+    .maybeSingle();
+  if (error || !updated) {
+    // Outra confirmação venceu a corrida depois da leitura. Remove apenas o
+    // lançamento que esta tentativa acabou de criar, sem tocar no vencedor.
+    await deleteFinance(finance.id, userId);
+    return null;
+  }
   return { updated: fromRow(updated as Row), finance };
 }
 

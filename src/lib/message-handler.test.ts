@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { accountSelectionMessage, buildFirstUseGuideMessages, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
+import { accountSelectionMessage, buildFirstUseGuideMessages, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
@@ -68,6 +68,38 @@ describe("finance mode changes", () => {
       date: "2026-09-07", category: "Moradia", mode: "personal",
     }));
     expect(parseFinanceChoiceMulti("2 e 3 do dia 07/09/2026", candidates)).toEqual([1, 2]);
+  });
+});
+
+describe("settled recurring detection", () => {
+  it.each([
+    "Já paguei o aluguel",
+    "Paguei o aluguel hoje",
+    "O aluguel ficou pago",
+    "Recebi a mensalidade",
+    "Ya pagué el alquiler",
+  ])("recognizes completed money movement: %s", message => {
+    expect(hasSettledFinanceSignal(message)).toBe(true);
+  });
+
+  it.each([
+    "Vou pagar o aluguel amanhã",
+    "Cadastre o aluguel do mês que vem",
+    "Quanto falta para pagar?",
+    "Ainda não paguei o aluguel",
+    "Ela não pagou o aluguel",
+  ])("does not treat a future statement as settled: %s", message => {
+    expect(hasSettledFinanceSignal(message)).toBe(false);
+  });
+
+  it.each([
+    ["Já paguei o aluguel", "expense", "aluguel"],
+    ["Paguei R$ 1.500 do aluguel hoje", "expense", "aluguel"],
+    ["O aluguel ficou pago", "expense", "aluguel"],
+    ["Recebi a mensalidade que estava pendente", "income", "mensalidade"],
+    ["Ya pagué el alquiler", "expense", "alquiler"],
+  ] as const)("extracts a recurring reference from: %s", (message, type, keyword) => {
+    expect(getSettledFinanceReference(message)).toEqual({ type, keyword });
   });
 });
 

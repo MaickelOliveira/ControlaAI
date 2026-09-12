@@ -28,7 +28,7 @@ import {
   isClearlyNewActionDuringContinuation,
   mergeActionContinuation,
 } from "@/lib/action-completion";
-import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription } from "@/lib/recurring";
+import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription, findDueRecurringMatches, descriptionsLikelyMatch, type RecurringTransaction } from "@/lib/recurring";
 import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
@@ -113,6 +113,78 @@ async function getUserByWppPhone(phone: string) {
 function cap(s: string): string {
   if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Indica que a mensagem descreve dinheiro já movimentado. Usado somente
+ * para procurar uma recorrência vencida antes de criar um lançamento novo. */
+export function hasSettledFinanceSignal(text: string): boolean {
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const completedVerb = "(?:paguei|pagamos|pagou|pagaram|quitei|quitamos|quitou|quitaram|recebi|recebemos|recebeu|receberam|cobrei|cobramos|recibi|recibimos|pague|cobre)";
+  if (new RegExp(`\\b(?:nao|nunca)\\b[\\s\\S]{0,20}\\b${completedVerb}\\b`).test(normalized)) return false;
+  return /\b(?:paguei|pagamos|pagou|pagaram|quitei|quitamos|quitou|quitaram|recebi|recebemos|recebeu|receberam|cobrei|cobramos|recibi|recibimos|pague|pagamos|cobre|cobramos)\b/.test(normalized)
+    || /\b(?:foi|esta|ficou)\s+(?:pago|paga|quitado|quitada|recebido|recebida)\b/.test(normalized);
+}
+
+export type SettledFinanceReference = {
+  keyword: string;
+  type: "income" | "expense";
+};
+
+/** Extrai o nome sem depender do classificador externo. Isso permite baixar
+ * "já paguei o aluguel" mesmo quando a mensagem não informa o valor. */
+export function getSettledFinanceReference(text: string): SettledFinanceReference | null {
+  if (!hasSettledFinanceSignal(text)) return null;
+  const question = text.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/^(?:quem|quando|como|qual|porque|por que|sera que|quien|cuando|como|cual|por que)\b/.test(question)) return null;
+
+  const active = text.match(/\b(?:j[aá]\s+|ya\s+)?(paguei|pagamos|pagou|pagaram|quitei|quitamos|quitou|quitaram|recebi|recebemos|recebeu|receberam|cobrei|cobramos|recib[ií]|recibimos|pagu[eé]|cobr[eé])\s+(.+?)\s*[.!?]*$/iu);
+  let action = active?.[1] ?? "";
+  let keyword = active?.[2] ?? "";
+
+  if (!keyword) {
+    const passive = text.match(/^\s*(.+?)\s+(?:j[aá]\s+|ya\s+)?(?:foi|ficou|est[aá])\s+(pago|paga|quitado|quitada|recebido|recebida)\b/iu);
+    keyword = passive?.[1] ?? "";
+    action = passive?.[2] ?? "";
+  }
+  if (!keyword) return null;
+
+  keyword = keyword
+    .replace(/^\s*(?:r?\$|€)?\s*[\d.,]+\s*(?:reais?|euros?|d[oó]lares?)?\s*/iu, "")
+    .replace(/^\s*(?:o|a|os|as|el|la|los|las|um|uma|un|una|d[oa]|del)\s+/iu, "")
+    .replace(/\s+(?:que\s+)?(?:estava|estaba)\s+(?:pendente|pendiente|agendad[oa]|programad[oa]).*$/iu, "")
+    .replace(/\s+\b(?:hoje|ontem|hoy|ayer)\b.*$/iu, "")
+    .trim();
+  if (!keyword) return null;
+
+  const normalizedAction = action.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const type = /^(?:receb|recebido|recebida|cobr|recib)/.test(normalizedAction) ? "income" : "expense";
+  return { keyword, type };
+}
+
+async function askWhichRecurringWasSettled(
+  from: string,
+  userId: string,
+  matches: RecurringTransaction[],
+  locale?: string,
+): Promise<void> {
+  await setPendingAction(from, {
+    type: "recurring_selection",
+    userId,
+    candidates: matches.map(item => ({
+      id: item.id,
+      description: item.description,
+      amount: item.amount,
+      dueDate: item.nextDueDate,
+      mode: item.mode,
+    })),
+  });
+  const list = matches.map((item, index) =>
+    `${listNumberLabel(index)} *${item.description}* — ${formatCurrency(item.amount)} · ${item.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`
+  ).join("\n");
+  await wppSend(from, localized(locale,
+    `Encontrei mais de uma conta vencida com esse nome:\n\n${list}\n\nQual delas foi paga? Responda com o número ou o nome.`,
+    `Encontré más de un movimiento vencido con ese nombre:\n\n${list}\n\n¿Cuál se pagó? Responde con el número o el nombre.`,
+  ));
 }
 
 /** Keycap emoji só existe para um algarismo. Em 10️⃣ o WhatsApp renderiza
@@ -1791,14 +1863,44 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
+    // ── Escolha entre recorrentes vencidos com descrições parecidas ──
+    if (pending?.type === "recurring_selection" && pending.userId === user.id) {
+      const selectedIndex = choiceIndexByLabels(messageText, pending.candidates, item => [item.description]);
+      if (selectedIndex < 0) {
+        await wppSend(from, localized(user.locale,
+          "Não consegui identificar qual conta. Responda apenas com o número ou o nome mostrado na lista.",
+          "No pude identificar cuál movimiento. Responde solo con el número o el nombre de la lista.",
+        ));
+        return;
+      }
+      await clearPendingAction(from);
+      const selected = pending.candidates[selectedIndex];
+      const result = await confirmRecurring(selected.id, user.id, selected.dueDate);
+      if (result) {
+        await setLastFinanceBatch(from, [{
+          id: result.finance.id,
+          description: result.finance.description,
+          amount: result.finance.amount,
+          type: result.finance.type,
+        }], result.finance.mode);
+        await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
+      } else {
+        await wppSend(from, localized(user.locale,
+          "Essa ocorrência já foi confirmada ou alterada. Nenhum pagamento foi duplicado.",
+          "Ese vencimiento ya fue confirmado o modificado. No se duplicó ningún pago.",
+        ));
+      }
+      return;
+    }
+
     // ── Confirmação de recorrente/parcela (resposta ao lembrete das 20h) ──
     if (pending?.type === "recurring_confirmation" && pending.userId === user.id) {
       const lower = messageText.toLowerCase().trim();
-      const isYes = /^(sim|s|foi|paguei|recebi|yes|pago|recebido|ok)\b/.test(lower);
+      const isYes = /^(sim|s|foi|j[aá]\s+(?:paguei|recebi)|paguei|recebi|yes|pago|recebido|ok)\b/.test(lower);
       const isNo  = /^(n(ão|ao)?|ainda não|ainda nao|não paguei|nao paguei|nao|não)\b/.test(lower);
       if (isYes) {
         await clearPendingAction(from);
-        const result = await confirmRecurring(pending.recurringId, user.id);
+        const result = await confirmRecurring(pending.recurringId, user.id, pending.dueDate);
         if (result) {
           await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
         } else await wppSend(from, localized(user.locale, "❌ Não consegui confirmar esse pagamento agora. Nada foi alterado; tente novamente.", "❌ No pude confirmar este pago. No se modificó nada; inténtalo de nuevo."));
@@ -1894,6 +1996,50 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
     }
     console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
+
+    // "Paguei o aluguel" costuma chegar como um novo lançamento financeiro,
+    // mas pode ser a baixa de uma recorrência que vence hoje. Fazemos essa
+    // conciliação antes de pedir valor/conta e só agimos com correspondência
+    // única, vencida, do mesmo tipo e modo. Sem correspondência, o cadastro
+    // normal segue inalterado.
+    const settledReference = getSettledFinanceReference(messageText);
+    if (settledReference && ai.intent !== "finance_confirm_pending") {
+      const settlementItems = ai.finances?.length ? ai.finances : ai.finance ? [ai.finance] : [];
+      if (settlementItems.length <= 1) {
+        const settlement = settlementItems[0];
+        const keyword = settlement?.description?.trim() || settledReference.keyword;
+        const settlementMode = (settlement?.mode || ai.mode || mode) as "personal" | "business";
+        const matches = await findDueRecurringMatches(user.id, {
+          keyword,
+          mode: settlementMode,
+          type: settlement?.type || settledReference.type,
+          amount: settlement?.amount && settlement.amount > 0 ? settlement.amount : undefined,
+          today: todayStrBR(),
+        });
+        if (matches.length > 1) {
+          await askWhichRecurringWasSettled(from, user.id, matches, user.locale);
+          return;
+        }
+        if (matches.length === 1) {
+          const result = await confirmRecurring(matches[0].id, user.id, matches[0].nextDueDate);
+          if (result) {
+            await setLastFinanceBatch(from, [{
+              id: result.finance.id,
+              description: result.finance.description,
+              amount: result.finance.amount,
+              type: result.finance.type,
+            }], result.finance.mode);
+            await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
+          } else {
+            await wppSend(from, localized(user.locale,
+              "Essa ocorrência já foi confirmada ou alterada. Nenhum pagamento foi duplicado.",
+              "Ese vencimiento ya fue confirmado o modificado. No se duplicó ningún pago.",
+            ));
+          }
+          return;
+        }
+      }
+    }
 
     // A Agenda usa sempre seus dois avisos automáticos (2h e 15min). Pedidos
     // de antecedência para lembretes COMUNS continuam no intent reminder_set
@@ -2553,18 +2699,68 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "finance_confirm_pending": {
         const pendKeyword = ai.keyword || "";
-        if (!pendKeyword) { await wppSend(from, "❓ Qual lançamento agendado deseja confirmar?"); break; }
-        const lower = pendKeyword.toLowerCase();
-        const pendingItems = (await getPendingFinances(user.id)).filter(f => f.description.toLowerCase().includes(lower));
+        if (!pendKeyword) {
+          await wppSend(from, localized(user.locale, "❓ Qual lançamento agendado deseja confirmar?", "❓ ¿Qué movimiento programado quieres confirmar?"));
+          break;
+        }
+
+        const requestedMode = phoneAccess === "both"
+          ? ai.mode as "personal" | "business" | undefined
+          : mode;
+        const [allPendingItems, dueRecurringItems] = await Promise.all([
+          getPendingFinances(user.id, requestedMode),
+          findDueRecurringMatches(user.id, {
+            keyword: pendKeyword,
+            mode: requestedMode,
+            type: ai.financeType,
+            today: todayStrBR(),
+          }),
+        ]);
+        const pendingItems = allPendingItems.filter(item =>
+          (!ai.financeType || item.type === ai.financeType)
+          && descriptionsLikelyMatch(pendKeyword, item.description)
+        );
+
+        // A ocorrência recorrente vencida vem primeiro porque é ela que gera
+        // a pergunta das 20h. Confirmá-la já cria o lançamento financeiro e
+        // avança o próximo vencimento.
+        if (dueRecurringItems.length > 1) {
+          await askWhichRecurringWasSettled(from, user.id, dueRecurringItems, user.locale);
+          break;
+        }
+        if (dueRecurringItems.length === 1) {
+          const recurringTarget = dueRecurringItems[0];
+          const result = await confirmRecurring(recurringTarget.id, user.id, recurringTarget.nextDueDate);
+          if (result) {
+            await setLastFinanceBatch(from, [{
+              id: result.finance.id,
+              description: result.finance.description,
+              amount: result.finance.amount,
+              type: result.finance.type,
+            }], result.finance.mode);
+            await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
+          } else {
+            await wppSend(from, localized(user.locale,
+              "Essa ocorrência já foi confirmada ou alterada. Nenhum pagamento foi duplicado.",
+              "Ese vencimiento ya fue confirmado o modificado. No se duplicó ningún pago.",
+            ));
+          }
+          break;
+        }
+
         if (!pendingItems.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento agendado com *"${pendKeyword}"*.`);
+          await wppSend(from, localized(user.locale,
+            `❓ Não encontrei nenhum lançamento agendado ou recorrente vencido com *"${pendKeyword}"*.`,
+            `❓ No encontré ningún movimiento programado o recurrente vencido con *"${pendKeyword}"*.`));
           break;
         }
         const target = pendingItems[0];
         const confirmed = await updateFinance(target.id, user.id, { status: "posted" });
         if (confirmed) {
           const bal = await getBalance(user.id, confirmed.mode, year, month);
-          await wppSend(from, `✅ Confirmado antes da data.\n\n📝 ${confirmed.description}\n💰 ${formatCurrency(confirmed.amount)}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`);
+          await wppSend(from, localized(user.locale,
+            `✅ Confirmado antes da data.\n\n📝 ${confirmed.description}\n💰 ${formatCurrency(confirmed.amount)}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`,
+            `✅ Confirmado antes de la fecha.\n\n📝 ${confirmed.description}\n💰 ${formatCurrency(confirmed.amount)}\n\n📊 Saldo: ${formatCurrency(bal.balance)}`));
         }
         break;
       }

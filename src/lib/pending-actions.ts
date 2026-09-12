@@ -44,10 +44,26 @@ export type PendingRecurringConfirmation = {
   phone: string;
   userId: string;
   recurringId: string;
+  /** Evita confirmar duas vezes caso outra pessoa já tenha baixado a mesma ocorrência. */
+  dueDate?: string;
   description: string;
   amount: number;
   installmentNumber?: number;
   totalInstallments?: number;
+  expiresAt: string;
+};
+
+export type PendingRecurringSelection = {
+  type: "recurring_selection";
+  phone: string;
+  userId: string;
+  candidates: Array<{
+    id: string;
+    description: string;
+    amount: number;
+    dueDate: string;
+    mode: "personal" | "business";
+  }>;
   expiresAt: string;
 };
 
@@ -321,7 +337,7 @@ export type PendingAccountDefaultConfirm = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountDefaultConfirm | PendingClearHistory;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountDefaultConfirm | PendingClearHistory;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -337,6 +353,7 @@ type PendingActionInput =
   | Omit<PendingGoalSelection, "phone" | "expiresAt">
   | Omit<PendingAppointmentSelection, "phone" | "expiresAt">
   | Omit<PendingRecurringConfirmation, "phone" | "expiresAt">
+  | Omit<PendingRecurringSelection, "phone" | "expiresAt">
   | Omit<PendingMeetAta, "phone" | "expiresAt">
   | Omit<PendingMeetConfirm, "phone" | "expiresAt">
   | Omit<PendingFinanceSelect, "phone" | "expiresAt">

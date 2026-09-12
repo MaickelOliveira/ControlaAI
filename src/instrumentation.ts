@@ -97,7 +97,7 @@ export async function register() {
           const financesModule = await import("./lib/finances").catch(() => null);
           if (!recurringModule || !usersModule || !phoneLinksModule || !pendingModule || !repliesModule || !financesModule) return;
 
-          const { getRecurringDueToday, markNotified } = recurringModule;
+          const { getRecurringDueToday, getRecurringById, markNotified } = recurringModule;
           const { getUserById } = usersModule;
           const { getPhonesForUser } = phoneLinksModule;
           const { setPendingAction } = pendingModule;
@@ -107,8 +107,16 @@ export async function register() {
           const dueToday = await getRecurringDueToday();
           if (dueToday.length > 0) console.log(`[cron] ${dueToday.length} recorrente(s) a notificar`);
 
-          for (const rec of dueToday) {
+          for (const queuedRec of dueToday) {
             try {
+              // A cliente pode confirmar pelo WhatsApp enquanto o cron está
+              // percorrendo a fila. Revalida antes do envio para não usar um
+              // registro que acabou de avançar para o próximo vencimento.
+              const rec = await getRecurringById(queuedRec.id, queuedRec.userId);
+              if (!rec
+                || rec.status !== "active"
+                || rec.nextDueDate !== queuedRec.nextDueDate
+                || rec.paidInstallments !== queuedRec.paidInstallments) continue;
               const user = await getUserById(rec.userId);
               if (!user || !usersModule.hasAccess(user)) continue;
               const phones = (await getPhonesForUser(user.id)).map(link => link.phone);
@@ -123,6 +131,7 @@ export async function register() {
                     type: "recurring_confirmation",
                     userId: rec.userId,
                     recurringId: rec.id,
+                    dueDate: rec.nextDueDate,
                     description: rec.description,
                     amount: rec.amount,
                     installmentNumber: rec.recurrenceType === "installment" ? rec.paidInstallments + 1 : undefined,
