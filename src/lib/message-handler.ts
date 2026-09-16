@@ -19,7 +19,7 @@ import {
 } from "@/lib/grocery";
 import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
@@ -1178,47 +1178,35 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         pending.newAccountName,
       );
       if (!choice) {
-        await setPendingAction(from, {
-          type: "account_default_confirm",
-          userId: user.id,
-          mode: pending.mode,
-          currentAccountId: pending.currentAccountId,
-          currentAccountName: pending.currentAccountName,
-          newAccountId: pending.newAccountId,
-          newAccountName: pending.newAccountName,
-        });
-        await wppSend(from, accountDefaultConfirmationMessage(
-          pending.currentAccountName,
-          pending.newAccountName,
-          user.locale,
-        ));
+        await clearPendingAction(from);
+        // Não é uma das opções oferecidas: abandona a pergunta antiga e deixa
+        // a mensagem atual seguir como um novo comando.
+      } else {
+        await clearPendingAction(from);
+        if (choice === "keep") {
+          await wppSend(from, localized(user.locale,
+            `✅ Combinado. *${pending.currentAccountName}* continua como conta padrão.`,
+            `✅ De acuerdo. *${pending.currentAccountName}* sigue siendo la cuenta predeterminada.`,
+          ));
+          return;
+        }
+
+        const changed = await setDefaultAccount(
+          user.id,
+          pending.mode as FinanceMode,
+          pending.newAccountId,
+        );
+        await wppSend(from, changed
+          ? localized(user.locale,
+            `⭐ *${pending.newAccountName}* agora é a conta padrão.`,
+            `⭐ *${pending.newAccountName}* ahora es la cuenta predeterminada.`,
+          )
+          : localized(user.locale,
+            "❌ A conta foi cadastrada, mas não consegui defini-la como padrão agora.",
+            "❌ La cuenta fue registrada, pero no pude establecerla como predeterminada ahora.",
+          ));
         return;
       }
-
-      await clearPendingAction(from);
-      if (choice === "keep") {
-        await wppSend(from, localized(user.locale,
-          `✅ Combinado. *${pending.currentAccountName}* continua como conta padrão.`,
-          `✅ De acuerdo. *${pending.currentAccountName}* sigue siendo la cuenta predeterminada.`,
-        ));
-        return;
-      }
-
-      const changed = await setDefaultAccount(
-        user.id,
-        pending.mode as FinanceMode,
-        pending.newAccountId,
-      );
-      await wppSend(from, changed
-        ? localized(user.locale,
-          `⭐ *${pending.newAccountName}* agora é a conta padrão.`,
-          `⭐ *${pending.newAccountName}* ahora es la cuenta predeterminada.`,
-        )
-        : localized(user.locale,
-          "❌ A conta foi cadastrada, mas não consegui defini-la como padrão agora.",
-          "❌ La cuenta fue registrada, pero no pude establecerla como predeterminada ahora.",
-        ));
-      return;
     }
 
     // ── Funcionário de um lançamento financeiro. A opção final da lista é
@@ -1376,7 +1364,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         return;
       }
-      // resposta não reconhecida como sim/não — deixa expirar e processa normalmente
+      // Outro comando substitui a pergunta antiga; não deixa uma confirmação
+      // obsoleta capturar um "sim" enviado mais tarde para outro assunto.
+      await clearPendingAction(from);
     }
 
     // ── Aguardando confirmação de importar lançamentos de uma fatura de cartão ──
@@ -1408,7 +1398,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         return;
       }
-      // resposta não reconhecida como sim/não — deixa expirar e processa normalmente
+      await clearPendingAction(from);
     }
 
     if (pending?.type === "vehicle_selection" && pending.userId === user.id) {
@@ -1630,12 +1620,16 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         await wppSend(from, user.locale === "es"
           ? `🗑️ Listo. Borré ${deleted} ${deleted === 1 ? "movimiento" : "movimientos"} del historial ${modeLabel}. Esta acción no se puede deshacer.`
           : `🗑️ Pronto. Apaguei ${deleted} lançamento${deleted === 1 ? "" : "s"} do histórico ${modeLabel}. Não tem como desfazer isso.`);
-      } else {
+        return;
+      }
+      if (parseYesNo(messageText) !== null || /^(?:cancelar|cancela|deixa pra l[áa])\b/i.test(messageText.trim())) {
         await wppSend(from, user.locale === "es"
           ? "De acuerdo, no borré nada. Si quieres intentarlo de nuevo, solo tienes que pedirlo."
           : "Ok, não apaguei nada. Se quiser tentar de novo, é só pedir.");
+        return;
       }
-      return;
+      // Texto diferente da frase de confirmação e de um cancelamento explícito
+      // é um novo comando; segue normalmente depois de abandonar a exclusão.
     }
 
     // ── Seleção de lançamento financeiro (editar/excluir com múltiplos resultados) ──
@@ -1853,14 +1847,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             ? `⚠️ Não consegui gerar a ligação do Meet em ${failedMeetLinks === 1 ? "uma reunião" : `${failedMeetLinks} reuniões`}; os compromissos ficaram criados.`
             : `⚠️ Não consegui gerar o link do Meet em ${failedMeetLinks === 1 ? "uma reunião" : `${failedMeetLinks} reuniões`}; os compromissos foram criados.`;
         await wppSend(from, [failedMeetWarning, confirmations.join("\n\n────────\n\n")].filter(Boolean).join("\n\n"));
-      } else {
-        await wppSend(from, user.locale === "es"
-          ? "Responde *Sí* para incluir el enlace de Google Meet o *No* para crear solo la cita."
-          : user.locale === "pt-PT"
-            ? "Responde *Sim* para incluir a ligação do Google Meet ou *Não* para criar apenas o compromisso."
-            : "Responda *Sim* para incluir o link do Google Meet ou *Não* para criar só o compromisso.");
+        return;
       }
-      return;
+      await clearPendingAction(from);
+      // Não respondeu sim/não: descarta a confirmação do Meet e processa o
+      // texto como um novo pedido.
     }
 
     // ── Escolha entre recorrentes vencidos com descrições parecidas ──
@@ -1895,25 +1886,23 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
     // ── Confirmação de recorrente/parcela (resposta ao lembrete das 20h) ──
     if (pending?.type === "recurring_confirmation" && pending.userId === user.id) {
-      const lower = messageText.toLowerCase().trim();
-      const isYes = /^(sim|s|foi|j[aá]\s+(?:paguei|recebi)|paguei|recebi|yes|pago|recebido|ok)\b/.test(lower);
-      const isNo  = /^(n(ão|ao)?|ainda não|ainda nao|não paguei|nao paguei|nao|não)\b/.test(lower);
-      if (isYes) {
+      const answer = parseRecurringConfirmationAnswer(messageText);
+      if (answer === true) {
         await clearPendingAction(from);
         const result = await confirmRecurring(pending.recurringId, user.id, pending.dueDate);
         if (result) {
           await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
         } else await wppSend(from, localized(user.locale, "❌ Não consegui confirmar esse pagamento agora. Nada foi alterado; tente novamente.", "❌ No pude confirmar este pago. No se modificó nada; inténtalo de nuevo."));
-      } else if (isNo) {
+        return;
+      }
+      if (answer === false) {
         await clearPendingAction(from);
         await wppSend(from, localized(user.locale, "Ok! Quando quiser marcar como pago, acesse *Recorrentes* no dashboard. 👍", "De acuerdo. Cuando quieras marcarlo como pagado, abre *Recurrentes* en el panel. 👍"));
-      } else {
-        await wppSend(from, localized(user.locale,
-          `Não entendi. Responda *sim* se ${pending.installmentNumber ? "a parcela foi paga" : "foi pago/recebido"} ou *não* para deixar pendente.`,
-          `No entendí. Responde *sí* si ${pending.installmentNumber ? "pagaste la cuota" : "ya se pagó o recibió"}, o *no* para dejarlo pendiente.`,
-        ));
+        return;
       }
-      return;
+      await clearPendingAction(from);
+      // Ex.: "Me lembre hoje às 16h...". A cobrança fica para trás e o novo
+      // comando segue para processMessage neste mesmo turno.
     }
 
     // ── Continuação de uma ação que ainda precisava de algum dado ──

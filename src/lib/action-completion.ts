@@ -232,5 +232,5 @@ export function isActionContinuationCancel(text: string): boolean {
 /** Só abandona por comandos novos muito claros; respostas como "comprar pão"
  * podem ser justamente o título/item que a pergunta anterior solicitou. */
 export function isClearlyNewActionDuringContinuation(text: string): boolean {
-  return /^(?:quanto|qual (?:[ée]|foi)|meu saldo|mi saldo|minhas tarefas|mis tareas|meus lembretes|mis recordatorios|resumo|resumen|extrato|ajuda|ayuda|help)\b/i.test(text.trim());
+  return /^(?:quanto|qual (?:[ée]|foi)|meu saldo|mi saldo|minhas tarefas|mis tareas|meus lembretes|mis recordatorios|resumo|resumen|extrato|ajuda|ayuda|help|me lembre|lembre-me|recu[eé]rdame|crie (?:um )?lembrete|crea (?:un )?recordatorio|agende|agenda|marque|programe|registre|registra|anote|adicione|agrega|exclua|apague|elimine|altere|mude|pesquise|busque|liste|mostre)\b/i.test(text.trim());
 }

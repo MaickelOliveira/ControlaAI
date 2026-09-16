@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseAccountCreateRequest, parseFinanceChoiceMulti, parseFinanceEmployeeChoice, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
+import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseAccountCreateRequest, parseFinanceChoiceMulti, parseFinanceEmployeeChoice, parseRecurringConfirmationAnswer, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
 
 describe("parseYesNo", () => {
   it("recognizes affirmative answers", () => {
@@ -16,6 +16,23 @@ describe("parseYesNo", () => {
 
   it("returns null for unrelated text", () => {
     expect(parseYesNo("quanto gastei esse mês")).toBeNull();
+  });
+});
+
+describe("parseRecurringConfirmationAnswer", () => {
+  it.each(["sim", "sí", "si", "já paguei", "recebi", "foi pago", "ok"])("confirms with %s", answer => {
+    expect(parseRecurringConfirmationAnswer(answer)).toBe(true);
+  });
+
+  it.each(["não", "no", "ainda não", "não paguei"])("keeps pending with %s", answer => {
+    expect(parseRecurringConfirmationAnswer(answer)).toBe(false);
+  });
+
+  it("abandons the old question when the person sends a new command", () => {
+    expect(parseRecurringConfirmationAnswer("Me lembre hoje às 16h de mandar dinheiro pra conta do Itaú"))
+      .toBeNull();
+    expect(parseRecurringConfirmationAnswer("Não esqueça de me lembrar da reunião amanhã"))
+      .toBeNull();
   });
 });
 

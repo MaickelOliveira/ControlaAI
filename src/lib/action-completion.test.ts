@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { buildActionContinuationMessage, getMissingActionQuestion, mergeActionContinuation } from "./action-completion";
+import { buildActionContinuationMessage, getMissingActionQuestion, isClearlyNewActionDuringContinuation, mergeActionContinuation } from "./action-completion";
 
 describe("action completion", () => {
+  it.each([
+    "Me lembre hoje às 16h de mandar dinheiro pra conta do Itaú",
+    "Agende uma reunião amanhã às 10h",
+    "Mostre meus compromissos",
+  ])("abandons the old question for the explicit new command: %s", message => {
+    expect(isClearlyNewActionDuringContinuation(message)).toBe(true);
+  });
+
   it("asks only for the missing field in Portuguese and Spanish", () => {
     expect(getMissingActionQuestion({ intent: "task_create", confidence: 0.9 }, "pt-BR"))
       .toBe("📌 Qual tarefa deseja criar?");

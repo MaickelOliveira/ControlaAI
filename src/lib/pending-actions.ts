@@ -644,6 +644,16 @@ export function parseYesNo(text: string): boolean | null {
   return null;
 }
 
+/** Interpreta a resposta ao aviso de recorrente vencida. `null` significa que
+ * a pessoa ignorou a pergunta e enviou outro comando, que deve seguir pelo
+ * fluxo normal em vez de ficar preso nesta confirmação. */
+export function parseRecurringConfirmationAnswer(text: string): boolean | null {
+  const t = text.trim().toLowerCase();
+  if (/^(?:sim|s|s[ií]|foi|j[aá]\s+(?:paguei|recebi)|paguei|recebi|yes|pago|recebido|ok)\b/.test(t)) return true;
+  if (/^(?:n|não|nao|no|ainda não|ainda nao|não paguei|nao paguei)\s*[.!?]*$/.test(t)) return false;
+  return null;
+}
+
 /** Interpreta a resposta do usuário como escolha de veículo.
  *  Aceita: "1", "2", nome do modelo, nome da marca. Retorna índice (0-based) ou -1. */
 export function parseVehicleChoice(
