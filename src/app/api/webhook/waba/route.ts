@@ -4,6 +4,7 @@ import { downloadMedia, verifyToken, verifySignature } from "@/lib/waba";
 import { transcribeAudio } from "@/lib/ai-processor";
 import { getConfig } from "@/lib/whatsapp-config";
 import { alreadyProcessed } from "@/lib/webhook-dedup";
+import { getUserIdByPhone } from "@/lib/wpp-phone-links";
 
 /** Verificação do webhook exigida pela Meta ao cadastrar a URL no Business
  *  Manager — responde o hub.challenge em texto puro (não JSON) quando o
@@ -118,7 +119,8 @@ async function processMessages(messages: WabaMessage[], contactName?: string) {
     if (msg.type === "audio" && msg.audio?.id) {
       const media = await downloadMedia(msg.audio.id);
       if (!media) continue;
-      const transcript = await transcribeAudio(media.buffer, media.mimeType).catch(() => null);
+      const userId = await getUserIdByPhone(from).catch(() => null);
+      const transcript = await transcribeAudio(media.buffer, media.mimeType, userId || undefined).catch(() => null);
       if (!transcript) continue;
       await handleIncomingMessage({ from, text: transcript, contactName });
       continue;

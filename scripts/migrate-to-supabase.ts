@@ -34,11 +34,14 @@ const DATA_DIR = path.join(process.cwd(), "data");
 
 function loadJSON<T>(file: string, fallback: T): T {
   const p = path.join(DATA_DIR, file);
+  if (p !== DATA_DIR && !p.startsWith(DATA_DIR + path.sep)) {
+    throw new Error(`[migrate] path fora de DATA_DIR: ${file}`);
+  }
   if (!existsSync(p)) return fallback;
   try {
     return JSON.parse(readFileSync(p, "utf-8"));
   } catch (e) {
-    console.error(`Erro ao ler ${file}:`, e);
+    console.error("Erro ao ler arquivo:", file, e);
     return fallback;
   }
 }

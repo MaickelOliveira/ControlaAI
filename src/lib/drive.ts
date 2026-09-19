@@ -33,6 +33,17 @@ const DRIVE_DIR = path.join(process.cwd(), "data", "drive");
 
 const DEFAULT_FOLDERS = ["Documentos", "Comprovantes", "Contratos", "Fotos", "Outros"];
 
+// Contenção defensiva: garante que o path final nunca escape de DRIVE_DIR,
+// mesmo que userId/storedName um dia deixem de vir só de sessão autenticada
+// / randomUUID().
+function safeDriveJoin(...segments: string[]): string {
+  const resolved = path.join(DRIVE_DIR, ...segments);
+  if (resolved !== DRIVE_DIR && !resolved.startsWith(DRIVE_DIR + path.sep)) {
+    throw new Error("[drive] path fora de DRIVE_DIR");
+  }
+  return resolved;
+}
+
 type FileRow = {
   id: string; user_id: string; folder_id: string | null; original_name: string; stored_name: string;
   mime_type: string; size: number; description: string | null; ai_keywords: string[]; source: "whatsapp" | "web"; created_at: string;
@@ -106,10 +117,10 @@ export async function saveFile(data: {
   const ext = path.extname(data.originalName) || "";
   const storedName = `${id}${ext}`;
 
-  const userDir = path.join(DRIVE_DIR, data.userId);
+  const userDir = safeDriveJoin(data.userId);
   if (!existsSync(userDir)) mkdirSync(userDir, { recursive: true });
 
-  writeFileSync(path.join(userDir, storedName), data.buffer);
+  writeFileSync(safeDriveJoin(data.userId, storedName), data.buffer);
 
   const row = {
     id, user_id: data.userId, folder_id: data.folderId,
@@ -130,7 +141,7 @@ export async function getFileById(id: string, userId: string): Promise<DriveFile
 }
 
 export function getFilePath(file: DriveFile): string {
-  return path.join(DRIVE_DIR, file.userId, file.storedName);
+  return safeDriveJoin(file.userId, file.storedName);
 }
 
 export async function deleteFile(id: string, userId: string): Promise<boolean> {

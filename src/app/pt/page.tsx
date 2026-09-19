@@ -204,6 +204,7 @@ function ScreenChatDemo({ messages }: { messages: Msg[] }) {
           idx++;
           setTypingInput(text.slice(0, idx));
           if (idx < text.length) {
+            // nosemgrep: rules.ajinabraham.njsscan.crypto.crypto_node.node_insecure_random_generator -- só varia a velocidade da animação de "digitando", não é usado pra token/senha/id
             at(tick, 40 + Math.random() * 35);
           } else {
             at(() => { setTypingInput(null); setShown(i + 1); at(() => step(i + 1), 500); }, 500);

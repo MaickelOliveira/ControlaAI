@@ -15,6 +15,21 @@ Para validar eventos sem contaminar os dados reais, adicione temporariamente `ME
 
 O token da Conversions API é secreto: configure-o somente no servidor/EasyPanel e nunca use o prefixo `NEXT_PUBLIC_` nele.
 
+## Teste isolado com OpenAI
+
+O Gemini continua sendo o provedor padrão. A OpenAI só é chamada para os IDs de usuário explicitamente informados em `OPENAI_TEST_USER_IDS`; se a chamada falhar, o sistema tenta o Gemini automaticamente. Configure estas variáveis somente no servidor/EasyPanel:
+
+```bash
+OPENAI_API_KEY=sk-...
+OPENAI_TEST_USER_IDS=uuid-do-usuario-de-teste
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+```
+
+Para testar mais de um usuário, separe os UUIDs por vírgula. Não use `NEXT_PUBLIC_` nessas variáveis. A chave nunca deve ser colocada no navegador, no código-fonte ou enviada pelo WhatsApp. Depois de alterar o ambiente, reinicie a aplicação.
+
+Para encerrar o teste e manter todos no Gemini, remova `OPENAI_TEST_USER_IDS` ou deixe a variável vazia. Para migrar gradualmente, adicione os UUIDs um a um; um valor curinga como `*` não é aceito.
+
 ## Getting Started
 
 First, run the development server:

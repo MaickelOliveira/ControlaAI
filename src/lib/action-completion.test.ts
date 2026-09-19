@@ -36,6 +36,9 @@ describe("action completion", () => {
     expect(getMissingActionQuestion({
       intent: "category_create", confidence: 0.9, categoryName: "Pets",
     }, "es")).toBeNull();
+    expect(getMissingActionQuestion({
+      intent: "agenda_update", confidence: 0.9, keyword: "feira", agendaData: { allDay: true },
+    }, "pt-BR")).toBeNull();
   });
 
   it("preserves the original intent and combines fields from short answers", () => {

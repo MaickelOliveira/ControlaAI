@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { getDueReminders, markReminderSent, markReminderFailed, markReminderSkippedForInactiveUser } from "@/lib/reminders";
 import { buildReminderTemplateDispatch, sendReminderTemplate } from "@/lib/whatsapp";
 import { acquireCronLock, releaseCronLock } from "@/lib/cron-lock";
@@ -11,7 +12,13 @@ function isAuthorized(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return false;
   const secret = req.nextUrl.searchParams.get("secret") || req.headers.get("x-cron-secret");
-  return secret === cronSecret;
+  if (!secret) return false;
+  // Comparação em tempo constante — timingSafeEqual exige buffers do mesmo
+  // tamanho, por isso a checagem de length antes (não vaza tempo, só barra
+  // logo o caso trivial de tamanho diferente).
+  const a = Buffer.from(secret);
+  const b = Buffer.from(cronSecret);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function GET(req: NextRequest) {

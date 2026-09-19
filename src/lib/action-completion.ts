@@ -33,7 +33,7 @@ function hasReminderChange(ai: AIResult): boolean {
 
 function hasAgendaChange(ai: AIResult): boolean {
   const agenda = ai.agendaData;
-  return !!(agenda?.title || agenda?.description || agenda?.location || agenda?.startDate || agenda?.startTime || agenda?.endDate || agenda?.endTime || agenda?.reminderMinutesBefore !== undefined);
+  return !!(agenda?.title || agenda?.description || agenda?.location || agenda?.startDate || agenda?.startTime || agenda?.endDate || agenda?.endTime || agenda?.allDay !== undefined || agenda?.reminderMinutesBefore !== undefined);
 }
 
 function hasEmployeeChange(ai: AIResult): boolean {

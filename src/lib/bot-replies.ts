@@ -28,6 +28,12 @@ function dateLocale(locale?: string): string {
 const isEs = (l?: string) => l === "es";
 const isPtPt = (l?: string) => l === "pt-PT";
 
+function appointmentDateTime(a: Appointment, locale?: string): string {
+  if (!a.allDay) return formatDateTimeBR(a.startAt);
+  const label = isEs(locale) ? "Todo el día" : "Dia inteiro";
+  return `${formatDateBR(a.startAt)} — *${label}*`;
+}
+
 export function replyFinanceRegistered(f: Finance, balance: number, locale?: string): string {
   const emoji = f.type === "income" ? "💰" : "💸";
   const tipo = f.type === "income"
@@ -928,17 +934,19 @@ export function replyDriveFileList(count: number, locale?: string): string {
 }
 
 export function replyAgendaCreated(a: Appointment, locale?: string): string {
-  const dateTime = formatDateTimeBR(a.startAt);
+  const dateTime = appointmentDateTime(a, locale);
   const locationLine = a.location ? `\n📍 ${a.location}` : "";
-  const endLine = a.endAt ? ` ${isEs(locale) ? "hasta" : "até"} ${formatDateTimeBR(a.endAt).slice(11)}` : "";
+  const endLine = !a.allDay && a.endAt ? ` ${isEs(locale) ? "hasta" : "até"} ${formatDateTimeBR(a.endAt).slice(11)}` : "";
   const syncWarning = a.googleSyncFailed
     ? isEs(locale) ? "\n\n⚠️ Se guardó en Zelo, pero no pude sincronizarlo con Google Calendar. Vuelve a conectar Google en Configuración."
       : isPtPt(locale) ? "\n\n⚠️ Foi guardado no Zelo, mas não consegui sincronizá-lo com o Google Calendar. Volta a ligar o Google nas Definições."
         : "\n\n⚠️ Foi salvo no Zelo, mas não consegui sincronizar com o Google Calendar. Reconecte o Google em Configurações."
     : "";
-  const reminderNotice = isEs(locale)
-    ? "\n\n🔔 Avisos automáticos: *2 horas antes* y *15 minutos antes*."
-    : "\n\n🔔 Avisos automáticos: *2 horas antes* e *15 minutos antes*.";
+  const reminderNotice = a.allDay
+    ? ""
+    : isEs(locale)
+      ? "\n\n🔔 Avisos automáticos: *2 horas antes* y *15 minutos antes*."
+      : "\n\n🔔 Avisos automáticos: *2 horas antes* e *15 minutos antes*.";
   if (isEs(locale)) return `Agendado en tu calendario.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${reminderNotice}${syncWarning}`;
   if (isPtPt(locale)) return `Marcado na tua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${reminderNotice}${syncWarning}`;
   return `Marcado na sua agenda.\n\n📅 *${a.title}*\n🕒 ${dateTime}${endLine}${locationLine}${reminderNotice}${syncWarning}`;
@@ -959,7 +967,7 @@ export function replyAgendaList(appointments: Appointment[], locale?: string): s
     if (!appointments.length) return `Nada agendado para los próximos días.\n\nPara agendar: _"Agendar reunión mañana a las 14"_`;
     let msg = `🗓️ *Tus próximos eventos (${appointments.length}):*\n\n`;
     appointments.slice(0, 10).forEach((a, i) => {
-      const dateTime = formatDateTimeBR(a.startAt);
+      const dateTime = appointmentDateTime(a, locale);
       const loc = a.location ? ` · ${a.location}` : "";
       msg += `${i + 1}. *${a.title}*\n   🕒 ${dateTime}${loc}\n\n`;
     });
@@ -969,7 +977,7 @@ export function replyAgendaList(appointments: Appointment[], locale?: string): s
     if (!appointments.length) return `Nada agendado para os próximos dias.\n\nPara marcar: _"Agendar reunião amanhã às 14h"_`;
     let msg = `🗓️ *Os teus próximos compromissos (${appointments.length}):*\n\n`;
     appointments.slice(0, 10).forEach((a, i) => {
-      const dateTime = formatDateTimeBR(a.startAt);
+      const dateTime = appointmentDateTime(a, locale);
       const loc = a.location ? ` · ${a.location}` : "";
       msg += `${i + 1}. *${a.title}*\n   🕒 ${dateTime}${loc}\n\n`;
     });
@@ -978,7 +986,7 @@ export function replyAgendaList(appointments: Appointment[], locale?: string): s
   if (!appointments.length) return `Nada agendado nos próximos dias.\n\nPara marcar: _"Agendar reunião amanhã às 14h"_`;
   let msg = `🗓️ *Seus próximos compromissos (${appointments.length}):*\n\n`;
   appointments.slice(0, 10).forEach((a, i) => {
-    const dateTime = formatDateTimeBR(a.startAt);
+    const dateTime = appointmentDateTime(a, locale);
     const loc = a.location ? ` · ${a.location}` : "";
     msg += `${i + 1}. *${a.title}*\n   🕒 ${dateTime}${loc}\n\n`;
   });
@@ -986,7 +994,7 @@ export function replyAgendaList(appointments: Appointment[], locale?: string): s
 }
 
 export function replyAgendaUpdated(a: Appointment, locale?: string): string {
-  const dateTime = formatDateTimeBR(a.startAt);
+  const dateTime = appointmentDateTime(a, locale);
   const locationLine = a.location ? `\n📍 ${a.location}` : "";
   const verbo = isEs(locale) ? "Actualizado." : isPtPt(locale) ? "Atualizado." : "Atualizado.";
   return `${verbo}\n\n📅 *${a.title}*\n🕒 ${dateTime}${locationLine}`;

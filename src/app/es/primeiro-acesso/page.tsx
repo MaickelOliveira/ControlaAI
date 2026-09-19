@@ -33,6 +33,7 @@ export default function FirstAccessPageEs() {
 
   async function createPassword(event: React.FormEvent) {
     event.preventDefault(); setError("");
+    // nosemgrep: rules.ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack -- confirmação de senha no client (UX), não é comparação de segredo
     if (password !== confirm) { setError("Las contraseñas no coinciden"); return; }
     setLoading(true);
     try {

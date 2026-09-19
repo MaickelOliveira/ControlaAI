@@ -4,6 +4,16 @@ import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } from "./finances";
 import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
+import { isAllDayAgendaText } from "./agenda-all-day";
+import {
+  isOpenAITestUser,
+  openAIJson,
+  openAIMediaJson,
+  openAIMediaText,
+  openAIText,
+  openAITranscribe,
+  openAIWebSearch,
+} from "./openai-provider";
 
 export type Intent =
   | "finance_register"
@@ -339,6 +349,9 @@ export type AIResult = {
  * para frases equivalentes, principalmente em espanhol. */
 export function normalizeMeetingCreation(message: string, result: AIResult): AIResult {
   if (result.intent !== "agenda_create") return result;
+  // Sem horário não existe uma reunião de Meet a criar. Mantém como evento
+  // de Agenda para que o Google Calendar receba start.date/end.date.
+  if (isAllDayAgendaText(message)) return result;
   const normalized = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   if (!/\b(?:reuniao|reunion|videoconferencia|videochamada|videollamada)\b/.test(normalized)) return result;
   const convert = (agenda: AgendaData): MeetData => ({
@@ -599,7 +612,8 @@ export function getWebSearchMissingQuestion(query: string, locale?: string): str
 }
 
 export type AiContext = {
-  user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome" | "locale">;
+  user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome" | "locale">
+    & Partial<Pick<User, "id">>;
   // Últimas mensagens da conversa (mais antiga primeiro), sem incluir a
   // mensagem atual — dá ao classificador memória de curto prazo pra
   // resolver respostas curtas que só fazem sentido junto da pergunta
@@ -2014,10 +2028,10 @@ INTENÇÕES POSSÍVEIS:
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
-- agenda_create: agendar um ou vários compromissos, consultas ou eventos que NÃO sejam reuniões. Use "agendaData" para um e "agendaItems" para vários, com título, startDate, startTime e campos opcionais em cada item.
+- agenda_create: agendar um ou vários compromissos, consultas ou eventos que NÃO sejam reuniões. Use "agendaData" para um e "agendaItems" para vários, com título, startDate, startTime e campos opcionais em cada item. Se a pessoa disser "dia todo", "dia inteiro", "todo o dia", "todo el día" ou "all day", inclua "allDay": true e NÃO inclua startTime/endTime.
 - agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
 - agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: "reunião", "consulta") — NUNCA inclua dia/data/hora no keyword, já que a busca compara com o título salvo (que não tem essas palavras) e um keyword mais longo que o título nunca bate. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
-- agenda_update: reagendar ou editar um compromisso existente — apenas data, hora ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "altera o local da reunião para Zoom"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "reagendar a reunião para segunda às 10h" extraia keyword: "reunião", NÃO "reunião para segunda") e "agendaData" com os novos valores. NÃO use para adicionar Meet link.
+- agenda_update: reagendar ou editar um compromisso existente — data, hora, dia inteiro ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "deixa a feira como dia todo", "altera o local da reunião para Zoom"). Use "keyword" com APENAS o nome/assunto do compromisso e "agendaData" com os novos valores. Para "dia todo"/"dia inteiro"/"todo el día", use "allDay": true e omita startTime/endTime. NÃO use para adicionar Meet link.
 - agenda_delete: cancelar ou excluir um compromisso ("cancelar a reunião de amanhã", "apaga o compromisso de sexta", "remove a consulta médica"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: de "apaga o compromisso de sexta" extraia keyword: "compromisso", NÃO "compromisso de sexta"; de "cancelar a reunião de amanhã" extraia "reunião", NÃO "reunião de amanhã").
 - agenda_add_meet: adicionar link do Google Meet a um compromisso já existente na agenda ("coloca meet nessa reunião", "adiciona meet no compromisso", "cria link de meet para a reunião", "coloca via meet", "quero que tenha meet", "adiciona videoconferência", "transforma em meet"). Use "keyword" com APENAS o nome/assunto do compromisso, sem dia/data/hora. NÃO confunda com meet_create (que cria reunião nova) — agenda_add_meet adiciona Meet a compromisso existente.
 - meet_create: criar qualquer reunião nova, com ou sem pedido explícito de Google Meet ("reunião amanhã às 14h", "reunión mañana a las 14", "criar meet hoje às 16h com João", "agendar videoconferência sexta às 10h com maria@email.com"). Use "meetData" com título, startDate, startTime, duration (em minutos, default 60), e attendees (lista de {name, phone?, email?}). O sistema perguntará no idioma do cliente se ele quer incluir o link do Google Meet. Uma consulta/cita ou evento comum continua sendo agenda_create.
@@ -2986,6 +3000,17 @@ OU para agendar com local ("agendar almoço sexta às 12h no Restaurante Central
   }
 }
 
+OU para compromisso de dia inteiro ("agendar Feira do Disco dia 19 de setembro, dia todo"):
+{
+  "intent": "agenda_create",
+  "confidence": 0.95,
+  "agendaData": {
+    "title": "Feira do Disco",
+    "startDate": "2026-09-19",
+    "allDay": true
+  }
+}
+
 OU para listar compromissos ("meus compromissos de hoje"):
 {
   "intent": "agenda_list",
@@ -3306,6 +3331,52 @@ export function withExplicitFinanceAccount(message: string, result: AIResult): A
   };
 }
 
+export function withExplicitAgendaAllDay(message: string, result: AIResult): AIResult {
+  if (!(["agenda_create", "agenda_update"] as Intent[]).includes(result.intent) || !isAllDayAgendaText(message)) return result;
+
+  const markAllDay = (agenda: AgendaData): AgendaData => ({
+    ...agenda,
+    startTime: undefined,
+    endTime: undefined,
+    allDay: true,
+  });
+
+  return {
+    ...result,
+    ...(!result.agendaItems?.length ? { agendaData: markAllDay(result.agendaData || {}) } : {}),
+    ...(result.agendaItems ? { agendaItems: result.agendaItems.map(markAllDay) } : {}),
+  };
+}
+
+type OpenAIAttempt<T> =
+  | { ok: true; value: T }
+  | { ok: false };
+
+async function tryOpenAIForTestUser<T>(
+  userId: string | undefined,
+  operation: string,
+  run: () => Promise<T>,
+): Promise<OpenAIAttempt<T>> {
+  if (!isOpenAITestUser(userId)) return { ok: false };
+
+  try {
+    return { ok: true, value: await run() };
+  } catch (error) {
+    console.error(`[ai-processor] OpenAI falhou em ${operation}; usando Gemini:`, String(error));
+    return { ok: false };
+  }
+}
+
+function normalizeAIResult(message: string, result: AIResult): AIResult {
+  return withExplicitAgendaAllDay(message, withExplicitFinanceAccount(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
+    message,
+    withExplicitFinanceType(
+      message,
+      withExplicitRelativePeriod(message, result),
+    ),
+  ))));
+}
+
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
   const explicitUnscheduledReminder = getExplicitUnscheduledReminderResult(message, ctx?.history);
   if (explicitUnscheduledReminder) return explicitUnscheduledReminder;
@@ -3394,6 +3465,33 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     return { intent: "how_to", confidence: 1, response: unsupportedBankConnection };
   }
 
+  const prompt = `${buildVolatileContext(ctx)}\n\nMensagem do usuário: "${message}"`;
+  const openAIAttempt = await tryOpenAIForTestUser(
+    ctx?.user.id,
+    "processMessage",
+    () => openAIJson<AIResult>({
+      prompt,
+      instructions: buildStaticInstructions(),
+      schemaName: "zelo_intent",
+      schema: {
+        type: "object",
+        required: ["intent", "confidence"],
+        properties: {
+          intent: { type: "string" },
+          confidence: { type: "number" },
+        },
+        additionalProperties: true,
+      },
+      maxOutputTokens: 4_096,
+      userId: ctx?.user.id,
+    }),
+  );
+  if (openAIAttempt.ok) {
+    const parsed = normalizeAIResult(message, openAIAttempt.value);
+    console.log(`[ai-processor] provider=openai intent=${parsed.intent} confidence=${parsed.confidence}`);
+    return parsed;
+  }
+
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
 
@@ -3416,7 +3514,6 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
       generationConfig: { temperature: 0.1 }, // classificador — não texto criativo
     });
 
-    const prompt = `${buildVolatileContext(ctx)}\n\nMensagem do usuário: "${message}"`;
     let result: GenerateContentResult | undefined;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -3433,13 +3530,7 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    const parsed = withExplicitFinanceAccount(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
-      message,
-      withExplicitFinanceType(
-        message,
-        withExplicitRelativePeriod(message, JSON.parse(text) as AIResult),
-      ),
-    )));
+    const parsed = normalizeAIResult(message, JSON.parse(text) as AIResult);
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   } catch (e) {
@@ -3469,16 +3560,13 @@ function groundedSources(result: GenerateContentResult): GroundedSource[] {
 export async function generateWebSearchResponse(
   query: string,
   locale?: string,
+  userId?: string,
 ): Promise<string> {
-  const cfg = await getConfig();
-  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   const failure = locale === "es"
     ? "No pude confirmar esa búsqueda con fuentes públicas ahora. Inténtalo de nuevo en unos minutos."
     : locale === "pt-PT"
       ? "Não consegui confirmar essa pesquisa com fontes públicas agora. Tenta novamente dentro de alguns minutos."
       : "Não consegui confirmar essa pesquisa com fontes públicas agora. Tente novamente em alguns minutos.";
-  if (!apiKey) return failure;
-
   const language = localeInstruction(locale) || "Responda sempre em português brasileiro.";
   const searchedAt = new Intl.DateTimeFormat(locale === "es" ? "es-419" : locale === "pt-PT" ? "pt-PT" : "pt-BR", {
     dateStyle: "short",
@@ -3497,6 +3585,28 @@ Você é o Zelo, assessor pessoal do usuário. Faça uma pesquisa real na intern
 
 Pesquisa solicitada: ${query}
 Consulta iniciada em ${searchedAt} (horário de Brasília).`;
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "generateWebSearchResponse",
+    async () => {
+      const result = await openAIWebSearch({ prompt, userId, maxOutputTokens: 2_048 });
+      if (!result.text || !result.sources.length) {
+        throw new Error("pesquisa OpenAI sem resposta ou sem fontes");
+      }
+      const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
+      const sourceList = result.sources
+        .slice(0, 5)
+        .map((source, index) => `${index + 1}. ${source.title}: ${source.url}`)
+        .join("\n");
+      return `${result.text}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
+    },
+  );
+  if (openAIAttempt.ok) return openAIAttempt.value;
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return failure;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -3527,19 +3637,39 @@ export async function identifyImageSubject(
   buffer: Buffer,
   mimeType: string,
   locale?: string,
+  userId?: string,
 ): Promise<string | null> {
+  const instruction = locale === "es"
+    ? "Identifica el producto u objeto principal de la imagen. Incluye marca, nombre, presentación, concentración y cantidad cuando sean visibles."
+    : "Identifique o produto ou objeto principal da imagem. Inclua marca, nome, apresentação, concentração e quantidade quando estiverem visíveis.";
+  const prompt = `${instruction}\nRetorne somente uma descrição curta e pesquisável. Se não for possível identificar com segurança, retorne exatamente: NAO_IDENTIFICADO`;
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "identifyImageSubject",
+    async () => {
+      const text = await openAIMediaText({
+        prompt,
+        buffer,
+        mimeType: mimeType || "image/jpeg",
+        userId,
+        maxOutputTokens: 300,
+      });
+      const subject = text.trim().replace(/^['"]|['"]$/g, "");
+      if (!subject || /^NAO_IDENTIFICADO$/i.test(subject)) return null;
+      return subject.slice(0, 240);
+    },
+  );
+  if (openAIAttempt.ok) return openAIAttempt.value;
+
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
 
-  const instruction = locale === "es"
-    ? "Identifica el producto u objeto principal de la imagen. Incluye marca, nombre, presentación, concentración y cantidad cuando sean visibles."
-    : "Identifique o produto ou objeto principal da imagem. Inclua marca, nome, apresentação, concentração e quantidade quando estiverem visíveis.";
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0 } });
     const result = await model.generateContent([
-      `${instruction}\nRetorne somente uma descrição curta e pesquisável. Se não for possível identificar com segurança, retorne exatamente: NAO_IDENTIFICADO`,
+      prompt,
       { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
     ]);
     const subject = result.response.text().trim().replace(/^['"]|['"]$/g, "");
@@ -3560,11 +3690,8 @@ export async function generateFallbackResponse(
   message: string,
   history: { role: "user" | "assistant"; content: string }[],
   locale?: string,
+  userId?: string,
 ): Promise<string | null> {
-  const cfg = await getConfig();
-  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return null;
-
   const historyText = history.length
     ? history.map(h => `${h.role === "user" ? "Usuário" : "Você"}: ${h.content}`).join("\n")
     : "(sem mensagens anteriores)";
@@ -3587,6 +3714,22 @@ Instruções:
 - ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Se o pedido não estiver claramente coberto pela lista ou faltar informação confirmada, diga isso com naturalidade e oriente a pessoa a entrar no painel do Zelo e abrir o *Suporte* no canto inferior direito. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
 - Existem contas manuais, mas não existe cartão de crédito nem conexão/sincronização bancária via Open Finance/Open Banking. Nunca invente integração bancária.
 - Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "generateFallbackResponse",
+    async () => {
+      const text = (await openAIText({ prompt, userId, maxOutputTokens: 500 })).trim();
+      if (!text) return null;
+      if (/\b(suporte|support|soporte)\b/i.test(text)) return text;
+      return `${text}\n\n${supportInsidePlatformLine(locale)}`;
+    },
+  );
+  if (openAIAttempt.ok) return openAIAttempt.value;
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -3611,12 +3754,9 @@ export async function generateAnalysisResponse(
     topIncomes: Array<{ category: string; amount: number }>;
     month: string;
   },
-  locale?: string
+  locale?: string,
+  userId?: string,
 ): Promise<string> {
-  const cfg = await getConfig();
-  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return "❌ IA não configurada.";
-
   const modeLabel = data.mode === "business" ? "Empresa" : "Pessoal";
   const expText = data.topExpenses.length
     ? data.topExpenses.map((e, i) => `${i + 1}. ${e.category}: R$ ${e.amount.toFixed(2)}`).join("\n")
@@ -3650,6 +3790,17 @@ Instruções:
 - Se pediu análise geral → dê uma visão personalizada do perfil financeiro com base nos dados
 - Sempre baseie a resposta nos dados reais, não em exemplos genéricos`;
 
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "generateAnalysisResponse",
+    () => openAIText({ prompt, userId, maxOutputTokens: 1_200 }),
+  );
+  if (openAIAttempt.ok) return openAIAttempt.value.trim();
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return "❌ IA não configurada.";
+
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -3676,9 +3827,44 @@ export async function categorizeDriveFile(
   originalName: string,
   defaultFolders: string[],
   captionHint?: string,
+  userId?: string,
 ): Promise<{ folder: string; keywords: string[]; suggestedName: string }> {
   const ext = (originalName.match(/\.[a-z0-9]+$/i) || [""])[0];
   const heuristicName = `${captionHint?.trim() || "Arquivo"} ${todayStrBR()}${ext}`;
+
+  const prompt = `Analise o CONTEÚDO deste arquivo (imagem ou documento) — o nome original ("${originalName}") normalmente é genérico e não ajuda, ignore-o.
+${captionHint ? `Legenda enviada pelo usuário: "${captionHint}"` : ""}
+Pastas disponíveis: ${defaultFolders.join(", ")}.
+
+Retorne APENAS JSON válido no formato:
+{"folder": "NomeDaPasta", "keywords": ["palavra1","palavra2","palavra3"], "suggestedName": "Nome curto e descritivo"}
+- folder: a pasta mais adequada para este arquivo
+- keywords: 3-5 palavras-chave em português que descrevem o conteúdo (úteis para busca futura)
+- suggestedName: nome curto (até 6 palavras) e descritivo do que É o arquivo, em português, baseado no que você vê (ex: "Contrato de aluguel assinado", "Foto da fachada da loja", "Comprovante de transferência"). NUNCA use nomes genéricos como "Arquivo" ou "Imagem" — descreva o conteúdo real. Se a imagem for ilegível/genérica demais pra descrever, use a legenda do usuário como base.
+Não use markdown.`;
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "categorizeDriveFile",
+    () => openAIMediaJson<{ folder?: string; keywords?: unknown; suggestedName?: string }>({
+      prompt,
+      buffer,
+      mimeType: mimeType || "image/jpeg",
+      filename: originalName,
+      schemaName: "drive_file_category",
+      userId,
+      maxOutputTokens: 700,
+    }),
+  );
+  if (openAIAttempt.ok) {
+    const parsed = openAIAttempt.value;
+    const aiName = String(parsed.suggestedName || "").trim();
+    return {
+      folder: parsed.folder && defaultFolders.includes(parsed.folder) ? parsed.folder : "Outros",
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords.map(String).slice(0, 5) : [],
+      suggestedName: aiName ? `${aiName}${ext}` : heuristicName,
+    };
+  }
 
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
@@ -3688,16 +3874,7 @@ export async function categorizeDriveFile(
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent([
-      `Analise o CONTEÚDO deste arquivo (imagem ou documento) — o nome original ("${originalName}") normalmente é genérico e não ajuda, ignore-o.
-${captionHint ? `Legenda enviada pelo usuário: "${captionHint}"` : ""}
-Pastas disponíveis: ${defaultFolders.join(", ")}.
-
-Retorne APENAS JSON válido no formato:
-{"folder": "NomeDaPasta", "keywords": ["palavra1","palavra2","palavra3"], "suggestedName": "Nome curto e descritivo"}
-- folder: a pasta mais adequada para este arquivo
-- keywords: 3-5 palavras-chave em português que descrevem o conteúdo (úteis para busca futura)
-- suggestedName: nome curto (até 6 palavras) e descritivo do que É o arquivo, em português, baseado no que você vê (ex: "Contrato de aluguel assinado", "Foto da fachada da loja", "Comprovante de transferência"). NUNCA use nomes genéricos como "Arquivo" ou "Imagem" — descreva o conteúdo real. Se a imagem for ilegível/genérica demais pra descrever, use a legenda do usuário como base.
-Não use markdown.`,
+      prompt,
       { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
     ]);
     const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -3715,9 +3892,22 @@ Não use markdown.`,
 
 export async function findDriveFileByAI(
   query: string,
-  files: Array<{ id: string; originalName: string; description?: string; aiKeywords?: string[] }>
+  files: Array<{ id: string; originalName: string; description?: string; aiKeywords?: string[] }>,
+  userId?: string,
 ): Promise<string | null> {
   if (!files.length) return null;
+  const fileList = files.map((f, i) => `${i + 1}. id="${f.id}" nome="${f.originalName}"${f.description ? ` desc="${f.description}"` : ""}${f.aiKeywords?.length ? ` keywords="${f.aiKeywords.join(",")}"` : ""}`).join("\n");
+  const prompt = `Busca: "${query}"\n\nArquivos disponíveis:\n${fileList}\n\nRetorne APENAS o id do arquivo mais compatível com a busca. Se nenhum arquivo for compatível, retorne "null". Retorne APENAS o id ou "null", sem mais nada.`;
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "findDriveFileByAI",
+    async () => {
+      const text = (await openAIText({ prompt, userId, maxOutputTokens: 150 })).trim().replace(/"/g, "");
+      return text === "null" || !text ? null : text;
+    },
+  );
+  if (openAIAttempt.ok) return openAIAttempt.value;
+
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
@@ -3725,10 +3915,7 @@ export async function findDriveFileByAI(
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const fileList = files.map((f, i) => `${i + 1}. id="${f.id}" nome="${f.originalName}"${f.description ? ` desc="${f.description}"` : ""}${f.aiKeywords?.length ? ` keywords="${f.aiKeywords.join(",")}"` : ""}`).join("\n");
-    const result = await model.generateContent(
-      `Busca: "${query}"\n\nArquivos disponíveis:\n${fileList}\n\nRetorne APENAS o id do arquivo mais compatível com a busca. Se nenhum arquivo for compatível, retorne "null". Retorne APENAS o id ou "null", sem mais nada.`
-    );
+    const result = await model.generateContent(prompt);
     const text = result.response.text().trim().replace(/"/g, "");
     return text === "null" || !text ? null : text;
   } catch {
@@ -3740,22 +3927,15 @@ export async function generateMeetAta(
   notes: string,
   meetTitle: string,
   attendeeNames: string[],
-  locale?: string
+  locale?: string,
+  userId?: string,
 ): Promise<{ summary: string; decisions: string[]; tasks: string[] }> {
-  const cfg = await getConfig();
-  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return { summary: notes, decisions: [], tasks: [] };
-
   const attendeesLine = attendeeNames.length
     ? `Participantes: ${attendeeNames.join(", ")}.`
     : "";
   const localeNote = localeInstruction(locale);
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent(
-      `Você é um assistente de ata de reunião. Com base nas notas abaixo, gere uma ata estruturada.${localeNote ? `\n${localeNote}` : ""}
+  const prompt = `Você é um assistente de ata de reunião. Com base nas notas abaixo, gere uma ata estruturada.${localeNote ? `\n${localeNote}` : ""}
 ${attendeesLine}
 Reunião: "${meetTitle}"
 
@@ -3771,8 +3951,35 @@ Retorne APENAS JSON válido no formato:
 - summary: o que foi discutido e decidido, de forma objetiva
 - decisions: lista de decisões tomadas (máx 5)
 - tasks: lista de tarefas/próximas ações (máx 8, frases curtas imperativas)
-Não use markdown.`
-    );
+Não use markdown.`;
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "generateMeetAta",
+    () => openAIJson<{ summary?: string; decisions?: unknown; tasks?: unknown }>({
+      prompt,
+      schemaName: "meeting_minutes",
+      userId,
+      maxOutputTokens: 1_500,
+    }),
+  );
+  if (openAIAttempt.ok) {
+    const parsed = openAIAttempt.value;
+    return {
+      summary: parsed.summary || notes,
+      decisions: Array.isArray(parsed.decisions) ? parsed.decisions.map(String) : [],
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map(String) : [],
+    };
+  }
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return { summary: notes, decisions: [], tasks: [] };
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
     const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
     return {
@@ -3788,20 +3995,11 @@ Não use markdown.`
 export async function extractFinanceFromDocument(
   buffer: Buffer,
   mimeType: string,
-  caption?: string
+  caption?: string,
+  userId?: string,
 ): Promise<{ type: "income" | "expense"; amount: number; description: string; category: string; date: string; mode?: "personal" | "business" } | null> {
-  const cfg = await getConfig();
-  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return null;
-
   const hoje = todayStrBR();
-
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    const result = await model.generateContent([
-      `Analise esta imagem/documento e determine se é um documento financeiro (nota fiscal, recibo, boleto, comprovante de pagamento, cupom fiscal, extrato bancário, fatura, etc.).
+  const prompt = `Analise esta imagem/documento e determine se é um documento financeiro (nota fiscal, recibo, boleto, comprovante de pagamento, cupom fiscal, extrato bancário, fatura, etc.).
 
 Hoje é: ${hoje}
 ${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
@@ -3823,7 +4021,51 @@ Se NÃO for um documento financeiro, retorne:
 CATEGORIAS DE DESPESA: ${CATEGORIES_EXPENSE.join(", ")}
 CATEGORIAS DE RECEITA: ${CATEGORIES_INCOME.join(", ")}
 
-Retorne APENAS JSON válido, sem markdown.`,
+Retorne APENAS JSON válido, sem markdown.`;
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "extractFinanceFromDocument",
+    () => openAIMediaJson<Record<string, unknown>>({
+      prompt,
+      buffer,
+      mimeType: mimeType || "image/jpeg",
+      schemaName: "financial_document",
+      userId,
+      maxOutputTokens: 1_200,
+    }),
+  );
+  if (openAIAttempt.ok) {
+    const parsed = openAIAttempt.value;
+    if (!parsed.isFinancial) return null;
+    const rawAmount = String(parsed.amount ?? "0")
+      .replace(/\s/g, "")
+      .replace(/\.(?=\d{3}[,.])/g, "")
+      .replace(",", ".");
+    const amount = Number(rawAmount);
+    if (isNaN(amount) || amount <= 0) return null;
+    const rawDate = String(parsed.date || "");
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
+    return {
+      type: parsed.type === "income" ? "income" : "expense",
+      amount,
+      description: String(parsed.description || "documento"),
+      category: String(parsed.category || "Outros"),
+      date,
+      mode: parsed.mode === "business" || parsed.mode === "personal" ? parsed.mode : undefined,
+    };
+  }
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent([
+      prompt,
       {
         inlineData: {
           data: buffer.toString("base64"),
@@ -3874,20 +4116,11 @@ export type InvoiceExtraction = { transactions: InvoiceTransaction[]; bankName?:
 export async function extractInvoiceTransactions(
   buffer: Buffer,
   mimeType: string,
-  caption?: string
+  caption?: string,
+  userId?: string,
 ): Promise<InvoiceExtraction | null> {
-  const cfg = await getConfig();
-  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return null;
-
   const hoje = todayStrBR();
-
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    const result = await model.generateContent([
-      `Analise este documento e determine se é uma FATURA DE CARTÃO DE CRÉDITO ou EXTRATO com MÚLTIPLAS transações/lançamentos (compras individuais).
+  const prompt = `Analise este documento e determine se é uma FATURA DE CARTÃO DE CRÉDITO ou EXTRATO com MÚLTIPLAS transações/lançamentos (compras individuais).
 
 Hoje é: ${hoje}
 ${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
@@ -3906,7 +4139,54 @@ Se NÃO for uma fatura/extrato com múltiplas transações (ex: é só um recibo
 
 CATEGORIAS: ${CATEGORIES_EXPENSE.join(", ")}
 
-Retorne APENAS JSON válido, sem markdown, sem comentários.`,
+Retorne APENAS JSON válido, sem markdown, sem comentários.`;
+
+  const normalizeInvoice = (parsed: Record<string, unknown>): InvoiceExtraction | null => {
+    if (!parsed.isInvoice || !Array.isArray(parsed.transactions)) return null;
+    const transactions: InvoiceTransaction[] = [];
+    for (const rawTransaction of parsed.transactions) {
+      const transaction = rawTransaction as Record<string, unknown> | null;
+      const rawAmount = String(transaction?.amount ?? "0")
+        .replace(/\s/g, "")
+        .replace(/\.(?=\d{3}[,.])/g, "")
+        .replace(",", ".");
+      const amount = Number(rawAmount);
+      if (isNaN(amount) || amount <= 0) continue;
+      const rawDate = String(transaction?.date || "");
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
+      const description = String(transaction?.description || "").trim().slice(0, 80) || "Lançamento da fatura";
+      const category = String(transaction?.category || "Outros");
+      transactions.push({ date, description, amount, category });
+    }
+    if (!transactions.length) return null;
+    const bankName = String(parsed.bankName || "").trim() || undefined;
+    return { transactions, bankName };
+  };
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "extractInvoiceTransactions",
+    () => openAIMediaJson<Record<string, unknown>>({
+      prompt,
+      buffer,
+      mimeType: mimeType || "application/pdf",
+      schemaName: "invoice_transactions",
+      userId,
+      maxOutputTokens: 8_000,
+    }),
+  );
+  if (openAIAttempt.ok) return normalizeInvoice(openAIAttempt.value);
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent([
+      prompt,
       {
         inlineData: {
           data: buffer.toString("base64"),
@@ -3919,29 +4199,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`,
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
 
-    if (!parsed.isInvoice || !Array.isArray(parsed.transactions)) return null;
-
-    const transactions: InvoiceTransaction[] = [];
-    for (const t of parsed.transactions) {
-      const rawAmount = String(t?.amount ?? "0")
-        .replace(/\s/g, "")
-        .replace(/\.(?=\d{3}[,.])/g, "")
-        .replace(",", ".");
-      const amount = Number(rawAmount);
-      if (isNaN(amount) || amount <= 0) continue;
-
-      const rawDate = String(t?.date || "");
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
-
-      const description = String(t?.description || "").trim().slice(0, 80) || "Lançamento da fatura";
-      const category = String(t?.category || "Outros");
-
-      transactions.push({ date, description, amount, category });
-    }
-
-    if (transactions.length === 0) return null;
-    const bankName = String(parsed.bankName || "").trim() || undefined;
-    return { transactions, bankName };
+    return normalizeInvoice(parsed);
   } catch (e) {
     console.error("[ai-processor] Erro extractInvoiceTransactions:", e);
     return null;
@@ -3956,20 +4214,13 @@ export type GroceryReceiptItem = { productName: string; category: GroceryCategor
  *  vários ITENS). Mesmo padrão de classificação interna (retorna null se
  *  não bater) usado em extractInvoiceTransactions/extractFinanceFromDocument. */
 export async function extractGroceryReceiptItems(
-  buffer: Buffer, mimeType: string, caption?: string
+  buffer: Buffer,
+  mimeType: string,
+  caption?: string,
+  userId?: string,
 ): Promise<{ storeName: string; date: string; items: GroceryReceiptItem[]; total: number } | null> {
-  const cfg = await getConfig();
-  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return null;
-
   const hoje = todayStrBR();
-
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    const result = await model.generateContent([
-      `Analise esta imagem e determine se é um CUPOM FISCAL/NOTA FISCAL DE SUPERMERCADO com MÚLTIPLOS PRODUTOS individuais (cada linha um item comprado, com preço).
+  const prompt = `Analise esta imagem e determine se é um CUPOM FISCAL/NOTA FISCAL DE SUPERMERCADO com MÚLTIPLOS PRODUTOS individuais (cada linha um item comprado, com preço).
 
 Hoje é: ${hoje}
 ${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
@@ -3997,17 +4248,15 @@ Se NÃO for cupom de mercado, ou tiver só 1 produto, retorne: {"isGroceryReceip
 
 CATEGORIAS: ${GROCERY_CATEGORIES.join(", ")}
 
-Retorne APENAS JSON válido, sem markdown.`,
-      { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
-    ]);
+Retorne APENAS JSON válido, sem markdown.`;
 
-    const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(text);
+  const normalizeReceipt = (parsed: Record<string, unknown>) => {
     if (!parsed.isGroceryReceipt || !Array.isArray(parsed.items) || parsed.items.length < 2) return null;
 
     const items: GroceryReceiptItem[] = [];
-    for (const raw of parsed.items) {
-      const parseNum = (v: unknown) => Number(String(v ?? "0").replace(/\s/g, "").replace(/\.(?=\d{3}[,.])/g, "").replace(",", "."));
+    for (const rawItem of parsed.items) {
+      const raw = rawItem as Record<string, unknown> | null;
+      const parseNum = (value: unknown) => Number(String(value ?? "0").replace(/\s/g, "").replace(/\.(?=\d{3}[,.])/g, "").replace(",", "."));
       let unitPrice = parseNum(raw?.unitPrice);
       const lineTotal = parseNum(raw?.lineTotal);
       let quantity = parseNum(raw?.quantity) || 1;
@@ -4015,9 +4264,6 @@ Retorne APENAS JSON válido, sem markdown.`,
         if (!isNaN(lineTotal) && lineTotal > 0) unitPrice = lineTotal / quantity;
         else continue;
       }
-      // Cupons NFC-e mostram unitPrice e lineTotal separados — se divergirem
-      // muito do que quantity×unitPrice daria, o modelo provavelmente errou
-      // a quantidade (ex: leu "2" de outra coluna); recalcula pela linha.
       if (!isNaN(lineTotal) && lineTotal > 0) {
         const expected = unitPrice * quantity;
         if (Math.abs(expected - lineTotal) / lineTotal > 0.05) {
@@ -4026,28 +4272,73 @@ Retorne APENAS JSON válido, sem markdown.`,
       }
       const productName = String(raw?.productName || "").trim().slice(0, 80);
       if (!productName) continue;
-      const category = GROCERY_CATEGORIES.includes(raw?.category) ? raw.category as GroceryCategory : "Outros";
+      const category = GROCERY_CATEGORIES.includes(raw?.category as GroceryCategory)
+        ? raw?.category as GroceryCategory
+        : "Outros";
       items.push({ productName, category, unitPrice, quantity, unit: String(raw?.unit || "un").slice(0, 10) });
     }
     if (items.length < 2) return null;
 
     const rawTotal = String(parsed.total ?? "0").replace(/\s/g, "").replace(/\.(?=\d{3}[,.])/g, "").replace(",", ".");
     const parsedTotal = Number(rawTotal);
-    const sumItems = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-    const total = (!isNaN(parsedTotal) && parsedTotal > 0 && Math.abs(parsedTotal - sumItems) / sumItems < 0.15) ? parsedTotal : sumItems;
-
+    const sumItems = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    const total = (!isNaN(parsedTotal) && parsedTotal > 0 && Math.abs(parsedTotal - sumItems) / sumItems < 0.15)
+      ? parsedTotal
+      : sumItems;
     const rawDate = String(parsed.date || "");
     const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
     const storeName = String(parsed.storeName || "Mercado").trim().slice(0, 60);
-
     return { storeName, date, items, total };
+  };
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "extractGroceryReceiptItems",
+    () => openAIMediaJson<Record<string, unknown>>({
+      prompt,
+      buffer,
+      mimeType: mimeType || "image/jpeg",
+      schemaName: "grocery_receipt",
+      userId,
+      maxOutputTokens: 6_000,
+    }),
+  );
+  if (openAIAttempt.ok) return normalizeReceipt(openAIAttempt.value);
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
+    ]);
+
+    const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(text);
+    return normalizeReceipt(parsed);
   } catch (e) {
     console.error("[ai-processor] Erro extractGroceryReceiptItems:", e);
     return null;
   }
 }
 
-export async function transcribeAudio(audioBuffer: Buffer, mimeType: string): Promise<string | null> {
+export async function transcribeAudio(
+  audioBuffer: Buffer,
+  mimeType: string,
+  userId?: string,
+): Promise<string | null> {
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "transcribeAudio",
+    () => openAITranscribe(audioBuffer, mimeType || "audio/ogg"),
+  );
+  if (openAIAttempt.ok) return openAIAttempt.value || null;
+
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;

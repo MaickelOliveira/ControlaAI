@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { accountSelectionMessage, buildFirstUseGuideMessages, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
+import { accountSelectionMessage, appointmentPatchFromAi, buildFirstUseGuideMessages, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
@@ -33,6 +33,32 @@ describe("phoneMatches", () => {
   it("returns false for empty input", () => {
     expect(phoneMatches("", "5511987654321")).toBe(false);
     expect(phoneMatches("5511987654321", "")).toBe(false);
+  });
+});
+
+describe("all-day appointment updates", () => {
+  const current = {
+    id: "appointment-1", userId: "user-1", title: "Feira", startAt: "2026-09-19T17:00:00.000Z",
+    allDay: false, repeat: "none" as const, status: "scheduled" as const, source: "whatsapp" as const,
+    createdAt: "2026-09-01T12:00:00.000Z",
+  };
+
+  it("moves an existing appointment to midnight and marks it as all-day", () => {
+    expect(appointmentPatchFromAi({
+      intent: "agenda_update", confidence: 1, agendaData: { allDay: true },
+    }, current)).toMatchObject({
+      allDay: true,
+      startAt: "2026-09-19T03:00:00.000Z",
+    });
+  });
+
+  it("turns all-day off when a specific time is supplied", () => {
+    expect(appointmentPatchFromAi({
+      intent: "agenda_update", confidence: 1, agendaData: { startTime: "14:30" },
+    }, { ...current, allDay: true })).toMatchObject({
+      allDay: false,
+      startAt: "2026-09-19T17:30:00.000Z",
+    });
   });
 });
 

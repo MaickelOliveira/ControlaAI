@@ -231,7 +231,7 @@ export async function getAppointmentsWithEndedMeet(): Promise<Appointment[]> {
 export async function getAppointmentsNeedingReminder(): Promise<Appointment[]> {
   const now = Date.now();
   const hours2 = 2 * 60 * 60_000;
-  const { data, error } = await getSupabase().from("appointments").select("*").eq("status", "scheduled").is("reminder_sent_at", null);
+  const { data, error } = await getSupabase().from("appointments").select("*").eq("status", "scheduled").eq("all_day", false).is("reminder_sent_at", null);
   if (error || !data) return [];
   return (data as Row[]).map(fromRow).filter(a => {
     const startMs = new Date(a.startAt).getTime();
@@ -246,7 +246,7 @@ export async function getAppointmentsNeedingReminder(): Promise<Appointment[]> {
 export async function getAppointmentsNeeding15MinReminder(): Promise<Appointment[]> {
   const now = Date.now();
   const min15 = 15 * 60_000;
-  const { data, error } = await getSupabase().from("appointments").select("*").eq("status", "scheduled").is("reminder_15min_sent_at", null);
+  const { data, error } = await getSupabase().from("appointments").select("*").eq("status", "scheduled").eq("all_day", false).is("reminder_15min_sent_at", null);
   if (error || !data) return [];
   return (data as Row[]).map(fromRow).filter(a => {
     const startMs = new Date(a.startAt).getTime();

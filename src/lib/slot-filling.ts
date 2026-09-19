@@ -23,6 +23,7 @@ import {
 import { addFinance } from "./finances";
 import { findPhoneByName, getPhonesForUser } from "./wpp-phone-links";
 import { phoneVariants } from "./conversations";
+import { isAllDayAgendaText } from "./agenda-all-day";
 
 /**
  * Motor genérico de "perguntar o que falta" (slot-filling), usado quando uma
@@ -889,7 +890,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         key: "startTime",
         label: "horário",
         parse: (text) => {
-          if (/^(dia todo|todo el d[ií]a)$/i.test(text.trim())) return { ok: true, value: "ALLDAY" };
+          if (isAllDayAgendaText(text)) return { ok: true, value: "ALLDAY" };
           const parsed = parseReminderTimeAnswer(text);
           return parsed ? { ok: true, value: parsed } : { ok: false };
         },

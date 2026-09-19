@@ -266,8 +266,15 @@ function isImageSearchRequest(text?: string): boolean {
   return !!text && parseImageAction(text) === "search";
 }
 
-async function researchImage(from: string, buffer: Buffer, mimeType: string, request: string, locale?: string): Promise<void> {
-  const subject = await identifyImageSubject(buffer, mimeType, locale);
+async function researchImage(
+  from: string,
+  buffer: Buffer,
+  mimeType: string,
+  request: string,
+  locale?: string,
+  userId?: string,
+): Promise<void> {
+  const subject = await identifyImageSubject(buffer, mimeType, locale, userId);
   if (!subject) {
     await wppSend(from, localized(locale,
       "❓ Não consegui identificar o produto com segurança nessa imagem. Envie uma foto mais nítida, mostrando o nome, a marca e a embalagem.",
@@ -277,7 +284,7 @@ async function researchImage(from: string, buffer: Buffer, mimeType: string, req
   const query = localized(locale,
     `${request}. Produto identificado na imagem: ${subject}. Pesquise preços atuais no Brasil e envie lojas, valores e links para conferir.`,
     `${request}. Producto identificado en la imagen: ${subject}. Busca precios actuales en el país del usuario y envía tiendas, importes y enlaces para comprobar.`);
-  await wppSendLong(from, await generateWebSearchResponse(query, locale));
+  await wppSendLong(from, await generateWebSearchResponse(query, locale, userId));
 }
 
 export function replyProcessingError(locale?: string): string {
@@ -392,14 +399,19 @@ function localTimePart(iso: string): string {
   return new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 }
 
-function appointmentPatchFromAi(ai: AIResult, current?: Appointment): Parameters<typeof updateAppointment>[2] {
+export function appointmentPatchFromAi(ai: AIResult, current?: Appointment): Parameters<typeof updateAppointment>[2] {
   const data = ai.agendaData ?? {};
   const patch: Parameters<typeof updateAppointment>[2] = {};
-  if (data.startDate || data.startTime) {
+  if (data.allDay === true) {
+    const date = data.startDate || (current ? localDatePart(current.startAt) : undefined);
+    if (date) patch.startAt = spToUTC(`${date}T00:00:00`);
+    patch.allDay = true;
+  } else if (data.startDate || data.startTime) {
     const date = data.startDate || (current ? localDatePart(current.startAt) : undefined);
     const time = data.startTime || (current ? localTimePart(current.startAt) : "00:00");
     if (date) patch.startAt = spToUTC(`${date}T${time}:00`);
   }
+  if (data.allDay === false || data.startTime) patch.allDay = false;
   if (data.endDate || data.endTime) {
     const baseEnd = current?.endAt || current?.startAt;
     const date = data.endDate || (baseEnd ? localDatePart(baseEnd) : undefined);
@@ -726,12 +738,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Perguntas de preço/pesquisa usam primeiro a visão para identificar
         // o produto e depois uma busca pública atual com fontes e links.
         if (mimeType.includes("image") && isImageSearchRequest(caption)) {
-          await researchImage(from, buffer, mimeType, caption!, fileUser.locale);
+          await researchImage(from, buffer, mimeType, caption!, fileUser.locale, fileUser.id);
           return;
         }
 
         if (mimeType.includes("image") && requestedImageAction === "describe") {
-          const subject = await identifyImageSubject(buffer, mimeType, fileUser.locale);
+          const subject = await identifyImageSubject(buffer, mimeType, fileUser.locale, fileUser.id);
           await wppSend(from, subject
             ? localized(fileUser.locale, `🔎 Identifiquei na imagem: *${subject}*.`, `🔎 Identifiqué en la imagen: *${subject}*.`)
             : localized(fileUser.locale, "❓ Não consegui identificar a imagem com segurança. Envie uma foto mais nítida.", "❓ No pude identificar la imagen con seguridad. Envía una foto más nítida."));
@@ -744,7 +756,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const looksLikeInvoice = !hasSaveIntent && (mimeType.includes("pdf") || /fatura|extrato/i.test(caption || ""));
         if (looksLikeInvoice) {
           try {
-            const invoice = await extractInvoiceTransactions(buffer, mimeType, caption);
+            const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id);
             if (invoice && invoice.transactions.length > 1) {
               const fMode = fileUser.activeMode;
               const withDup = await Promise.all(invoice.transactions.map(async t => ({
@@ -786,7 +798,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // intenção explícita de só salvar.
         if (!hasSaveIntent && mimeType.includes("image")) {
           try {
-            const receipt = await extractGroceryReceiptItems(buffer, mimeType, caption);
+            const receipt = await extractGroceryReceiptItems(buffer, mimeType, caption, fileUser.id);
             if (receipt) {
               const gMode = fileUser.activeMode;
               const isDup = await isLikelyDuplicateExpense(fileUser.id, gMode, receipt.total, receipt.date);
@@ -827,7 +839,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (!hasSaveIntent) {
           // Tenta extrair dados financeiros do documento/foto via Gemini Vision
           try {
-            const financeData = await extractFinanceFromDocument(buffer, mimeType, caption);
+            const financeData = await extractFinanceFromDocument(buffer, mimeType, caption, fileUser.id);
             if (financeData) {
               const fNow = nowBR();
               const fYear = fNow.getFullYear();
@@ -875,7 +887,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           // "salva"/"guarda" é comando, não descrição — só passa a legenda como
           // dica de conteúdo quando ela traz informação de verdade além do comando.
           const contentHint = hasSaveIntent ? undefined : caption;
-          const { folder: suggestedFolder, keywords, suggestedName } = await categorizeDriveFile(buffer, mimeType, originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"], contentHint);
+          const { folder: suggestedFolder, keywords, suggestedName } = await categorizeDriveFile(buffer, mimeType, originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"], contentHint, fileUser.id);
           const targetFolder = await getFolderByName(fileUser.id, suggestedFolder);
           const savedFile = await saveFile({
             userId: fileUser.id,
@@ -1301,11 +1313,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const buffer = Buffer.from(pending.fileBase64, "base64");
       await clearPendingAction(from);
       if (imageAction === "search") {
-        await researchImage(from, buffer, pending.mimeType, messageText, user.locale);
+        await researchImage(from, buffer, pending.mimeType, messageText, user.locale, user.id);
         return;
       }
       if (imageAction === "describe") {
-        const subject = await identifyImageSubject(buffer, pending.mimeType, user.locale);
+        const subject = await identifyImageSubject(buffer, pending.mimeType, user.locale, user.id);
         await wppSend(from, subject
           ? localized(user.locale, `🔎 Identifiquei na imagem: *${subject}*.`, `🔎 Identifiqué en la imagen: *${subject}*.`)
           : localized(user.locale, "❓ Não consegui identificar a imagem com segurança. Envie uma foto mais nítida.", "❓ No pude identificar la imagen con seguridad. Envía una foto más nítida."));
@@ -1317,6 +1329,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const { folder, keywords, suggestedName } = await categorizeDriveFile(
         buffer, pending.mimeType, pending.originalName,
         folderNames.length ? folderNames : ["Documentos", "Comprovantes", "Contratos", "Fotos", "Outros"],
+        undefined,
+        user.id,
       );
       const targetFolder = await getFolderByName(user.id, folder);
       await saveFile({
@@ -1340,7 +1354,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
             // Aqui o nome já é bom (montado a partir dos dados financeiros extraídos:
             // "Categoria - Descrição - Data"), então só reaproveita a IA pra pasta/keywords.
-            const { folder: suggestedFolder, keywords } = await categorizeDriveFile(buffer, pending.mimeType, pending.suggestedName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"]);
+            const { folder: suggestedFolder, keywords } = await categorizeDriveFile(buffer, pending.mimeType, pending.suggestedName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"], undefined, user.id);
             const targetFolder = await getFolderByName(user.id, suggestedFolder);
             const savedFile = await saveFile({
               userId: user.id,
@@ -2681,7 +2695,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const monthLabel = periodLabelFor(ai.period, now);
         const analysisReply = await generateAnalysisResponse(messageText, {
           mode, balance: analysisBal, topExpenses, topIncomes, month: monthLabel,
-        }, user.locale);
+        }, user.locale, user.id);
         await wppSend(from, analysisReply);
         break;
       }
@@ -3945,7 +3959,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         const fileId = await findDriveFileByAI(driveQuery, allFiles.map(f => ({
           id: f.id, originalName: f.originalName, description: f.description, aiKeywords: f.aiKeywords,
-        })));
+        })), user.id);
         if (!fileId) {
           await wppSend(from, replyFileNotFound(driveQuery, user.locale));
           break;
@@ -4145,7 +4159,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           await wppSend(from, missingQuestion);
           break;
         }
-        await wppSend(from, await generateWebSearchResponse(query, user.locale));
+        await wppSend(from, await generateWebSearchResponse(query, user.locale, user.id));
         break;
       }
 
@@ -4239,7 +4253,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             await wppSend(from, msg.trim());
           }
         } else {
-          const fallback = await generateFallbackResponse(messageText, recentHistory, user.locale);
+          const fallback = await generateFallbackResponse(messageText, recentHistory, user.locale, user.id);
           await wppSend(from, fallback || replyUnknown(messageText, user.locale));
         }
       }

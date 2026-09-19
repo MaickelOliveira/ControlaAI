@@ -4,6 +4,7 @@ import { sendText as wppSend } from "@/lib/whatsapp";
 import { getBase64FromMediaMessage } from "@/lib/evolution";
 import { transcribeAudio } from "@/lib/ai-processor";
 import { getConfig } from "@/lib/whatsapp-config";
+import { getUserIdByPhone } from "@/lib/wpp-phone-links";
 
 type EvolutionMessageData = {
   key?: { remoteJid?: string; remoteJidAlt?: string; senderPn?: string; fromMe?: boolean; id?: string };
@@ -111,7 +112,8 @@ export async function POST(req: NextRequest) {
 
     if (typeInfo.key === "audioMessage") {
       const mime = mimetype.split(";")[0].trim() || "audio/ogg";
-      const transcript = await transcribeAudio(buffer, mime).catch(() => null);
+      const userId = await getUserIdByPhone(from).catch(() => null);
+      const transcript = await transcribeAudio(buffer, mime, userId || undefined).catch(() => null);
       if (!transcript) {
         await wppSend(from, "🎤 Não consegui entender o áudio. Pode digitar sua mensagem?");
         return NextResponse.json({ ok: true });

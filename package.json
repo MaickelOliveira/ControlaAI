@@ -17,10 +17,15 @@
     "googleapis": "^174.0.1",
     "jose": "^6.2.3",
     "libphonenumber-js": "^1.13.12",
-    "next": "16.3.0",
+    "next": "^16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "^3.9.1"
+  },
+  "overrides": {
+    "glob": {
+      "brace-expansion": "^5.0.8"
+    }
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

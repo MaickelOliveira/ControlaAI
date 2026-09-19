@@ -17,7 +17,7 @@ export function encryptField(plain: string | undefined): string | undefined {
   if (!plain) return plain;
   const key = getKey();
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   const ciphertext = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return PREFIX + Buffer.concat([iv, authTag, ciphertext]).toString("base64");
@@ -32,7 +32,7 @@ export function decryptField(value: string | undefined): string | undefined {
   const iv = raw.subarray(0, 12);
   const authTag = raw.subarray(12, 28);
   const ciphertext = raw.subarray(28);
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
