@@ -252,7 +252,6 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
 
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
   const provider = (await getConfig()).provider;
-  // nosemgrep: rules.javascript.express.security.audit.express-res-sendfile.express-res-sendfile -- colisão de nome: isto é sendFile de mídia do WhatsApp (waba/evolution), não res.sendFile do Express
   const ok = provider === "waba"
     ? await waba.sendFile(to, fileBuffer, filename, mimeType, caption)
     : await evolution.sendFile(to, fileBuffer, filename, mimeType, caption);
