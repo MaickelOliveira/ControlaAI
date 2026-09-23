@@ -20,7 +20,7 @@ import {
 import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
-import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn } from "@/lib/slot-filling";
+import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
   getMissingActionQuestion,
@@ -1958,6 +1958,38 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       if (out.reply) await wppSend(from, out.reply);
       if (!out.fallThrough) return;
       // fallThrough → usuário mudou de assunto; segue o turno normalmente com esta mensagem
+    }
+
+    // ── Correção oportunista de um campo que ficou no valor padrão ──
+    // Mais permissivo que o slot-filling normal (não há mais uma pergunta
+    // "no ar"): só age se a mensagem não parecer um comando novo qualquer
+    // (mesma heurística usada pra decidir se o slot-filling foi abandonado)
+    // e ainda assim passa pelo MESMO parser rígido do campo — nunca "adivinha"
+    // livremente. Se qualquer uma dessas checagens falhar, não interfere: a
+    // mensagem segue o caminho normal como se essa pendência não existisse.
+    if (
+      pending?.type === "slot_correction" &&
+      pending.userId === user.id &&
+      !looksLikeNewCommand(messageText.trim())
+    ) {
+      if (pending.entity === "recurring" && pending.field === "dayOfMonth") {
+        const parsed = slotDayOfMonth()(messageText, {}, { user, userId: user.id, phone: from, mode });
+        if (parsed.ok) {
+          const updated = await updateRecurring(pending.entityId, user.id, { dayOfMonth: parsed.value as number });
+          if (updated) {
+            await clearPendingAction(from);
+            await wppSend(from, localized(user.locale,
+              `✏️ Beleza! Ajustei o vencimento de *${updated.description}* pra dia ${updated.dayOfMonth}.`,
+              `✏️ ¡Listo! Ajusté el vencimiento de *${updated.description}* al día ${updated.dayOfMonth}.`));
+            return;
+          }
+          // Update falhou (registro sumiu, erro passageiro etc.) — não trava
+          // a mensagem nisso; deixa cair no fluxo normal como se não tivesse
+          // reconhecido nada, e a pendência expira sozinha pelo TTL.
+        }
+      }
+      // Não bateu no parser do campo — deixa a pendência viva (expira sozinha
+      // pelo TTL) e segue o fluxo normal com esta mensagem.
     }
 
     // Um pedido direto de aviso para um compromisso existente é totalmente

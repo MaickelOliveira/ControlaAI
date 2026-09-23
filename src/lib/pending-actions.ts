@@ -76,6 +76,21 @@ export type PendingClearHistory = {
   expiresAt: string;
 };
 
+/** Quando um slot-fill desiste e usa o valor padrão de um campo (ex: dia do
+ *  vencimento vira 1º do mês por falta de resposta válida), guarda por um
+ *  tempo curto qual campo/registro ficou "no palpite" — se a PRÓXIMA
+ *  mensagem for curta e bater exatamente no parser daquele campo (não uma
+ *  frase nova qualquer), aplica como correção em vez de ignorar. */
+export type PendingSlotCorrection = {
+  type: "slot_correction";
+  phone: string;
+  userId: string;
+  entity: "recurring";
+  entityId: string;
+  field: "dayOfMonth";
+  expiresAt: string;
+};
+
 export type PendingMeetAta = {
   type: "meet_ata";
   phone: string;
@@ -337,7 +352,7 @@ export type PendingAccountDefaultConfirm = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountDefaultConfirm | PendingClearHistory;
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -347,6 +362,7 @@ const TTL_MEET_ATA_MS = 4 * 60 * 60 * 1000; // 4 horas
 // orçamento POR TURNO, não total, já que toda resposta válida renova o TTL
 // (setPendingAction é chamado de novo a cada avanço no fluxo).
 const TTL_SLOT_FILL_MS = 10 * 60 * 1000;
+const TTL_SLOT_CORRECTION_MS = 30 * 60 * 1000;
 
 type PendingActionInput =
   | Omit<PendingVehicleSelection, "phone" | "expiresAt">
@@ -370,7 +386,8 @@ type PendingActionInput =
   | Omit<PendingAccountSelection, "phone" | "expiresAt">
   | Omit<PendingAccountCreateName, "phone" | "expiresAt">
   | Omit<PendingAccountDefaultConfirm, "phone" | "expiresAt">
-  | Omit<PendingClearHistory, "phone" | "expiresAt">;
+  | Omit<PendingClearHistory, "phone" | "expiresAt">
+  | Omit<PendingSlotCorrection, "phone" | "expiresAt">;
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   recurring_confirmation: TTL_RECURRING_MS,
@@ -379,6 +396,7 @@ const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   image_action: TTL_SLOT_FILL_MS,
   slot_fill: TTL_SLOT_FILL_MS,
   action_continuation: TTL_SLOT_FILL_MS,
+  slot_correction: TTL_SLOT_CORRECTION_MS,
 };
 
 export async function setPendingAction(phone: string, action: PendingActionInput): Promise<void> {

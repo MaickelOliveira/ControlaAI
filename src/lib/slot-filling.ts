@@ -118,7 +118,7 @@ function isSkipWord(t: string): boolean {
  *  de assunto) — só é chamada depois que o parse do slot já falhou.
  *  Heurística deliberadamente conservadora: melhor pecar por excesso de
  *  re-pergunta do que interromper um comando genuinamente novo. */
-function looksLikeNewCommand(t: string): boolean {
+export function looksLikeNewCommand(t: string): boolean {
   const s = t.trim();
   if (s.length > 60) return true;
   return /^(gastei|paguei|comprei|recebi|ganhei|gast[eé]|pagu[eé]|compr[eé]|recib[ií]|gan[eé]|cu[aá]nto|qu[eé]|cu[aá]l|mi saldo|extracto|mis|quanto|qual|meu saldo|extrato|minhas?|agenda|lembr|recuerda|recordatorio|ayuda|ajuda|help|crea|crear|cria|criar|agrega|a[ñn]ade|adiciona|marca)\b/i.test(s);
@@ -152,6 +152,20 @@ async function finalizeWithDefaults(flow: FlowDef, draft: Draft, queue: string[]
   }
   const base = await flow.finalize(draft, ctx);
   if (usedLabels.length === 0) return base;
+
+  // Dia do vencimento ficou no palpite (1º do mês) — guarda por um tempo
+  // curto pra, se a próxima mensagem for só a resposta certa (não uma frase
+  // nova qualquer), corrigir em vez de deixar o palpite errado pra sempre.
+  if (queue.includes("dayOfMonth") && typeof draft._createdRecurringId === "string") {
+    await setPendingAction(ctx.phone, {
+      type: "slot_correction",
+      userId: ctx.userId,
+      entity: "recurring",
+      entityId: draft._createdRecurringId,
+      field: "dayOfMonth",
+    });
+  }
+
   return ctx.user.locale === "es"
     ? `_No entendí tu última respuesta; usé el valor predeterminado para: ${usedLabels.join(", ")}._\n\n${base}`
     : `_Não entendi sua última resposta — usei o padrão para: ${usedLabels.join(", ")}._\n\n${base}`;
@@ -811,6 +825,9 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         source: "whatsapp",
         employeeId: draft.employeeId as string | undefined,
       });
+      // Carimba o ID criado no rascunho — finalizeWithDefaults usa isso pra
+      // saber o que corrigir se um campo tiver ficado no valor padrão.
+      draft._createdRecurringId = rec.id;
       return replyRecurringCreated(rec, ctx.user.locale);
     },
 
