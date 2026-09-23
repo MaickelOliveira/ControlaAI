@@ -4126,7 +4126,31 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           };
         });
         const firstMeet = pendingMeetItems[0];
-        // Pergunta se quer link do Google Meet
+
+        if (!await isConnected(user.id)) {
+          // Sem Google conectado não tem como gerar link — perguntar "quer
+          // link do Meet?" só pra depois dizer que não dá é atrito à toa.
+          // Cria o(s) compromisso(s) direto, sem o link.
+          const confirmations: string[] = [];
+          for (const item of pendingMeetItems) {
+            const apt = await createAppointment({
+              userId: user.id, title: item.title, description: item.description,
+              startAt: item.startAt, endAt: item.endAt, allDay: false, repeat: "none",
+              status: "scheduled", source: "whatsapp",
+            });
+            confirmations.push(replyMeetCreated(apt, undefined, user.locale));
+            for (const attendee of item.attendees.filter(attendee => attendee.phone)) {
+              await wppSend(attendee.phone!, replyMeetInvite(apt, attendee.name, user.locale));
+            }
+          }
+          const notConnectedNote = localized(user.locale,
+            "🔗 Sua conta Google não está conectada, então criei sem link do Meet. Para conectar, acesse Configurações → Integrações.",
+            "🔗 Tu cuenta de Google no está conectada, así que lo creé sin enlace de Meet. Para conectarla, entra en Configuración → Integraciones.");
+          await wppSend(from, [notConnectedNote, confirmations.join("\n\n────────\n\n")].filter(Boolean).join("\n\n"));
+          break;
+        }
+
+        // Pergunta se quer link do Google Meet (só quando o Google está conectado)
         const { formatDateTimeBR } = await import("@/lib/date-br");
         const timeStr = formatDateTimeBR(firstMeet.startAt);
         await setPendingAction(from, {
