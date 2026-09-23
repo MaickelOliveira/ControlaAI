@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getFileById, getFilePath } from "@/lib/drive";
-import { readFileSync, existsSync } from "fs";
+import { getFileById, getFileBuffer } from "@/lib/drive";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -11,11 +10,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const file = await getFileById(id, session.sub);
   if (!file) return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
 
-  const filePath = getFilePath(file);
-  if (!existsSync(filePath)) return NextResponse.json({ error: "Arquivo não encontrado no servidor" }, { status: 404 });
+  const buffer = await getFileBuffer(file);
+  if (!buffer) return NextResponse.json({ error: "Arquivo não encontrado no servidor" }, { status: 404 });
 
-  const buffer = readFileSync(filePath);
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": file.mimeType,
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,

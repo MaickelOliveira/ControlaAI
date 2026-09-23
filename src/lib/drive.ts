@@ -1,4 +1,3 @@
-import { writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
@@ -25,23 +24,18 @@ export type DriveFolder = {
   createdAt: string;
 };
 
-// Os BYTES do arquivo em si continuam em disco local (nunca estiveram no
-// JSON — só a metadata estava) — fora do escopo desta migração pra
-// Postgres. Se um dia isso precisar ir pro Supabase Storage, é uma
-// migração separada.
-const DRIVE_DIR = path.join(process.cwd(), "data", "drive");
+// Os BYTES do arquivo em si vivem no Supabase Storage, bucket privado
+// "drive-files" (migrado de disco local em 2026-09-23 — disco local não
+// sobrevive a um redeploy sem volume persistente, e mesmo com volume não
+// tinha redundância nem aparecia nas métricas de uso do projeto). O
+// caminho dentro do bucket é "{userId}/{storedName}", mesmo padrão do
+// bucket "support-attachments".
+export const DRIVE_BUCKET = "drive-files";
 
 const DEFAULT_FOLDERS = ["Documentos", "Comprovantes", "Contratos", "Fotos", "Outros"];
 
-// Contenção defensiva: garante que o path final nunca escape de DRIVE_DIR,
-// mesmo que userId/storedName um dia deixem de vir só de sessão autenticada
-// / randomUUID().
-function safeDriveJoin(...segments: string[]): string {
-  const resolved = path.join(DRIVE_DIR, ...segments);
-  if (resolved !== DRIVE_DIR && !resolved.startsWith(DRIVE_DIR + path.sep)) {
-    throw new Error("[drive] path fora de DRIVE_DIR");
-  }
-  return resolved;
+function driveStoragePath(userId: string, storedName: string): string {
+  return `${userId}/${storedName}`;
 }
 
 type FileRow = {
@@ -117,10 +111,13 @@ export async function saveFile(data: {
   const ext = path.extname(data.originalName) || "";
   const storedName = `${id}${ext}`;
 
-  const userDir = safeDriveJoin(data.userId);
-  if (!existsSync(userDir)) mkdirSync(userDir, { recursive: true });
-
-  writeFileSync(safeDriveJoin(data.userId, storedName), data.buffer);
+  const { error: uploadError } = await getSupabase().storage
+    .from(DRIVE_BUCKET)
+    .upload(driveStoragePath(data.userId, storedName), data.buffer, {
+      contentType: data.mimeType,
+      upsert: false,
+    });
+  if (uploadError) throw new Error(`[drive] upload falhou: ${uploadError.message}`);
 
   const row = {
     id, user_id: data.userId, folder_id: data.folderId,
@@ -140,14 +137,18 @@ export async function getFileById(id: string, userId: string): Promise<DriveFile
   return fileFromRow(data as FileRow);
 }
 
-export function getFilePath(file: DriveFile): string {
-  return safeDriveJoin(file.userId, file.storedName);
+export async function getFileBuffer(file: DriveFile): Promise<Buffer | null> {
+  const { data, error } = await getSupabase().storage
+    .from(DRIVE_BUCKET)
+    .download(driveStoragePath(file.userId, file.storedName));
+  if (error || !data) return null;
+  return Buffer.from(await data.arrayBuffer());
 }
 
 export async function deleteFile(id: string, userId: string): Promise<boolean> {
   const file = await getFileById(id, userId);
   if (!file) return false;
-  try { if (existsSync(getFilePath(file))) unlinkSync(getFilePath(file)); } catch { /* ignore */ }
+  try { await getSupabase().storage.from(DRIVE_BUCKET).remove([driveStoragePath(file.userId, file.storedName)]); } catch { /* ignore */ }
   const { error, count } = await getSupabase().from("drive_files").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
   return !error && !!count && count > 0;
 }

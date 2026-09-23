@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession as getSession } from "@/lib/auth";
 import { getUsers, isTrialExpired, createUser, getUserByEmail, updateUser, getMaxWppPhones } from "@/lib/users";
 import { getPhonesForUser } from "@/lib/wpp-phone-links";
-import { getFinancesByUser } from "@/lib/finances";
-import { getTasksByUser } from "@/lib/tasks";
+import { getFinancesCountByUser, getLatestFinanceDate } from "@/lib/finances";
+import { getTasksCountByUser } from "@/lib/tasks";
 
 export async function GET() {
   const session = await getSession();
@@ -13,14 +13,14 @@ export async function GET() {
   const now = new Date();
 
   const clientes = (await Promise.all(users.map(async u => {
-    const [finances, tasks, phoneLinks] = await Promise.all([
-      getFinancesByUser(u.id),
-      getTasksByUser(u.id),
+    const [financesCount, tasksCount, phoneLinks, latestFinanceDate] = await Promise.all([
+      getFinancesCountByUser(u.id),
+      getTasksCountByUser(u.id),
       getPhonesForUser(u.id),
+      getLatestFinanceDate(u.id),
     ]);
     const wppPhones = phoneLinks.map(link => link.phone);
-    const lastFinance = finances.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-    const lastActivity = lastFinance?.createdAt ?? u.createdAt;
+    const lastActivity = latestFinanceDate ?? u.createdAt;
     const isToday = new Date(lastActivity).toDateString() === now.toDateString();
     const trialExpired = isTrialExpired(u);
 
@@ -39,8 +39,8 @@ export async function GET() {
       trialEndsAt: u.trialEndsAt,
       createdAt: u.createdAt,
       priceOverride: u.priceOverride,
-      financesCount: finances.length,
-      tasksCount: tasks.length,
+      financesCount,
+      tasksCount,
       lastActivity,
       activeToday: isToday,
     };

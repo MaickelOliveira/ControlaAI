@@ -169,6 +169,32 @@ export async function getFinancesByUser(userId: string, mode?: FinanceMode, regi
   return load(userId, { mode, registeredBy });
 }
 
+/** Só a contagem, sem baixar as linhas — usado onde só o número importa
+ *  (ex: painel admin listando todos os clientes), pra não puxar o
+ *  histórico financeiro inteiro de cada um só pra saber o tamanho dele. */
+export async function getFinancesCountByUser(userId: string): Promise<number> {
+  const { count, error } = await getSupabase()
+    .from("finances")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  if (error) { console.error("[finances] getFinancesCountByUser erro:", error.message); return 0; }
+  return count ?? 0;
+}
+
+/** Só a data do lançamento mais recente — mesma ideia: evita baixar todo o
+ *  histórico só pra achar a última atividade. */
+export async function getLatestFinanceDate(userId: string): Promise<string | null> {
+  const { data, error } = await getSupabase()
+    .from("finances")
+    .select("created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data as { created_at: string }).created_at;
+}
+
 /** Filtra por intervalo de datas (YYYY-MM-DD, inclusive nas duas pontas) em
  *  vez do ano/mês fixo de getBalance — usado pelos filtros de período
  *  customizados em Finanças/Dashboard. Sem from/to, retorna tudo (mesmo

@@ -2,8 +2,7 @@ import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, 
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
-import { saveFile, getFiles, getFolders, getFolderByName, getFilePath, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { readFileSync, existsSync } from "fs";
+import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
@@ -4001,10 +4000,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         const foundFile = await getFileById(fileId, user.id);
         if (!foundFile) { await wppSend(from, replyFileNotFound(driveQuery, user.locale)); break; }
-        const filePath = getFilePath(foundFile);
-        if (!existsSync(filePath)) { await wppSend(from, replyFileNotFound(driveQuery, user.locale)); break; }
+        const fileBuffer = await getFileBuffer(foundFile);
+        if (!fileBuffer) { await wppSend(from, replyFileNotFound(driveQuery, user.locale)); break; }
         await wppSend(from, replyFileFound(foundFile.originalName, user.locale));
-        const fileBuffer = readFileSync(filePath);
         await wppSendFile(from, fileBuffer, foundFile.originalName, foundFile.mimeType);
         break;
       }
