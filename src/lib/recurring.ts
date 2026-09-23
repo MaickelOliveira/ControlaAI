@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { addFinance, deleteFinance } from "./finances";
+import { withRetry } from "./retry";
 
 const TZ = "America/Sao_Paulo";
 
@@ -173,8 +174,15 @@ export async function createRecurring(data: CreateRecurringInput): Promise<Recur
     source: data.source,
   };
   if (data.employeeId !== undefined) row.employee_id = data.employeeId;
-  const { data: inserted, error } = await getSupabase().from("recurring_transactions").insert(row).select("*").single();
-  if (error) throw new Error(`[recurring] createRecurring falhou: ${error.message}`);
+
+  // Tenta de novo automaticamente se for uma falha passageira de rede/gateway
+  // (já visto acontecendo entre o app e o Supabase) — evita que o cliente
+  // veja "tive um problema" numa gravação que teria funcionado na 2ª tentativa.
+  const inserted = await withRetry(async () => {
+    const { data: row_, error } = await getSupabase().from("recurring_transactions").insert(row).select("*").single();
+    if (error) throw new Error(`[recurring] createRecurring falhou: ${error.message}`);
+    return row_;
+  });
   return fromRow(inserted as Row);
 }
 

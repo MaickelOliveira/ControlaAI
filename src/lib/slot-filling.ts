@@ -369,12 +369,54 @@ export function slotMoney(): SlotDef["parse"] {
   };
 }
 
+const CARDINAL_UNITS = ["zero", "um", "dois", "tres", "quatro", "cinco", "seis", "sete", "oito", "nove"];
+const CARDINAL_TEENS = ["dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+const ORDINAL_UNITS = ["", "primeiro", "segundo", "terceiro", "quarto", "quinto", "sexto", "setimo", "oitavo", "nono"];
+
+/** Mapa "palavra por extenso → dia do mês (1-31)", cobrindo cardinais
+ *  ("dia cinco", "vinte e um") e ordinais ("quinto dia", "vigésimo primeiro"). */
+function buildDayWordMap(): Map<string, number> {
+  const map = new Map<string, number>();
+
+  for (let n = 1; n <= 9; n++) map.set(CARDINAL_UNITS[n], n);
+  for (let n = 10; n <= 19; n++) map.set(CARDINAL_TEENS[n - 10], n);
+  map.set("catorze", 14); // grafia alternativa de "quatorze"
+  map.set("vinte", 20);
+  for (let n = 21; n <= 29; n++) map.set(`vinte e ${CARDINAL_UNITS[n - 20]}`, n);
+  map.set("trinta", 30);
+  map.set("trinta e um", 31);
+
+  for (let n = 1; n <= 9; n++) map.set(ORDINAL_UNITS[n], n);
+  map.set("decimo", 10);
+  for (let n = 11; n <= 19; n++) map.set(`decimo ${ORDINAL_UNITS[n - 10]}`, n);
+  map.set("vigesimo", 20);
+  for (let n = 21; n <= 29; n++) map.set(`vigesimo ${ORDINAL_UNITS[n - 20]}`, n);
+  map.set("trigesimo", 30);
+  map.set("trigesimo primeiro", 31);
+
+  return map;
+}
+
+// Ordenado do mais longo pro mais curto, pra "vinte e um" bater antes do "vinte" isolado.
+const DAY_WORD_ENTRIES = [...buildDayWordMap().entries()].sort((a, b) => b[0].length - a[0].length);
+
+function parseWrittenDayNumber(text: string): number | null {
+  const normalized = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  for (const [word, value] of DAY_WORD_ENTRIES) {
+    if (new RegExp(`\\b${word}\\b`).test(normalized)) return value;
+  }
+  return null;
+}
+
 export function slotDayOfMonth(): SlotDef["parse"] {
   return (text) => {
     const match = text.trim().match(/(\d{1,2})/);
-    if (!match) return { ok: false };
-    const day = parseInt(match[1], 10);
-    return day >= 1 && day <= 31 ? { ok: true, value: day } : { ok: false };
+    if (match) {
+      const day = parseInt(match[1], 10);
+      if (day >= 1 && day <= 31) return { ok: true, value: day };
+    }
+    const written = parseWrittenDayNumber(text);
+    return written !== null ? { ok: true, value: written } : { ok: false };
   };
 }
 

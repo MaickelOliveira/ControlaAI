@@ -177,9 +177,14 @@ export async function getLastFinanceBatch(phone: string): Promise<LastFinanceBat
 
 export async function setAiPaused(phone: string, paused: boolean) {
   const found = await findConversation(phone);
-  if (found && found.conv.aiPaused !== paused) {
-    found.conv.aiPaused = paused;
-    await saveConversation(found.key, found.conv);
+  // Sem conversa ainda (ex: atendente manda a 1ª mensagem pra um lead novo,
+  // antes de qualquer contato dele) — cria o registro em vez de descartar a
+  // pausa silenciosamente, senão a IA responde normal no primeiro contato.
+  const key = found?.key ?? phone;
+  const conv: Conversation = found?.conv ?? { messages: [], lastActivity: Date.now() };
+  if (conv.aiPaused !== paused) {
+    conv.aiPaused = paused;
+    await saveConversation(key, conv);
   }
 }
 

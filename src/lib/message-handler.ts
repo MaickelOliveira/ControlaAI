@@ -695,6 +695,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       await addMessage(from, { role: "user", content: messageText || (msg.isFileMessage ? "[Arquivo]" : ""), ts: Date.now() }, { contactName: msg.contactName });
     }
 
+    // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──
+    // Precisa vir ANTES de qualquer processamento (arquivo, ação pendente,
+    // slot-fill) — esses caminhos respondem automaticamente e furavam a
+    // pausa quando o check só existia mais abaixo, depois deles.
+    if (from && await getAiPaused(from)) {
+      console.log("[message-handler] IA pausada, não processa");
+      return;
+    }
+
     // ── Detecta arquivo/documento enviado via WhatsApp ──
     const isFileMessage = !!msg.isFileMessage && !!msg.fileBuffer;
 
@@ -1949,12 +1958,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       if (out.reply) await wppSend(from, out.reply);
       if (!out.fallThrough) return;
       // fallThrough → usuário mudou de assunto; segue o turno normalmente com esta mensagem
-    }
-
-    // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──
-    if (await getAiPaused(from)) {
-      console.log("[message-handler] IA pausada, não processa");
-      return;
     }
 
     // Um pedido direto de aviso para um compromisso existente é totalmente
