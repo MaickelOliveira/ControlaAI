@@ -169,30 +169,25 @@ export async function getFinancesByUser(userId: string, mode?: FinanceMode, regi
   return load(userId, { mode, registeredBy });
 }
 
-/** Só a contagem, sem baixar as linhas — usado onde só o número importa
- *  (ex: painel admin listando todos os clientes), pra não puxar o
- *  histórico financeiro inteiro de cada um só pra saber o tamanho dele. */
-export async function getFinancesCountByUser(userId: string): Promise<number> {
-  const { count, error } = await getSupabase()
-    .from("finances")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  if (error) { console.error("[finances] getFinancesCountByUser erro:", error.message); return 0; }
-  return count ?? 0;
-}
-
-/** Só a data do lançamento mais recente — mesma ideia: evita baixar todo o
- *  histórico só pra achar a última atividade. */
-export async function getLatestFinanceDate(userId: string): Promise<string | null> {
+/** Contagem e data do lançamento mais recente de TODOS os usuários numa
+ *  única query (só as colunas user_id/created_at, sem o resto da linha) —
+ *  usado pelo painel admin. Fazer isso por usuário (1 requisição cada)
+ *  significava dezenas de idas e vindas ao Supabase toda vez que a tela
+ *  abria; numa lista pequena de lançamentos isso pesa mais em latência de
+ *  rede do que em volume de dados, então uma query só resolve as duas coisas. */
+export async function getFinancesSummaryByAllUsers(): Promise<Map<string, { count: number; latestCreatedAt: string }>> {
   const { data, error } = await getSupabase()
     .from("finances")
-    .select("created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return null;
-  return (data as { created_at: string }).created_at;
+    .select("user_id, created_at")
+    .order("created_at", { ascending: false });
+  const summary = new Map<string, { count: number; latestCreatedAt: string }>();
+  if (error) { console.error("[finances] getFinancesSummaryByAllUsers erro:", error.message); return summary; }
+  for (const row of data as { user_id: string; created_at: string }[]) {
+    const existing = summary.get(row.user_id);
+    if (existing) existing.count += 1;
+    else summary.set(row.user_id, { count: 1, latestCreatedAt: row.created_at });
+  }
+  return summary;
 }
 
 /** Filtra por intervalo de datas (YYYY-MM-DD, inclusive nas duas pontas) em

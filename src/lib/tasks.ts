@@ -57,15 +57,17 @@ export async function getTasksByUser(userId: string, mode?: TaskMode): Promise<T
   return (data as Row[]).map(fromRow);
 }
 
-/** Só a contagem, sem baixar as linhas — usado onde só o número importa
- *  (ex: painel admin listando todos os clientes). */
-export async function getTasksCountByUser(userId: string): Promise<number> {
-  const { count, error } = await getSupabase()
-    .from("tasks")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  if (error) { console.error("[tasks] getTasksCountByUser erro:", error.message); return 0; }
-  return count ?? 0;
+/** Contagem de tarefas de TODOS os usuários numa única query — usado pelo
+ *  painel admin pra não fazer 1 requisição por cliente (ver
+ *  getFinancesSummaryByAllUsers em finances.ts pra mais contexto). */
+export async function getTasksCountsByAllUsers(): Promise<Map<string, number>> {
+  const { data, error } = await getSupabase().from("tasks").select("user_id");
+  const counts = new Map<string, number>();
+  if (error) { console.error("[tasks] getTasksCountsByAllUsers erro:", error.message); return counts; }
+  for (const row of data as { user_id: string }[]) {
+    counts.set(row.user_id, (counts.get(row.user_id) ?? 0) + 1);
+  }
+  return counts;
 }
 
 export async function getPendingTasks(userId: string, mode?: TaskMode): Promise<Task[]> {

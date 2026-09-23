@@ -1,26 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession as getSession } from "@/lib/auth";
 import { getUsers, isTrialExpired, createUser, getUserByEmail, updateUser, getMaxWppPhones } from "@/lib/users";
-import { getPhonesForUser } from "@/lib/wpp-phone-links";
-import { getFinancesCountByUser, getLatestFinanceDate } from "@/lib/finances";
-import { getTasksCountByUser } from "@/lib/tasks";
+import { getAllPhoneLinks } from "@/lib/wpp-phone-links";
+import { getFinancesSummaryByAllUsers } from "@/lib/finances";
+import { getTasksCountsByAllUsers } from "@/lib/tasks";
 
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const users = await getUsers();
+  const [users, financesSummary, tasksCounts, phoneLinksByUser] = await Promise.all([
+    getUsers(),
+    getFinancesSummaryByAllUsers(),
+    getTasksCountsByAllUsers(),
+    getAllPhoneLinks(),
+  ]);
   const now = new Date();
 
-  const clientes = (await Promise.all(users.map(async u => {
-    const [financesCount, tasksCount, phoneLinks, latestFinanceDate] = await Promise.all([
-      getFinancesCountByUser(u.id),
-      getTasksCountByUser(u.id),
-      getPhonesForUser(u.id),
-      getLatestFinanceDate(u.id),
-    ]);
-    const wppPhones = phoneLinks.map(link => link.phone);
-    const lastActivity = latestFinanceDate ?? u.createdAt;
+  const clientes = users.map(u => {
+    const financeSummary = financesSummary.get(u.id);
+    const wppPhones = (phoneLinksByUser.get(u.id) ?? []).map(link => link.phone);
+    const lastActivity = financeSummary?.latestCreatedAt ?? u.createdAt;
     const isToday = new Date(lastActivity).toDateString() === now.toDateString();
     const trialExpired = isTrialExpired(u);
 
@@ -39,12 +39,12 @@ export async function GET() {
       trialEndsAt: u.trialEndsAt,
       createdAt: u.createdAt,
       priceOverride: u.priceOverride,
-      financesCount,
-      tasksCount,
+      financesCount: financeSummary?.count ?? 0,
+      tasksCount: tasksCounts.get(u.id) ?? 0,
       lastActivity,
       activeToday: isToday,
     };
-  }))).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const stats = {
     total: clientes.length,

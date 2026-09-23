@@ -24,6 +24,21 @@ export async function getPhonesForUser(userId: string): Promise<WppPhoneLink[]> 
   return (data as Row[]).map(fromRow);
 }
 
+/** Todos os vínculos de todos os usuários numa única query — usado pelo
+ *  painel admin pra não fazer 1 requisição por cliente (ver
+ *  getFinancesSummaryByAllUsers em finances.ts pra mais contexto). */
+export async function getAllPhoneLinks(): Promise<Map<string, WppPhoneLink[]>> {
+  const { data, error } = await getSupabase().from("wpp_phone_links").select("*");
+  const byUser = new Map<string, WppPhoneLink[]>();
+  if (error) { console.error("[wpp-phone-links] getAllPhoneLinks erro:", error.message); return byUser; }
+  for (const row of data as Row[]) {
+    const link = fromRow(row);
+    const list = byUser.get(link.userId);
+    if (list) list.push(link); else byUser.set(link.userId, [link]);
+  }
+  return byUser;
+}
+
 export async function countPhonesForUser(userId: string): Promise<number> {
   const { count, error } = await getSupabase().from("wpp_phone_links").select("phone", { count: "exact", head: true }).eq("user_id", userId);
   if (error) return 0;
