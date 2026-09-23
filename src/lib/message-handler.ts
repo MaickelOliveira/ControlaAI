@@ -3,7 +3,7 @@ import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRel
 import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getRecentTransactions, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
@@ -4271,19 +4271,24 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const business = await getBalance(user.id, "business", year, month);
           await wppSend(from, replyBalance(personal, business, undefined, undefined, user.locale));
         } else if (lower.includes("extrato") || lower.includes("extracto") || lower.includes("ultimos")) {
-          const recents = await getRecentTransactions(user.id, mode, 10);
+          const [monthFrom, monthTo] = monthBounds(year, month);
+          const recents = await getTransactionsInRange(user.id, mode, monthFrom, monthTo);
           if (!recents.length) {
-            await wppSend(from, user.locale === "es" ? "📋 Todavía no encontré ningún movimiento." : "📋 Nenhum lançamento encontrado ainda.");
+            await wppSend(from, user.locale === "es" ? "📋 Todavía no encontré ningún movimiento este mes." : "📋 Nenhum lançamento encontrado neste mês ainda.");
           } else {
+            const income = recents.filter(f => f.type === "income").reduce((sum, f) => sum + f.amount, 0);
+            const expense = recents.filter(f => f.type === "expense").reduce((sum, f) => sum + f.amount, 0);
+            const modeLabel = mode === "business" ? "Empresa" : (user.locale === "es" ? "Personal" : "Pessoal");
             let msg = user.locale === "es"
-              ? `📋 *Últimos movimientos (${mode === "business" ? "Empresa" : "Personal"}):*\n\n`
-              : `📋 *Últimos lançamentos (${mode === "business" ? "Empresa" : "Pessoal"}):*\n\n`;
+              ? `📋 *Movimientos de este mes (${modeLabel}):*\n\n💰 Ingresos: *${formatCurrency(income)}*\n💸 Gastos: *${formatCurrency(expense)}*\n📊 Saldo: *${formatCurrency(income - expense)}*\n\n`
+              : `📋 *Lançamentos deste mês (${modeLabel}):*\n\n💰 Receitas: *${formatCurrency(income)}*\n💸 Despesas: *${formatCurrency(expense)}*\n📊 Saldo: *${formatCurrency(income - expense)}*\n\n`;
             recents.forEach((f, i) => {
               const emoji = f.type === "income" ? "💰" : "💸";
               const dateLocale = user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR";
               msg += `${i + 1}. ${emoji} ${f.description} — ${formatCurrency(f.amount)}\n   📅 ${new Date(f.date + "T12:00:00").toLocaleDateString(dateLocale)} · ${f.category}\n\n`;
             });
-            await wppSend(from, msg.trim());
+            msg = msg.trim();
+            await wppSend(from, msg.length > 4000 ? msg.slice(0, 3950) + "\n\n_(lista truncada — veja o restante no dashboard)_" : msg);
           }
         } else {
           const fallback = await generateFallbackResponse(messageText, recentHistory, user.locale, user.id);

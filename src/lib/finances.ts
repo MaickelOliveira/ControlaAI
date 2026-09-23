@@ -428,19 +428,6 @@ export async function findFinanceByDescription(userId: string, mode: FinanceMode
     .slice(0, limit);
 }
 
-export async function getRecentTransactions(userId: string, mode: FinanceMode, limit = 10): Promise<Finance[]> {
-  const { data, error } = await getSupabase()
-    .from("finances")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("mode", mode)
-    .eq("pending", false)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) { console.error("[finances] getRecentTransactions erro:", error.message); return []; }
-  return (data as Row[]).map(fromRow);
-}
-
 export async function getMonthlyTransactions(userId: string, mode: FinanceMode, year: number, month: number): Promise<Finance[]> {
   return (await getFinancesByUser(userId, mode))
     .filter(f => isPostedFinance(f) && /^\d{4}-\d{2}-\d{2}$/.test(f.date ?? ""))
