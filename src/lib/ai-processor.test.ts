@@ -32,6 +32,7 @@ import {
   getExplicitWebSearchResult,
   getWebSearchMissingQuestion,
   getExplicitWeeklySummaryResult,
+  getMediaCapabilityResponse,
   getUnsupportedBankConnectionResponse,
   normalizeActionReminder,
   normalizeMeetingCreation,
@@ -893,6 +894,33 @@ describe("getUnsupportedBankConnectionResponse", () => {
     expect(getUnsupportedBankConnectionResponse("Como conecto o Google Agenda?")).toBeNull();
     expect(getUnsupportedBankConnectionResponse("Como registrar a conta de luz?"))
       .toBeNull();
+  });
+});
+
+describe("getMediaCapabilityResponse", () => {
+  it.each([
+    ["Vc transcreve áudio?", "pt-BR"],
+    ["E se eu mandar áudio você assimila?", "pt-BR"],
+    ["Você lê documento PDF?", "pt-BR"],
+    ["¿Puedes entender audios y leer facturas?", "es"],
+    ["Consegues ler fotografias e faturas?", "pt-PT"],
+  ])("confirms supported media capabilities for %s", (message, locale) => {
+    const response = getMediaCapabilityResponse(message, locale);
+
+    expect(response).not.toBeNull();
+    expect(response).not.toMatch(/não consigo|no puedo|não consigo processar/i);
+  });
+
+  it("short-circuits processMessage without depending on an AI provider", async () => {
+    const result = await processMessage("Vc transcreve áudio?");
+
+    expect(result).toMatchObject({ intent: "how_to", confidence: 1 });
+    expect(result.response).toContain("Sim. Pode me enviar áudios");
+  });
+
+  it("does not hijack unrelated messages", () => {
+    expect(getMediaCapabilityResponse("Crie uma tarefa para amanhã")).toBeNull();
+    expect(getMediaCapabilityResponse("Quanto gastei este mês?")).toBeNull();
   });
 });
 

@@ -2021,6 +2021,26 @@ export function getUnsupportedBankConnectionResponse(
   return `${limitation}\n\n${supportInsidePlatformLine(locale)}`;
 }
 
+/** Responde perguntas sobre formatos que o Zelo realmente processa sem
+ * depender do classificador externo. Isso evita respostas falsas como
+ * "não consigo transcrever áudios" mesmo com a transcrição ativa nos
+ * webhooks do WhatsApp. */
+export function getMediaCapabilityResponse(message: string, locale?: string): string | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  const mentionsSupportedMedia = /\b(?:audio|audios|mensagem de voz|mensagens de voz|nota de voz|notas de voz|foto|fotos|fotografia|fotografias|imagem|imagens|imagen|imagenes|pdf|pdfs|documento|documentos|arquivo|arquivos|archivo|archivos|ficheiro|ficheiros|recibo|recibos|fatura|faturas|factura|facturas|boleto|boletos|comprovante|comprovantes)\b/.test(normalized);
+  const asksAboutCapability = /\b(?:transcrev\w*|entend\w*|compreend\w*|assimil\w*|process\w*|aceit\w*|analis\w*|interpret\w*|identific\w*|reconhec\w*|escut\w*|ouv\w*|consig\w*|pod\w*|le|ler|lee|leer|entiend\w*|comprend\w*|pued\w*|acept\w*|escuch\w*)\b/.test(normalized);
+
+  if (!mentionsSupportedMedia || !asksAboutCapability) return null;
+
+  if (locale === "es") {
+    return "Sí. Puedes enviarme audios: los transcribo y entiendo su contenido para registrar información o ejecutar lo que me pidas. También analizo fotos, comprobantes, recibos, facturas y documentos PDF; puedo extraer los datos, identificar el contenido o guardar el archivo en el Drive de Zelo. Solo envíalo y dime qué quieres hacer.";
+  }
+  if (locale === "pt-PT") {
+    return "Sim. Podes enviar-me áudios: transcrevo e compreendo o conteúdo para registar informações ou executar o que pedires. Também analiso fotografias, comprovativos, recibos, faturas e documentos PDF; posso extrair os dados, identificar o conteúdo ou guardar o ficheiro no Drive do Zelo. Basta enviares e dizeres o que pretendes fazer.";
+  }
+  return "Sim. Pode me enviar áudios: eu transcrevo e entendo o conteúdo para registrar informações ou executar o que você pedir. Também analiso fotos, comprovantes, notas fiscais, boletos e documentos PDF; posso extrair os dados, identificar o conteúdo ou guardar o arquivo no Drive do Zelo. É só enviar e dizer o que quer fazer.";
+}
+
 /** Parte do prompt que muda a cada chamada (data, calendário, períodos
  *  pré-calculados, categorias do usuário — incluindo as personalizadas,
  *  invisíveis pra IA antes disso — e modo ativo). Fica no início da
@@ -2243,6 +2263,7 @@ INTENÇÕES POSSÍVEIS:
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa", "como acesso o painel/site", "qual o site/link do Zelo", "estou conectado no Google", "como conecto o Google", "verificar conexão do Google"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos, funcionalidades ou endereços/links que não existem). ⚠️ Se a resposta precisar citar o endereço do painel, use EXATAMENTE o "Endereço do painel web" informado no início da mensagem — nunca invente um domínio diferente.
   CONTAS MANUAIS: é possível criar, listar, renomear, excluir e definir como padrão contas manuais (ex.: Dinheiro, Nubank, Caixa). Não há cartão de crédito. O Zelo NÃO conecta nem sincroniza bancos e NÃO usa Open Finance/Open Banking. Para conexão bancária, explique apenas essa limitação.
+  ÁUDIO, FOTOS E DOCUMENTOS: o Zelo recebe áudios do WhatsApp, transcreve e compreende o conteúdo para executar o pedido do usuário. Também analisa fotos/imagens, identifica o conteúdo, pesquisa um item quando solicitado e lê comprovantes, notas fiscais, boletos, recibos, faturas e documentos PDF. NUNCA diga que o Zelo não consegue ouvir, transcrever, compreender ou processar áudio; NUNCA diga que ele não consegue ler fotos ou PDFs. Se o formato específico não estiver confirmado nestas instruções, não prometa esse formato.
   IMPORTAR COMPROVANTE/FATURA POR FOTO OU PDF: o usuário PODE mandar a foto ou o PDF de uma nota fiscal, recibo, boleto, comprovante de pagamento ou cupom fiscal que o Zelo lê o documento e registra o lançamento sozinho (pergunta antes de guardar o arquivo no Drive). Também PODE mandar o PDF de uma fatura de cartão ou extrato com VÁRIAS transações — o Zelo extrai todos os lançamentos, avisa quantos já estão registrados (evita duplicar) e pergunta se importa o restante antes de lançar qualquer coisa. ⚠️ O que o Zelo NÃO lê é planilha (.xlsx/.csv) — nesse caso oriente a mandar foto/PDF do comprovante, ou registrar um a um por aqui.
   - account_create/account_list/account_update/account_delete/account_set_default: use account.name; em update use também account.newName. Funciona em português e espanhol.
   - Consultas por conta continuam como finance_query ou finance_detail e usam account.name. Para "nessa conta"/"en esa cuenta", use account.useContext=true; o sistema recupera a conta da conversa ou pergunta qual.
@@ -3690,6 +3711,11 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   const explicitWebSearch = getExplicitWebSearchResult(message, ctx?.history);
   if (explicitWebSearch) return explicitWebSearch;
 
+  const mediaCapability = getMediaCapabilityResponse(message, ctx?.user.locale);
+  if (mediaCapability) {
+    return { intent: "how_to", confidence: 1, response: mediaCapability };
+  }
+
   const unsupportedBankConnection = getUnsupportedBankConnectionResponse(
     message,
     ctx?.user.locale,
@@ -3939,7 +3965,7 @@ ${historyText}
 
 MENSAGEM ATUAL QUE NÃO FOI ENTENDIDA: "${message}"
 
-O que você sabe fazer (só pra te orientar, não repita essa lista pronta): registrar/editar/apagar despesas e receitas (inclusive marcar algo como "a receber"/"a pagar" ainda não recebido), criar/listar/renomear/excluir contas manuais e consultar gastos por conta, ver saldo e extrato, tarefas, lembretes (inclusive pra outra pessoa), metas financeiras, gastos de veículo, contas recorrentes/parceladas, funcionários e clientes (cadastro no painel), lista de compras de mercado, agenda/reuniões no Google Meet, pesquisar informações públicas atuais na internet com fontes, vincular o WhatsApp de outra pessoa à conta (código de 4 dígitos via "vincular número" ou em Configurações).
+O que você sabe fazer (só pra te orientar, não repita essa lista pronta): registrar/editar/apagar despesas e receitas (inclusive marcar algo como "a receber"/"a pagar" ainda não recebido), criar/listar/renomear/excluir contas manuais e consultar gastos por conta, ver saldo e extrato, tarefas, lembretes (inclusive pra outra pessoa), metas financeiras, gastos de veículo, contas recorrentes/parceladas, funcionários e clientes (cadastro no painel), lista de compras de mercado, agenda/reuniões no Google Meet, pesquisar informações públicas atuais na internet com fontes, vincular o WhatsApp de outra pessoa à conta (código de 4 dígitos via "vincular número" ou em Configurações), receber e transcrever áudios do WhatsApp para compreender e executar pedidos, analisar fotos/imagens, ler comprovantes/notas/boletos/recibos/faturas e documentos PDF, extrair dados financeiros desses arquivos e guardá-los no Drive do Zelo.
 
 Instruções:
 - Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.
@@ -3947,6 +3973,7 @@ Instruções:
 - No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
 - ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Se o pedido não estiver claramente coberto pela lista ou faltar informação confirmada, diga isso com naturalidade e oriente a pessoa a entrar no painel do Zelo e abrir o *Suporte* no canto inferior direito. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
 - Existem contas manuais, mas não existe cartão de crédito nem conexão/sincronização bancária via Open Finance/Open Banking. Nunca invente integração bancária.
+- Nunca diga que o Zelo não consegue transcrever ou compreender áudios, nem que não consegue analisar fotos ou ler PDFs: essas funções existem. Não prometa formatos não confirmados, como planilhas .xlsx/.csv.
 - Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
 
   const openAIAttempt = await tryOpenAIForTestUser(

@@ -218,6 +218,13 @@ Cuéntame qué pasó y yo lo anoto:
 📸 También acepto foto de recibo o factura — lo registro solo.
 
 ━━━━━━━━━━━━━━━
+🎙️ *AUDIOS, FOTOS Y PDF*
+• Envíame un audio → lo transcribo, entiendo el contenido y ejecuto tu pedido
+• Envíame una foto → identifico lo que aparece o extraigo los datos
+• Envíame un comprobante, recibo, factura o PDF → lo leo y te indico qué encontré
+También puedo guardar el archivo en el Drive de Zelo cuando me lo pidas.
+
+━━━━━━━━━━━━━━━
 📊 *VER TUS NÚMEROS*
 • _"Mi saldo"_ → cuánto entró y salió en el mes
 • _"Movimientos"_ → tus últimos registros
@@ -362,6 +369,13 @@ Conta-me o que aconteceu que eu registo:
 📸 Também aceito foto de recibo ou fatura — registo sozinho.
 
 ━━━━━━━━━━━━━━━
+🎙️ *ÁUDIOS, FOTOGRAFIAS E PDF*
+• Envia-me um áudio → transcrevo, compreendo o conteúdo e executo o teu pedido
+• Envia-me uma fotografia → identifico o que aparece ou extraio os dados
+• Envia-me um comprovativo, recibo, fatura ou PDF → leio e mostro o que encontrei
+Também posso guardar o ficheiro no Drive do Zelo quando pedires.
+
+━━━━━━━━━━━━━━━
 📊 *VER OS TEUS NÚMEROS*
 • _"O meu saldo"_ → quanto entrou e saiu no mês
 • _"Extrato"_ → os teus últimos registos
@@ -503,6 +517,13 @@ Me conte o que aconteceu que eu anoto:
 • _"Recebi 2000 de salário"_ → receita registrada
 • _"Entrou 500 de freela"_ → receita registrada
 📸 Também aceito foto de nota fiscal ou boleto — registro sozinho.
+
+━━━━━━━━━━━━━━━
+🎙️ *ÁUDIOS, FOTOS E PDF*
+• Envie um áudio → transcrevo, entendo o conteúdo e executo seu pedido
+• Envie uma foto → identifico o que aparece ou extraio os dados
+• Envie um comprovante, nota fiscal, boleto, recibo, fatura ou PDF → leio e mostro o que encontrei
+Também posso guardar o arquivo no Drive do Zelo quando você pedir.
 
 ━━━━━━━━━━━━━━━
 📊 *VER SEUS NÚMEROS*
