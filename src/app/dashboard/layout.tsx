@@ -134,6 +134,7 @@ const BUSINESS_NAV = [
 ];
 const PERSONAL_NAV = [
   { href: "/dashboard/supermercado", label: "Supermercado", icon: Icons.cart },
+  { href: "/dashboard/contatos", label: "Contatos", icon: Icons.users },
 ];
 const CONFIG_NAV = [
   { href: "/dashboard/configuracoes", label: "Configurações", icon: Icons.settings },
