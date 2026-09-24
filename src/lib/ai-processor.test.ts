@@ -7,6 +7,8 @@ import {
   getExplicitFinanceTypeSignal,
   getExplicitEmployeeCrudResult,
   getExplicitCustomerCrudResult,
+  getExplicitContactCrudResult,
+  getExplicitFinanceTransferResult,
   getExplicitDriveRenameResult,
   getExplicitDriveSearchResult,
   getExplicitModeSwitchResult,
@@ -31,6 +33,7 @@ import {
   getWebSearchMissingQuestion,
   getExplicitWeeklySummaryResult,
   getUnsupportedBankConnectionResponse,
+  normalizeActionReminder,
   normalizeMeetingCreation,
   processMessage,
   withExplicitFinanceDestinationMode,
@@ -130,6 +133,13 @@ describe("employee command parity", () => {
     expect(getExplicitEmployeeCrudResult("Cambia el nombre de la factura a internet septiembre")).toBeNull();
     expect(getExplicitEmployeeCrudResult("Cambia el nombre del archivo del cliente Juan")).toBeNull();
   });
+
+  it("understands the 'mil' (thousand) shorthand in salary values", () => {
+    expect(getExplicitEmployeeCrudResult("Cadastra a funcionária Aline com salário 11 mil"))
+      .toMatchObject({ intent: "employee_create", employee: { name: "Aline", salary: 11000 } });
+    expect(getExplicitEmployeeCrudResult("Muda o salário da Aline para 11 mil"))
+      .toMatchObject({ intent: "employee_update", keyword: "Aline", employee: { salary: 11000 } });
+  });
 });
 
 describe("customer command parity", () => {
@@ -143,6 +153,42 @@ describe("customer command parity", () => {
       .toMatchObject({ intent: "customer_update", keyword: "Juan" });
     expect(getExplicitCustomerCrudResult("Desactiva al cliente Juan"))
       .toMatchObject({ intent: "customer_deactivate", keyword: "Juan" });
+  });
+});
+
+describe("contact command parity", () => {
+  it("handles personal contact CRUD in Portuguese without the model", () => {
+    expect(getExplicitContactCrudResult("Salva o contato da Fernanda, telefone 11999999999"))
+      .toMatchObject({ intent: "contact_create", contact: { name: "Fernanda", phone: "11999999999" } });
+    expect(getExplicitContactCrudResult("Meus contatos")).toMatchObject({ intent: "contact_list" });
+    expect(getExplicitContactCrudResult("Busca o contato Bruno"))
+      .toMatchObject({ intent: "contact_query", keyword: "Bruno" });
+    expect(getExplicitContactCrudResult("Muda o telefone do contato Pedro para 11988887777"))
+      .toMatchObject({ intent: "contact_update", keyword: "Pedro", contact: { phone: "11988887777" } });
+    expect(getExplicitContactCrudResult("Apaga o contato Pedro"))
+      .toMatchObject({ intent: "contact_deactivate", keyword: "Pedro" });
+  });
+
+  it("does not steal business customer commands", () => {
+    expect(getExplicitContactCrudResult("Cadastra o cliente Pedro, telefone 11999999999")).toBeNull();
+  });
+});
+
+describe("finance transfer parity", () => {
+  it("recognizes an explicit transfer between personal and business", () => {
+    expect(getExplicitFinanceTransferResult("Transferir 500 da conta pessoal para a empresarial"))
+      .toMatchObject({ intent: "finance_transfer", transfer: { toMode: "business", amount: 500 } });
+    expect(getExplicitFinanceTransferResult("Transferir 1200 para a conta pessoal"))
+      .toMatchObject({ intent: "finance_transfer", transfer: { toMode: "personal", amount: 1200 } });
+  });
+
+  it("leaves ambiguous 'mover/passar' phrasing to the classifier (finance_edit territory)", () => {
+    expect(getExplicitFinanceTransferResult("Passa 300 do pessoal pra empresa")).toBeNull();
+    expect(getExplicitFinanceTransferResult("Muda as contas de água para a conta da empresa")).toBeNull();
+  });
+
+  it("does not steal unrelated messages", () => {
+    expect(getExplicitFinanceTransferResult("Gastei 50 no mercado")).toBeNull();
   });
 });
 
@@ -196,6 +242,40 @@ describe("meeting creation parity", () => {
   });
 });
 
+describe("action reminder vs agenda parity", () => {
+  it("reclassifies a personal action with a time as a reminder, not an appointment", () => {
+    const base = {
+      intent: "agenda_create" as const,
+      confidence: 0.9,
+      agendaData: { title: "Ligar para Shelton sobre contatores", startDate: "2026-09-24", startTime: "09:00" },
+    };
+    expect(normalizeActionReminder("Ligar para Shelton sobre contatores amanhã 09:00", base)).toMatchObject({
+      intent: "reminder_set",
+      reminder: { message: "Ligar para Shelton sobre contatores", scheduledAt: "2026-09-24T09:00:00", repeat: "none" },
+    });
+    const other = {
+      intent: "agenda_create" as const,
+      confidence: 0.9,
+      agendaData: { title: "Ligar para Victor sobre Tati", startDate: "2026-09-24", startTime: "09:30" },
+    };
+    expect(normalizeActionReminder("Ligar para Victor sobre Tati amanhã 09:30", other).intent).toBe("reminder_set");
+  });
+
+  it("keeps real appointments (with a presence word) in the agenda flow", () => {
+    const result = {
+      intent: "agenda_create" as const,
+      confidence: 0.9,
+      agendaData: { title: "Consulta médica", startDate: "2026-09-24", startTime: "09:00" },
+    };
+    expect(normalizeActionReminder("Marcar consulta médica amanhã às 9h", result).intent).toBe("agenda_create");
+  });
+
+  it("leaves other intents untouched", () => {
+    const result = { intent: "reminder_set" as const, confidence: 0.9, reminder: { message: "Pagar conta" } };
+    expect(normalizeActionReminder("Pagar conta amanhã às 9h", result)).toBe(result);
+  });
+});
+
 describe("internet research classification", () => {
   it("routes explicit web research in Portuguese and Spanish", async () => {
     expect(getExplicitWebSearchResult("Pesquise na internet o preço do medicamento X"))
@@ -227,6 +307,12 @@ describe("internet research classification", () => {
     expect(getExplicitWebSearchResult("tarefa de hoje: pesquisar hotéis")).toBeNull();
     expect(getExplicitWebSearchResult("tenho reunião hoje em Bogotá")).toBeNull();
     expect(getExplicitWebSearchResult("qual meu saldo hoje?")).toBeNull();
+  });
+
+  it("does not treat sending a message to a client/employee 'now' as a web search", () => {
+    expect(getExplicitWebSearchResult("Enviar msg para cliente Thaynara agora")).toBeNull();
+    expect(getExplicitWebSearchResult("Avisa o funcionário Carlos agora")).toBeNull();
+    expect(getExplicitWebSearchResult("Liga para o cliente agora")).toBeNull();
   });
 
   it("uses the previous grounded search to resolve any city or subject referenced indirectly", async () => {

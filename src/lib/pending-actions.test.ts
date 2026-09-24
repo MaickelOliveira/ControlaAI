@@ -94,6 +94,13 @@ describe("parseAmountBR", () => {
   it("returns null for zero or negative", () => {
     expect(parseAmountBR("0")).toBeNull();
   });
+
+  it("parses the 'mil' (thousand) shorthand", () => {
+    expect(parseAmountBR("11 mil")).toBe(11000);
+    expect(parseAmountBR("11mil")).toBe(11000);
+    expect(parseAmountBR("2,5 mil")).toBe(2500);
+    expect(parseAmountBR("gastei mil reais no fornecedor")).toBe(1000);
+  });
 });
 
 describe("parseFinanceChoiceMulti", () => {

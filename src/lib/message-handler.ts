@@ -18,6 +18,7 @@ import {
 } from "@/lib/grocery";
 import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
+import { getContactsByUser, findContactByName, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
@@ -53,6 +54,8 @@ import {
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
   replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
   replyCustomerList, replyCustomerInfo, replyCustomerUpdated, replyCustomerDeactivated,
+  replyContactList, replyContactInfo, replyContactUpdated, replyContactDeactivated,
+  replyTransferDone,
   replyFirstUseTips,
 } from "@/lib/bot-replies";
 
@@ -2122,6 +2125,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       "task_query", "reminder_list", "goal_query", "recurring_query", "agenda_list", "vehicle_query",
       "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking", "grocery_last_purchase_query",
       "grocery_history_query", "employee_list", "customer_list", "customer_query",
+      "contact_list", "contact_query",
       "account_list", "web_search",
     ].includes(ai.intent);
     const shouldCollectMissingSlots = hasMissingSlotFields(ai, { user, userId: user.id, phone: from, mode });
@@ -3906,6 +3910,83 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (!custDeactTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista.", "❓ No encontré a ese cliente. Escribe *mis clientes* para ver la lista.")); break; }
         const custDeactivated = await updateCustomer(custDeactTarget.id, user.id, { status: "inactive" });
         await wppSend(from, custDeactivated ? replyCustomerDeactivated(custDeactivated, user.locale) : localized(user.locale, "❌ Não consegui desativar esse cliente agora. Tente novamente.", "❌ No pude desactivar a este cliente. Inténtalo de nuevo."));
+        break;
+      }
+
+      case "contact_create": {
+        const contactAis = ai.contacts?.length ? ai.contacts.map(contact => ({ ...ai, contact, contacts: undefined })) : [ai];
+        const { reply: contactReply } = await beginBatchSlotFill("contact_create", contactAis, { user, userId: user.id, phone: from, mode }, messageText);
+        await wppSend(from, contactReply);
+        break;
+      }
+
+      case "contact_list": {
+        const contacts = await getContactsByUser(user.id, "active");
+        await wppSend(from, replyContactList(contacts, user.locale));
+        break;
+      }
+
+      case "contact_query": {
+        const contQueryKeyword = ai.keyword || ai.contact?.name || "";
+        const contMatches = contQueryKeyword ? await findContactsByName(user.id, contQueryKeyword) : [];
+        await wppSend(from, replyContactInfo(contMatches, contQueryKeyword, user.locale));
+        break;
+      }
+
+      case "contact_update": {
+        const contKeyword = ai.keyword || ai.contact?.name || "";
+        const contTarget = contKeyword ? await findContactByName(user.id, contKeyword) : null;
+        if (!contTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse contato. Digite *meus contatos* para ver a lista.", "❓ No encontré a ese contacto. Escribe *mis contactos* para ver la lista.")); break; }
+        const contPatch: Partial<Contact> = {};
+        if (ai.contact?.phone) contPatch.phone = ai.contact.phone;
+        if (ai.contact?.email) contPatch.email = ai.contact.email;
+        if (ai.contact?.relation) contPatch.relation = ai.contact.relation;
+        if (ai.contact?.notes) contPatch.notes = ai.contact.notes;
+        if (Object.keys(contPatch).length === 0) { await wppSend(from, localized(user.locale, "❓ O que deseja alterar? Ex: _\"muda o telefone do Pedro para 11988887777\"_", "❓ ¿Qué quieres cambiar? Ej.: _\"cambia el teléfono de Pedro a 56912345678\"_")); break; }
+        const contUpdated = await updateContact(contTarget.id, user.id, contPatch);
+        await wppSend(from, contUpdated ? replyContactUpdated(contUpdated, user.locale) : localized(user.locale, "❌ Não consegui atualizar esse contato agora. Nada foi modificado; tente novamente.", "❌ No pude actualizar a este contacto. No se modificó nada; inténtalo de nuevo."));
+        break;
+      }
+
+      case "contact_deactivate": {
+        const contDeactKeyword = ai.keyword || ai.contact?.name || "";
+        const contDeactTarget = contDeactKeyword ? await findContactByName(user.id, contDeactKeyword) : null;
+        if (!contDeactTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse contato. Digite *meus contatos* para ver a lista.", "❓ No encontré a ese contacto. Escribe *mis contactos* para ver la lista.")); break; }
+        const contDeactivated = await updateContact(contDeactTarget.id, user.id, { status: "inactive" });
+        await wppSend(from, contDeactivated ? replyContactDeactivated(contDeactivated, user.locale) : localized(user.locale, "❌ Não consegui apagar esse contato agora. Tente novamente.", "❌ No pude borrar a este contacto. Inténtalo de nuevo."));
+        break;
+      }
+
+      case "finance_transfer": {
+        if (phoneAccess !== "both") {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          break;
+        }
+        const toMode = ai.transfer?.toMode;
+        const transferAmount = ai.transfer?.amount;
+        if (!toMode || !transferAmount || transferAmount <= 0) {
+          await wppSend(from, localized(user.locale,
+            "❓ Diga o valor e o destino da transferência. Ex: _\"transferir 500 da conta pessoal para a empresarial\"_",
+            "❓ Indica el monto y el destino de la transferencia. Ej.: _\"transferir 500 de la cuenta personal a la empresarial\"_"));
+          break;
+        }
+        const fromMode: FinanceMode = toMode === "business" ? "personal" : "business";
+        const today = todayStrBR();
+        const fromLabel = fromMode === "business" ? "Empresa" : "Pessoal";
+        const toLabel = toMode === "business" ? "Empresa" : "Pessoal";
+        await addFinance({
+          userId: user.id, type: "expense", amount: transferAmount, category: "Transferência",
+          description: ai.transfer?.description || `Transferência para ${toLabel}`,
+          date: today, mode: fromMode, source: "whatsapp", registeredBy: from,
+        });
+        await addFinance({
+          userId: user.id, type: "income", amount: transferAmount, category: "Transferência",
+          description: ai.transfer?.description || `Transferência de ${fromLabel}`,
+          date: today, mode: toMode, source: "whatsapp", registeredBy: from,
+        });
+        const personalBalance = await getBalance(user.id, "personal");
+        const businessBalance = await getBalance(user.id, "business");
+        await wppSend(from, replyTransferDone(transferAmount, toMode, personalBalance.balance, businessBalance.balance, user.locale));
         break;
       }
 

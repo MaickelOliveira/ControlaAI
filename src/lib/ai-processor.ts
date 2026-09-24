@@ -82,6 +82,11 @@ export type Intent =
   | "customer_query"
   | "customer_update"
   | "customer_deactivate"
+  | "contact_create"
+  | "contact_list"
+  | "contact_query"
+  | "contact_update"
+  | "contact_deactivate"
   | "web_search"
   | "how_to"
   | "help"
@@ -92,6 +97,7 @@ export type Intent =
   | "account_update"
   | "account_delete"
   | "account_set_default"
+  | "finance_transfer"
   | "unknown";
 
 export type GoalData = {
@@ -295,6 +301,24 @@ export type CustomerData = {
   notes?: string;
 };
 
+/** Contato pessoal — equivalente ao cliente, mas para o modo pessoal (família,
+ *  amigos, prestadores). "relation" é o vínculo com a pessoa (ex: "esposa",
+ *  "filho", "médico", "amigo"), livre, sem lista fechada. */
+export type ContactData = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  relation?: string;
+  notes?: string;
+};
+
+export type TransferData = {
+  amount?: number;
+  /** Modo de DESTINO do valor transferido; a origem é sempre o outro modo. */
+  toMode?: "personal" | "business";
+  description?: string;
+};
+
 export type AIResult = {
   intent: Intent;
   finance?: FinanceData;
@@ -321,6 +345,9 @@ export type AIResult = {
   employees?: EmployeeData[];
   customer?: CustomerData;
   customers?: CustomerData[];
+  contact?: ContactData;
+  contacts?: ContactData[];
+  transfer?: TransferData;
   mode?: UserMode;
   financeType?: "income" | "expense"; // para finance_detail/finance_query/finance_upcoming: qual tipo mostrar (padrão "expense"); para category_create: restringe a categoria a só esse tipo (padrão: ambos)
   keyword?: string; // palavra-chave para buscar lançamento em finance_detail/finance_edit/finance_delete/recurring_cancel/recurring_edit/drive_search/agenda_update/agenda_delete
@@ -381,6 +408,46 @@ export function normalizeMeetingCreation(message: string, result: AIResult): AIR
   };
 }
 
+/** Verbos de AÇÃO pessoal ("ligar para", "mandar mensagem", "pagar"...) no
+ *  início da frase indicam um lembrete de tarefa, não um compromisso — não
+ *  há ninguém pra encontrar nem local pra estar, só um aviso pra fazer algo. */
+const REMINDER_ACTION_START_RE = /^(?:me\s+)?(?:ligar|telefonar|chamar|contatar|contactar|falar\s+com|mandar\s+mensagem|enviar\s+mensagem|mandar\s+email|enviar\s+email|mandar\s+e-mail|enviar\s+e-mail|confirmar|cobrar|pagar|buscar|pegar|retirar|entregar|renovar|responder|avisar|llamar|telefonear|hablar\s+con|enviar\s+mensaje|mandar\s+mensaje|confirmar\s+con)\b/i;
+
+/** Palavras que confirmam um COMPROMISSO de verdade (presença marcada com
+ *  outra pessoa/local) — na presença delas, mantém agenda_create mesmo que
+ *  a frase comece com um verbo de ação. */
+const AGENDA_APPOINTMENT_WORD_RE = /\b(?:reuni[ãa]o|reunion|consulta|compromisso|encontro|visita|entrevista|evento|festa|anivers[áa]rio|almo[çc]o|jantar|cena|cita)\b/i;
+
+/** O classificador às vezes trata uma AÇÃO com horário de aviso ("ligar
+ * para Fulano amanhã às 9h") como um compromisso de Agenda, quando na
+ * verdade é um lembrete de tarefa comum. */
+export function normalizeActionReminder(message: string, result: AIResult): AIResult {
+  if (result.intent !== "agenda_create") return result;
+  if (result.agendaItems?.length) return result;
+  if (isAllDayAgendaText(message)) return result;
+
+  const normalized = message.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  if (AGENDA_APPOINTMENT_WORD_RE.test(normalized)) return result;
+
+  const agenda = result.agendaData || {};
+  const title = (agenda.title || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  if (!REMINDER_ACTION_START_RE.test(normalized) && !REMINDER_ACTION_START_RE.test(title)) return result;
+
+  const scheduledAt = agenda.startDate && agenda.startTime ? `${agenda.startDate}T${agenda.startTime}:00` : undefined;
+  const repeat: ReminderData["repeat"] = agenda.repeat && agenda.repeat !== "yearly" ? agenda.repeat : "none";
+
+  return {
+    ...result,
+    intent: "reminder_set",
+    reminder: {
+      ...(agenda.title ? { message: agenda.title } : {}),
+      ...(scheduledAt ? { scheduledAt } : {}),
+      repeat,
+    },
+    agendaData: undefined,
+  };
+}
+
 /** Reconhece pesquisas atuais sem depender do classificador.
  * Além de pedidos explícitos, cobre a forma curta que as pessoas usam no
  * WhatsApp ("dólar hoje", "Balneário Camboriú hoje", "clima em Bogotá").
@@ -435,7 +502,7 @@ export function getExplicitWebSearchResult(message: string, history?: WebSearchH
     hasContextualWebReference(message)
     || (/^(?:e|y)\b/.test(normalized) && /\b(?:hoje|hoy|amanha|manana|semana|fim de semana|fin de semana|mes|m[eê]s)\b/.test(normalized))
   );
-  const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|pagar|recebi|recibi|receber|cobrar|ganhei|comprei|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|coloc|coloqu|bot|lanc|agreg|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|contas? a receber|contas? a pagar|cuentas? por cobrar|cuentas? por pagar|conta da empresa|cuenta de la empresa|drive)\w*/.test(normalized);
+  const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|pagar|recebi|recibi|receber|cobrar|ganhei|comprei|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|coloc|coloqu|bot|lanc|agreg|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|contas? a receber|contas? a pagar|cuentas? por cobrar|cuentas? por pagar|conta da empresa|cuenta de la empresa|drive|envi|mand|avis|notific|respond|liga|llama|chama|telefon|cliente|clienta|customer|funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa])\w*/.test(normalized);
 
   if (!(asksToSearch && mentionsWeb) && !(hasLiveInformationSubject || terseCurrentSubject || contextualFollowUp) || isInternalOrMutation) return null;
 
@@ -1574,7 +1641,7 @@ export function getExplicitEmployeeCrudResult(message: string): AIResult | null 
 
   const deactivate = /\b(?:desativ(?:a|ar|e)|remov(?:a|er|e)|exclu(?:a|ir)|elimin(?:a|ar|e)|desactiv(?:a|ar|e)|retir(?:a|ar|e))\b/.test(normalized);
   if (deactivate && hasEmployeeWord) {
-    const name = cleanName(text.match(/\b(?:funcionari[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+)$/i)?.[1]
+    const name = cleanName(text.match(/\b(?:funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+)$/i)?.[1]
       || text.match(/\b(?:desativ\w*|remov\w*|exclu\w*|elimin\w*|desactiv\w*|retir\w*)\s+(?:a[ol]?\s+)?(.+)$/i)?.[1]);
     return { intent: "employee_deactivate", confidence: 1, ...(name ? { keyword: name, employee: { name } } : {}) };
   }
@@ -1584,13 +1651,14 @@ export function getExplicitEmployeeCrudResult(message: string): AIResult | null 
   if (update && !hasOtherEntity && (hasEmployeeWord || hasExclusiveEmployeeField)) {
     const employee: EmployeeData = {};
     let name: string | undefined;
-    const salary = text.match(/\b(?:sal[aá]rio|sueldo)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)\s+(?:para|a)\s+(?:[$€]\s*)?(\d[\d.,]*)/i);
+    const salary = text.match(/\b(?:sal[aá]rio|sueldo)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)\s+(?:para|a)\s+(?:[$€]\s*)?(\d[\d.,]*)\s*(mil)?\b/i);
     const role = text.match(/\b(?:cargo|fun[çc][aã]o|puesto)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)\s+(?:para|a)\s+(.+)$/i);
     const phone = text.match(/\b(?:telefone|tel[eé]fono)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)(?:\s+(?:para|a)\s+([+\d][\d\s().-]{7,}))?$/i);
     const email = text.match(/\b(?:e-?mail|correo)\s+(?:d[oa]|de(?:l|\s+la)?)\s+(.+?)(?:\s+(?:para|a)\s+([^\s]+@[^\s]+))?$/i);
     if (salary) {
       name = cleanName(salary[1]);
-      employee.salary = Number(salary[2].replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+      const base = Number(salary[2].replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+      employee.salary = salary[3] ? base * 1000 : base;
     } else if (role) {
       name = cleanName(role[1]);
       employee.role = role[2].trim().replace(/[.!?]+$/, "");
@@ -1601,7 +1669,7 @@ export function getExplicitEmployeeCrudResult(message: string): AIResult | null 
       name = cleanName(email[1]);
       if (email[2]) employee.email = email[2].trim();
     } else {
-      name = cleanName(text.match(/\b(?:funcionari[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?:\s+(?:para|a|com|con)\b|$)/i)?.[1]);
+      name = cleanName(text.match(/\b(?:funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?:\s+(?:para|a|com|con)\b|$)/i)?.[1]);
     }
     if (name) employee.name = name;
     return { intent: "employee_update", confidence: 1, employee, ...(name ? { keyword: name } : {}) };
@@ -1611,12 +1679,15 @@ export function getExplicitEmployeeCrudResult(message: string): AIResult | null 
   const asRole = text.match(/\b(?:adicion\w*|inclu\w*|contrat\w*|agreg\w*|a[ñn]ad\w*|incorpor\w*)\s+(?:a(?:o|l)?\s+)?(.+?)\s+como\s+(.+)$/i);
   if (create && (hasEmployeeWord || (asRole && !/\b(?:cliente|clienta|customer)\b/i.test(asRole[2])))) {
     const employee: EmployeeData = {};
-    const named = text.match(/\b(?:funcionari[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?=\s+(?:com|con|como|sal[aá]rio|sueldo|cargo|puesto)\b|$)/i);
+    const named = text.match(/\b(?:funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?=\s+(?:com|con|como|sal[aá]rio|sueldo|cargo|puesto)\b|$)/i);
     employee.name = cleanName(named?.[1] || asRole?.[1]);
     const role = text.match(/\b(?:como|cargo|puesto)\s+(?:de\s+)?([^,;]+?)(?=\s+(?:com|con)\s+(?:sal[aá]rio|sueldo)\b|$)/i)?.[1];
-    const salary = text.match(/\b(?:sal[aá]rio|sueldo)(?:\s+de)?\s+(?:[$€]\s*)?(\d[\d.,]*)/i)?.[1];
+    const salaryMatch = text.match(/\b(?:sal[aá]rio|sueldo)(?:\s+de)?\s+(?:[$€]\s*)?(\d[\d.,]*)\s*(mil)?\b/i);
     if (role) employee.role = role.trim();
-    if (salary) employee.salary = Number(salary.replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+    if (salaryMatch) {
+      const base = Number(salaryMatch[1].replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+      employee.salary = salaryMatch[2] ? base * 1000 : base;
+    }
     return { intent: "employee_create", confidence: 1, employee };
   }
 
@@ -1670,6 +1741,76 @@ export function getExplicitCustomerCrudResult(message: string): AIResult | null 
 
   const query = /\b(?:busca|buscar|procura|procurar|encontra|encontrar|dados|datos|informacoes|informaciones|mostr(?:a|ar|e)|ver|consulta|consultar)\b/.test(normalized);
   return query ? { intent: "customer_query", confidence: 1, ...(name ? { keyword: name, customer } : {}) } : null;
+}
+
+/** CRUD essencial de contatos pessoais (família, amigos, prestadores) em
+ * PT-BR e espanhol — mesmo padrão de getExplicitCustomerCrudResult, mas para
+ * o modo pessoal. Palavra-gatilho própria ("contato"/"contacto") evita
+ * colidir com o fluxo de clientes. */
+export function getExplicitContactCrudResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const hasContact = /\b(?:contatos?|contactos?)\b/.test(normalized);
+  if (!hasContact) return null;
+
+  const cleanName = (value?: string) => value
+    ?.replace(/^(?:o|a|os|as|el|la|los|las|ao|al|do|da|de|del)\s+/i, "")
+    .replace(/^(?:contato|contacto)\s+/i, "")
+    .replace(/\s+(?:com|con|como|para|a)\s+.*$/i, "")
+    .trim().replace(/[.,;:!?]+$/, "") || undefined;
+  const contact: ContactData = {};
+  const named = text.match(/\b(?:contato|contacto)\s+(?:d[oa]\s+|de\s+)?(.+?)(?=\s+(?:com|con|como|telefone|tel[eé]fono|correo|e-?mail)\b|$)/i);
+  const name = cleanName(named?.[1]);
+  if (name) contact.name = name;
+
+  const deactivate = /\b(?:desativ(?:a|ar|e)|remov(?:a|er|e)|exclu(?:a|ir)|elimin(?:a|ar|e)|desactiv(?:a|ar|e)|apag(?:a|ar|ue)|delet(?:a|ar|e))\b/.test(normalized);
+  if (deactivate) return { intent: "contact_deactivate", confidence: 1, contact, ...(name ? { keyword: name } : {}) };
+
+  const update = /\b(?:alter(?:a|ar|e)|mud(?:a|ar|e)|atualiz(?:a|ar|e)|edit(?:a|ar|e)|modific(?:a|ar|e)|cambi(?:a|ar|e)|actualiz(?:a|ar|e))\b/.test(normalized);
+  if (update) {
+    const phone = text.match(/\b(?:telefone|tel[eé]fono)\b[\s\S]*?(?:para|a)\s+([+\d][\d\s().-]{7,})/i)?.[1];
+    const email = text.match(/\b(?:e-?mail|correo)\b[\s\S]*?(?:para|a)\s+([^\s]+@[^\s]+)/i)?.[1];
+    if (phone) contact.phone = phone.replace(/\D/g, "");
+    if (email) contact.email = email.trim().replace(/[.,;:!?]+$/, "");
+    return { intent: "contact_update", confidence: 1, contact, ...(name ? { keyword: name } : {}) };
+  }
+
+  const create = /\b(?:cadastr(?:a|ar|e)|registr(?:a|ar|e)|adicion(?:a|ar|e)|inclu(?:a|ir)|agreg(?:a|ar|ue)|anad(?:e|ir)|salv(?:a|ar|e)|guard(?:a|ar|e))\b/.test(normalized);
+  if (create) {
+    const phone = text.match(/\b(?:telefone|tel[eé]fono)(?:\s+de)?\s+([+\d][\d\s().-]{7,})/i)?.[1];
+    const email = text.match(/\b(?:e-?mail|correo)(?:\s+de)?\s+([^\s]+@[^\s]+)/i)?.[1];
+    if (phone) contact.phone = phone.replace(/\D/g, "");
+    if (email) contact.email = email.trim().replace(/[.,;:!?]+$/, "");
+    return { intent: "contact_create", confidence: 1, contact };
+  }
+
+  const list = /\b(?:mostr(?:a|ar|e)|list(?:a|ar|e)|ver|consult(?:a|ar|e)|quantos?|cuantos?|meus|minhas|mis|todos?|todas?)\b/.test(normalized)
+    && !/\b(?:busca|buscar|procura|procurar|datos|dados)\b/.test(normalized);
+  if (list) return { intent: "contact_list", confidence: 1 };
+
+  const query = /\b(?:busca|buscar|procura|procurar|encontra|encontrar|dados|datos|informacoes|informaciones|mostr(?:a|ar|e)|ver|consulta|consultar)\b/.test(normalized);
+  return query ? { intent: "contact_query", confidence: 1, ...(name ? { keyword: name, contact } : {}) } : null;
+}
+
+/** Transferência de saldo entre os modos pessoal e empresarial — vira dois
+ *  lançamentos espelhados (despesa na origem, receita no destino), nunca uma
+ *  conta bancária real. Usa só o verbo "transferir" (nunca "mover"/"passar",
+ *  que já servem pra RE-CLASSIFICAR um lançamento existente em finance_edit
+ *  — ambíguo demais pra decidir por regex; fica a cargo do classificador). */
+export function getExplicitFinanceTransferResult(message: string): AIResult | null {
+  const text = message.trim();
+  const normalized = normalizeCapabilityText(text);
+  const isTransfer = /\b(?:transfer[ei]|transferir|transferencia|transfiro|transferi)\w*\b/.test(normalized);
+  if (!isTransfer) return null;
+
+  const toMode = parseFinanceDestinationMode(text);
+  if (!toMode) return null;
+
+  const amountMatch = text.match(/(?:r\$|\$)?\s*(\d[\d.,]*)\s*(mil)?\b/i);
+  if (!amountMatch) return { intent: "finance_transfer", confidence: 1, transfer: { toMode } };
+  const base = Number(amountMatch[1].replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+  const amount = amountMatch[2] ? base * 1000 : base;
+  return { intent: "finance_transfer", confidence: 1, transfer: { toMode, ...(amount > 0 ? { amount } : {}) } };
 }
 
 /** Troca explícita entre os modos pessoal e empresarial. Se a conversa está
@@ -2007,7 +2148,7 @@ INTENÇÕES POSSÍVEIS:
 - task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título atual) pra identificar qual. Para editar dados, use somente os campos alterados: "newTitle", "newDueDate", "newPriority" ou "clearDueDate": true. Para mudar o andamento, use "newStatus".
 - task_delete: apagar/excluir uma tarefa ("apaga a tarefa 3", "remove a tarefa de ligar pro cliente", "deleta essa tarefa"). Use "taskNumber" ou "title" igual ao task_update.
 - task_query: listar tarefas
-- reminder_set: criar um ou VÁRIOS lembretes agendados. Para um só, use "reminder"; para dois ou mais, use "reminders" (array), um aviso por item. Pedido chamado de "tarefa" que traz horário explícito para avisar/confirmar também é reminder_set. Se pedir para outra pessoa, inclua recipientName e, quando informado, recipientPhone só com dígitos.
+- reminder_set: criar um ou VÁRIOS lembretes agendados. Para um só, use "reminder"; para dois ou mais, use "reminders" (array), um aviso por item. Pedido chamado de "tarefa" que traz horário explícito para avisar/confirmar também é reminder_set. Uma AÇÃO pessoal com horário ("ligar para X", "mandar mensagem pra Y", "pagar Z", "confirmar com W"), mesmo sem dizer "lembrete" ou "tarefa", também é reminder_set — só vira agenda_create quando é um compromisso com presença marcada (consulta, visita, evento). Se pedir para outra pessoa, inclua recipientName e, quando informado, recipientPhone só com dígitos.
 - reminder_list: listar lembretes ativos ("meus lembretes", "quais lembretes eu tenho", "o que eu tenho agendado pra me avisar")
 - reminder_update: editar um lembrete existente — mensagem, data/hora ou repetição ("muda o lembrete do remédio pra 8h", "troca o lembrete da conta de luz pra todo dia 5"). Use "keyword" com o termo de busca e "reminder" com os novos valores (só os campos que mudaram).
 - reminder_delete: cancelar/apagar um lembrete ("cancela o lembrete do remédio", "apaga o lembrete da reunião", "não precisa mais me lembrar disso"). Use "keyword" com o termo de busca.
@@ -2028,7 +2169,7 @@ INTENÇÕES POSSÍVEIS:
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
 - drive_rename: renomear ou descrever o arquivo salvo recentemente no Drive ("altere e salve como comprovante de pagamento thalita", "renomeia o arquivo para contrato assinado", "muda o nome para boleto de agosto", "salva como recibo do fornecedor"). Use "keyword" com o novo nome/descrição.
-- agenda_create: agendar um ou vários compromissos, consultas ou eventos que NÃO sejam reuniões. Use "agendaData" para um e "agendaItems" para vários, com título, startDate, startTime e campos opcionais em cada item. Se a pessoa disser "dia todo", "dia inteiro", "todo o dia", "todo el día" ou "all day", inclua "allDay": true e NÃO inclua startTime/endTime.
+- agenda_create: agendar um ou vários compromissos, consultas ou eventos que NÃO sejam reuniões — ou seja, algo com presença marcada num horário/local (consulta médica, visita, entrevista, evento, festa). Use "agendaData" para um e "agendaItems" para vários, com título, startDate, startTime e campos opcionais em cada item. Se a pessoa disser "dia todo", "dia inteiro", "todo o dia", "todo el día" ou "all day", inclua "allDay": true e NÃO inclua startTime/endTime. ⚠️ NÃO use agenda_create para uma AÇÃO/tarefa pessoal com horário de aviso, mesmo com data e hora explícitas (ex: "ligar para o cliente amanhã às 9h", "mandar mensagem pro fornecedor às 14h", "pagar a conta sexta de manhã") — isso é reminder_set, porque não existe compromisso/presença marcada, só um aviso pra fazer algo.
 - agenda_list: ver os próximos compromissos agendados ("meus compromissos", "agenda de hoje", "o que tenho essa semana", "próximos eventos").
 - agenda_done: marcar um compromisso já realizado/concluído ("já fiz a reunião de ontem", "marca a consulta como feita", "concluí o compromisso com o cliente"). Use "keyword" com APENAS o nome/assunto do compromisso (ex: "reunião", "consulta") — NUNCA inclua dia/data/hora no keyword, já que a busca compara com o título salvo (que não tem essas palavras) e um keyword mais longo que o título nunca bate. NÃO confunda com agenda_delete (que apaga o compromisso) — agenda_done só marca como realizado, mantém o histórico.
 - agenda_update: reagendar ou editar um compromisso existente — data, hora, dia inteiro ou local ("reagendar a reunião para segunda às 10h", "muda o horário da consulta para 15h", "deixa a feira como dia todo", "altera o local da reunião para Zoom"). Use "keyword" com APENAS o nome/assunto do compromisso e "agendaData" com os novos valores. Para "dia todo"/"dia inteiro"/"todo el día", use "allDay": true e omita startTime/endTime. NÃO use para adicionar Meet link.
@@ -2063,6 +2204,12 @@ INTENÇÕES POSSÍVEIS:
 - customer_query: perguntar um dado (telefone, email, endereço, empresa) de UM cliente específico pelo nome ("qual o telefone do meu cliente Bruno", "qual o email da Maria", "endereço do cliente Pedro Silva"). Use "keyword" com o nome citado (pode ser só o primeiro nome, ou nome completo se a mensagem já disser sobrenome/identificação — quanto mais específico o nome citado, melhor a busca acha só um cliente).
 - customer_update: alterar dados de um cliente existente ("muda o telefone do Pedro", "atualiza o email da Maria"). Use "keyword" com o nome e "customer" com os campos novos.
 - customer_deactivate: desativar/remover um cliente ("remove o cliente Pedro", "esse cliente não compra mais comigo"). Use "keyword" com o nome.
+- contact_create: cadastrar um ou vários CONTATOS PESSOAIS — família, amigos, prestadores de serviço no dia a dia (NÃO é cliente/funcionário da empresa) ("salva o contato da minha esposa Ana, telefone 11999999999", "cadastra o Pedro, meu médico, como contato"). Use "contact" para um e "contacts" para vários; name é obrigatório em cada item; "relation" é o vínculo com a pessoa quando citado (ex: "esposa", "médico", "amigo").
+- contact_list: ver TODOS os contatos pessoais cadastrados ("meus contatos", "lista de contatos", "quais contatos eu tenho") — sem citar nome específico.
+- contact_query: perguntar um dado (telefone, email) de UM contato específico pelo nome ("qual o telefone do meu contato Bruno", "qual o email da Ana"). Use "keyword" com o nome citado.
+- contact_update: alterar dados de um contato existente ("muda o telefone do Pedro nos contatos", "atualiza o email da Ana"). Use "keyword" com o nome e "contact" com os campos novos.
+- contact_deactivate: apagar/remover um contato ("apaga o contato do Pedro", "remove a Ana dos contatos"). Use "keyword" com o nome.
+- finance_transfer: transferir um valor entre o saldo PESSOAL e o EMPRESARIAL — dinheiro de verdade mudando de "bolso" (não confundir com finance_edit, que só reclassifica um lançamento já existente). Só use quando a mensagem disser claramente "transferir"/"transferência" (ou "transferir"/"transferencia" em espanhol) — nunca para "mudar"/"passar"/"mover" um lançamento específico, que continua em finance_edit com finance.newMode. Use "transfer.amount" com o valor e "transfer.toMode" com o DESTINO ("business" ou "personal"); a origem é sempre o outro modo. Ex.: "transferir 500 da conta pessoal para a empresarial" → transfer: {amount: 500, toMode: "business"}. Se faltar o valor ou o destino, deixe o campo de fora — o sistema pergunta o que falta.
 - web_search: pesquisar informações públicas e atuais na internet, como preços e disponibilidade de produtos/remédios, passagens, hotéis, serviços, horários, notícias, endereços ou comparações. Use "keyword" com a pesquisa COMPLETA, reunindo a mensagem atual e o contexto recente quando necessário. Se faltar um dado indispensável para a busca (ex.: data/origem/destino de viagem; nome/apresentação do medicamento; cidade quando a disponibilidade local importar), use "response" para fazer UMA pergunta objetiva e não invente o dado. Não use para consultar dados internos do Zelo, arquivos do Drive ou histórico financeiro. Não ofereça diagnóstico, prescrição nem alteração de dose de medicamentos.
 - mode_switch: trocar modo (pessoal/empresa/empresarial)
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa", "como acesso o painel/site", "qual o site/link do Zelo", "estou conectado no Google", "como conecto o Google", "verificar conexão do Google"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos, funcionalidades ou endereços/links que não existem). ⚠️ Se a resposta precisar citar o endereço do painel, use EXATAMENTE o "Endereço do painel web" informado no início da mensagem — nunca invente um domínio diferente.
@@ -2330,6 +2477,17 @@ Exemplo em que a pessoa diz "tarefa", mas quer aviso com horário ("tarefa de ho
   "reminder": {
     "message": "Confirmar se depositei a pensão",
     "scheduledAt": "2026-07-04T14:00:00",
+    "repeat": "none"
+  }
+}
+
+Exemplo de AÇÃO com horário sem dizer "lembrete"/"tarefa" ("Ligar para Shelton sobre contatores amanhã 09:00") — NÃO é agenda_create, pois não há compromisso/presença marcada, só um aviso pra ligar:
+{
+  "intent": "reminder_set",
+  "confidence": 0.95,
+  "reminder": {
+    "message": "Ligar para Shelton sobre contatores",
+    "scheduledAt": "2026-07-05T09:00:00",
     "repeat": "none"
   }
 }
@@ -2824,6 +2982,45 @@ OU para remover cliente ("remove o cliente Pedro"):
   "intent": "customer_deactivate",
   "confidence": 0.9,
   "keyword": "Pedro"
+}
+
+OU para cadastrar contato pessoal ("salva o contato da minha esposa Ana, telefone 11999999999" — Ana é pessoa da vida pessoal, não cliente/funcionário):
+{
+  "intent": "contact_create",
+  "confidence": 0.9,
+  "contact": {
+    "name": "Ana",
+    "phone": "11999999999",
+    "relation": "esposa"
+  }
+}
+
+OU para listar contatos ("meus contatos"):
+{
+  "intent": "contact_list",
+  "confidence": 0.9
+}
+
+OU para editar contato ("muda o telefone do Pedro nos contatos para 11988887777"):
+{
+  "intent": "contact_update",
+  "confidence": 0.9,
+  "keyword": "Pedro",
+  "contact": { "phone": "11988887777" }
+}
+
+OU para remover contato ("apaga o contato do Pedro"):
+{
+  "intent": "contact_deactivate",
+  "confidence": 0.9,
+  "keyword": "Pedro"
+}
+
+OU para transferência entre pessoal e empresa ("transferir 500 da conta pessoal para a empresarial"):
+{
+  "intent": "finance_transfer",
+  "confidence": 0.9,
+  "transfer": { "amount": 500, "toMode": "business" }
 }
 
 OU para parcelamento ("comprei geladeira 5000 em 10x de 500 todo dia 10"):
@@ -3370,13 +3567,13 @@ async function tryOpenAIForTestUser<T>(
 }
 
 function normalizeAIResult(message: string, result: AIResult): AIResult {
-  return withExplicitAgendaAllDay(message, withExplicitFinanceAccount(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
+  return withExplicitAgendaAllDay(message, withExplicitFinanceAccount(message, normalizeActionReminder(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
     message,
     withExplicitFinanceType(
       message,
       withExplicitRelativePeriod(message, result),
     ),
-  ))));
+  )))));
 }
 
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
@@ -3413,8 +3610,14 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   const explicitPendingFinance = getExplicitPendingFinanceRegisterResult(message);
   if (explicitPendingFinance) return explicitPendingFinance;
 
+  const explicitFinanceTransfer = getExplicitFinanceTransferResult(message);
+  if (explicitFinanceTransfer) return explicitFinanceTransfer;
+
   const explicitCustomer = getExplicitCustomerCrudResult(message);
   if (explicitCustomer) return explicitCustomer;
+
+  const explicitContact = getExplicitContactCrudResult(message);
+  if (explicitContact) return explicitContact;
 
   const explicitEmployee = getExplicitEmployeeCrudResult(message);
   if (explicitEmployee) return explicitEmployee;

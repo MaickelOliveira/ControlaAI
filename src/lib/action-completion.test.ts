@@ -6,7 +6,13 @@ describe("action completion", () => {
     "Me lembre hoje às 16h de mandar dinheiro pra conta do Itaú",
     "Agende uma reunião amanhã às 10h",
     "Mostre meus compromissos",
+    "Lembrete pagar Poliana 668,00",
   ])("abandons the old question for the explicit new command: %s", message => {
+    expect(isClearlyNewActionDuringContinuation(message)).toBe(true);
+  });
+
+  it("abandons the old question for a multi-line batch request", () => {
+    const message = "Lembrete pagar Poliana 668,00\nMaruzzi 240,00\n300 Madson ( empresa)\n250,00 Sandro carro até amanhã\n166,00 restante cayo adesivo ambulatório ( empresa)";
     expect(isClearlyNewActionDuringContinuation(message)).toBe(true);
   });
 

@@ -16,9 +16,10 @@ import { todayStrBR, spToUTC } from "./date-br";
 import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchaseFinanceId, type GroceryPurchaseItem } from "./grocery";
 import { createEmployee, findEmployeeByName } from "./employees";
 import { createCustomer, findCustomerByName } from "./customers";
+import { createContact, findContactByName } from "./contacts";
 import { createVehicle, FUEL_TYPE_LABEL, type FuelType } from "./vehicles";
 import {
-  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyGoalCreated, replyReminderSet,
+  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyContactCreated, replyGoalCreated, replyReminderSet,
 } from "./bot-replies";
 import { addFinance } from "./finances";
 import { findPhoneByName, getPhonesForUser } from "./wpp-phone-links";
@@ -660,7 +661,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
 
     async finalize(draft, ctx) {
       let targetPhone = ctx.phone;
-      let recipientType: "self" | "customer" | "employee" | "other" = "self";
+      let recipientType: "self" | "customer" | "employee" | "contact" | "other" = "self";
       let recipientName = draft.recipientName as string | undefined;
       const explicitPhone = String(draft.recipientPhone || "").replace(/\D/g, "");
 
@@ -670,11 +671,14 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       } else if (recipientName) {
         const customer = await findCustomerByName(ctx.userId, recipientName);
         const employee = await findEmployeeByName(ctx.userId, recipientName);
+        const contact = await findContactByName(ctx.userId, recipientName);
         const linkedPhone = await findPhoneByName(ctx.userId, recipientName);
         if (customer?.phone) {
           targetPhone = customer.phone; recipientType = "customer"; recipientName = customer.name;
         } else if (employee?.phone) {
           targetPhone = employee.phone; recipientType = "employee"; recipientName = employee.name;
+        } else if (contact?.phone) {
+          targetPhone = contact.phone; recipientType = "contact"; recipientName = contact.name;
         } else if (linkedPhone) {
           targetPhone = linkedPhone; recipientType = "other";
         } else {
@@ -1308,6 +1312,50 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
     giveUp: (_draft, ctx) => localized(ctx,
       "❌ Não consegui cadastrar — faltou o nome. Tente de novo, ex: _\"cadastra o cliente Pedro\"_.",
       "❌ No pude registrar al cliente porque faltó el nombre. Inténtalo de nuevo, ej.: _\"registra al cliente Pedro\"_."),
+  },
+
+  contact_create: {
+    seed(ai) {
+      const c = ai.contact;
+      return {
+        name: c?.name ? cap(c.name.trim()) : "",
+        phone: c?.phone,
+        email: c?.email,
+        relation: c?.relation,
+        notes: c?.notes,
+      } satisfies Draft;
+    },
+
+    missing(draft) {
+      return draft.name ? [] : ["name"];
+    },
+
+    slots: {
+      name: {
+        key: "name",
+        label: "nome",
+        parse: slotText(2),
+        ask: (_draft, ctx) => localized(ctx, "📇 Qual o nome do contato?", "📇 ¿Cuál es el nombre del contacto?"),
+        // sem fallback — slot duro
+      },
+    },
+
+    async finalize(draft, ctx) {
+      const contact = await createContact({
+        userId: ctx.userId,
+        name: draft.name as string,
+        phone: draft.phone as string | undefined,
+        email: draft.email as string | undefined,
+        relation: draft.relation as string | undefined,
+        notes: draft.notes as string | undefined,
+        status: "active",
+      });
+      return replyContactCreated(contact, ctx.user.locale);
+    },
+
+    giveUp: (_draft, ctx) => localized(ctx,
+      "❌ Não consegui salvar — faltou o nome. Tente de novo, ex: _\"salva o contato da Ana\"_.",
+      "❌ No pude guardar el contacto porque faltó el nombre. Inténtalo de nuevo, ej.: _\"guarda el contacto de Ana\"_."),
   },
 };
 

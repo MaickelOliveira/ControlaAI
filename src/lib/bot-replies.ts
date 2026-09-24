@@ -11,6 +11,7 @@ import { formatDateBR, formatDateTimeBR } from "./date-br";
 import type { ShoppingListItem, GroceryPurchase } from "./grocery";
 import type { Employee } from "./employees";
 import type { Customer } from "./customers";
+import type { Contact } from "./contacts";
 
 const TZ = "America/Sao_Paulo";
 
@@ -1411,4 +1412,110 @@ export function replyCustomerDeactivated(c: Customer, locale?: string): string {
   if (isEs(locale)) return `🗑️ *${c.name}* fue eliminado(a) de los clientes activos.`;
   if (isPtPt(locale)) return `🗑️ *${c.name}* foi removido(a) dos clientes ativos.`;
   return `🗑️ *${c.name}* foi removido(a) dos clientes ativos.`;
+}
+
+export function replyContactCreated(c: Contact, locale?: string): string {
+  const line = [c.relation, c.phone, c.email].filter(Boolean).join(" · ");
+  if (isEs(locale)) return `Guardado. 📇\n\n*${c.name}*${line ? `\n${line}` : ""}\n\n👤 Míralo en Contactos en el panel.`;
+  if (isPtPt(locale)) return `Guardado. 📇\n\n*${c.name}*${line ? `\n${line}` : ""}\n\n👤 Vê em Contatos no painel.`;
+  return `Salvo. 📇\n\n*${c.name}*${line ? `\n${line}` : ""}\n\n👤 Veja em Contatos no dashboard.`;
+}
+
+export function replyContactList(contacts: Contact[], locale?: string): string {
+  if (isEs(locale)) {
+    if (!contacts.length) return `📇 Ningún contacto guardado todavía.`;
+    let msg = `📇 *Tus contactos (${contacts.length}):*\n\n`;
+    contacts.forEach(c => { msg += `• ${c.name}${c.phone ? ` — ${c.phone}` : ""}\n`; });
+    return msg.trim();
+  }
+  if (isPtPt(locale)) {
+    if (!contacts.length) return `📇 Nenhum contacto guardado ainda.`;
+    let msg = `📇 *Os teus contactos (${contacts.length}):*\n\n`;
+    contacts.forEach(c => { msg += `• ${c.name}${c.phone ? ` — ${c.phone}` : ""}\n`; });
+    return msg.trim();
+  }
+  if (!contacts.length) return `📇 Nenhum contato salvo ainda.`;
+  let msg = `📇 *Seus contatos (${contacts.length}):*\n\n`;
+  contacts.forEach(c => { msg += `• ${c.name}${c.phone ? ` — ${c.phone}` : ""}\n`; });
+  return msg.trim();
+}
+
+export function replyContactInfo(contacts: Contact[], keyword: string, locale?: string): string {
+  if (isEs(locale)) {
+    if (!contacts.length) return `❓ No encontré ningún contacto con "${keyword}". Escribe *mis contactos* para ver la lista.`;
+    if (contacts.length === 1) {
+      const c = contacts[0];
+      let msg = `📇 *${c.name}*\n`;
+      if (c.relation) msg += `🔗 ${c.relation}\n`;
+      if (c.phone) msg += `📱 ${c.phone}\n`;
+      if (c.email) msg += `✉️ ${c.email}\n`;
+      if (c.notes) msg += `📝 ${c.notes}\n`;
+      return msg.trim();
+    }
+    let msg = `📇 Encontré *${contacts.length}* contactos con "${keyword}" — ¿cuál de ellos?\n\n`;
+    contacts.forEach(c => {
+      const detail = [c.relation, c.phone].filter(Boolean).join(" · ");
+      msg += `• ${c.name}${detail ? ` — ${detail}` : ""}\n`;
+    });
+    return msg.trim();
+  }
+  if (isPtPt(locale)) {
+    if (!contacts.length) return `❓ Não encontrei nenhum contacto com "${keyword}". Escreve *meus contactos* para ver a lista.`;
+    if (contacts.length === 1) {
+      const c = contacts[0];
+      let msg = `📇 *${c.name}*\n`;
+      if (c.relation) msg += `🔗 ${c.relation}\n`;
+      if (c.phone) msg += `📱 ${c.phone}\n`;
+      if (c.email) msg += `✉️ ${c.email}\n`;
+      if (c.notes) msg += `📝 ${c.notes}\n`;
+      return msg.trim();
+    }
+    let msg = `📇 Encontrei *${contacts.length}* contactos com "${keyword}" — qual deles?\n\n`;
+    contacts.forEach(c => {
+      const detail = [c.relation, c.phone].filter(Boolean).join(" · ");
+      msg += `• ${c.name}${detail ? ` — ${detail}` : ""}\n`;
+    });
+    return msg.trim();
+  }
+  if (!contacts.length) return `❓ Não encontrei nenhum contato com "${keyword}". Digite *meus contatos* para ver a lista.`;
+  if (contacts.length === 1) {
+    const c = contacts[0];
+    let msg = `📇 *${c.name}*\n`;
+    if (c.relation) msg += `🔗 ${c.relation}\n`;
+    if (c.phone) msg += `📱 ${c.phone}\n`;
+    if (c.email) msg += `✉️ ${c.email}\n`;
+    if (c.notes) msg += `📝 ${c.notes}\n`;
+    return msg.trim();
+  }
+  let msg = `📇 Encontrei *${contacts.length}* contatos com "${keyword}" — qual deles?\n\n`;
+  contacts.forEach(c => {
+    const detail = [c.relation, c.phone].filter(Boolean).join(" · ");
+    msg += `• ${c.name}${detail ? ` — ${detail}` : ""}\n`;
+  });
+  return msg.trim();
+}
+
+export function replyContactUpdated(c: Contact, locale?: string): string {
+  if (isEs(locale)) return `✏️ Actualizado.\n\n*${c.name}*`;
+  return `✏️ Atualizado.\n\n*${c.name}*`;
+}
+
+export function replyContactDeactivated(c: Contact, locale?: string): string {
+  if (isEs(locale)) return `🗑️ *${c.name}* fue eliminado de tus contactos.`;
+  if (isPtPt(locale)) return `🗑️ *${c.name}* foi removido dos teus contactos.`;
+  return `🗑️ *${c.name}* foi removido dos seus contatos.`;
+}
+
+export function replyTransferDone(
+  amount: number,
+  toMode: "personal" | "business",
+  personalBalance: number,
+  businessBalance: number,
+  locale?: string,
+): string {
+  const toLabel = toMode === "business" ? "Empresa" : (isEs(locale) ? "Personal" : "Pessoal");
+  const fromLabel = toMode === "business" ? (isEs(locale) ? "Personal" : "Pessoal") : "Empresa";
+  if (isEs(locale)) return `Transferencia hecha. 🔄\n\n*${formatCurrency(amount)}* de *${fromLabel}* a *${toLabel}*.\n\nSaldo Personal: *${formatCurrency(personalBalance)}*\nSaldo Empresa: *${formatCurrency(businessBalance)}*`;
+  if (isPtPt(locale)) return `Transferência feita. 🔄\n\n*${formatCurrency(amount)}* de *${fromLabel}* para *${toLabel}*.\n\nSaldo Pessoal: *${formatCurrency(personalBalance)}*\nSaldo Empresa: *${formatCurrency(businessBalance)}*`;
+  return `Transferência feita. 🔄\n\n*${formatCurrency(amount)}* de *${fromLabel}* para *${toLabel}*.\n\nSaldo Pessoal: *${formatCurrency(personalBalance)}*\nSaldo Empresa: *${formatCurrency(businessBalance)}*`;
 }

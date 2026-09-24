@@ -10,6 +10,7 @@ const SLOT_FILL_INTENTS = new Set<Intent>([
   "vehicle_create",
   "employee_create",
   "customer_create",
+  "contact_create",
   "grocery_purchase",
   "grocery_purchase_finish",
 ]);
@@ -44,6 +45,11 @@ function hasEmployeeChange(ai: AIResult): boolean {
 function hasCustomerChange(ai: AIResult): boolean {
   const customer = ai.customer;
   return !!(customer?.phone || customer?.email || customer?.company || customer?.address || customer?.notes);
+}
+
+function hasContactChange(ai: AIResult): boolean {
+  const contact = ai.contact;
+  return !!(contact?.phone || contact?.email || contact?.relation || contact?.notes);
 }
 
 function hasRecurringChange(ai: AIResult): boolean {
@@ -157,6 +163,18 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
     case "customer_deactivate":
       return hasText(ai.keyword) || hasText(ai.customer?.name) ? null : say(locale, "🧾 Qual cliente deseja desativar?", "🧾 ¿Qué cliente quieres desactivar?");
 
+    case "contact_query":
+      return hasText(ai.keyword) || hasText(ai.contact?.name) ? null : say(locale, "📇 De qual contato deseja consultar os dados?", "📇 ¿De qué contacto quieres consultar los datos?");
+    case "contact_update":
+      if (!hasText(ai.keyword) && !hasText(ai.contact?.name)) return say(locale, "📇 Qual contato deseja alterar?", "📇 ¿Qué contacto quieres cambiar?");
+      return hasContactChange(ai) ? null : say(locale, "✏️ O que deseja alterar nesse contato?", "✏️ ¿Qué quieres cambiar en ese contacto?");
+    case "contact_deactivate":
+      return hasText(ai.keyword) || hasText(ai.contact?.name) ? null : say(locale, "📇 Qual contato deseja apagar?", "📇 ¿Qué contacto quieres borrar?");
+
+    case "finance_transfer":
+      if (!ai.transfer?.toMode) return say(locale, "🔄 Transferir para qual conta: pessoal ou empresarial?", "🔄 ¿Transferir a qué cuenta: personal o empresarial?");
+      return ai.transfer?.amount ? null : say(locale, "🔄 Qual o valor da transferência?", "🔄 ¿Cuál es el monto de la transferencia?");
+
     case "recurring_cancel":
       return hasText(ai.keyword) ? null : say(locale, "🔁 Qual recorrente ou parcela deseja cancelar?", "🔁 ¿Qué movimiento recurrente o cuota quieres cancelar?");
     case "recurring_edit":
@@ -199,7 +217,7 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
 
 const NESTED_KEYS = [
   "finance", "task", "reminder", "goal", "vehicle", "recurring", "agendaData",
-  "meetData", "grocery", "account", "employee", "customer", "period",
+  "meetData", "grocery", "account", "employee", "customer", "contact", "transfer", "period",
 ] as const;
 
 /** Junta os dados extraídos do pedido original aos dados da resposta curta. */
@@ -232,5 +250,10 @@ export function isActionContinuationCancel(text: string): boolean {
 /** Só abandona por comandos novos muito claros; respostas como "comprar pão"
  * podem ser justamente o título/item que a pergunta anterior solicitou. */
 export function isClearlyNewActionDuringContinuation(text: string): boolean {
-  return /^(?:quanto|qual (?:[ée]|foi)|meu saldo|mi saldo|minhas tarefas|mis tareas|meus lembretes|mis recordatorios|resumo|resumen|extrato|ajuda|ayuda|help|me lembre|lembre-me|recu[eé]rdame|crie (?:um )?lembrete|crea (?:un )?recordatorio|agende|agenda|marque|programe|registre|registra|anote|adicione|agrega|exclua|apague|elimine|altere|mude|pesquise|busque|liste|mostre)\b/i.test(text.trim());
+  const trimmed = text.trim();
+  // Uma lista em várias linhas (vários itens/valores/pessoas) nunca é a
+  // resposta curta que uma pergunta pendente espera — é sempre um pedido
+  // novo, ainda que a pergunta antiga fique sem resposta.
+  if (/\n/.test(trimmed)) return true;
+  return /^(?:quanto|qual (?:[ée]|foi)|meu saldo|mi saldo|minhas tarefas|mis tareas|meus lembretes|mis recordatorios|lembrete|lembretes|recordatorio|recordatorios|resumo|resumen|extrato|ajuda|ayuda|help|me lembre|lembre-me|recu[eé]rdame|crie (?:um )?lembrete|crea (?:un )?recordatorio|agende|agenda|marque|programe|registre|registra|anote|adicione|agrega|exclua|apague|elimine|altere|mude|pesquise|busque|liste|mostre)\b/i.test(trimmed);
 }

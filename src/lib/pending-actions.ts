@@ -221,6 +221,7 @@ export type SlotFillIntent =
   | "vehicle_create"
   | "employee_create"
   | "customer_create"
+  | "contact_create"
   | "grocery_purchase"
   | "grocery_purchase_finish";
 
@@ -609,10 +610,17 @@ export function parseFinanceChoiceMulti(
   return [...indices].sort((a, b) => a - b);
 }
 
-/** Extrai um valor em reais de um texto livre (ex: "80 reais", "R$ 80,50").
+/** Extrai um valor em reais de um texto livre (ex: "80 reais", "R$ 80,50",
+ *  "11 mil", "mil e quinhentos" fica de fora — só o caso simples "<número> mil").
  *  Converte separador decimal BR (vírgula) e remove separador de milhar
  *  (ponto) antes de parsear. Retorna null se não achar nada válido. */
 export function parseAmountBR(text: string): number | null {
+  const lower = text.toLowerCase();
+  const milMatch = lower.match(/(\d+(?:,\d+)?)\s*mil\b/) || (/\bmil\b/.test(lower) ? [text, "1"] : null);
+  if (milMatch) {
+    const base = parseFloat(milMatch[1].replace(",", "."));
+    if (!isNaN(base) && base > 0) return base * 1000;
+  }
   const match = text.replace(/\./g, "").replace(",", ".").match(/(\d+(?:\.\d{1,2})?)/);
   if (!match) return null;
   const val = parseFloat(match[1]);

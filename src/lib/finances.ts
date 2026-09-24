@@ -40,11 +40,11 @@ export function parseFinanceDestinationMode(text: string): FinanceMode | null {
 export const CATEGORIES_EXPENSE = [
   "Alimentação", "Transporte", "Moradia", "Saúde", "Educação",
   "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos",
-  "Funcionários", "Marketing", "Fornecedores", "Outros",
+  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência",
 ];
 export const CATEGORIES_INCOME = [
   "Salário", "Freelance", "Vendas", "Investimentos", "Aluguel",
-  "Serviços", "Reembolso", "Outros",
+  "Serviços", "Reembolso", "Outros", "Transferência",
 ];
 
 // Traduções apenas de EXIBIÇÃO das categorias padrão (mesma ordem/índice de
@@ -56,20 +56,20 @@ export const CATEGORIES_INCOME = [
 const CATEGORIES_EXPENSE_ES = [
   "Alimentación", "Transporte", "Vivienda", "Salud", "Educación",
   "Ocio", "Ropa", "Tecnología", "Servicios", "Impuestos",
-  "Empleados", "Marketing", "Proveedores", "Otros",
+  "Empleados", "Marketing", "Proveedores", "Otros", "Transferencia",
 ];
 const CATEGORIES_EXPENSE_PTPT = [
   "Alimentação", "Transporte", "Habitação", "Saúde", "Educação",
   "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos",
-  "Funcionários", "Marketing", "Fornecedores", "Outros",
+  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência",
 ];
 const CATEGORIES_INCOME_ES = [
   "Salario", "Freelance", "Ventas", "Inversiones", "Alquiler",
-  "Servicios", "Reembolso", "Otros",
+  "Servicios", "Reembolso", "Otros", "Transferencia",
 ];
 const CATEGORIES_INCOME_PTPT = [
   "Salário", "Freelance", "Vendas", "Investimentos", "Renda",
-  "Serviços", "Reembolso", "Outros",
+  "Serviços", "Reembolso", "Outros", "Transferência",
 ];
 
 export function translateCategory(category: string, type: FinanceType, locale?: string): string {

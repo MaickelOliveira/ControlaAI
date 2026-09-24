@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 
 export type ReminderRepeat = "none" | "daily" | "weekly" | "monthly";
-export type ReminderRecipientType = "self" | "customer" | "employee" | "other";
+export type ReminderRecipientType = "self" | "customer" | "employee" | "contact" | "other";
 
 // Depois de MAX_FAILED_ATTEMPTS tentativas seguidas sem sucesso (ex: número
 // inválido, WhatsApp fora do ar por horas), getDueReminders() para de
