@@ -87,3 +87,21 @@ export function normalizeWhatsAppPhone(value: string, countryIso?: string): stri
   // Reconhece esse formato sem presumir que 10/11 dígitos sejam brasileiros.
   return parsedNumber(`+${digits}`) ?? digits;
 }
+
+function defaultCountryIsoForLocale(locale?: string): CountryCode | undefined {
+  if (locale === "pt-PT") return "PT";
+  if (locale === "es") return undefined; // cobre vários países; não presume Espanha
+  return "BR"; // pt-BR e padrão
+}
+
+/** Normaliza um telefone DIGITADO por alguém (contato, cliente, funcionário,
+ *  destinatário de lembrete — tanto pelo WhatsApp quanto pelo dashboard) pro
+ *  formato internacional E.164. Sem isso, um número local ("44999999999",
+ *  sem o 55) fica salvo incompleto e o envio real pra essa pessoa falha.
+ *  Usa o idioma da conta só pra inferir o país quando o número não vier com
+ *  "+"/"00" (ex.: pt-BR → assume Brasil se faltar o DDI). */
+export function normalizePhoneInput(value: string, locale?: string): string {
+  const raw = value?.trim() ?? "";
+  if (!raw) return "";
+  return normalizeWhatsAppPhone(raw, defaultCountryIsoForLocale(locale));
+}

@@ -25,6 +25,7 @@ import { addFinance } from "./finances";
 import { findPhoneByName, getPhonesForUser } from "./wpp-phone-links";
 import { phoneVariants } from "./conversations";
 import { isAllDayAgendaText } from "./agenda-all-day";
+import { normalizePhoneInput } from "./phone";
 
 /**
  * Motor genérico de "perguntar o que falta" (slot-filling), usado quando uma
@@ -649,9 +650,10 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       recipientPhone: {
         key: "recipientPhone",
         label: "telefone de quem receberá",
-        parse: (text) => {
-          const phone = text.replace(/\D/g, "");
-          return phone.length >= 8 ? { ok: true, value: phone } : { ok: false };
+        parse: (text, _draft, ctx) => {
+          const digits = text.replace(/\D/g, "");
+          if (digits.length < 8) return { ok: false };
+          return { ok: true, value: normalizePhoneInput(text, ctx.user.locale) };
         },
         ask: (draft, ctx) => ctx.user.locale === "es"
           ? `📱 ¿Cuál es el número de WhatsApp de ${draft.recipientName || "esa persona"}, con código de país?`
@@ -663,9 +665,12 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       let targetPhone = ctx.phone;
       let recipientType: "self" | "customer" | "employee" | "contact" | "other" = "self";
       let recipientName = draft.recipientName as string | undefined;
-      const explicitPhone = String(draft.recipientPhone || "").replace(/\D/g, "");
+      const explicitPhoneRaw = String(draft.recipientPhone || "");
+      const explicitPhone = explicitPhoneRaw.replace(/\D/g, "").length >= 8
+        ? normalizePhoneInput(explicitPhoneRaw, ctx.user.locale)
+        : "";
 
-      if (explicitPhone.length >= 8) {
+      if (explicitPhone) {
         targetPhone = explicitPhone;
         recipientType = "other";
       } else if (recipientName) {
@@ -1259,7 +1264,7 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
         salary: draft.salary as number,
         startDate: (draft.startDate as string) || todayStrBR(),
         status: "active",
-        phone: draft.phone as string | undefined,
+        phone: draft.phone ? normalizePhoneInput(String(draft.phone), ctx.user.locale) : undefined,
         email: draft.email as string | undefined,
       });
       return replyEmployeeCreated(employee, ctx.user.locale);
@@ -1300,7 +1305,7 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
       const customer = await createCustomer({
         userId: ctx.userId,
         name: draft.name as string,
-        phone: draft.phone as string | undefined,
+        phone: draft.phone ? normalizePhoneInput(String(draft.phone), ctx.user.locale) : undefined,
         email: draft.email as string | undefined,
         company: draft.company as string | undefined,
         notes: draft.notes as string | undefined,
@@ -1344,7 +1349,7 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
       const contact = await createContact({
         userId: ctx.userId,
         name: draft.name as string,
-        phone: draft.phone as string | undefined,
+        phone: draft.phone ? normalizePhoneInput(String(draft.phone), ctx.user.locale) : undefined,
         email: draft.email as string | undefined,
         relation: draft.relation as string | undefined,
         notes: draft.notes as string | undefined,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createEmployee, getEmployeesByUser, updateEmployee, getTotalPayroll, getEmployeePaymentsByUser } from "@/lib/employees";
+import { normalizePhoneInput } from "@/lib/phone";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     userId: session.sub, name, role,
     salary: parseFloat(salary) || 0,
     startDate: startDate || new Date().toISOString().slice(0, 10),
-    status: "active", phone, email, notes,
+    status: "active", phone: phone ? normalizePhoneInput(phone) : phone, email, notes,
   });
   return NextResponse.json(employee, { status: 201 });
 }
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest) {
   const { id, ...patch } = await req.json();
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   if (patch.salary) patch.salary = parseFloat(patch.salary);
+  if (patch.phone) patch.phone = normalizePhoneInput(patch.phone);
   const e = await updateEmployee(id, session.sub, patch);
   return e ? NextResponse.json(e) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 }

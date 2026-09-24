@@ -41,7 +41,7 @@ import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/wha
 import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
-import { localeForWhatsAppPhone } from "@/lib/phone";
+import { localeForWhatsAppPhone, normalizePhoneInput } from "@/lib/phone";
 import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTasksCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
@@ -3850,7 +3850,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (ai.employee?.role) empPatch.role = cap(ai.employee.role);
         if (ai.employee?.salary && ai.employee.salary > 0) empPatch.salary = ai.employee.salary;
         if (ai.employee?.startDate) empPatch.startDate = ai.employee.startDate;
-        if (ai.employee?.phone) empPatch.phone = ai.employee.phone;
+        if (ai.employee?.phone) empPatch.phone = normalizePhoneInput(ai.employee.phone, user.locale);
         if (ai.employee?.email) empPatch.email = ai.employee.email;
         if (ai.employee?.notes) empPatch.notes = ai.employee.notes;
         if (Object.keys(empPatch).length === 0) { await wppSend(from, localized(user.locale, "❓ O que deseja alterar? Ex: _\"muda o salário da Ana para 2200\"_", "❓ ¿Qué quieres cambiar? Ej.: _\"cambia el sueldo de Ana a 2200\"_")); break; }
@@ -3893,7 +3893,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const custTarget = custKeyword ? await findCustomerByName(user.id, custKeyword) : null;
         if (!custTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista.", "❓ No encontré a ese cliente. Escribe *mis clientes* para ver la lista.")); break; }
         const custPatch: Partial<Customer> = {};
-        if (ai.customer?.phone) custPatch.phone = ai.customer.phone;
+        if (ai.customer?.phone) custPatch.phone = normalizePhoneInput(ai.customer.phone, user.locale);
         if (ai.customer?.email) custPatch.email = ai.customer.email;
         if (ai.customer?.company) custPatch.company = ai.customer.company;
         if (ai.customer?.address) custPatch.address = ai.customer.address;
@@ -3938,7 +3938,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const contTarget = contKeyword ? await findContactByName(user.id, contKeyword) : null;
         if (!contTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse contato. Digite *meus contatos* para ver a lista.", "❓ No encontré a ese contacto. Escribe *mis contactos* para ver la lista.")); break; }
         const contPatch: Partial<Contact> = {};
-        if (ai.contact?.phone) contPatch.phone = ai.contact.phone;
+        if (ai.contact?.phone) contPatch.phone = normalizePhoneInput(ai.contact.phone, user.locale);
         if (ai.contact?.email) contPatch.email = ai.contact.email;
         if (ai.contact?.relation) contPatch.relation = ai.contact.relation;
         if (ai.contact?.notes) contPatch.notes = ai.contact.notes;

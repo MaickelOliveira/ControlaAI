@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createCustomer, getCustomersByUser, updateCustomer } from "@/lib/customers";
+import { normalizePhoneInput } from "@/lib/phone";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { name, phone, email, company, address, notes } = await req.json();
   if (!name) return NextResponse.json({ error: "Nome obrigatório" }, { status: 400 });
-  const customer = await createCustomer({ userId: session.sub, name, phone, email, company, address, notes, status: "active" });
+  const customer = await createCustomer({ userId: session.sub, name, phone: phone ? normalizePhoneInput(phone) : phone, email, company, address, notes, status: "active" });
   return NextResponse.json(customer, { status: 201 });
 }
 
@@ -25,6 +26,7 @@ export async function PATCH(req: NextRequest) {
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { id, ...patch } = await req.json();
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+  if (patch.phone) patch.phone = normalizePhoneInput(patch.phone);
   const c = await updateCustomer(id, session.sub, patch);
   return c ? NextResponse.json(c) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 }

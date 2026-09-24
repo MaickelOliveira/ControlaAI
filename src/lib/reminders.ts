@@ -39,23 +39,31 @@ function fromRow(r: Row): Reminder {
   };
 }
 
-export async function createReminder(data: Omit<Reminder, "id" | "sent" | "failedAttempts" | "createdAt">): Promise<Reminder> {
-  let scheduledAt = data.scheduledAt;
+// Pedido de aviso "agora" chega com scheduledAt = o instante exato em que a
+// IA respondeu; alguns segundos de processamento até aqui já bastam pra esse
+// horário virar passado. Sem essa margem, o reminder era empurrado um ciclo
+// inteiro pra frente (ex: "agora" virava "amanhã no mesmo horário") por causa
+// só do atraso de rede, não porque o horário pedido já tinha passado de fato.
+export const OVERDUE_GRACE_MS = 15 * 60 * 1000;
 
-  // Se o horário já passou, avança para o próximo futuro
-  if (new Date(scheduledAt) <= new Date()) {
-    const d = new Date(scheduledAt);
-    if (data.repeat === "daily" || data.repeat === "none") {
-      d.setDate(d.getDate() + 1);
-    } else if (data.repeat === "weekly") {
-      d.setDate(d.getDate() + 7);
-    } else if (data.repeat === "monthly") {
-      d.setMonth(d.getMonth() + 1);
-    } else {
-      d.setDate(d.getDate() + 1);
-    }
-    scheduledAt = d.toISOString();
-  }
+/** Decide o scheduledAt final de um lembrete recém-criado. Só empurra para o
+ *  próximo ciclo (dia/semana/mês) quando o horário pedido já ficou
+ *  claramente pra trás; um atraso pequeno (rede, "agora") apenas dispara já,
+ *  em vez de esperar um ciclo inteiro. */
+export function resolveInitialScheduledAt(scheduledAt: string, repeat: ReminderRepeat, now: Date = new Date()): string {
+  const overdueMs = now.getTime() - new Date(scheduledAt).getTime();
+  if (overdueMs <= 0) return scheduledAt;
+  if (overdueMs <= OVERDUE_GRACE_MS) return now.toISOString();
+
+  const d = new Date(scheduledAt);
+  if (repeat === "weekly") d.setDate(d.getDate() + 7);
+  else if (repeat === "monthly") d.setMonth(d.getMonth() + 1);
+  else d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
+export async function createReminder(data: Omit<Reminder, "id" | "sent" | "failedAttempts" | "createdAt">): Promise<Reminder> {
+  const scheduledAt = resolveInitialScheduledAt(data.scheduledAt, data.repeat);
 
   const row = {
     id: randomUUID(), user_id: data.userId, message: data.message, phone: data.phone, scheduled_at: scheduledAt,

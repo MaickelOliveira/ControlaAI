@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWhatsAppPhone } from "./phone";
+import { normalizeWhatsAppPhone, normalizePhoneInput } from "./phone";
 
 describe("normalizeWhatsAppPhone", () => {
   it.each([
@@ -26,5 +26,26 @@ describe("normalizeWhatsAppPhone", () => {
     ["987 654 321", "PE", "51987654321"],
   ])("aplica o DDI de %s usando o país %s", (input, country, expected) => {
     expect(normalizeWhatsAppPhone(input, country)).toBe(expected);
+  });
+});
+
+describe("normalizePhoneInput", () => {
+  it("completa um número brasileiro local (sem DDI) com o 55, por padrão ou com locale pt-BR", () => {
+    expect(normalizePhoneInput("44999999999")).toBe("5544999999999");
+    expect(normalizePhoneInput("44999999999", "pt-BR")).toBe("5544999999999");
+    expect(normalizePhoneInput("(44) 99999-9999")).toBe("5544999999999");
+  });
+
+  it("mantém um número que já veio completo ou com +", () => {
+    expect(normalizePhoneInput("5544999999999")).toBe("5544999999999");
+    expect(normalizePhoneInput("+5544999999999")).toBe("5544999999999");
+  });
+
+  it("usa Portugal para locale pt-PT", () => {
+    expect(normalizePhoneInput("912345678", "pt-PT")).toBe("351912345678");
+  });
+
+  it("retorna vazio para entrada vazia", () => {
+    expect(normalizePhoneInput("")).toBe("");
   });
 });

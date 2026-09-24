@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getAllRemindersByUser, createReminder, deleteReminder, updateReminder, type Reminder, type ReminderRecipientType } from "@/lib/reminders";
 import { getPhonesForUser } from "@/lib/wpp-phone-links";
+import { normalizePhoneInput } from "@/lib/phone";
 
-const RECIPIENT_TYPES: ReminderRecipientType[] = ["self", "customer", "employee", "other"];
+const RECIPIENT_TYPES: ReminderRecipientType[] = ["self", "customer", "employee", "contact", "other"];
 const REPEAT_TYPES = ["none", "daily", "weekly", "monthly"] as const;
 
 function normalizePhone(value: unknown): string {
-  return typeof value === "string" ? value.replace(/\D/g, "") : "";
+  return typeof value === "string" && value.trim() ? normalizePhoneInput(value) : "";
 }
 
 async function resolveRecipient(
