@@ -140,6 +140,15 @@ describe("employee command parity", () => {
     expect(getExplicitEmployeeCrudResult("Muda o salário da Aline para 11 mil"))
       .toMatchObject({ intent: "employee_update", keyword: "Aline", employee: { salary: 11000 } });
   });
+
+  it("extracts a bare phone number instead of dumping it into the name, without confusing it with salary", () => {
+    expect(getExplicitEmployeeCrudResult("Cadastra o funcionário Lucas 44999999999"))
+      .toMatchObject({ intent: "employee_create", employee: { name: "Lucas", phone: "44999999999" } });
+    // Salário curto sem a palavra "salário" continua não indo pro campo errado.
+    const salaryResult = getExplicitEmployeeCrudResult("Registra al empleado Carlos con salario de 1500");
+    expect(salaryResult).toMatchObject({ intent: "employee_create", employee: { name: "Carlos", salary: 1500 } });
+    expect(salaryResult?.employee?.phone).toBeUndefined();
+  });
 });
 
 describe("customer command parity", () => {
@@ -153,6 +162,11 @@ describe("customer command parity", () => {
       .toMatchObject({ intent: "customer_update", keyword: "Juan" });
     expect(getExplicitCustomerCrudResult("Desactiva al cliente Juan"))
       .toMatchObject({ intent: "customer_deactivate", keyword: "Juan" });
+  });
+
+  it("extracts a bare phone number instead of dumping it into the name", () => {
+    expect(getExplicitCustomerCrudResult("Cadastra o cliente Pedro 11999999999"))
+      .toMatchObject({ intent: "customer_create", customer: { name: "Pedro", phone: "11999999999" } });
   });
 });
 
@@ -171,6 +185,13 @@ describe("contact command parity", () => {
 
   it("does not steal business customer commands", () => {
     expect(getExplicitContactCrudResult("Cadastra o cliente Pedro, telefone 11999999999")).toBeNull();
+  });
+
+  it("extracts a bare phone number (no 'telefone' keyword) instead of dumping it into the name", () => {
+    expect(getExplicitContactCrudResult("cadastra um contato pra mim lucas 44999999999"))
+      .toMatchObject({ intent: "contact_create", contact: { name: "lucas", phone: "44999999999" } });
+    expect(getExplicitContactCrudResult("salva o contato Marina 11988887777"))
+      .toMatchObject({ intent: "contact_create", contact: { name: "Marina", phone: "11988887777" } });
   });
 });
 

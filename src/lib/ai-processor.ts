@@ -1622,6 +1622,19 @@ function cleanVehicleTarget(value?: string): string | undefined {
   return cleaned || undefined;
 }
 
+/** Acha um telefone mesmo sem a palavra "telefone" na frase (ex: "cadastra o
+ *  contato Lucas 44999999999") — sequência de 8 a 15 dígitos, com "+"
+ *  opcional e separadores comuns (espaço, parênteses, traço) no meio.
+ *  Retorna também o trecho bruto casado, pra remover da frase antes de
+ *  extrair o nome (senão o número vira parte do nome). */
+function extractBarePhone(text: string): { raw: string; digits: string } | null {
+  const match = text.match(/\+?\d[\d\s()-]{6,17}\d\b/);
+  if (!match) return null;
+  const digits = match[0].replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) return null;
+  return { raw: match[0], digits };
+}
+
 /** CRUD essencial de funcionários em PT-BR e espanhol. Mantém os comandos
  * operacionais mesmo durante uma indisponibilidade transitória do provedor
  * de IA e garante o mesmo resultado nos modos pessoal e empresarial. */
@@ -1679,7 +1692,11 @@ export function getExplicitEmployeeCrudResult(message: string): AIResult | null 
   const asRole = text.match(/\b(?:adicion\w*|inclu\w*|contrat\w*|agreg\w*|a[ñn]ad\w*|incorpor\w*)\s+(?:a(?:o|l)?\s+)?(.+?)\s+como\s+(.+)$/i);
   if (create && (hasEmployeeWord || (asRole && !/\b(?:cliente|clienta|customer)\b/i.test(asRole[2])))) {
     const employee: EmployeeData = {};
-    const named = text.match(/\b(?:funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?=\s+(?:com|con|como|sal[aá]rio|sueldo|cargo|puesto)\b|$)/i);
+    // Sem a palavra "salário" na frase, um número (ex: telefone) que aparece
+    // depois do nome viraria parte do nome — remove antes de extrair o nome.
+    const barePhone = /\b(?:sal[aá]rio|sueldo)\b/i.test(normalized) ? null : extractBarePhone(text);
+    const textForName = barePhone ? text.replace(barePhone.raw, " ") : text;
+    const named = textForName.match(/\b(?:funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa]|trabajador)\s+(.+?)(?=\s+(?:com|con|como|sal[aá]rio|sueldo|cargo|puesto)\b|$)/i);
     employee.name = cleanName(named?.[1] || asRole?.[1]);
     const role = text.match(/\b(?:como|cargo|puesto)\s+(?:de\s+)?([^,;]+?)(?=\s+(?:com|con)\s+(?:sal[aá]rio|sueldo)\b|$)/i)?.[1];
     const salaryMatch = text.match(/\b(?:sal[aá]rio|sueldo)(?:\s+de)?\s+(?:[$€]\s*)?(\d[\d.,]*)\s*(mil)?\b/i);
@@ -1687,6 +1704,8 @@ export function getExplicitEmployeeCrudResult(message: string): AIResult | null 
     if (salaryMatch) {
       const base = Number(salaryMatch[1].replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
       employee.salary = salaryMatch[2] ? base * 1000 : base;
+    } else if (barePhone) {
+      employee.phone = barePhone.digits;
     }
     return { intent: "employee_create", confidence: 1, employee };
   }
@@ -1710,7 +1729,11 @@ export function getExplicitCustomerCrudResult(message: string): AIResult | null 
     .replace(/\s+(?:com|con|como|para|a)\s+.*$/i, "")
     .trim().replace(/[.,;:!?]+$/, "") || undefined;
   const customer: CustomerData = {};
-  const named = text.match(/\b(?:cliente|clienta|empresa|companhia|compa[ñn][ií]a)\s+(.+?)(?=\s+(?:com|con|como|telefone|tel[eé]fono|correo|e-?mail|da\s+empresa|de\s+la\s+empresa)\b|$)/i);
+  // Sem a palavra "telefone" na frase, o número viraria parte do nome —
+  // remove da frase antes de extrair o nome.
+  const barePhone = extractBarePhone(text);
+  const textForName = barePhone ? text.replace(barePhone.raw, " ") : text;
+  const named = textForName.match(/\b(?:cliente|clienta|empresa|companhia|compa[ñn][ií]a)\s+(.+?)(?=\s+(?:com|con|como|telefone|tel[eé]fono|correo|e-?mail|da\s+empresa|de\s+la\s+empresa)\b|$)/i);
   const name = cleanName(named?.[1]);
   if (name) customer.name = name;
 
@@ -1728,7 +1751,7 @@ export function getExplicitCustomerCrudResult(message: string): AIResult | null 
 
   const create = /\b(?:cadastr(?:a|ar|e)|registr(?:a|ar|e)|adicion(?:a|ar|e)|inclu(?:a|ir)|agreg(?:a|ar|ue)|anad(?:e|ir))\b/.test(normalized);
   if (create) {
-    const phone = text.match(/\b(?:telefone|tel[eé]fono)(?:\s+de)?\s+([+\d][\d\s().-]{7,})/i)?.[1];
+    const phone = (text.match(/\b(?:telefone|tel[eé]fono)(?:\s+de)?\s+([+\d][\d\s().-]{7,})/i)?.[1]) ?? barePhone?.digits;
     const email = text.match(/\b(?:e-?mail|correo)(?:\s+de)?\s+([^\s]+@[^\s]+)/i)?.[1];
     if (phone) customer.phone = phone.replace(/\D/g, "");
     if (email) customer.email = email.trim().replace(/[.,;:!?]+$/, "");
@@ -1754,12 +1777,18 @@ export function getExplicitContactCrudResult(message: string): AIResult | null {
   if (!hasContact) return null;
 
   const cleanName = (value?: string) => value
-    ?.replace(/^(?:o|a|os|as|el|la|los|las|ao|al|do|da|de|del)\s+/i, "")
+    ?.replace(/^(?:pra|para|pro)\s+(?:mim|mi|ele|ela|el)\b,?\s*/i, "")
+    .replace(/^(?:o|a|os|as|el|la|los|las|ao|al|do|da|de|del)\s+/i, "")
     .replace(/^(?:contato|contacto)\s+/i, "")
     .replace(/\s+(?:com|con|como|para|a)\s+.*$/i, "")
     .trim().replace(/[.,;:!?]+$/, "") || undefined;
   const contact: ContactData = {};
-  const named = text.match(/\b(?:contato|contacto)\s+(?:d[oa]\s+|de\s+)?(.+?)(?=\s+(?:com|con|como|telefone|tel[eé]fono|correo|e-?mail)\b|$)/i);
+  // Sem a palavra "telefone" na frase (ex: "contato Lucas 44999999999"), o
+  // número teria virado parte do nome — remove da frase ANTES de extrair o
+  // nome, e usa como telefone se nenhum vier explicitamente marcado.
+  const barePhone = extractBarePhone(text);
+  const textForName = barePhone ? text.replace(barePhone.raw, " ") : text;
+  const named = textForName.match(/\b(?:contato|contacto)\s+(?:d[oa]\s+|de\s+)?(.+?)(?=\s+(?:com|con|como|telefone|tel[eé]fono|correo|e-?mail)\b|$)/i);
   const name = cleanName(named?.[1]);
   if (name) contact.name = name;
 
@@ -1777,7 +1806,7 @@ export function getExplicitContactCrudResult(message: string): AIResult | null {
 
   const create = /\b(?:cadastr(?:a|ar|e)|registr(?:a|ar|e)|adicion(?:a|ar|e)|inclu(?:a|ir)|agreg(?:a|ar|ue)|anad(?:e|ir)|salv(?:a|ar|e)|guard(?:a|ar|e))\b/.test(normalized);
   if (create) {
-    const phone = text.match(/\b(?:telefone|tel[eé]fono)(?:\s+de)?\s+([+\d][\d\s().-]{7,})/i)?.[1];
+    const phone = (text.match(/\b(?:telefone|tel[eé]fono)(?:\s+de)?\s+([+\d][\d\s().-]{7,})/i)?.[1]) ?? barePhone?.digits;
     const email = text.match(/\b(?:e-?mail|correo)(?:\s+de)?\s+([^\s]+@[^\s]+)/i)?.[1];
     if (phone) contact.phone = phone.replace(/\D/g, "");
     if (email) contact.email = email.trim().replace(/[.,;:!?]+$/, "");
