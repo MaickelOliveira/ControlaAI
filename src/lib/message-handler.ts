@@ -306,12 +306,12 @@ function localized(locale: string | undefined, ptBR: string, es: string, ptPT = 
   return ptBR;
 }
 
-/** Mensagem INTEIRA de desistência solta ("cancelar", "deixa pra lá"), sem
- *  mais nada junto — deliberadamente mais estrita que o CANCEL_RE usado
- *  dentro do slot-filling (que é um prefixo, correto pra respostas de uma
- *  pergunta em andamento). Aqui roda fora de qualquer pendência, então um
- *  prefixo pegaria comandos reais tipo "cancela o lembrete do remédio". */
-const BARE_CANCEL_RE = /^(cancela(r)?|deixa pra l[áa]|esquece|desisto|n[ãa]o quero|olvida|no quiero)[.,!\s]*$/i;
+/** Mensagem INTEIRA de desistência solta ("cancelar", "deixa pra lá", "no
+ *  quiero"), sem mais nada junto — mesma lista de palavras do CANCEL_RE do
+ *  slot-filling (PT e ES), mas ancorada nas duas pontas em vez de só no
+ *  prefixo. Aqui roda fora de qualquer pendência, então um prefixo pegaria
+ *  comandos reais tipo "cancela o lembrete do remédio". */
+const BARE_CANCEL_RE = /^(cancela(r)?|deixa( pra l[áa])?|esquece|para|sair|nada|desisto|n[ãa]o quero|olvida|salir|no quiero)[.,!\s]*$/i;
 
 /** Pergunta qual compromisso o usuário quis dizer quando a busca por
  *  palavra-chave bate em mais de um (ex: duas "reunião" na mesma semana) —

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FLOWS, hasMissingSlotFields, parseReminderDateAnswer, parseReminderTimeAnswer } from "./slot-filling";
+import { FLOWS, hasMissingSlotFields, parseReminderDateAnswer, parseReminderTimeAnswer, slotDayOfMonth } from "./slot-filling";
 
 describe("reminder slot filling", () => {
   it("parses relative dates and time in Portuguese", () => {
@@ -37,5 +37,21 @@ describe("reminder slot filling", () => {
 
     expect(hasMissingSlotFields({ intent: "recurring_create", confidence: 0.4 }, ctx)).toBe(true);
     expect(FLOWS.recurring_create!.slots.type.ask({}, ctx)).toContain("¿Es un gasto o un ingreso");
+  });
+
+  it("parses the day-of-month written out in Portuguese", () => {
+    const parse = slotDayOfMonth();
+    expect(parse("dia cinco", {}, {} as never)).toEqual({ ok: true, value: 5 });
+    expect(parse("vinte e um", {}, {} as never)).toEqual({ ok: true, value: 21 });
+    expect(parse("trinta e um", {}, {} as never)).toEqual({ ok: true, value: 31 });
+    expect(parse("vigésimo primeiro", {}, {} as never)).toEqual({ ok: true, value: 21 });
+  });
+
+  it("parses the day-of-month written out in Spanish (parser is locale-agnostic)", () => {
+    const parse = slotDayOfMonth();
+    expect(parse("quince", {}, {} as never)).toEqual({ ok: true, value: 15 });
+    expect(parse("veintiuno", {}, {} as never)).toEqual({ ok: true, value: 21 });
+    expect(parse("treinta y uno", {}, {} as never)).toEqual({ ok: true, value: 31 });
+    expect(parse("vigésimo primero", {}, {} as never)).toEqual({ ok: true, value: 21 });
   });
 });

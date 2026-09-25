@@ -389,8 +389,18 @@ const CARDINAL_UNITS = ["zero", "um", "dois", "tres", "quatro", "cinco", "seis",
 const CARDINAL_TEENS = ["dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
 const ORDINAL_UNITS = ["", "primeiro", "segundo", "terceiro", "quarto", "quinto", "sexto", "setimo", "oitavo", "nono"];
 
-/** Mapa "palavra por extenso → dia do mês (1-31)", cobrindo cardinais
- *  ("dia cinco", "vinte e um") e ordinais ("quinto dia", "vigésimo primeiro"). */
+// Equivalentes em espanhol — o parser não sabe o locale de quem está
+// falando (chamado a partir de slotDayOfMonth, sem acesso a ctx.user.locale
+// de forma direta), então precisa reconhecer as duas línguas sempre.
+const CARDINAL_UNITS_ES = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"];
+const CARDINAL_TEENS_ES = ["diez", "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve"];
+// 21-29 em espanhol contraem "veinte y X" numa palavra só, diferente do PT.
+const CARDINAL_VEINTI_ES = ["veintiuno", "veintidos", "veintitres", "veinticuatro", "veinticinco", "veintiseis", "veintisiete", "veintiocho", "veintinueve"];
+const ORDINAL_UNITS_ES = ["", "primero", "segundo", "tercero", "cuarto", "quinto", "sexto", "septimo", "octavo", "noveno"];
+
+/** Mapa "palavra por extenso → dia do mês (1-31)", cobrindo cardinais em
+ *  PT e ES ("dia cinco", "vinte e um", "veintiuno") e ordinais ("quinto
+ *  dia", "vigésimo primeiro", "vigésimo primero"). */
 function buildDayWordMap(): Map<string, number> {
   const map = new Map<string, number>();
 
@@ -403,12 +413,24 @@ function buildDayWordMap(): Map<string, number> {
   map.set("trinta e um", 31);
 
   for (let n = 1; n <= 9; n++) map.set(ORDINAL_UNITS[n], n);
-  map.set("decimo", 10);
+  map.set("decimo", 10); // "décimo" sem acento — serve pra PT e ES, grafia idêntica
   for (let n = 11; n <= 19; n++) map.set(`decimo ${ORDINAL_UNITS[n - 10]}`, n);
   map.set("vigesimo", 20);
   for (let n = 21; n <= 29; n++) map.set(`vigesimo ${ORDINAL_UNITS[n - 20]}`, n);
   map.set("trigesimo", 30);
   map.set("trigesimo primeiro", 31);
+
+  for (let n = 1; n <= 9; n++) map.set(CARDINAL_UNITS_ES[n], n);
+  for (let n = 10; n <= 19; n++) map.set(CARDINAL_TEENS_ES[n - 10], n);
+  map.set("veinte", 20);
+  for (let n = 21; n <= 29; n++) map.set(CARDINAL_VEINTI_ES[n - 21], n);
+  map.set("treinta", 30);
+  map.set("treinta y uno", 31);
+
+  for (let n = 1; n <= 9; n++) map.set(ORDINAL_UNITS_ES[n], n);
+  for (let n = 11; n <= 19; n++) map.set(`decimo ${ORDINAL_UNITS_ES[n - 10]}`, n);
+  for (let n = 21; n <= 29; n++) map.set(`vigesimo ${ORDINAL_UNITS_ES[n - 20]}`, n);
+  map.set("trigesimo primero", 31);
 
   return map;
 }

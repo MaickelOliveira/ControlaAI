@@ -116,6 +116,18 @@ describe("parseAmountBR", () => {
   it("returns null when written words don't form a number", () => {
     expect(parseAmountBR("o valor é variável mês a mês")).toBeNull();
   });
+
+  it("parses amounts written out in Spanish words (parser is locale-agnostic)", () => {
+    expect(parseAmountBR("cuatrocientos")).toBe(400);
+    expect(parseAmountBR("Cuatrocientos pesos.")).toBe(400);
+    expect(parseAmountBR("cien pesos")).toBe(100);
+    expect(parseAmountBR("dos mil pesos")).toBe(2000);
+    expect(parseAmountBR("mil doscientos")).toBe(1200);
+    expect(parseAmountBR("veintiuno")).toBe(21);
+    expect(parseAmountBR("treinta y cinco")).toBe(35);
+    expect(parseAmountBR("cien pesos con cincuenta centavos")).toBe(100.5);
+    expect(parseAmountBR("cincuenta centimos")).toBe(0.5);
+  });
 });
 
 describe("parseFinanceChoiceMulti", () => {
