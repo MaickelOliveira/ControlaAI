@@ -610,21 +610,97 @@ export function parseFinanceChoiceMulti(
   return [...indices].sort((a, b) => a - b);
 }
 
+const WRITTEN_NUMBER_UNITS: Record<string, number> = {
+  zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5,
+  seis: 6, sete: 7, oito: 8, nove: 9,
+  dez: 10, onze: 11, doze: 12, treze: 13, quatorze: 14, catorze: 14,
+  quinze: 15, dezesseis: 16, dezessete: 17, dezoito: 18, dezenove: 19,
+  vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60,
+  setenta: 70, oitenta: 80, noventa: 90,
+  cem: 100, cento: 100, duzentos: 200, trezentos: 300, quatrocentos: 400,
+  quinhentos: 500, seiscentos: 600, setecentos: 700, oitocentos: 800, novecentos: 900,
+};
+
+const WRITTEN_NUMBER_MULTIPLIERS: Record<string, number> = {
+  mil: 1000, milhao: 1_000_000, milhoes: 1_000_000,
+};
+
+function tokenizeWords(text: string): string[] {
+  return text.match(/[a-z]+/g) ?? [];
+}
+
+/** Soma uma sequência de palavras numéricas ("mil", "duzentos", "e", "vinte")
+ *  em um único valor. Ignora silenciosamente qualquer token desconhecido
+ *  (ex: "reais", "gastei") — é chamada só depois que não sobrou nenhum
+ *  dígito no texto, então ser permissiva aqui não colide com números. */
+function sumWrittenNumberTokens(tokens: string[]): { value: number; found: boolean } {
+  let total = 0;
+  let current = 0;
+  let found = false;
+  for (const tok of tokens) {
+    if (tok === "e") continue;
+    if (tok in WRITTEN_NUMBER_UNITS) {
+      current += WRITTEN_NUMBER_UNITS[tok];
+      found = true;
+    } else if (tok in WRITTEN_NUMBER_MULTIPLIERS) {
+      total += (current || 1) * WRITTEN_NUMBER_MULTIPLIERS[tok];
+      current = 0;
+      found = true;
+    }
+  }
+  return { value: total + current, found };
+}
+
+/** Interpreta um valor por extenso ("quatrocentos reais", "mil e duzentos",
+ *  "cem reais e cinquenta centavos"). Só é chamada quando o texto não tem
+ *  nenhum dígito — evita competir com o caminho numérico de parseAmountBR. */
+function parseWrittenAmountBR(text: string): number | null {
+  const normalized = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const tokens = tokenizeWords(normalized);
+  const centavosIndex = tokens.findIndex(t => t === "centavo" || t === "centavos");
+
+  let cents = 0;
+  let mainTokens = tokens;
+  if (centavosIndex > 0) {
+    let start = centavosIndex;
+    while (start > 0) {
+      const prev = tokens[start - 1];
+      if (prev in WRITTEN_NUMBER_UNITS || prev in WRITTEN_NUMBER_MULTIPLIERS || prev === "e" || prev === "com") {
+        start -= 1;
+      } else {
+        break;
+      }
+    }
+    const centsResult = sumWrittenNumberTokens(tokens.slice(start, centavosIndex));
+    if (centsResult.found) cents = centsResult.value;
+    mainTokens = tokens.slice(0, start);
+  }
+
+  const mainResult = sumWrittenNumberTokens(mainTokens);
+  if (!mainResult.found && cents === 0) return null;
+  const value = mainResult.value + cents / 100;
+  return value > 0 ? value : null;
+}
+
 /** Extrai um valor em reais de um texto livre (ex: "80 reais", "R$ 80,50",
- *  "11 mil", "mil e quinhentos" fica de fora — só o caso simples "<número> mil").
+ *  "11 mil", "quatrocentos reais", "cem reais e cinquenta centavos").
  *  Converte separador decimal BR (vírgula) e remove separador de milhar
- *  (ponto) antes de parsear. Retorna null se não achar nada válido. */
+ *  (ponto) antes de parsear. Sem nenhum dígito no texto, tenta interpretar
+ *  o valor por extenso. Retorna null se não achar nada válido. */
 export function parseAmountBR(text: string): number | null {
   const lower = text.toLowerCase();
-  const milMatch = lower.match(/(\d+(?:,\d+)?)\s*mil\b/) || (/\bmil\b/.test(lower) ? [text, "1"] : null);
+  const milMatch = lower.match(/(\d+(?:,\d+)?)\s*mil\b/);
   if (milMatch) {
     const base = parseFloat(milMatch[1].replace(",", "."));
     if (!isNaN(base) && base > 0) return base * 1000;
   }
   const match = text.replace(/\./g, "").replace(",", ".").match(/(\d+(?:\.\d{1,2})?)/);
-  if (!match) return null;
-  const val = parseFloat(match[1]);
-  return !isNaN(val) && val > 0 ? val : null;
+  if (match) {
+    const val = parseFloat(match[1]);
+    if (!isNaN(val) && val > 0) return val;
+    return null;
+  }
+  return parseWrittenAmountBR(text);
 }
 
 /** Interpreta a resposta do usuário como o NOVO VALOR de um lançamento já

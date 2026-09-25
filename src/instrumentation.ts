@@ -85,9 +85,9 @@ export async function register() {
         }
       }
 
-      // ── Notificações de recorrentes/parcelas às 20h SP ──
+      // ── Notificações de recorrentes/parcelas às 9h SP ──
       const hourSP = Number(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }));
-      if (hourSP === 20) {
+      if (hourSP === 9) {
         try {
           const recurringModule = await import("./lib/recurring").catch(() => null);
           const usersModule = await import("./lib/users").catch(() => null);

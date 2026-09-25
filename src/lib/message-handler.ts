@@ -306,6 +306,13 @@ function localized(locale: string | undefined, ptBR: string, es: string, ptPT = 
   return ptBR;
 }
 
+/** Mensagem INTEIRA de desistência solta ("cancelar", "deixa pra lá"), sem
+ *  mais nada junto — deliberadamente mais estrita que o CANCEL_RE usado
+ *  dentro do slot-filling (que é um prefixo, correto pra respostas de uma
+ *  pergunta em andamento). Aqui roda fora de qualquer pendência, então um
+ *  prefixo pegaria comandos reais tipo "cancela o lembrete do remédio". */
+const BARE_CANCEL_RE = /^(cancela(r)?|deixa pra l[áa]|esquece|desisto|n[ãa]o quero|olvida|no quiero)[.,!\s]*$/i;
+
 /** Pergunta qual compromisso o usuário quis dizer quando a busca por
  *  palavra-chave bate em mais de um (ex: duas "reunião" na mesma semana) —
  *  mesmo padrão usado para lançamentos financeiros e metas ambíguas: nunca
@@ -1909,7 +1916,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
-    // ── Confirmação de recorrente/parcela (resposta ao lembrete das 20h) ──
+    // ── Confirmação de recorrente/parcela (resposta ao lembrete das 9h) ──
     if (pending?.type === "recurring_confirmation" && pending.userId === user.id) {
       const answer = parseRecurringConfirmationAnswer(messageText);
       if (answer === true) {
@@ -2002,6 +2009,18 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       && isStandaloneAppointmentReminderRequest(messageText)
       && isAgendaReminderTarget(directAppointmentReminder, messageText)) {
       await wppSend(from, replyAgendaReminderPolicy(user.locale));
+      return;
+    }
+
+    // ── "Cancelar"/"deixa pra lá" sozinho, sem nenhuma pendência em aberto ──
+    // Só a mensagem INTEIRA (não um prefixo, tipo "cancela o lembrete do
+    // remédio" — isso é reminder_delete de verdade) pra não competir com
+    // comandos reais. Sem isso, esse texto cairia direto na IA de
+    // classificação livre e, puxado pelo histórico recente da conversa,
+    // podia ser confundido com uma intenção real (ex: editar lembrete) —
+    // respondendo com um erro sem sentido pra quem só queria encerrar o assunto.
+    if (!pending && BARE_CANCEL_RE.test(messageText.trim())) {
+      await wppSend(from, localized(user.locale, "Ok! 👍", "¡Listo! 👍"));
       return;
     }
 
@@ -2763,7 +2782,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         );
 
         // A ocorrência recorrente vencida vem primeiro porque é ela que gera
-        // a pergunta das 20h. Confirmá-la já cria o lançamento financeiro e
+        // a pergunta das 9h. Confirmá-la já cria o lançamento financeiro e
         // avança o próximo vencimento.
         if (dueRecurringItems.length > 1) {
           await askWhichRecurringWasSettled(from, user.id, dueRecurringItems, user.locale);

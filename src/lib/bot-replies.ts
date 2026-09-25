@@ -815,25 +815,25 @@ export function replyRecurringCreated(r: RecurringTransaction, locale?: string):
   if (isEs(locale)) {
     const unitLabel: Record<string, string> = { monthly: "mensual", weekly: "semanal", daily: "diario", yearly: "anual" };
     if (r.recurrenceType === "installment") {
-      return `Registrado. Voy a seguir cada cuota por ti.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/cuota × ${r.totalInstallments ?? "?"} veces\n📅 Primer vencimiento: ${nextStr}\n\nTe aviso a las 20h de cada vencimiento.`;
+      return `Registrado. Voy a seguir cada cuota por ti.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/cuota × ${r.totalInstallments ?? "?"} veces\n📅 Primer vencimiento: ${nextStr}\n\nTe aviso a las 9h de cada vencimiento.`;
     }
     const termLine = r.totalInstallments ? ` · ${r.totalInstallments} veces` : "";
-    return `Registrado. Voy a estar atento a los próximos vencimientos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimiento: ${nextStr}\n\nTe aviso a las 20h de cada vencimiento.`;
+    return `Registrado. Voy a estar atento a los próximos vencimientos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimiento: ${nextStr}\n\nTe aviso a las 9h de cada vencimiento.`;
   }
   if (isPtPt(locale)) {
     const unitLabel: Record<string, string> = { monthly: "mensal", weekly: "semanal", daily: "diário", yearly: "anual" };
     if (r.recurrenceType === "installment") {
-      return `Registado. Vou acompanhar cada prestação por ti.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/prestação × ${r.totalInstallments ?? "?"} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nAviso-te às 20h de cada vencimento.`;
+      return `Registado. Vou acompanhar cada prestação por ti.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/prestação × ${r.totalInstallments ?? "?"} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nAviso-te às 9h de cada vencimento.`;
     }
     const termLine = r.totalInstallments ? ` · ${r.totalInstallments} vezes` : "";
-    return `Registado. Fico atento aos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso-te às 20h de cada vencimento.`;
+    return `Registado. Fico atento aos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso-te às 9h de cada vencimento.`;
   }
   const unitLabel: Record<string, string> = { monthly: "mensal", weekly: "semanal", daily: "diário", yearly: "anual" };
   if (r.recurrenceType === "installment") {
-    return `Cadastrado. Vou acompanhar cada parcela pra você.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/parcela × ${r.totalInstallments ?? "?"} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nAviso você às 20h de cada vencimento.`;
+    return `Cadastrado. Vou acompanhar cada parcela pra você.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/parcela × ${r.totalInstallments ?? "?"} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nAviso você às 9h de cada vencimento.`;
   }
   const termLine = r.totalInstallments ? ` · ${r.totalInstallments} vezes` : "";
-  return `Cadastrado. Fico de olho nos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso você às 20h de cada vencimento.`;
+  return `Cadastrado. Fico de olho nos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso você às 9h de cada vencimento.`;
 }
 
 export function replyGoalCreated(goal: Goal, pct: number, locale?: string): string {

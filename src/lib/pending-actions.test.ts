@@ -101,6 +101,21 @@ describe("parseAmountBR", () => {
     expect(parseAmountBR("2,5 mil")).toBe(2500);
     expect(parseAmountBR("gastei mil reais no fornecedor")).toBe(1000);
   });
+
+  it("parses amounts written out in Portuguese words", () => {
+    expect(parseAmountBR("quatrocentos")).toBe(400);
+    expect(parseAmountBR("Quatrocentos reais.")).toBe(400);
+    expect(parseAmountBR("cem reais")).toBe(100);
+    expect(parseAmountBR("dois mil reais")).toBe(2000);
+    expect(parseAmountBR("mil e duzentos")).toBe(1200);
+    expect(parseAmountBR("trezentos e cinquenta e cinco")).toBe(355);
+    expect(parseAmountBR("cem reais e cinquenta centavos")).toBe(100.5);
+    expect(parseAmountBR("cinquenta centavos")).toBe(0.5);
+  });
+
+  it("returns null when written words don't form a number", () => {
+    expect(parseAmountBR("o valor é variável mês a mês")).toBeNull();
+  });
 });
 
 describe("parseFinanceChoiceMulti", () => {
