@@ -331,6 +331,16 @@ describe("internet research classification", () => {
     expect(getExplicitWebSearchResult("qual meu saldo hoje?")).toBeNull();
   });
 
+  it("does not steal an expense registration just because it mentions 'valor'", () => {
+    // "compra"/"compras" (substantivo) faltava na lista de exclusão — só
+    // "comprei"/"compre"/"comprar" (verbo) estavam cobertos, então uma frase
+    // como "Compra de agônio no valor de R$ 300" caía na pesquisa web em vez
+    // de ir pro classificador registrar o gasto.
+    expect(getExplicitWebSearchResult("Compra de agônio no valor de R$ 300.")).toBeNull();
+    expect(getExplicitWebSearchResult("Compra de material de escritório, valor 150")).toBeNull();
+    expect(getExplicitWebSearchResult("Registrei uma compra de 80 reais")).toBeNull();
+  });
+
   it("does not treat sending a message to a client/employee 'now' as a web search", () => {
     expect(getExplicitWebSearchResult("Enviar msg para cliente Thaynara agora")).toBeNull();
     expect(getExplicitWebSearchResult("Avisa o funcionário Carlos agora")).toBeNull();
