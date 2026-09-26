@@ -3445,6 +3445,20 @@ export function getExplicitLastFinanceAccountEditResult(message: string): AIResu
   };
 }
 
+/** As regex de correção de funcionário usam ".+" pra capturar o nome porque
+ *  não sabem de antemão onde ele termina — mas isso também casa com o resto
+ *  de uma frase inteira quando "foi"/"é"/"e" aparece de novo mais adiante por
+ *  coincidência (ex: "não foi 1400. Foi apenas R$ 1000, como adiantamento...").
+ *  Um nome de verdade é curto, sem dígitos e sem pontuação de frase; se não
+ *  bater com isso, é sinal de que o match "vazou" pra além do nome. */
+function looksLikeEmployeeName(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 40) return false;
+  if (/[.!?;:]/.test(trimmed)) return false;
+  if (/\d/.test(trimmed)) return false;
+  return trimmed.split(/\s+/).length <= 5;
+}
+
 function cleanEmployeeLinkName(value: string): string {
   return value
     .replace(/^(?:o|a|os|as|el|la|los|las)\s+/i, "")
@@ -3477,7 +3491,7 @@ export function getExplicitLastFinanceEmployeeEditResult(message: string): AIRes
   const correction = text.match(/(?:n[ãa]o\s+(?:é|e|foi|era)|no\s+(?:es|fue|era))\s+(?:(?:o|a|el|la)\s+)?(?:(?:funcion[aá]ri[oa]|colaborador(?:a)?|emplead[oa]|trabajador(?:a)?)\s+)?(.+?)\s*(?:,|\s)\s*(?:e\s+sim|mas\s+sim|foi|é|e|sino|fue|es)\s+(?:(?:o|a|el|la)\s+)?(?:(?:funcion[aá]ri[oa]|colaborador(?:a)?|emplead[oa]|trabajador(?:a)?)\s+)?(.+)$/i);
   const direct = text.match(/(?:altere|alterar|mude|mudar|troque|trocar|corrija|corrigir|cambie|cambiar|cambia|corrige|corregir)\s+(?:(?:o|a|el|la)\s+)?(?:funcion[aá]ri[oa]|colaborador(?:a)?|emplead[oa]|trabajador(?:a)?)\s+(?:d[oa]|de(?:l|\s+la)?|nesse|neste|desse|deste)?\s*(?:[úu]ltimo\s+)?(?:lan[çc]amento|gasto|movimento|movimiento|registro|pago|pagamento)?\s*(?:para|por|a)\s+(.+)$/i);
   const employeeName = cleanEmployeeLinkName(correction?.[2] ?? direct?.[1] ?? "");
-  if (!employeeName) return null;
+  if (!employeeName || !looksLikeEmployeeName(employeeName)) return null;
   return {
     intent: "finance_edit",
     confidence: 1,

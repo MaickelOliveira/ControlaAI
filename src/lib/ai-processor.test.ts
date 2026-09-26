@@ -1063,6 +1063,17 @@ describe("latest finance employee corrections", () => {
       intent: "finance_edit", finance: { clearEmployee: true }, lastFinanceReference: "last",
     });
   });
+
+  it("does not mistake a payment-amount correction for an employee swap", () => {
+    // "não foi 1400. Foi apenas R$ 1000, ..." tem "não foi" seguido, mais
+    // adiante, de outro "foi" por coincidência — as regex de correção de
+    // funcionário usam ".+" pra capturar o nome e acabavam engolindo a frase
+    // inteira como se fosse o nome do novo funcionário.
+    expect(getExplicitLastFinanceEmployeeEditResult(
+      "O valor pago pelo cliente não foi 1400. Foi apenas R$ 1000, como adiantamento. Serviço ainda não concluído. Inserir em tarefa em andamento."
+    )).toBeNull();
+    expect(getExplicitLastFinanceEmployeeEditResult("não foi ontem, foi hoje que paguei a conta de luz")).toBeNull();
+  });
 });
 
 describe("getExplicitVehicleCrudResult", () => {
