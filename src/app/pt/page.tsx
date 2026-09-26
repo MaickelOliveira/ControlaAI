@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { BRAZIL_CHECKOUT } from "@/lib/checkout-markets";
+import { BRAZIL_CHECKOUT, checkoutUrlWithLandingParams } from "@/lib/checkout-markets";
 
 const heading = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-heading" });
 
@@ -1137,6 +1137,9 @@ function PlanChoice() {
               </ul>
               <a
                 href={option.checkoutUrl}
+                onClick={event => {
+                  event.currentTarget.href = checkoutUrlWithLandingParams(option.checkoutUrl, window.location.search);
+                }}
                 data-meta-plan={option.id}
                 data-meta-value={option.totalValue}
                 className={clsx("mt-8 inline-flex items-center justify-center rounded-xl px-6 py-3.5 text-sm font-extrabold transition", option.id === "semiannual" ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 hover:bg-amber-300" : "border border-slate-300 text-slate-900 hover:border-slate-950 hover:bg-slate-950 hover:text-white")}

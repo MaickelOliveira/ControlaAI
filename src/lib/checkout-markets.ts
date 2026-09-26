@@ -2,6 +2,15 @@ import type { UserLocale } from "./users";
 
 export type CheckoutPlanId = "monthly" | "semiannual" | "annual";
 
+const FORWARDED_LANDING_PARAMS = [
+  "fbclid",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+] as const;
+
 type CheckoutMarket = {
   locale: UserLocale;
   sourceCode: string;
@@ -49,6 +58,23 @@ export const SPANISH_CHECKOUT: CheckoutMarket = {
     annual: "https://pay.hotmart.com/T107497176B?off=zcsygj89&src=zelo_site_es",
   },
 };
+
+/**
+ * Mantém a identificação do clique e as UTMs quando a landing page envia o
+ * visitante para o checkout hospedado na Hotmart. Sem o fbclid no checkout,
+ * o Pixel não consegue associar a sessão à origem do anúncio.
+ */
+export function checkoutUrlWithLandingParams(checkoutUrl: string, landingSearch: string): string {
+  const checkout = new URL(checkoutUrl);
+  const landingParams = new URLSearchParams(landingSearch);
+
+  for (const param of FORWARDED_LANDING_PARAMS) {
+    const value = landingParams.get(param);
+    if (value) checkout.searchParams.set(param, value);
+  }
+
+  return checkout.toString();
+}
 
 const CHECKOUT_MARKETS = [BRAZIL_CHECKOUT, SPANISH_CHECKOUT] as const;
 

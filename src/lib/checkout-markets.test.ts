@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BRAZIL_CHECKOUT,
   checkoutLocaleFromIdentifiers,
+  checkoutUrlWithLandingParams,
   SPANISH_CHECKOUT,
   type CheckoutPlanId,
 } from "./checkout-markets";
@@ -47,5 +48,18 @@ describe("checkout por mercado", () => {
       undefined,
       BRAZIL_CHECKOUT.sourceCode,
     )).toBe("pt-BR");
+  });
+
+  it("mantém o identificador do clique da Meta e UTMs no checkout", () => {
+    const url = new URL(checkoutUrlWithLandingParams(
+      BRAZIL_CHECKOUT.checkoutUrls.monthly,
+      "?fbclid=IwZXh0bgNhZW0CMTEAARteste&utm_source=facebook&utm_campaign=chile",
+    ));
+
+    expect(url.searchParams.get("off")).toBe(BRAZIL_CHECKOUT.offerCodes.monthly);
+    expect(url.searchParams.get("src")).toBe(BRAZIL_CHECKOUT.sourceCode);
+    expect(url.searchParams.get("fbclid")).toBe("IwZXh0bgNhZW0CMTEAARteste");
+    expect(url.searchParams.get("utm_source")).toBe("facebook");
+    expect(url.searchParams.get("utm_campaign")).toBe("chile");
   });
 });
