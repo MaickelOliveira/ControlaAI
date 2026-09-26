@@ -33,6 +33,8 @@ type SupportSummary = {
 
 const SUPPORT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SUPPORT_IMAGE_BYTES = 5 * 1024 * 1024;
+const INBOX_LIST_REFRESH_MS = 30_000;
+const INBOX_MESSAGE_REFRESH_MS = 15_000;
 
 function displayPhone(phone: string): string {
   const d = phone.replace(/\D/g, "");
@@ -138,25 +140,47 @@ export default function AdminInboxPage() {
   }, []);
 
   useEffect(() => {
-    fetchConversations();
-    fetchSupportConversations();
-    const t = setInterval(() => { fetchConversations(); fetchSupportConversations(); }, 5000);
-    return () => clearInterval(t);
-  }, [fetchConversations, fetchSupportConversations]);
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (tab === "inbox") fetchConversations();
+      else fetchSupportConversations();
+    };
+    refresh();
+    const t = window.setInterval(refresh, INBOX_LIST_REFRESH_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [tab, fetchConversations, fetchSupportConversations]);
 
   useEffect(() => {
-    if (!selected) return;
-    fetchMessages(selected);
-    const t = setInterval(() => fetchMessages(selected), 3000);
-    return () => clearInterval(t);
-  }, [selected, fetchMessages]);
+    if (!selected || tab !== "inbox") return;
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchMessages(selected);
+    };
+    refresh();
+    const t = window.setInterval(refresh, INBOX_MESSAGE_REFRESH_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [tab, selected, fetchMessages]);
 
   useEffect(() => {
-    if (!supportSelected) return;
-    fetchSupportMessages(supportSelected);
-    const t = setInterval(() => fetchSupportMessages(supportSelected), 3000);
-    return () => clearInterval(t);
-  }, [supportSelected, fetchSupportMessages]);
+    if (!supportSelected || tab !== "suporte") return;
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchSupportMessages(supportSelected);
+    };
+    refresh();
+    const t = window.setInterval(refresh, INBOX_MESSAGE_REFRESH_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [tab, supportSelected, fetchSupportMessages]);
 
   useEffect(() => {
     if (!userScrolledUpRef.current) messagesEndRef.current?.scrollIntoView({ behavior: "auto" });

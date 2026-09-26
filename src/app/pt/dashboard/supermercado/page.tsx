@@ -98,10 +98,11 @@ export default function SupermercadoPagePt() {
   useEffect(() => {
     if (tab !== "lista" && tab !== "whatsapp") return;
     const sync = () => {
+      if (document.visibilityState !== "visible") return;
       loadList(tab === "whatsapp" ? undefined : listFilter);
       loadOverview();
     };
-    const timer = window.setInterval(sync, 5_000);
+    const timer = window.setInterval(sync, 30_000);
     const onVisibility = () => { if (document.visibilityState === "visible") sync(); };
     window.addEventListener("focus", sync);
     document.addEventListener("visibilitychange", onVisibility);

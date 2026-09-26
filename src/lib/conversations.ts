@@ -15,8 +15,20 @@ type Conversation = {
   lastFinanceBatch?: LastFinanceBatch;
 };
 
+export type ConversationSummary = {
+  phone: string;
+  contactName: string | null;
+  lastMessage: ChatMessage | null;
+  lastActivity: number;
+  unread: boolean;
+  aiPaused: boolean;
+  messageCount: number;
+};
+
 const MAX_MESSAGES = 200;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const SUMMARY_CACHE_MS = 30_000;
+let summaryCache: { expiresAt: number; value: ConversationSummary[] } | null = null;
 // Janela em que "tá errado, são despesas" (sem citar um lançamento
 // específico) ainda é entendido como correção do que acabou de ser
 // registrado — depois disso, é seguro demais assumir que a pessoa ainda
@@ -96,6 +108,7 @@ async function findConversation(phone: string): Promise<{ key: string; conv: Con
 
 async function saveConversation(key: string, conv: Conversation) {
   await getSupabase().from("conversations").upsert({ phone: key, data: conv });
+  summaryCache = null;
 }
 
 export async function getHistory(phone: string): Promise<ChatMessage[]> {
@@ -112,21 +125,16 @@ export async function hasOpenCustomerServiceWindow(phone: string, now = Date.now
   return found ? isCustomerServiceWindowOpen(found.conv.messages, now) : false;
 }
 
-export async function getAllConversations(): Promise<Array<{
-  phone: string;
-  contactName: string | null;
-  lastMessage: ChatMessage | null;
-  lastActivity: number;
-  unread: boolean;
-  aiPaused: boolean;
-  messageCount: number;
-}>> {
+export async function getAllConversations(): Promise<ConversationSummary[]> {
+  const now = Date.now();
+  if (summaryCache && summaryCache.expiresAt > now) return summaryCache.value;
+
   const { data, error } = await getSupabase().from("conversations").select("phone, data");
   if (error || !data) return [];
   const rows = data as Array<{ phone: string; data: Conversation }>;
-  const result = [];
+  const result: ConversationSummary[] = [];
   for (const { phone, data: conv } of rows) {
-    if (Date.now() - conv.lastActivity > MAX_AGE_MS) continue;
+    if (now - conv.lastActivity > MAX_AGE_MS) continue;
     const lastMessage = conv.messages.length > 0 ? conv.messages[conv.messages.length - 1] : null;
     result.push({
       phone,
@@ -139,13 +147,15 @@ export async function getAllConversations(): Promise<Array<{
     });
   }
   // Deduplica por variante de telefone (mesmo padrão do original): mantém a mais recente
-  const deduped = new Map<string, (typeof result)[0]>();
+  const deduped = new Map<string, ConversationSummary>();
   for (const c of result) {
     const canonical = phoneVariants(c.phone)[0];
     const existing = deduped.get(canonical);
     if (!existing || c.lastActivity > existing.lastActivity) deduped.set(canonical, c);
   }
-  return [...deduped.values()].sort((a, b) => b.lastActivity - a.lastActivity);
+  const value = [...deduped.values()].sort((a, b) => b.lastActivity - a.lastActivity);
+  summaryCache = { value, expiresAt: now + SUMMARY_CACHE_MS };
+  return value;
 }
 
 export async function markAsRead(phone: string) {

@@ -24,8 +24,20 @@ type SupportConversation = {
   unreadUser?: boolean;  // tem mensagem do admin que o usuário ainda não viu
 };
 
+export type SupportConversationSummary = {
+  userId: string;
+  userName: string | null;
+  status: SupportStatus;
+  lastMessage: SupportMessage | null;
+  lastActivity: number;
+  unreadAdmin: boolean;
+  messageCount: number;
+};
+
 const MAX_MESSAGES = 200;
 const EMPTY: SupportConversation = { messages: [], lastActivity: 0, status: "none" };
+const SUMMARY_CACHE_MS = 30_000;
+let summaryCache: { expiresAt: number; value: SupportConversationSummary[] } | null = null;
 
 async function findConversation(userId: string): Promise<SupportConversation | null> {
   const { data, error } = await getSupabase().from("support_conversations").select("data").eq("user_id", userId).maybeSingle();
@@ -36,6 +48,7 @@ async function findConversation(userId: string): Promise<SupportConversation | n
 async function saveConversation(userId: string, conv: SupportConversation) {
   const { error } = await getSupabase().from("support_conversations").upsert({ user_id: userId, data: conv });
   if (error) throw new Error(`Falha ao salvar conversa de suporte: ${error.message}`);
+  summaryCache = null;
 }
 
 function pushMessage(conv: SupportConversation, msg: SupportMessage) {
@@ -139,19 +152,14 @@ export async function postUserSupportMessage(
   return systemReplies;
 }
 
-export async function getAllSupportConversations(): Promise<Array<{
-  userId: string;
-  userName: string | null;
-  status: SupportStatus;
-  lastMessage: SupportMessage | null;
-  lastActivity: number;
-  unreadAdmin: boolean;
-  messageCount: number;
-}>> {
+export async function getAllSupportConversations(): Promise<SupportConversationSummary[]> {
+  const now = Date.now();
+  if (summaryCache && summaryCache.expiresAt > now) return summaryCache.value;
+
   const { data, error } = await getSupabase().from("support_conversations").select("user_id, data, users(name)");
   if (error || !data) return [];
   type Row = { user_id: string; data: SupportConversation; users: { name: string } | null };
-  return (data as unknown as Row[])
+  const value = (data as unknown as Row[])
     .filter(r => r.data.messages.length > 0)
     .map(r => ({
       userId: r.user_id,
@@ -163,4 +171,6 @@ export async function getAllSupportConversations(): Promise<Array<{
       messageCount: r.data.messages.length,
     }))
     .sort((a, b) => b.lastActivity - a.lastActivity);
+  summaryCache = { value, expiresAt: now + SUMMARY_CACHE_MS };
+  return value;
 }

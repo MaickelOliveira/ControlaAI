@@ -12,6 +12,7 @@ type SupportMessage = {
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const SUPPORT_REFRESH_MS = 15_000;
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -37,9 +38,16 @@ export default function SupportWidget() {
 
   useEffect(() => {
     if (!open) return;
-    fetchMessages();
-    const t = setInterval(fetchMessages, 3000);
-    return () => clearInterval(t);
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchMessages();
+    };
+    refresh();
+    const t = window.setInterval(refresh, SUPPORT_REFRESH_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [open, fetchMessages]);
 
   useEffect(() => {
