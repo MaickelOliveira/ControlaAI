@@ -221,6 +221,24 @@ describe("normalizeInvoiceExtraction", () => {
       purchaseDate: "2026-07-05",
     });
   });
+
+  it("uses the month printed on the statement when purchases belong to an older cycle", () => {
+    const result = normalizeInvoiceExtraction({
+      isInvoice: true,
+      billingReferenceMonth: "2026-08",
+      statementReferenceMonth: "2026-10",
+      dueDay: 10,
+      transactions: [
+        { date: "2026-08-05", description: "Compra parcelada", amount: 80, category: "Outros", installmentCurrent: 3, installmentTotal: 6 },
+      ],
+    }, "2026-09-27");
+
+    expect(result?.statementReferenceMonth).toBe("2026-10");
+    expect(result?.transactions[0]).toMatchObject({
+      date: "2026-10-10",
+      purchaseDate: "2026-08-05",
+    });
+  });
 });
 
 describe("isProbableRepeatedInvoice", () => {

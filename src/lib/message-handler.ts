@@ -854,6 +854,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             }
           } catch (e) {
             console.error("[webhook] erro ao extrair fatura:", e);
+            await clearPendingAction(from);
+            await wppSend(from, localized(fileUser.locale,
+              "⚠️ *Não consegui separar as compras desta fatura com segurança.*\n\n*Nada foi lançado.* Envie o PDF novamente. Se o erro continuar, aguarde alguns minutos e tente de novo.",
+              "⚠️ *No pude separar las compras de esta factura de forma segura.*\n\n*No se registró nada.* Envía el PDF nuevamente. Si el error continúa, espera unos minutos e inténtalo otra vez."));
+            return;
           }
         }
 

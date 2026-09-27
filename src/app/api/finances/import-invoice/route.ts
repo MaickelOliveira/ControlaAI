@@ -22,7 +22,13 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(await fileObj.arrayBuffer());
   const mimeType = fileObj.type || "application/pdf";
 
-  const invoice = await extractInvoiceTransactions(buffer, mimeType, undefined, session.sub, fileObj.name);
+  let invoice;
+  try {
+    invoice = await extractInvoiceTransactions(buffer, mimeType, undefined, session.sub, fileObj.name);
+  } catch (error) {
+    console.error("[import-invoice] falha ao extrair lançamentos:", error);
+    return NextResponse.json({ error: "Não consegui separar as compras da fatura com segurança. Nada foi importado; envie o PDF novamente." }, { status: 422 });
+  }
   if (!invoice || invoice.transactions.length === 0) {
     return NextResponse.json({ error: "Não consegui identificar lançamentos nesse arquivo. Confira se é mesmo uma fatura/extrato." }, { status: 422 });
   }
@@ -47,6 +53,7 @@ export async function POST(req: NextRequest) {
     dueDay: invoice.dueDay,
     dueDate: invoice.dueDate,
     billingReferenceMonth: invoice.billingReferenceMonth,
+    statementReferenceMonth: invoice.statementReferenceMonth,
     sourceTransactionCount: invoice.sourceTransactionCount,
     ignoredTransactionCount: invoice.ignoredTransactionCount,
     statementTotal: invoice.statementTotal,

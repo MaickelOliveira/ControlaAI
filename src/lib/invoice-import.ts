@@ -25,6 +25,8 @@ export type InvoiceExtraction = {
   ignoredTransactionCount?: number;
   /** Mês ao qual todas as cobranças desta fatura pertencem. */
   billingReferenceMonth?: string;
+  /** Mês impresso da fatura/pagamento, usado para afetar o caixa. */
+  statementReferenceMonth?: string;
   /** Total líquido impresso como valor final da fatura. */
   statementTotal?: number;
   /** Indica se a soma dos lançamentos líquidos confere com o total impresso. */
@@ -235,6 +237,7 @@ export function parseInvoiceCsv(
     ignoredTransactionCount,
     ignoredTransactions,
     statementTotal,
+    statementReferenceMonth: dueDate?.slice(0, 7),
     transactions,
   }, today);
 }
@@ -362,12 +365,19 @@ function removeReversedPurchases(
  * seguinte ao mês de compras. */
 function invoicePaymentDate(
   billingReferenceMonth: string,
+  statementReferenceMonth: string | undefined,
   purchaseDate: string,
   dueDate: string | undefined,
   closingDay: number | undefined,
   dueDay: number | undefined,
 ): string {
   if (dueDate) return dueDate;
+  if (statementReferenceMonth) {
+    if (!dueDay || dueDay > 31) return dateInReferenceMonth(purchaseDate, statementReferenceMonth);
+    const [year, month] = statementReferenceMonth.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    return `${statementReferenceMonth}-${String(Math.min(dueDay, lastDay)).padStart(2, "0")}`;
+  }
   if (!dueDay || dueDay > 31) return dateInReferenceMonth(purchaseDate, billingReferenceMonth);
 
   const [year, month] = billingReferenceMonth.split("-").map(Number);
@@ -444,6 +454,7 @@ export function normalizeInvoiceExtraction(
   // confiável do ciclo. Alguns modelos confundem "fatura de setembro" com
   // competência setembro, embora a lista de compras feche em agosto.
   const billingReferenceMonth = latestRegularPurchaseMonth || explicitReferenceMonth || latestPurchaseMonth || today.slice(0, 7);
+  const statementReferenceMonth = normalizeBillingReferenceMonth(parsed.statementReferenceMonth);
   const bankName = String(parsed.bankName || "").trim() || undefined;
   const rawClosingDay = positiveInteger(parsed.closingDay);
   const rawDueDay = positiveInteger(parsed.dueDay);
@@ -452,6 +463,7 @@ export function normalizeInvoiceExtraction(
     ...transaction,
     date: invoicePaymentDate(
       billingReferenceMonth,
+      statementReferenceMonth,
       transaction.purchaseDate!,
       dueDate,
       rawClosingDay && rawClosingDay <= 31 ? rawClosingDay : undefined,
@@ -489,6 +501,7 @@ export function normalizeInvoiceExtraction(
     sourceTransactionCount,
     ignoredTransactionCount,
     billingReferenceMonth,
+    statementReferenceMonth: statementReferenceMonth || dueDate?.slice(0, 7),
     statementTotal: statementTotal === undefined ? undefined : roundCurrency(statementTotal),
     reconciled,
     reconciliationDifference,

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, type GenerateContentResult } from "@google/generative-ai";
+import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
@@ -3969,7 +3969,7 @@ export async function identifyImageSubject(
 
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return null;
+  if (!apiKey) throw new Error("Leitor de faturas indisponível; classificação segura não realizada");
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -4415,6 +4415,54 @@ Retorne APENAS JSON válido, sem markdown.`;
 
 export type { InvoiceExtraction, InvoiceTransaction } from "./invoice-import";
 
+const invoiceResponseSchema = {
+  type: "object",
+  properties: {
+    isInvoice: { type: "boolean" },
+    bankName: { type: "string", nullable: true },
+    closingDay: { type: "integer", nullable: true },
+    dueDay: { type: "integer", nullable: true },
+    dueDate: { type: "string", nullable: true },
+    billingReferenceMonth: { type: "string", nullable: true },
+    statementReferenceMonth: { type: "string", nullable: true },
+    statementTotal: { type: "number", nullable: true },
+    sourceTransactionCount: { type: "integer", nullable: true },
+    ignoredTransactionCount: { type: "integer", nullable: true },
+    ignoredTransactions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          date: { type: "string" },
+          description: { type: "string" },
+          amount: { type: "number" },
+          transactionKind: { type: "string" },
+        },
+        required: ["date", "description", "amount", "transactionKind"],
+      },
+    },
+    transactions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          date: { type: "string" },
+          description: { type: "string" },
+          amount: { type: "number" },
+          category: { type: "string" },
+          installmentCurrent: { type: "integer", nullable: true },
+          installmentTotal: { type: "integer", nullable: true },
+          installmentsRemaining: { type: "integer", nullable: true },
+          billingStatus: { type: "string" },
+          transactionKind: { type: "string" },
+        },
+        required: ["date", "description", "amount", "category", "billingStatus", "transactionKind"],
+      },
+    },
+  },
+  required: ["isInvoice"],
+} as ResponseSchema;
+
 /** Extrai TODAS as transações de uma fatura de cartão de crédito ou extrato (várias
  *  linhas), diferente de extractFinanceFromDocument que assume um único lançamento
  *  (uma nota/recibo/boleto). Retorna null se o documento não parecer uma fatura/extrato
@@ -4449,6 +4497,7 @@ REGRAS OBRIGATÓRIAS:
 - Conte também as linhas de pagamento, crédito, estorno ou reembolso que aparecem DENTRO da seção de transações, mas coloque-as somente em ignoredTransactions. Elas entram em sourceTransactionCount, porém NUNCA em transactions.
 - sourceTransactionCount é a quantidade total de linhas reais da seção de transações: compras válidas + ignoredTransactions. Não conte totais, subtotais, ofertas de parcelamento nem linhas de cabeçalho.
 - billingReferenceMonth é o mês de competência das compras cobradas nesta fatura, no formato YYYY-MM. Use o mês em que termina o ciclo/lista atual de compras (normalmente o mês da data mais recente da seção de transações), NÃO o mês original de uma compra parcelada antiga e NÃO necessariamente o mês do vencimento.
+- statementReferenceMonth é o mês da fatura/pagamento impresso no documento, no formato YYYY-MM (ex.: "fatura de outubro" = 2026-10). É o mês em que a despesa afeta o caixa, mesmo que as compras sejam de setembro ou de meses anteriores.
 - dueDate é a data completa de vencimento impressa na fatura. Ela será usada para contabilizar o valor no mês em que a fatura é paga. Não confunda com a data de uma compra.
 - statementTotal é o valor LÍQUIDO final impresso como "total da fatura", "total atual" ou equivalente. Não use o subtotal bruto de compras quando houver pagamentos, créditos ou estornos.
 
@@ -4460,6 +4509,7 @@ Retorne JSON:
   "dueDay": "dia do vencimento entre 1 e 28, se estiver impresso — null caso contrário",
   "dueDate": "YYYY-MM-DD do vencimento completo impresso — null caso contrário",
   "billingReferenceMonth": "YYYY-MM do ciclo atual da fatura",
+  "statementReferenceMonth": "YYYY-MM do mês da fatura/pagamento impresso no documento",
   "statementTotal": "valor líquido exato impresso como total final da fatura",
   "sourceTransactionCount": "quantidade total de linhas reais na seção de transações, incluindo as ignoradas",
   "ignoredTransactionCount": "quantidade de linhas listadas em ignoredTransactions",
@@ -4505,38 +4555,55 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
       maxOutputTokens: 16_000,
     }),
   );
-  if (openAIAttempt.ok) return normalizeInvoiceExtraction(openAIAttempt.value, hoje);
+  if (openAIAttempt.ok) {
+    if (openAIAttempt.value.isInvoice !== true) return null;
+    const normalized = normalizeInvoiceExtraction(openAIAttempt.value, hoje);
+    if (normalized) return normalized;
+  }
 
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
   if (!apiKey) return null;
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: { maxOutputTokens: 16_000, responseMimeType: "application/json" },
-    });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      maxOutputTokens: 16_000,
+      temperature: 0,
+      responseMimeType: "application/json",
+      responseSchema: invoiceResponseSchema,
+    },
+  });
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          data: buffer.toString("base64"),
-          mimeType: mimeType || "application/pdf",
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const result = await model.generateContent([
+        attempt === 1 ? prompt : `${prompt}\n\nATENÇÃO: esta é uma nova tentativa porque a resposta anterior ficou inválida. Retorne o JSON completo e bem-formado, sem interromper a lista de transações.`,
+        {
+          inlineData: {
+            data: buffer.toString("base64"),
+            mimeType: mimeType || "application/pdf",
+          },
         },
-      },
-    ]);
+      ]);
 
-    const text = result.response.text().trim()
-      .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(text);
+      const text = result.response.text().trim()
+        .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      if (parsed.isInvoice !== true) return null;
 
-    return normalizeInvoiceExtraction(parsed, hoje);
-  } catch (e) {
-    console.error("[ai-processor] Erro extractInvoiceTransactions:", e);
-    return null;
+      const normalized = normalizeInvoiceExtraction(parsed, hoje);
+      if (normalized) return normalized;
+      throw new Error("A resposta marcou o arquivo como fatura, mas não trouxe compras válidas");
+    } catch (error) {
+      lastError = error;
+      console.error(`[ai-processor] Erro extractInvoiceTransactions (tentativa ${attempt}/2):`, error);
+    }
   }
+
+  throw lastError instanceof Error ? lastError : new Error("Não foi possível extrair a fatura com segurança");
 }
 
 export type GroceryReceiptItem = { productName: string; category: GroceryCategory; unitPrice: number; quantity: number; unit: string };
