@@ -450,16 +450,49 @@ function merchantDescriptionsMatch(a: string, b: string): boolean {
   return [...leftTokens].some(token => rightTokens.has(token));
 }
 
+function storedInstallment(description: string): { current: number; total: number; merchant: string } | null {
+  const explicit = description.match(/\bparcela\s*(\d{1,3})\s*\/\s*(\d{1,3})\b/i);
+  const compact = /\brestantes\s+\d+\b/i.test(description)
+    ? description.match(/\b(\d{1,3})\s*\/\s*(\d{1,3})\b/)
+    : null;
+  const match = explicit || compact;
+  if (!match) return null;
+  const current = Number(match[1]);
+  const total = Number(match[2]);
+  if (!Number.isInteger(current) || !Number.isInteger(total) || current < 1 || total < current) return null;
+  const merchant = description
+    .replace(/\s*·?\s*parcela\s*\d{1,3}\s*\/\s*\d{1,3}/ig, "")
+    .replace(/\s*·?\s*\d{1,3}\s*\/\s*\d{1,3}(?=\s*·?\s*restantes)/ig, "")
+    .replace(/\s*·?\s*restantes\s+\d+/ig, "")
+    .trim();
+  return { current, total, merchant };
+}
+
 /** Deduplicação específica da importação de fatura. Cruza o que já existe em
  *  QUALQUER conta do mesmo modo com a cobrança do cartão somente quando dia e
  *  valor são iguais e o estabelecimento ou a categoria também é compatível. */
 export function isSameInvoiceExpense(
   existing: Finance,
-  candidate: { amount: number; date: string; description: string; category: string },
+  candidate: { amount: number; date: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number },
   mode: FinanceMode,
 ): boolean {
   if (existing.mode !== mode || existing.type !== "expense") return false;
-  if (existing.date !== candidate.date || Math.abs(existing.amount - candidate.amount) >= 0.01) return false;
+  if (Math.abs(existing.amount - candidate.amount) >= 0.01) return false;
+
+  const previousInstallment = storedInstallment(existing.description);
+  if (candidate.installmentCurrent && candidate.installmentTotal && previousInstallment
+    && previousInstallment.total === candidate.installmentTotal
+    && merchantDescriptionsMatch(previousInstallment.merchant, candidate.description)) {
+    // A mesma parcela do mesmo documento já existe. Uma parcela posterior é
+    // a continuação mensal da sequência e deve entrar como gasto do novo mês,
+    // sem recriar todas as parcelas restantes.
+    if (previousInstallment.current !== candidate.installmentCurrent) {
+      return previousInstallment.current > candidate.installmentCurrent && existing.date === candidate.date;
+    }
+    return existing.date === candidate.date;
+  }
+
+  if (existing.date !== candidate.date) return false;
   return normalizeDuplicateText(existing.category) === normalizeDuplicateText(candidate.category)
     || merchantDescriptionsMatch(existing.description, candidate.description);
 }
@@ -467,7 +500,7 @@ export function isSameInvoiceExpense(
 export async function isLikelyDuplicateInvoiceExpense(
   userId: string,
   mode: FinanceMode,
-  candidate: { amount: number; date: string; description: string; category: string },
+  candidate: { amount: number; date: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number },
 ): Promise<boolean> {
   const sameDay = await load(userId, { mode, from: candidate.date, to: candidate.date });
   return sameDay.some(existing => isSameInvoiceExpense(existing, candidate, mode));
@@ -479,7 +512,7 @@ export async function isLikelyDuplicateInvoiceExpense(
 export async function getInvoiceDuplicateFlags(
   userId: string,
   mode: FinanceMode,
-  candidates: Array<{ amount: number; date: string; description: string; category: string }>,
+  candidates: Array<{ amount: number; date: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number }>,
 ): Promise<boolean[]> {
   if (candidates.length === 0) return [];
   const dates = candidates.map(candidate => candidate.date).sort();

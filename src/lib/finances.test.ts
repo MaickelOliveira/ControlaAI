@@ -94,4 +94,29 @@ describe("isSameInvoiceExpense", () => {
       category: "Transporte",
     }, "personal")).toBe(false);
   });
+
+  it("advances an existing installment sequence instead of treating the next installment as a duplicate", () => {
+    const previous = makeFinance({
+      amount: 50,
+      date: "2026-05-10",
+      description: "Loja Exemplo · Parcela 3/10 · restantes 7",
+      category: "Vestuário",
+    });
+    expect(isSameInvoiceExpense(previous, {
+      amount: 50,
+      date: "2026-05-10",
+      description: "Loja Exemplo",
+      category: "Vestuário",
+      installmentCurrent: 4,
+      installmentTotal: 10,
+    }, "personal")).toBe(false);
+    expect(isSameInvoiceExpense(previous, {
+      amount: 50,
+      date: "2026-05-10",
+      description: "Loja Exemplo",
+      category: "Vestuário",
+      installmentCurrent: 3,
+      installmentTotal: 10,
+    }, "personal")).toBe(true);
+  });
 });
