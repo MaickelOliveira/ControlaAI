@@ -27,6 +27,183 @@ export type InvoiceExtraction = {
   billingReferenceMonth?: string;
 };
 
+function csvText(buffer: Buffer): string {
+  return buffer.toString("utf8").replace(/^\uFEFF/, "");
+}
+
+function normalizeCsvHeader(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
+}
+
+function parseCsvLine(line: string, delimiter: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === delimiter && !quoted) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function csvDelimiter(lines: string[]): string {
+  const candidates = [";", "\t", ","];
+  return candidates.sort((a, b) => {
+    const score = (delimiter: string) => lines.slice(0, 20).reduce((sum, line) => sum + (line.split(delimiter).length - 1), 0);
+    return score(b) - score(a);
+  })[0];
+}
+
+function csvDate(value: string): string | undefined {
+  const raw = value.trim();
+  const br = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const parts = br ? [Number(br[3]), Number(br[2]), Number(br[1])] : iso ? [Number(iso[1]), Number(iso[2]), Number(iso[3])] : null;
+  if (!parts) return undefined;
+  const [year, month, day] = parts;
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return undefined;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function csvMoney(value: string): number | undefined {
+  const raw = value.trim();
+  if (!raw) return undefined;
+  const negative = /^\s*-/.test(raw) || /^\s*\(/.test(raw);
+  const cleaned = raw.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", ".");
+  const parsed = Number(cleaned.replace(/[()-]/g, ""));
+  if (!Number.isFinite(parsed)) return undefined;
+  return negative ? -parsed : parsed;
+}
+
+function csvInstallment(value: string): { current: number; total: number } | undefined {
+  const match = value.match(/(?:\(|\b)(\d{1,3})\s*\/\s*(\d{1,3})(?:\)|\b)/);
+  if (!match) return undefined;
+  const current = Number(match[1]);
+  const total = Number(match[2]);
+  return current >= 1 && total >= current && total <= 120 ? { current, total } : undefined;
+}
+
+function csvCategory(description: string): string {
+  const normalized = normalizeCsvHeader(description);
+  if (/mercad|supermerc|condor|ifd|ifood|restaurante|lanch|esfih|acai|alimento/.test(normalized)) return "Alimentação";
+  if (/farmac|hospital|clinica|diagnosti|medic|odont|laboratorio/.test(normalized)) return "Saúde";
+  if (/academia|cinema|parque|viagem|hotel|show/.test(normalized)) return "Lazer";
+  if (/uber|posto|combust|pedagio|estacion|transporte/.test(normalized)) return "Transporte";
+  if (/havan|material|condominio|aluguel|energia|moveis/.test(normalized)) return "Moradia";
+  if (/lojas|roupa|calcado|moda/.test(normalized)) return "Vestuário";
+  if (/escola|curso|faculdade|livraria/.test(normalized)) return "Educação";
+  if (/asaas|assinatura|mensalidade|servico/.test(normalized)) return "Serviços";
+  if (/software|apple|google|microsoft|tecnologia/.test(normalized)) return "Tecnologia";
+  return "Outros";
+}
+
+function findInvoiceCsvHeader(rows: string[][]): number {
+  return rows.findIndex(row => {
+    const headers = row.map(normalizeCsvHeader);
+    return headers.includes("data")
+      && headers.some(value => /descricao|historico|estabelecimento|merchant/.test(value))
+      && headers.some(value => /^valor$|amount|valor da compra/.test(value));
+  });
+}
+
+/** Detecta uma planilha textual de fatura pelo conteúdo, sem confiar apenas
+ * na extensão/MIME enviados pelo WhatsApp. */
+export function isLikelyInvoiceCsv(buffer: Buffer, mimeType = "", originalName = ""): boolean {
+  const formatHint = /csv|text\/(?:plain|comma-separated-values)/i.test(mimeType) || /\.csv$/i.test(originalName);
+  if (!formatHint) return false;
+  const lines = csvText(buffer).split(/\r?\n/).filter(line => line.trim()).slice(0, 40);
+  if (lines.length < 2) return false;
+  const delimiter = csvDelimiter(lines);
+  return findInvoiceCsvHeader(lines.map(line => parseCsvLine(line, delimiter))) >= 0;
+}
+
+/** Lê CSVs de fatura de forma determinística, linha por linha. Isso evita que
+ * uma planilha seja confundida com um comprovante simples e vire apenas um
+ * lançamento com o total final do documento. */
+export function parseInvoiceCsv(
+  buffer: Buffer,
+  today: string,
+  originalName = "",
+): InvoiceExtraction | null {
+  const lines = csvText(buffer).split(/\r?\n/).filter(line => line.trim());
+  if (lines.length < 2) return null;
+  const delimiter = csvDelimiter(lines);
+  const rows = lines.map(line => parseCsvLine(line, delimiter));
+  const headerIndex = findInvoiceCsvHeader(rows);
+  if (headerIndex < 0) return null;
+
+  const headers = rows[headerIndex].map(normalizeCsvHeader);
+  const columnIndex = (patterns: RegExp[]) => headers.findIndex(header => patterns.some(pattern => pattern.test(header)));
+  const dateIndex = columnIndex([/^data$/, /^date$/]);
+  const descriptionIndex = columnIndex([/descricao/, /historico/, /estabelecimento/, /merchant/]);
+  const amountIndex = columnIndex([/^valor$/, /amount/, /valor da compra/]);
+  const installmentIndex = columnIndex([/parcela/, /cuota/, /installment/]);
+  if (dateIndex < 0 || descriptionIndex < 0 || amountIndex < 0) return null;
+
+  const metadata = rows.slice(0, headerIndex);
+  const metadataValue = (pattern: RegExp) => metadata.find(row => pattern.test(normalizeCsvHeader(row[0] || "")))?.[1]?.trim();
+  const dueDate = csvDate(metadataValue(/vencimento|due date|fecha de vencimiento/) || "");
+  const contentSignature = normalizeCsvHeader(lines.slice(0, headerIndex + 1).join(" "));
+  const bankName = /sicredi/i.test(originalName)
+    || (/associado/.test(contentSignature) && /cooperativa/.test(contentSignature) && /conta corrente/.test(contentSignature))
+    ? "Sicredi"
+    : undefined;
+
+  const transactions: Array<Record<string, unknown>> = [];
+  let ignoredTransactionCount = 0;
+  let sourceTransactionCount = 0;
+  for (const row of rows.slice(headerIndex + 1)) {
+    const rawDate = row[dateIndex] || "";
+    const description = (row[descriptionIndex] || "").trim();
+    const amount = csvMoney(row[amountIndex] || "");
+    if (!rawDate.trim() && !description && amount === undefined) continue;
+    const date = csvDate(rawDate);
+    if (!date || !description || amount === undefined) continue;
+    sourceTransactionCount += 1;
+
+    const nonPurchase = amount <= 0 || /\b(?:pagamento|payment|pago|estorno|reembolso|refund|reversal|cashback|credito|cr[eé]dito|cancelad[oa])\b/i.test(description);
+    if (nonPurchase) {
+      ignoredTransactionCount += 1;
+      continue;
+    }
+
+    const installment = installmentIndex >= 0 ? csvInstallment(row[installmentIndex] || "") : undefined;
+    transactions.push({
+      date,
+      description,
+      amount,
+      category: csvCategory(description),
+      ...(installment ? { installmentCurrent: installment.current, installmentTotal: installment.total } : {}),
+      billingStatus: "current",
+      transactionKind: "purchase",
+    });
+  }
+
+  if (!transactions.length) return null;
+  return normalizeInvoiceExtraction({
+    isInvoice: true,
+    bankName,
+    dueDate,
+    dueDay: dueDate ? Number(dueDate.slice(8, 10)) : undefined,
+    sourceTransactionCount,
+    ignoredTransactionCount,
+    transactions,
+  }, today);
+}
+
 function positiveInteger(value: unknown): number | undefined {
   const parsed = typeof value === "number" ? value : Number(String(value ?? "").trim());
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;

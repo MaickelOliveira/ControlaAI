@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateFinanceBalance, isPostedFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, type Finance } from "./finances";
+import { calculateFinanceBalance, isPostedFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, importedInstallmentStatuses, merchantPurchaseDate, type Finance } from "./finances";
 
 function makeFinance(overrides: Partial<Finance> = {}): Finance {
   return {
@@ -60,6 +60,39 @@ describe("expandMerchantAliases", () => {
   it("returns just the lowercased term when there is no known alias", () => {
     expect(expandMerchantAliases("Padaria do Zé")).toEqual(["padaria do zé"]);
   });
+
+  it("recognizes Mercado Amazonas even when the statement abbreviates and reverses the name", () => {
+    expect(expandMerchantAliases("Mercado Amazonas")).toContain("amazonas mercad");
+  });
+});
+
+describe("merchantPurchaseDate", () => {
+  it("uses the original purchase date embedded by an invoice import", () => {
+    expect(merchantPurchaseDate(makeFinance({
+      date: "2026-11-10",
+      description: "AMAZONAS MERCAD · compra em 27/09/2026",
+    }))).toBe("2026-09-27");
+  });
+
+  it("falls back to the accounting date for ordinary expenses", () => {
+    expect(merchantPurchaseDate(makeFinance({ date: "2026-09-27", description: "Mercado" }))).toBe("2026-09-27");
+  });
+});
+
+describe("importedInstallmentStatuses", () => {
+  it("keeps the latest known installment and its monthly amount", () => {
+    expect(importedInstallmentStatuses([
+      makeFinance({ id: "old", amount: 250, date: "2026-10-10", description: "Geladeira · Parcela 2/10 · restantes 8 · compra em 01/08/2026" }),
+      makeFinance({ id: "new", amount: 250, date: "2026-11-10", description: "Geladeira · Parcela 3/10 · restantes 7 · compra em 01/08/2026" }),
+    ])).toEqual([expect.objectContaining({
+      description: "Geladeira",
+      current: 3,
+      total: 10,
+      remaining: 7,
+      amount: 250,
+      date: "2026-11-10",
+    })]);
+  });
 });
 
 describe("formatCurrency", () => {
@@ -109,6 +142,36 @@ describe("isSameInvoiceExpense", () => {
       date: "2026-10-10",
       purchaseDate: "2026-09-10",
       description: "Mercado Central",
+      category: "Alimentação",
+    }, "personal")).toBe(true);
+  });
+
+  it("does not merge equal merchant-category amounts bought on different days of the same invoice", () => {
+    expect(isSameInvoiceExpense(makeFinance({
+      amount: 49.77,
+      date: "2026-11-10",
+      description: "AMAZONAS MERCAD · compra em 27/09/2026",
+      category: "Alimentação",
+    }), {
+      amount: 49.77,
+      date: "2026-11-10",
+      purchaseDate: "2026-09-26",
+      description: "AMAZONAS MERCAD",
+      category: "Alimentação",
+    }, "personal")).toBe(false);
+  });
+
+  it("recognizes the same CSV row after it has been imported", () => {
+    expect(isSameInvoiceExpense(makeFinance({
+      amount: 49.77,
+      date: "2026-11-10",
+      description: "AMAZONAS MERCAD · compra em 26/09/2026",
+      category: "Alimentação",
+    }), {
+      amount: 49.77,
+      date: "2026-11-10",
+      purchaseDate: "2026-09-26",
+      description: "AMAZONAS MERCAD",
       category: "Alimentação",
     }, "personal")).toBe(true);
   });

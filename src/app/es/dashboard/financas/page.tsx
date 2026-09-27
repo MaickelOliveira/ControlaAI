@@ -118,7 +118,7 @@ export default function FinancasPageEs() {
       const res = await fetch("/api/finances/import-invoice", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Error al analizar la factura"); return; }
-      setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: data.probableRepeat ? false : !t.duplicate })));
+      setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: !t.duplicate })));
       setImportMeta({ bankName: data.bankName, closingDay: data.closingDay, dueDay: data.dueDay, dueDate: data.dueDate, billingReferenceMonth: data.billingReferenceMonth, sourceTransactionCount: data.sourceTransactionCount, ignoredTransactionCount: data.ignoredTransactionCount, probableRepeat: data.probableRepeat, alreadyRegisteredCount: data.alreadyRegisteredCount });
     } catch {
       setImportError("Error de conexión");
@@ -850,11 +850,11 @@ export default function FinancasPageEs() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-slate-900 mb-1">📑 Importar factura</h3>
-            <p className="text-xs text-slate-400 mb-4">Envía la factura de la tarjeta (PDF) o un estado de cuenta — la IA identifica cada movimiento y marca los que ya parecen estar registrados, para que no dupliques.</p>
+            <p className="text-xs text-slate-400 mb-4">Envía la factura de la tarjeta en PDF, imagen o CSV — cada compra se identifica por separado y lo ya registrado no se duplica.</p>
 
             {importItems.length === 0 ? (
               <div className="space-y-3">
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png"
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.csv,text/csv"
                   onChange={e => setImportFile(e.target.files?.[0] ?? null)}
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-50 file:text-amber-700 file:text-xs file:font-semibold" />
                 {importError && <p className="text-xs text-red-500">{importError}</p>}
@@ -877,7 +877,7 @@ export default function FinancasPageEs() {
                 {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/tarjeta identificado: <strong>{importMeta.bankName}</strong></p>}
                 {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">💳 El total seleccionado se contabilizará en <strong>{fmtMonth(importItems[0].date)}</strong>, mes de pago de la factura. Cada compra conserva su fecha original.</p>}
                 {importMeta.probableRepeat
-                  ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Parece ser la misma factura enviada otra vez: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} compras ya están registradas. Nada fue seleccionado ni se duplicará.</p>
+                  ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Parece ser una factura actualizada: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} compras ya están registradas. Solo se seleccionaron las nuevas.</p>
                   : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ ¿Realmente gastaste estos importes dos veces el mismo día? Los posibles duplicados empiezan desmarcados; marca solo los que ocurrieron dos veces.</p>}
                 <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-80 overflow-y-auto">
                   {importItems.map((item, idx) => (

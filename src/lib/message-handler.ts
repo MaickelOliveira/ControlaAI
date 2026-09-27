@@ -3,9 +3,9 @@ import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRel
 import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, addFinances, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { addFinance, addFinances, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
-import { invoiceTransactionDescription, isProbableRepeatedInvoice } from "@/lib/invoice-import";
+import { invoiceTransactionDescription, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
@@ -724,7 +724,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         responseLocale = fileUser.locale;
         const buffer = msg.fileBuffer!;
         const mimeType = msg.fileMimeType || "application/octet-stream";
-        const defaultExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("image") ? ".jpg" : "";
+        const defaultExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("image") ? ".jpg" : mimeType.includes("csv") ? ".csv" : "";
         const caption = msg.fileCaption;
 
         // Extrai um nome explícito da legenda (ex: "salva como etac", "guarda como contrato assinado")
@@ -772,10 +772,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Fatura de cartão/extrato costuma vir em PDF, ou o usuário avisa na legenda —
         // nesses casos tenta extrair TODOS os lançamentos de uma vez (em vez de assumir
         // um único gasto), identificando duplicados antes de perguntar se importa.
-        const looksLikeInvoice = !hasSaveIntent && (mimeType.includes("pdf") || /fatura|extrato/i.test(caption || ""));
+        const looksLikeInvoice = !hasSaveIntent && (mimeType.includes("pdf") || /fatura|extrato/i.test(caption || "") || isLikelyInvoiceCsv(buffer, mimeType, originalName));
         if (looksLikeInvoice) {
           try {
-            const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id);
+            const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id, originalName);
             if (invoice && invoice.transactions.length > 0) {
               const fMode = fileUser.activeMode;
               const duplicateFlags = await getInvoiceDuplicateFlags(fileUser.id, fMode, invoice.transactions);
@@ -806,9 +806,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               // nova extração por IA pode variar em uma ou duas datas antigas;
               // nunca tratamos essas divergências como novas compras nem fazemos
               // a pergunta absurda de dezenas de gastos "duas vezes".
-              if (isProbableRepeatedInvoice(duplicateFlags)) {
+              const probableRepeatedInvoice = isProbableRepeatedInvoice(duplicateFlags);
+              if (probableRepeatedInvoice && novos.length === 0) {
                 await clearPendingAction(from);
-                await wppSend(from, `📄 *Esta fatura parece já ter sido importada.*\n\n${readingSummary}${invoice.bankName ? `\n🏦 Banco/cartão identificado: *${invoice.bankName}*` : ""}\n\n${duplicados.length} de ${withDup.length} compras já estão registradas. As ${novos.length} divergências foram deixadas para revisão e *nada foi gravado nem duplicado*.`);
+                await wppSend(from, `📄 *Esta fatura já foi importada.*\n\n${readingSummary}${invoice.bankName ? `\n🏦 Banco/cartão identificado: *${invoice.bankName}*` : ""}\n\nAs ${duplicados.length} compras já estão registradas. *Nada foi gravado nem duplicado*.`);
                 return;
               }
 
@@ -817,15 +818,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 userId: fileUser.id,
                 mode: fMode,
                 items: novos.map(withoutDuplicateFlag),
-                duplicateItems: duplicados.map(withoutDuplicateFlag),
-                stage: duplicados.length ? "duplicate_review" : "confirm",
+                duplicateItems: probableRepeatedInvoice ? [] : duplicados.map(withoutDuplicateFlag),
+                stage: probableRepeatedInvoice || !duplicados.length ? "confirm" : "duplicate_review",
                 accountHint: invoice.bankName,
                 closingDay: invoice.closingDay,
                 dueDay: invoice.dueDay,
               });
 
               const total = novos.reduce((s, t) => s + t.amount, 0);
-              if (duplicados.length) {
+              if (probableRepeatedInvoice) {
+                await wppSend(from, `📄 *Fatura atualizada analisada!*\n\n${readingSummary}\n\n⏭️ ${duplicados.length} compra(s) já registrada(s) foram ignoradas\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}*` : ""}\n\n_💾 Quer que eu registre somente as ${novos.length} compras novas? (sim/não)_`);
+              } else if (duplicados.length) {
                 await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n⚠️ Encontrei ${duplicados.length} possível(is) pagamento(s) duplicado(s), com mesmo dia, valor e estabelecimento/categoria:`);
                 for (let start = 0; start < duplicados.length; start += 15) {
                   const duplicatePreview = duplicados.slice(start, start + 15)
@@ -913,7 +916,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               const typeLabel = financeData.type === "income" ? "Receita" : "Despesa";
               const typeEmoji = financeData.type === "income" ? "💰" : "💸";
 
-              const receiptExt = mimeType.includes("pdf") ? ".pdf" : ".jpg";
+              const receiptExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("csv") ? ".csv" : ".jpg";
               const suggestedName = `${f.category} - ${f.description} - ${f.date}${receiptExt}`.slice(0, 80);
               await setPendingAction(from, {
                 type: "receipt_save",
@@ -3167,9 +3170,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const kwMode = queryMode;
           const kwType: "income" | "expense" = ai.financeType === "income" ? "income" : "expense";
           const terms = expandMerchantAliases(ai.keyword);
-          const total = accountTransactions
-            ? accountTransactions.filter(item => item.type === kwType && terms.some(term => item.description.toLocaleLowerCase().includes(term))).reduce((sum, item) => sum + item.amount, 0)
-            : await getKeywordTotal(user.id, kwMode, kwType, terms, pFrom, pTo);
+          const total = await getKeywordTotal(user.id, kwMode, kwType, terms, pFrom, pTo, undefined, accountFilter?.id);
           const kwModeLabel = kwMode === "business" ? "Empresa" : "Pessoal";
           const verb = user.locale === "es" ? (kwType === "income" ? "recibiste" : "gastaste") : (kwType === "income" ? "recebeu" : "gastou");
           const accountLabel = accountFilter ? ` — 🏦 ${accountFilter.name}` : "";
@@ -3809,9 +3810,28 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "grocery_spend_query": {
         const spendPeriod = ai.grocery?.period;
-        const spend = await getSpendByStore(user.id, spendPeriod?.from, spendPeriod?.to, ai.grocery?.storeName);
+        const requestedStore = ai.grocery?.storeName?.trim();
+        const spend = await getSpendByStore(user.id, spendPeriod?.from, spendPeriod?.to, requestedStore);
         const totalSpent = spend.reduce((s, x) => s + x.total, 0);
         const spendPeriodLabel = spendPeriod ? periodLabelFor(spendPeriod, now, user.locale) : undefined;
+        if (totalSpent === 0 && requestedStore) {
+          const [defaultFrom, defaultTo] = monthBounds(year, month);
+          const statementTotal = await getKeywordTotal(
+            user.id,
+            mode,
+            "expense",
+            expandMerchantAliases(requestedStore),
+            spendPeriod?.from || defaultFrom,
+            spendPeriod?.to || defaultTo,
+          );
+          if (statementTotal > 0) {
+            const label = spendPeriodLabel || periodLabelFor(undefined, now, user.locale);
+            await wppSend(from, localized(user.locale,
+              `🛒 Você gastou *${formatCurrency(statementTotal)}* no *${requestedStore}* em ${label}.\n\n_Esse total veio das compras individuais importadas da fatura._`,
+              `🛒 Gastaste *${formatCurrency(statementTotal)}* en *${requestedStore}* en ${label}.\n\n_Este total proviene de las compras individuales importadas de la factura._`));
+            break;
+          }
+        }
         await wppSend(from, replyGrocerySpend(spend, totalSpent, user.locale, spendPeriodLabel));
         break;
       }
@@ -4161,6 +4181,83 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
       case "recurring_query": {
         const recs = await getRecurringByUser(user.id, mode, "active");
+        if (ai.installmentForecast) {
+          const targetDate = ai.period?.to;
+          if (!targetDate) {
+            await wppSend(from, localized(user.locale,
+              "❓ Até qual mês você quer saber quais parcelas terminam?",
+              "❓ ¿Hasta qué mes quieres saber qué cuotas terminan?"));
+            break;
+          }
+          const today = todayStrBR();
+          const addMonths = (date: string, months: number) => {
+            const [year, month, day] = date.split("-").map(Number);
+            const shifted = new Date(year, month - 1 + months, 1, 12, 0, 0);
+            const lastDay = new Date(shifted.getFullYear(), shifted.getMonth() + 1, 0).getDate();
+            return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+          };
+          const imported = await getImportedInstallmentStatuses(user.id, mode);
+          const ending = [
+            ...imported.map(item => ({
+              description: item.description,
+              amount: item.amount,
+              current: item.current,
+              total: item.total,
+              endDate: addMonths(item.date, item.remaining),
+            })),
+            ...recs.filter(item => item.recurrenceType === "installment" && item.totalInstallments && item.paidInstallments < item.totalInstallments).map(item => {
+              const total = item.totalInstallments!;
+              const installmentsToPay = total - item.paidInstallments;
+              return {
+                description: item.description,
+                amount: item.amount,
+                current: item.paidInstallments + 1,
+                total,
+                endDate: addMonths(item.nextDueDate, installmentsToPay - 1),
+              };
+            }),
+          ].filter(item => item.endDate >= today && item.endDate <= targetDate)
+            .sort((a, b) => a.endDate.localeCompare(b.endDate) || a.description.localeCompare(b.description));
+
+          const targetLabel = new Date(`${targetDate}T12:00:00`).toLocaleDateString(
+            user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR",
+            { month: "long", year: "numeric" },
+          );
+          if (!ending.length) {
+            await wppSend(from, localized(user.locale,
+              `Não encontrei parcelas cadastradas que terminem até *${targetLabel}*.`,
+              `No encontré cuotas registradas que terminen hasta *${targetLabel}*.`));
+            break;
+          }
+          const monthlyRelief = ending.reduce((sum, item) => sum + item.amount, 0);
+          const lines = ending.map(item => {
+            const endLabel = new Date(`${item.endDate}T12:00:00`).toLocaleDateString(
+              user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR",
+              { month: "2-digit", year: "numeric" },
+            );
+            return `• ${item.description} — ${item.current}/${item.total} · ${user.locale === "es" ? "termina" : "termina em"} ${endLabel} · ${formatCurrency(item.amount)}/${user.locale === "es" ? "mes" : "mês"}`;
+          }).join("\n");
+          await wppSend(from, localized(user.locale,
+            `💳 *Parcelas que terminam até ${targetLabel}:*\n\n${lines}\n\n✅ Depois que todas terminarem, você deixará de pagar *${formatCurrency(monthlyRelief)} por mês*.`,
+            `💳 *Cuotas que terminan hasta ${targetLabel}:*\n\n${lines}\n\n✅ Cuando todas terminen, dejarás de pagar *${formatCurrency(monthlyRelief)} por mes*.`));
+          break;
+        }
+        const keyword = ai.keyword?.trim();
+        if (keyword) {
+          const normalizedKeyword = keyword.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+          const matchingRecurring = recs.filter(item => item.description.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().includes(normalizedKeyword));
+          if (matchingRecurring.length > 0) {
+            await wppSend(from, replyRecurringList(matchingRecurring, user.locale));
+            break;
+          }
+          const importedInstallment = await findImportedInstallmentStatus(user.id, mode, keyword);
+          if (importedInstallment) {
+            await wppSend(from, localized(user.locale,
+              `💳 *${importedInstallment.description}* está na parcela *${importedInstallment.current}/${importedInstallment.total}*.\n\nFaltam *${importedInstallment.remaining} parcela(s)* depois da atual.`,
+              `💳 *${importedInstallment.description}* está en la cuota *${importedInstallment.current}/${importedInstallment.total}*.\n\nFaltan *${importedInstallment.remaining} cuota(s)* después de la actual.`));
+            break;
+          }
+        }
         await wppSend(from, replyRecurringList(recs, user.locale));
         break;
       }

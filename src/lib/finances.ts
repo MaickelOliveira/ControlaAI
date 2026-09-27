@@ -280,6 +280,7 @@ export async function getCategoryTotal(userId: string, mode: FinanceMode, type: 
  *  em vez de confiar só na substring literal que a IA mandou. */
 const MERCHANT_ALIASES: Record<string, string[]> = {
   ifood: ["ifood", "ifd", "i food"],
+  amazonas: ["amazonas mercad", "mercado amazonas", "amazonas mercado", "amazonas"],
   aiqfome: ["aiqfome", "aiq fome", "ai que fome", "aiquefome"],
   "99food": ["99food", "99 food", "99app", "app 99"],
   rappi: ["rappi"],
@@ -300,10 +301,19 @@ export function expandMerchantAliases(term: string): string[] {
 /** Soma os lançamentos cuja descrição bate com algum dos termos (busca OR,
  *  case-insensitive) dentro de um intervalo de datas — usado em perguntas
  *  sobre um comerciante/app específico ("quanto gastei com ifood"). */
-export async function getKeywordTotal(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string): Promise<number> {
-  return (await getFinancesInRange(userId, mode, from, to))
-    .filter(f => isPostedFinance(f) && f.type === type && (!registeredBy || f.registeredBy === registeredBy))
-    .filter(f => terms.some(t => f.description.toLowerCase().includes(t)))
+export function merchantPurchaseDate(finance: Pick<Finance, "date" | "description">): string {
+  const match = finance.description.match(/\bcompra\s+(?:em|el)\s+(\d{2})\/(\d{2})\/(\d{4})\b/i);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : finance.date;
+}
+
+export async function getKeywordTotal(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string, accountId?: string): Promise<number> {
+  return (await getFinancesByUser(userId, mode, registeredBy))
+    .filter(f => isPostedFinance(f) && f.type === type && (!accountId || f.accountId === accountId))
+    .filter(f => {
+      const purchaseDate = merchantPurchaseDate(f);
+      return (!from || purchaseDate >= from) && (!to || purchaseDate <= to);
+    })
+    .filter(f => terms.some(t => f.description.toLowerCase().includes(t.toLowerCase())))
     .reduce((s, f) => s + f.amount, 0);
 }
 
@@ -481,6 +491,63 @@ function storedInstallment(description: string): { current: number; total: numbe
   return { current, total, merchant };
 }
 
+export type ImportedInstallmentStatus = {
+  description: string;
+  current: number;
+  total: number;
+  remaining: number;
+  date: string;
+  amount: number;
+  mode: FinanceMode;
+};
+
+export function importedInstallmentStatuses(items: readonly Finance[]): ImportedInstallmentStatus[] {
+  const latestByInstallment = new Map<string, ImportedInstallmentStatus>();
+  const sorted = [...items]
+    .filter(item => item.type === "expense" && isPostedFinance(item))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  for (const item of sorted) {
+    const installment = storedInstallment(item.description);
+    if (!installment) continue;
+    const description = installment.merchant.split(" · compra ")[0].trim();
+    const key = `${item.mode}|${normalizeDuplicateText(description)}|${installment.total}|${item.amount.toFixed(2)}`;
+    if (latestByInstallment.has(key)) continue;
+    latestByInstallment.set(key, {
+      description,
+      current: installment.current,
+      total: installment.total,
+      remaining: Math.max(0, installment.total - installment.current),
+      date: item.date,
+      amount: item.amount,
+      mode: item.mode,
+    });
+  }
+  return [...latestByInstallment.values()];
+}
+
+export async function getImportedInstallmentStatuses(
+  userId: string,
+  mode?: FinanceMode,
+): Promise<ImportedInstallmentStatus[]> {
+  return importedInstallmentStatuses(await getFinancesByUser(userId, mode));
+}
+
+/** Localiza a parcela mais recente que veio de uma fatura importada. Essas
+ * parcelas não são recorrências geradas pela Zelo, mas mantêm no histórico a
+ * fração atual/total e, por isso, também podem responder "quantas faltam?". */
+export async function findImportedInstallmentStatus(
+  userId: string,
+  mode: FinanceMode,
+  keyword: string,
+): Promise<ImportedInstallmentStatus | null> {
+  const normalizedKeyword = normalizeDuplicateText(keyword);
+  if (!normalizedKeyword) return null;
+  const matches = (await getImportedInstallmentStatuses(userId, mode))
+    .filter(item => normalizeDuplicateText(item.description).includes(normalizedKeyword))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  return matches[0] ?? null;
+}
+
 /** Deduplicação específica da importação de fatura. Cruza o que já existe em
  *  QUALQUER conta do mesmo modo com a cobrança do cartão somente quando dia e
  *  valor são iguais e o estabelecimento ou a categoria também é compatível. */
@@ -499,14 +566,14 @@ export function isSameInvoiceExpense(
     // A mesma parcela do mesmo documento já existe. Uma parcela posterior é
     // a continuação mensal da sequência e deve entrar como gasto do novo mês,
     // sem recriar todas as parcelas restantes.
-    const sameDate = existing.date === candidate.date || existing.date === candidate.purchaseDate;
+    const sameDate = merchantPurchaseDate(existing) === (candidate.purchaseDate || candidate.date);
     if (previousInstallment.current !== candidate.installmentCurrent) {
       return previousInstallment.current > candidate.installmentCurrent && sameDate;
     }
     return sameDate;
   }
 
-  if (existing.date !== candidate.date && existing.date !== candidate.purchaseDate) return false;
+  if (merchantPurchaseDate(existing) !== (candidate.purchaseDate || candidate.date)) return false;
   return normalizeDuplicateText(existing.category) === normalizeDuplicateText(candidate.category)
     || merchantDescriptionsMatch(existing.description, candidate.description);
 }

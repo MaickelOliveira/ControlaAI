@@ -836,11 +836,26 @@ describe("Spanish deterministic queries", () => {
   it("separates supermarket totals from purchase item history", () => {
     expect(getExplicitGrocerySpendQueryResult("¿Cuánto gasté en mis compras de supermercado este mes?"))
       .toMatchObject({ intent: "grocery_spend_query", grocery: { queryDetail: "total" } });
+    expect(getExplicitGrocerySpendQueryResult("Quanto gastei este mês no Mercado Amazonas?"))
+      .toMatchObject({ intent: "grocery_spend_query", grocery: { storeName: "amazonas", queryDetail: "total" } });
   });
 
   it("keeps subscription lookups inside Zelo instead of sending them to web search", () => {
     expect(getExplicitRecurringQueryResult("Consulta la suscripción de internet"))
       .toMatchObject({ intent: "recurring_query", keyword: "internet" });
+  });
+
+  it("extracts the product when asking how many installments remain", () => {
+    expect(getExplicitRecurringQueryResult("Quantas parcelas faltam da geladeira?"))
+      .toMatchObject({ intent: "recurring_query", keyword: "geladeira" });
+  });
+
+  it("recognizes how much monthly expense will end by a future month", () => {
+    const anchor = new Date(2026, 8, 27, 12, 0, 0);
+    expect(getExplicitRecurringQueryResult("Quanto eu me livro de conta até dezembro?", anchor))
+      .toMatchObject({ intent: "recurring_query", installmentForecast: true, period: { to: "2026-12-31" } });
+    expect(getExplicitRecurringQueryResult("¿Cuánto dejo de pagar en cuotas hasta marzo?", anchor))
+      .toMatchObject({ intent: "recurring_query", installmentForecast: true, period: { to: "2027-03-31" } });
   });
 });
 

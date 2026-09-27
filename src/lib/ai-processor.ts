@@ -6,7 +6,9 @@ import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } fr
 import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
 import { isAllDayAgendaText } from "./agenda-all-day";
 import {
+  isLikelyInvoiceCsv,
   normalizeInvoiceExtraction,
+  parseInvoiceCsv,
   type InvoiceExtraction,
 } from "./invoice-import";
 import {
@@ -359,6 +361,8 @@ export type AIResult = {
   category?: string; // categoria específica perguntada em finance_query/balance_query (ex: "quanto gastei com comida" → "Alimentação")
   newDescription?: string; // finance_edit: novo texto da descrição, quando o usuário quer RENOMEAR o lançamento. Distinto de finance.description, que ecoa o lançamento encontrado e serve de busca.
   period?: { from?: string; to?: string }; // intervalo de datas (YYYY-MM-DD) para finance_query/finance_upcoming/balance_query/finance_detail/finance_analysis quando o período não é o mês atual (ex: "mês passado", "semana passada")
+  /** recurring_query: pergunta quanto de parcelas deixa de pagar até uma data. */
+  installmentForecast?: boolean;
   response?: string; // resposta direta para how_to
   // finance_edit/finance_delete: true quando o pedido é sobre o(s)
   // lançamento(s) que acabaram de ser registrados (mensagem curta, sem
@@ -1236,7 +1240,8 @@ export function getExplicitGrocerySpendQueryResult(message: string, anchor: Date
   if (!asksTotal || !grocerySubject || latest) return null;
 
   const period = getExplicitRelativePeriod(message, anchor) ?? explicitPurchaseCalendarPeriod(message, anchor);
-  const storeName = extractGroceryStoreFromHistory(message);
+  const namedStore = normalized.match(/\b(?:no|na|do|da|en|del)\s+(?:mercado|supermercado)\s+(.+?)(?=\s+(?:este|esse|neste|mes|em|en|de|do|da)\b|$)/)?.[1]?.trim().replace(/[?!.,;:]+$/, "");
+  const storeName = extractGroceryStoreFromHistory(message) || namedStore;
   return {
     intent: "grocery_spend_query",
     confidence: 1,
@@ -1393,8 +1398,31 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
 
 /** Protege consultas de assinaturas/parcelas recorrentes em espanhol para
  * que "consulta" não seja confundido com pesquisa na internet. */
-export function getExplicitRecurringQueryResult(message: string): AIResult | null {
+export function getExplicitRecurringQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
+  const reliefQuestion = /\b(?:quanto|o\s+que|quais?|cuanto|que)\b[\s\S]*\b(?:me\s+livro|vou\s+me\s+livrar|deixo\s+de\s+pagar|libero|terminam|acabam|finalizam|me\s+libero|dejo\s+de\s+pagar|terminan|acaban)\b[\s\S]*\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b/.test(normalized)
+    || /\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b[\s\S]*\b(?:terminam|acabam|finalizam|terminan|acaban)\b/.test(normalized);
+  if (reliefQuestion) {
+    const monthNames = Object.keys(PURCHASE_MONTHS).join("|");
+    const target = normalized.match(new RegExp(`\\b(?:ate|hasta)\\s+(${monthNames})(?:\\s+(?:de\\s+)?(20\\d{2}))?\\b`));
+    let period: { from?: string; to?: string } | undefined;
+    if (target) {
+      const targetMonth = PURCHASE_MONTHS[target[1]];
+      const targetYear = target[2]
+        ? Number(target[2])
+        : targetMonth >= anchor.getMonth() + 1 ? anchor.getFullYear() : anchor.getFullYear() + 1;
+      const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+      period = {
+        from: `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, "0")}-${String(anchor.getDate()).padStart(2, "0")}`,
+        to: `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+      };
+    }
+    return { intent: "recurring_query", confidence: 1, installmentForecast: true, ...(period ? { period } : {}) };
+  }
+  const remainingInstallments = normalized.match(/\bquantas?\s+(?:parcelas?|prestacoes?|cuotas?)\s+(?:ainda\s+)?(?:falta|faltam|resta|restam|faltan|quedan)\s+(?:da|do|de|del)\s+(.+?)[?!.]*$/);
+  if (remainingInstallments?.[1]) {
+    return { intent: "recurring_query", confidence: 1, keyword: remainingInstallments[1].trim() };
+  }
   const subject = /\b(recurrentes?|recorrentes?|suscripci(?:on|ones)|assinaturas?|mensualidades?|cuotas?|parcelas?)\b/.test(normalized);
   const query = /^(?:muestra|mostrar|lista|listar|consulta|consultar|busca|buscar|cuales?|que|mis|meus|minhas)\b/.test(normalized)
     || /\b(?:que|cuales?)\s+(?:cuotas?|parcelas?|suscripciones?)\b/.test(normalized);
@@ -2217,7 +2245,7 @@ INTENÇÕES POSSÍVEIS:
   • "lifetime": true SE E SOMENTE SE o usuário disser explicitamente que não tem fim ("para sempre", "vitalício", "sem prazo", "indefinidamente"). Isso evita que o sistema pergunte de novo algo que já foi respondido. Na dúvida (a maioria das mensagens não fala nada sobre prazo), NÃO inclua "lifetime" nem "totalInstallments" — o sistema pergunta se for realmente necessário.
   • "startDate": data de início, se mencionada explicitamente (padrão é hoje).
   • "totalAmount": valor total da compra, se mencionado (só faz sentido em installment; o sistema calcula sozinho se não vier).
-- recurring_query: ver lançamentos recorrentes/parcelados ("minhas parcelas", "contas recorrentes", "o que tenho parcelado", "meus recorrentes")
+- recurring_query: ver lançamentos recorrentes/parcelados ("minhas parcelas", "contas recorrentes", "o que tenho parcelado", "meus recorrentes"). Também use para perguntar quais parcelas terminam até uma data ou quanto a pessoa deixará de pagar por mês; nesse caso inclua installmentForecast=true e o fim em period.to.
 - recurring_cancel: cancelar um recorrente/parcelado ("cancela a parcela da geladeira", "para o netflix", "remove o recorrente do aluguel")
 - recurring_edit: editar um recorrente/parcelado ("muda o netflix para 65", "altera o valor da parcela da geladeira para 450")
 - drive_search: buscar arquivo no Drive ("ache meu comprovante do mecânico", "me manda o contrato de aluguel", "cadê meu PDF do seguro", "encontra a foto da vistoria", "quero o boleto do banco"). Use "keyword" com os termos de busca.
@@ -2268,7 +2296,7 @@ INTENÇÕES POSSÍVEIS:
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa", "como acesso o painel/site", "qual o site/link do Zelo", "estou conectado no Google", "como conecto o Google", "verificar conexão do Google"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos, funcionalidades ou endereços/links que não existem). ⚠️ Se a resposta precisar citar o endereço do painel, use EXATAMENTE o "Endereço do painel web" informado no início da mensagem — nunca invente um domínio diferente.
   CONTAS MANUAIS: é possível criar, listar, renomear, excluir e definir como padrão contas manuais (ex.: Dinheiro, Nubank, Caixa). Não há cartão de crédito. O Zelo NÃO conecta nem sincroniza bancos e NÃO usa Open Finance/Open Banking. Para conexão bancária, explique apenas essa limitação.
   ÁUDIO, FOTOS E DOCUMENTOS: o Zelo recebe áudios do WhatsApp, transcreve e compreende o conteúdo para executar o pedido do usuário. Também analisa fotos/imagens, identifica o conteúdo, pesquisa um item quando solicitado e lê comprovantes, notas fiscais, boletos, recibos, faturas e documentos PDF. NUNCA diga que o Zelo não consegue ouvir, transcrever, compreender ou processar áudio; NUNCA diga que ele não consegue ler fotos ou PDFs. Se o formato específico não estiver confirmado nestas instruções, não prometa esse formato.
-  IMPORTAR COMPROVANTE/FATURA POR FOTO OU PDF: o usuário PODE mandar a foto ou o PDF de uma nota fiscal, recibo, boleto, comprovante de pagamento ou cupom fiscal que o Zelo lê o documento e registra o lançamento sozinho (pergunta antes de guardar o arquivo no Drive). Também PODE mandar o PDF de uma fatura de cartão ou extrato com VÁRIAS transações — o Zelo extrai todos os lançamentos, avisa quantos já estão registrados (evita duplicar) e pergunta se importa o restante antes de lançar qualquer coisa. ⚠️ O que o Zelo NÃO lê é planilha (.xlsx/.csv) — nesse caso oriente a mandar foto/PDF do comprovante, ou registrar um a um por aqui.
+  IMPORTAR COMPROVANTE/FATURA: o usuário PODE mandar a foto ou o PDF de uma nota fiscal, recibo, boleto, comprovante de pagamento ou cupom fiscal que o Zelo lê e registra (pergunta antes de guardar o arquivo no Drive). Também PODE mandar o PDF ou CSV de uma fatura de cartão/extrato com VÁRIAS transações — o Zelo extrai cada lançamento, avisa quantos já estão registrados (evita duplicar) e pergunta se importa somente o restante. CSV de fatura é lido linha por linha; planilha Excel .xlsx ainda não é suportada.
   - account_create/account_list/account_update/account_delete/account_set_default: use account.name; em update use também account.newName. Funciona em português e espanhol.
   - Consultas por conta continuam como finance_query ou finance_detail e usam account.name. Para "nessa conta"/"en esa cuenta", use account.useContext=true; o sistema recupera a conta da conversa ou pergunta qual.
   ⚠️ Se o usuário perguntar sobre qualquer funcionalidade que não esteja descrita nestas instruções, ou se você não tiver informação confirmada para responder, NÃO improvise. Diga que não consegue confirmar por ali e oriente a acessar o painel do Zelo e abrir o *Suporte* no canto inferior direito.
@@ -4396,8 +4424,13 @@ export async function extractInvoiceTransactions(
   mimeType: string,
   caption?: string,
   userId?: string,
+  originalName?: string,
 ): Promise<InvoiceExtraction | null> {
   const hoje = todayStrBR();
+  const csvInvoice = isLikelyInvoiceCsv(buffer, mimeType, originalName)
+    ? parseInvoiceCsv(buffer, hoje, originalName)
+    : null;
+  if (csvInvoice) return csvInvoice;
   const prompt = `Analise este documento e determine se é uma FATURA DE CARTÃO DE CRÉDITO ou EXTRATO com MÚLTIPLAS transações/lançamentos (compras individuais).
 
 Hoje é: ${hoje}

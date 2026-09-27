@@ -118,7 +118,7 @@ export default function FinancasPagePt() {
       const res = await fetch("/api/finances/import-invoice", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Erro ao analisar fatura"); return; }
-      setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: data.probableRepeat ? false : !t.duplicate })));
+      setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: !t.duplicate })));
       setImportMeta({ bankName: data.bankName, closingDay: data.closingDay, dueDay: data.dueDay, dueDate: data.dueDate, billingReferenceMonth: data.billingReferenceMonth, sourceTransactionCount: data.sourceTransactionCount, ignoredTransactionCount: data.ignoredTransactionCount, probableRepeat: data.probableRepeat, alreadyRegisteredCount: data.alreadyRegisteredCount });
     } catch {
       setImportError("Erro de conexão");
@@ -849,11 +849,11 @@ export default function FinancasPagePt() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-slate-900 mb-1">📑 Importar fatura</h3>
-            <p className="text-xs text-slate-400 mb-4">Envia a fatura do cartão (PDF) ou um extrato — a IA identifica cada lançamento e sinaliza os que já parecem estar registados, para não duplicares.</p>
+            <p className="text-xs text-slate-400 mb-4">Envia a fatura do cartão em PDF, imagem ou CSV — cada despesa é identificada separadamente e o que já está registado não é duplicado.</p>
 
             {importItems.length === 0 ? (
               <div className="space-y-3">
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png"
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.csv,text/csv"
                   onChange={e => setImportFile(e.target.files?.[0] ?? null)}
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-50 file:text-amber-700 file:text-xs file:font-semibold" />
                 {importError && <p className="text-xs text-red-500">{importError}</p>}
@@ -876,7 +876,7 @@ export default function FinancasPagePt() {
                 {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/cartão identificado: <strong>{importMeta.bankName}</strong></p>}
                 {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">💳 O total selecionado será contabilizado em <strong>{fmtMonth(importItems[0].date)}</strong>, mês do pagamento da fatura. A data original continua em cada despesa.</p>}
                 {importMeta.probableRepeat
-                  ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Esta parece ser a mesma fatura enviada novamente: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} despesas já estão registadas. Nada foi selecionado nem será duplicado.</p>
+                  ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Esta parece ser uma fatura atualizada: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} despesas já estão registadas. Apenas as novas foram selecionadas.</p>
                   : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ Você realmente gastou estes valores duas vezes no mesmo dia? Os possíveis duplicados começam desmarcados; marque apenas os que aconteceram duas vezes.</p>}
                 <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-80 overflow-y-auto">
                   {importItems.map((item, idx) => (
