@@ -4415,6 +4415,7 @@ REGRAS OBRIGATÓRIAS:
 - Conte também as linhas de pagamento, crédito, estorno ou reembolso que aparecem DENTRO da seção de transações, mas coloque-as somente em ignoredTransactions. Elas entram em sourceTransactionCount, porém NUNCA em transactions.
 - sourceTransactionCount é a quantidade total de linhas reais da seção de transações: compras válidas + ignoredTransactions. Não conte totais, subtotais, ofertas de parcelamento nem linhas de cabeçalho.
 - billingReferenceMonth é o mês de competência das compras cobradas nesta fatura, no formato YYYY-MM. Use o mês em que termina o ciclo/lista atual de compras (normalmente o mês da data mais recente da seção de transações), NÃO o mês original de uma compra parcelada antiga e NÃO necessariamente o mês do vencimento.
+- dueDate é a data completa de vencimento impressa na fatura. Ela será usada para contabilizar o valor no mês em que a fatura é paga. Não confunda com a data de uma compra.
 
 Retorne JSON:
 {
@@ -4422,6 +4423,7 @@ Retorne JSON:
   "bankName": "nome do banco/cartão impresso no documento, se identificável (ex: 'Nubank', 'Itaú', 'Inter', 'Bradesco') — null se não conseguir identificar",
   "closingDay": "dia do fechamento entre 1 e 28, se estiver impresso — null caso contrário",
   "dueDay": "dia do vencimento entre 1 e 28, se estiver impresso — null caso contrário",
+  "dueDate": "YYYY-MM-DD do vencimento completo impresso — null caso contrário",
   "billingReferenceMonth": "YYYY-MM do ciclo atual da fatura",
   "sourceTransactionCount": "quantidade total de linhas reais na seção de transações, incluindo as ignoradas",
   "ignoredTransactionCount": "quantidade de linhas listadas em ignoredTransactions",

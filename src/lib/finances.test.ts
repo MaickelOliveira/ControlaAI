@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPostedFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, type Finance } from "./finances";
+import { calculateFinanceBalance, isPostedFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, type Finance } from "./finances";
 
 function makeFinance(overrides: Partial<Finance> = {}): Finance {
   return {
@@ -20,6 +20,23 @@ describe("isPostedFinance", () => {
 
   it("is false when status is pending", () => {
     expect(isPostedFinance(makeFinance({ status: "pending" }))).toBe(false);
+  });
+});
+
+describe("calculateFinanceBalance", () => {
+  it("sums the complete posted history and ignores pending movements", () => {
+    expect(calculateFinanceBalance([
+      makeFinance({ id: "income", type: "income", amount: 1000, date: "2025-12-01" }),
+      makeFinance({ id: "old-expense", amount: 200, date: "2026-01-01" }),
+      makeFinance({ id: "new-expense", amount: 300, date: "2026-09-01" }),
+      makeFinance({ id: "pending", amount: 400, status: "pending", date: "2026-10-01" }),
+    ])).toEqual({ income: 1000, expense: 500, balance: 500 });
+  });
+
+  it("shows expenses as a negative balance even when there are no incomes", () => {
+    expect(calculateFinanceBalance([
+      makeFinance({ amount: 6213.15, type: "expense" }),
+    ])).toEqual({ income: 0, expense: 6213.15, balance: -6213.15 });
   });
 });
 

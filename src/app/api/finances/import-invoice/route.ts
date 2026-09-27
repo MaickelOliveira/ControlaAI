@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
     bankName: invoice.bankName,
     closingDay: invoice.closingDay,
     dueDay: invoice.dueDay,
+    dueDate: invoice.dueDate,
+    billingReferenceMonth: invoice.billingReferenceMonth,
     sourceTransactionCount: invoice.sourceTransactionCount,
     ignoredTransactionCount: invoice.ignoredTransactionCount,
     probableRepeat,

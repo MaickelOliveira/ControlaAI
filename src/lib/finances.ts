@@ -113,6 +113,26 @@ export function isPostedFinance(f: Finance): boolean {
   return !f.status || f.status === "posted";
 }
 
+export type FinanceBalance = {
+  income: number;
+  expense: number;
+  balance: number;
+};
+
+/** Calcula o saldo apenas com movimentos efetivamente contabilizados.
+ *  É uma função pura para que o resumo do período e o saldo acumulado usem
+ *  exatamente a mesma regra (pendências não alteram o caixa). */
+export function calculateFinanceBalance(items: readonly Finance[]): FinanceBalance {
+  const posted = items.filter(isPostedFinance);
+  const income = posted
+    .filter(f => f.type === "income" && !isNaN(f.amount))
+    .reduce((sum, f) => sum + f.amount, 0);
+  const expense = posted
+    .filter(f => f.type === "expense" && !isNaN(f.amount))
+    .reduce((sum, f) => sum + f.amount, 0);
+  return { income, expense, balance: income - expense };
+}
+
 type Row = {
   id: string; user_id: string; type: FinanceType; amount: number; category: string;
   description: string; date: string; mode: FinanceMode; source: FinanceSource;
@@ -218,37 +238,30 @@ export async function getFinancesInRange(userId: string, mode?: FinanceMode, fro
   return load(userId, { mode, from, to });
 }
 
-export async function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): Promise<{
-  income: number;
-  expense: number;
-  balance: number;
-}> {
-  let items = (await getFinancesByUser(userId, mode, registeredBy)).filter(isPostedFinance);
+export async function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): Promise<FinanceBalance> {
+  let items = await getFinancesByUser(userId, mode, registeredBy);
   if (year !== undefined && month !== undefined) {
     items = items.filter(f => {
       const d = new Date(f.date + "T12:00:00");
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     });
   }
-  const income = items.filter(f => f.type === "income" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
-  const expense = items.filter(f => f.type === "expense" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
-  return { income, expense, balance: income - expense };
+  return calculateFinanceBalance(items);
+}
+
+/** Saldo acumulado de todo o histórico do modo selecionado, sem depender do
+ *  período que o usuário está vendo no dashboard. */
+export async function getAllTimeBalance(userId: string, mode: FinanceMode): Promise<FinanceBalance> {
+  return calculateFinanceBalance(await getFinancesByUser(userId, mode));
 }
 
 /** Equivalente a getBalance, mas por intervalo de datas em vez de ano/mês fixo
  *  — usado quando a IA identifica um período relativo ("mês passado", "semana
  *  passada") em vez do mês atual. */
-export async function getBalanceInRange(userId: string, mode: FinanceMode, from?: string, to?: string, registeredBy?: string): Promise<{
-  income: number;
-  expense: number;
-  balance: number;
-}> {
+export async function getBalanceInRange(userId: string, mode: FinanceMode, from?: string, to?: string, registeredBy?: string): Promise<FinanceBalance> {
   const items = (await getFinancesInRange(userId, mode, from, to))
-    .filter(isPostedFinance)
     .filter(f => !registeredBy || f.registeredBy === registeredBy);
-  const income = items.filter(f => f.type === "income" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
-  const expense = items.filter(f => f.type === "expense" && !isNaN(f.amount)).reduce((s, f) => s + f.amount, 0);
-  return { income, expense, balance: income - expense };
+  return calculateFinanceBalance(items);
 }
 
 /** Soma os lançamentos de uma categoria específica dentro de um intervalo de

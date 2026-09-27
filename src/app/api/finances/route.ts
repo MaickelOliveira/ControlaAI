@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { addFinance, getFinancesByUser, getFinancesInRange, getBalance, isPostedFinance } from "@/lib/finances";
+import { addFinance, calculateFinanceBalance, getAllTimeBalance, getFinancesByUser, getFinancesInRange, getBalance } from "@/lib/finances";
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,12 +16,13 @@ export async function GET(req: NextRequest) {
       // Filtro de período customizado (Dashboard/Finanças com filtros ativos)
       // — saldo calculado a partir do MESMO array retornado, pra cards,
       // gráfico de categoria e extrato nunca terem escopos de data diferentes.
-      const finances = (await getFinancesInRange(session.sub, mode || undefined, from, to))
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      const posted = finances.filter(isPostedFinance);
-      const income = posted.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
-      const expense = posted.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
-      return NextResponse.json({ finances, balance: { income, expense, balance: income - expense } });
+      const selectedMode = mode || "personal";
+      const [periodFinances, totalBalance] = await Promise.all([
+        getFinancesInRange(session.sub, selectedMode, from, to),
+        getAllTimeBalance(session.sub, selectedMode),
+      ]);
+      const finances = periodFinances.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return NextResponse.json({ finances, balance: calculateFinanceBalance(finances), totalBalance });
     }
 
     // Sem período — comportamento padrão (mês atual), mantido pra quem não filtra.
@@ -31,9 +32,10 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const balance = await getBalance(session.sub, mode || "personal", now.getFullYear(), now.getMonth() + 1);
 
-    return NextResponse.json({ finances, balance });
+    return NextResponse.json({ finances, balance, totalBalance: calculateFinanceBalance(finances) });
   } catch {
-    return NextResponse.json({ finances: [], balance: { income: 0, expense: 0, balance: 0 } });
+    const emptyBalance = { income: 0, expense: 0, balance: 0 };
+    return NextResponse.json({ finances: [], balance: emptyBalance, totalBalance: emptyBalance });
   }
 }
 

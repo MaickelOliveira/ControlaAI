@@ -5,6 +5,7 @@ import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/compone
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
+type Balance = { income: number; expense: number; balance: number };
 
 type Recurring = {
   id: string;
@@ -26,6 +27,7 @@ type Recurring = {
 
 function fmt(v: number | undefined | null) { return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtDate(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-BR"); }
+function fmtMonth(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" }); }
 
 const UNIT_LABEL: Record<string, string> = { monthly: "Mensal", weekly: "Semanal", daily: "Diário", yearly: "Anual" };
 
@@ -51,6 +53,7 @@ const EMPTY_FORM: FormState = {
 export default function FinancasPage() {
   const [mode, setMode] = useState("");
   const [finances, setFinances] = useState<Finance[]>([]);
+  const [totalBalance, setTotalBalance] = useState<Balance>({ income: 0, expense: 0, balance: 0 });
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
@@ -93,7 +96,7 @@ export default function FinancasPage() {
   const [importError, setImportError] = useState("");
   type ImportItem = { date: string; purchaseDate?: string; description: string; amount: number; category: string; duplicate: boolean; selected: boolean; installmentCurrent?: number; installmentTotal?: number; installmentsRemaining?: number };
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
-  const [importMeta, setImportMeta] = useState<{ bankName?: string; closingDay?: number; dueDay?: number; sourceTransactionCount?: number; ignoredTransactionCount?: number; probableRepeat?: boolean; alreadyRegisteredCount?: number }>({});
+  const [importMeta, setImportMeta] = useState<{ bankName?: string; closingDay?: number; dueDay?: number; dueDate?: string; billingReferenceMonth?: string; sourceTransactionCount?: number; ignoredTransactionCount?: number; probableRepeat?: boolean; alreadyRegisteredCount?: number }>({});
 
   useEffect(() => {
     if (!banner) return;
@@ -116,7 +119,7 @@ export default function FinancasPage() {
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Erro ao analisar fatura"); return; }
       setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: data.probableRepeat ? false : !t.duplicate })));
-      setImportMeta({ bankName: data.bankName, closingDay: data.closingDay, dueDay: data.dueDay, sourceTransactionCount: data.sourceTransactionCount, ignoredTransactionCount: data.ignoredTransactionCount, probableRepeat: data.probableRepeat, alreadyRegisteredCount: data.alreadyRegisteredCount });
+      setImportMeta({ bankName: data.bankName, closingDay: data.closingDay, dueDay: data.dueDay, dueDate: data.dueDate, billingReferenceMonth: data.billingReferenceMonth, sourceTransactionCount: data.sourceTransactionCount, ignoredTransactionCount: data.ignoredTransactionCount, probableRepeat: data.probableRepeat, alreadyRegisteredCount: data.alreadyRegisteredCount });
     } catch {
       setImportError("Erro de conexão");
     } finally {
@@ -162,6 +165,7 @@ export default function FinancasPage() {
       fetch(`/api/recurring?mode=${m}&status=active`).then(r => r.json()),
     ]).then(([fd, rd]) => {
       setFinances(fd.finances || []);
+      setTotalBalance(fd.totalBalance || { income: 0, expense: 0, balance: 0 });
       setRecs(Array.isArray(rd) ? rd : []);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -362,7 +366,7 @@ export default function FinancasPage() {
 
   const incomeTotal = postedFinances.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
   const expenseTotal = postedFinances.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
-  const balance = { income: incomeTotal, expense: expenseTotal, balance: incomeTotal - expenseTotal };
+  const periodBalance = { income: incomeTotal, expense: expenseTotal, balance: incomeTotal - expenseTotal };
 
   const catTotals: Record<string, number> = {};
   postedFinances.filter(f => f.type === "expense").forEach(f => { catTotals[f.category] = (catTotals[f.category] || 0) + f.amount; });
@@ -409,15 +413,15 @@ export default function FinancasPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-emerald-600 rounded-2xl p-5 shadow-sm">
           <p className="text-xs text-emerald-100 font-medium uppercase tracking-wide">Receitas</p>
-          <p className="text-2xl font-bold text-white mt-2">{fmt(balance.income)}</p>
+          <p className="text-2xl font-bold text-white mt-2">{fmt(periodBalance.income)}</p>
         </div>
         <div className="bg-red-500 rounded-2xl p-5 shadow-sm">
           <p className="text-xs text-red-100 font-medium uppercase tracking-wide">Despesas</p>
-          <p className="text-2xl font-bold text-white mt-2">{fmt(balance.expense)}</p>
+          <p className="text-2xl font-bold text-white mt-2">{fmt(periodBalance.expense)}</p>
         </div>
-        <div className={clsx("rounded-2xl p-5 shadow-sm", balance.balance >= 0 ? "bg-blue-600" : "bg-orange-500")}>
-          <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Saldo do Mês</p>
-          <p className="text-2xl font-bold text-white mt-2">{fmt(balance.balance)}</p>
+        <div className={clsx("rounded-2xl p-5 shadow-sm", totalBalance.balance >= 0 ? "bg-blue-600" : "bg-orange-500")}>
+          <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Saldo Total</p>
+          <p className="text-2xl font-bold text-white mt-2">{fmt(totalBalance.balance)}</p>
         </div>
       </div>
 
@@ -439,7 +443,7 @@ export default function FinancasPage() {
           ) : (
             <div className="space-y-4">
               {topCats.map(([cat, val]) => {
-                const pctRaw = balance.expense > 0 ? (val / balance.expense * 100) : 0;
+                const pctRaw = periodBalance.expense > 0 ? (val / periodBalance.expense * 100) : 0;
                 const pct = Math.min(100, pctRaw).toFixed(0);
                 return (
                   <div key={cat}>
@@ -870,6 +874,7 @@ export default function FinancasPage() {
                 </div>
                 {!!importMeta.ignoredTransactionCount && <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">ℹ️ {importMeta.ignoredTransactionCount} pagamento/crédito/estorno foi lido e ignorado corretamente; não vira despesa.</p>}
                 {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/cartão identificado: <strong>{importMeta.bankName}</strong></p>}
+                {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">💳 O total selecionado será contabilizado em <strong>{fmtMonth(importItems[0].date)}</strong>, mês do pagamento da fatura. A data original continua em cada compra.</p>}
                 {importMeta.probableRepeat
                   ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Esta parece ser a mesma fatura enviada novamente: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} compras já estão registradas. Nada foi selecionado nem será duplicado.</p>
                   : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ Você realmente gastou estes valores duas vezes no mesmo dia? Os possíveis duplicados começam desmarcados; marque apenas os que aconteceram duas vezes.</p>}
@@ -882,7 +887,7 @@ export default function FinancasPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-800 truncate">{item.description}</p>
                         <p className="text-xs text-slate-400">
-                          {fmtDate(item.date)} · {item.category}
+                          {item.purchaseDate && item.purchaseDate !== item.date ? `Compra ${fmtDate(item.purchaseDate)} · pagamento ${fmtDate(item.date)}` : fmtDate(item.date)} · {item.category}
                           {item.installmentCurrent && item.installmentTotal && <span className="ml-1.5 text-blue-600">· parcela {item.installmentCurrent}/{item.installmentTotal} · restantes {item.installmentsRemaining ?? item.installmentTotal - item.installmentCurrent}</span>}
                           {item.duplicate && <span className="ml-1.5 text-amber-600">· possível repetição — marque se gastou 2 vezes</span>}
                         </p>

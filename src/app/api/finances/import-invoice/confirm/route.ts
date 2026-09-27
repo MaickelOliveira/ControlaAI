@@ -56,12 +56,13 @@ export async function POST(req: NextRequest) {
     throw error;
   }
 
-  const now = new Date();
-  const balance = await getBalance(session.sub, mode, now.getFullYear(), now.getMonth() + 1);
+  const [balanceYear, balanceMonth] = valid[0].date.split("-").map(Number);
+  const balance = await getBalance(session.sub, mode, balanceYear, balanceMonth);
 
   return NextResponse.json({
     imported: inserted.length,
     balance,
+    balanceMonth: valid[0].date.slice(0, 7),
     importedFrom: valid.reduce((min, item) => item.date < min ? item.date : min, valid[0].date),
     importedTo: valid.reduce((max, item) => item.date > max ? item.date : max, valid[0].date),
     accountName: account.accountName,

@@ -797,9 +797,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               const totalFatura = withDup.reduce((sum, item) => sum + item.amount, 0);
               const sourceCount = Math.max(invoice.sourceTransactionCount ?? 0, withDup.length);
               const ignoredCount = Math.max(invoice.ignoredTransactionCount ?? 0, sourceCount - withDup.length);
+              const paymentMonth = withDup[0]?.date.slice(0, 7).split("-").reverse().join("/");
               const readingSummary = sourceCount > withDup.length
-                ? `${sourceCount} movimentação(ões) lida(s) no documento\n✅ ${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}\nℹ️ ${ignoredCount} pagamento/crédito/estorno ignorado(s)`
-                : `${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}`;
+                ? `${sourceCount} movimentação(ões) lida(s) no documento\n✅ ${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}\nℹ️ ${ignoredCount} pagamento/crédito/estorno ignorado(s)${paymentMonth ? `\n💳 Despesa contabilizada no mês do pagamento: ${paymentMonth}` : ""}`
+                : `${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}${paymentMonth ? `\n💳 Despesa contabilizada no mês do pagamento: ${paymentMonth}` : ""}`;
 
               // Quase toda a lista já existe: é a mesma fatura reenviada. Uma
               // nova extração por IA pode variar em uma ou duas datas antigas;
@@ -828,7 +829,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n⚠️ Encontrei ${duplicados.length} possível(is) pagamento(s) duplicado(s), com mesmo dia, valor e estabelecimento/categoria:`);
                 for (let start = 0; start < duplicados.length; start += 15) {
                   const duplicatePreview = duplicados.slice(start, start + 15)
-                    .map((item, offset) => `${start + offset + 1}. ${item.description} — ${formatCurrency(item.amount)} em ${item.date.split("-").reverse().join("/")}`)
+                    .map((item, offset) => `${start + offset + 1}. ${item.description} — ${formatCurrency(item.amount)} em ${(item.purchaseDate || item.date).split("-").reverse().join("/")}`)
                     .join("\n");
                   await wppSend(from, duplicatePreview);
                 }
@@ -1515,12 +1516,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               cardInvoiceId: account.cardInvoiceId,
             })));
             await clearPendingAction(from);
-            const fNow = nowBR();
-            const bal = await getBalance(user.id, pending.mode, fNow.getFullYear(), fNow.getMonth() + 1);
+            const [paymentYear, paymentMonth] = pending.items[0].date.split("-").map(Number);
+            const bal = await getBalance(user.id, pending.mode, paymentYear, paymentMonth);
             const accountLabel = "accountName" in account && typeof account.accountName === "string" && account.accountName
               ? `\n🏦 Conta: *${account.accountName}*${"created" in account && account.created === true ? " (criada agora)" : ""}`
               : "";
-            await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📊 Saldo ${pending.mode === "business" ? "Empresa" : "Pessoal"}: ${formatCurrency(bal.balance)}`);
+            await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📊 Saldo de ${String(paymentMonth).padStart(2, "0")}/${paymentYear} — ${pending.mode === "business" ? "Empresa" : "Pessoal"}: ${formatCurrency(bal.balance)}`);
           } catch (error) {
             // A conta identificada no PDF e os lançamentos formam uma única
             // conclusão para o usuário. Se o lote falhar, remove a conta que
