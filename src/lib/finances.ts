@@ -473,7 +473,7 @@ function storedInstallment(description: string): { current: number; total: numbe
  *  valor são iguais e o estabelecimento ou a categoria também é compatível. */
 export function isSameInvoiceExpense(
   existing: Finance,
-  candidate: { amount: number; date: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number },
+  candidate: { amount: number; date: string; purchaseDate?: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number },
   mode: FinanceMode,
 ): boolean {
   if (existing.mode !== mode || existing.type !== "expense") return false;
@@ -486,13 +486,14 @@ export function isSameInvoiceExpense(
     // A mesma parcela do mesmo documento já existe. Uma parcela posterior é
     // a continuação mensal da sequência e deve entrar como gasto do novo mês,
     // sem recriar todas as parcelas restantes.
+    const sameDate = existing.date === candidate.date || existing.date === candidate.purchaseDate;
     if (previousInstallment.current !== candidate.installmentCurrent) {
-      return previousInstallment.current > candidate.installmentCurrent && existing.date === candidate.date;
+      return previousInstallment.current > candidate.installmentCurrent && sameDate;
     }
-    return existing.date === candidate.date;
+    return sameDate;
   }
 
-  if (existing.date !== candidate.date) return false;
+  if (existing.date !== candidate.date && existing.date !== candidate.purchaseDate) return false;
   return normalizeDuplicateText(existing.category) === normalizeDuplicateText(candidate.category)
     || merchantDescriptionsMatch(existing.description, candidate.description);
 }
@@ -500,7 +501,7 @@ export function isSameInvoiceExpense(
 export async function isLikelyDuplicateInvoiceExpense(
   userId: string,
   mode: FinanceMode,
-  candidate: { amount: number; date: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number },
+  candidate: { amount: number; date: string; purchaseDate?: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number },
 ): Promise<boolean> {
   const sameDay = await load(userId, { mode, from: candidate.date, to: candidate.date });
   return sameDay.some(existing => isSameInvoiceExpense(existing, candidate, mode));
@@ -512,11 +513,19 @@ export async function isLikelyDuplicateInvoiceExpense(
 export async function getInvoiceDuplicateFlags(
   userId: string,
   mode: FinanceMode,
-  candidates: Array<{ amount: number; date: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number }>,
+  candidates: Array<{ amount: number; date: string; purchaseDate?: string; description: string; category: string; installmentCurrent?: number; installmentTotal?: number }>,
 ): Promise<boolean[]> {
   if (candidates.length === 0) return [];
-  const dates = candidates.map(candidate => candidate.date).sort();
-  const existing = await load(userId, { mode, from: dates[0], to: dates[dates.length - 1] });
+  const dates = candidates.flatMap(candidate => [candidate.date, candidate.purchaseDate].filter((date): date is string => Boolean(date))).sort();
+  const { data, error } = await getSupabase().from("finances").select("*")
+    .eq("user_id", userId)
+    .eq("mode", mode)
+    .gte("date", dates[0])
+    .lte("date", dates[dates.length - 1]);
+  // Deduplicação é uma barreira de segurança: falha de leitura não pode
+  // virar silenciosamente "zero duplicados" e oferecer importar tudo outra vez.
+  if (error) throw new Error(`[finances] verificação de duplicados da fatura falhou: ${error.message}`);
+  const existing = (data as Row[]).map(fromRow);
   return candidates.map(candidate => existing.some(item => isSameInvoiceExpense(item, candidate, mode)));
 }
 

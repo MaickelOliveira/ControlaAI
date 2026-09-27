@@ -67,6 +67,35 @@ describe("normalizeInvoiceExtraction", () => {
     expect(result).toMatchObject({ sourceTransactionCount: 58, ignoredTransactionCount: 1 });
     expect(result?.transactions).toHaveLength(57);
   });
+
+  it("books every charge in the statement reference month and preserves the printed purchase date", () => {
+    const result = normalizeInvoiceExtraction({
+      isInvoice: true,
+      bankName: "Sicredi",
+      billingReferenceMonth: "2026-08",
+      transactions: [
+        { date: "2026-08-24", description: "Mercado", amount: 100, category: "Alimentação" },
+        { date: "2026-07-31", description: "Restaurante", amount: 50, category: "Alimentação" },
+        { date: "2026-06-15", description: "Havan", amount: 309.92, category: "Moradia", installmentCurrent: 3, installmentTotal: 5 },
+        { date: "2025-12-30", description: "Compra antiga", amount: 666.66, category: "Outros", installmentCurrent: 6, installmentTotal: 6 },
+      ],
+    }, "2026-09-27");
+
+    expect(result?.billingReferenceMonth).toBe("2026-08");
+    expect(result?.transactions.map(transaction => transaction.date)).toEqual([
+      "2026-08-24",
+      "2026-08-31",
+      "2026-08-15",
+      "2026-08-30",
+    ]);
+    expect(result?.transactions.map(transaction => transaction.purchaseDate)).toEqual([
+      "2026-08-24",
+      "2026-07-31",
+      "2026-06-15",
+      "2025-12-30",
+    ]);
+    expect(invoiceTransactionDescription(result!.transactions[2])).toContain("compra em 15/06/2026");
+  });
 });
 
 describe("isProbableRepeatedInvoice", () => {

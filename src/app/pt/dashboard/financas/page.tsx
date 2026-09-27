@@ -91,7 +91,7 @@ export default function FinancasPagePt() {
   const [importLoading, setImportLoading] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState("");
-  type ImportItem = { date: string; description: string; amount: number; category: string; duplicate: boolean; selected: boolean; installmentCurrent?: number; installmentTotal?: number; installmentsRemaining?: number };
+  type ImportItem = { date: string; purchaseDate?: string; description: string; amount: number; category: string; duplicate: boolean; selected: boolean; installmentCurrent?: number; installmentTotal?: number; installmentsRemaining?: number };
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
   const [importMeta, setImportMeta] = useState<{ bankName?: string; closingDay?: number; dueDay?: number; sourceTransactionCount?: number; ignoredTransactionCount?: number; probableRepeat?: boolean; alreadyRegisteredCount?: number }>({});
 
@@ -131,7 +131,7 @@ export default function FinancasPagePt() {
     try {
       const res = await fetch("/api/finances/import-invoice/confirm", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, ...importMeta, items: selected.map(({ date, description, amount, category, installmentCurrent, installmentTotal, installmentsRemaining }) => ({ date, description, amount, category, installmentCurrent, installmentTotal, installmentsRemaining })) }),
+        body: JSON.stringify({ mode, ...importMeta, items: selected.map(({ date, purchaseDate, description, amount, category, installmentCurrent, installmentTotal, installmentsRemaining }) => ({ date, purchaseDate, description, amount, category, installmentCurrent, installmentTotal, installmentsRemaining })) }),
       });
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Erro ao importar"); return; }

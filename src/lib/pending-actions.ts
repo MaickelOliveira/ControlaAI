@@ -188,6 +188,7 @@ export type PendingReceiptSave = {
 
 export type PendingInvoiceImportItem = {
   date: string;
+  purchaseDate?: string;
   description: string;
   amount: number;
   category: string;

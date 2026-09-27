@@ -1,5 +1,8 @@
 export type InvoiceTransaction = {
+  /** Data contábil usada nos filtros do dashboard (mês da fatura). */
   date: string;
+  /** Data impressa da compra, preservada quando difere da competência. */
+  purchaseDate?: string;
   description: string;
   amount: number;
   category: string;
@@ -18,6 +21,8 @@ export type InvoiceExtraction = {
   sourceTransactionCount?: number;
   /** Linhas lidas corretamente, mas descartadas por não serem compras. */
   ignoredTransactionCount?: number;
+  /** Mês ao qual todas as cobranças desta fatura pertencem. */
+  billingReferenceMonth?: string;
 };
 
 function positiveInteger(value: unknown): number | undefined {
@@ -51,6 +56,20 @@ function normalizeInvoiceDate(rawDate: string, today: string): string {
   return date;
 }
 
+function normalizeBillingReferenceMonth(value: unknown): string | undefined {
+  const raw = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}$/.test(raw) && Number(raw.slice(5, 7)) >= 1 && Number(raw.slice(5, 7)) <= 12) return raw;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.slice(0, 7);
+  return undefined;
+}
+
+function dateInReferenceMonth(purchaseDate: string, referenceMonth: string): string {
+  const [year, month] = referenceMonth.split("-").map(Number);
+  const requestedDay = Number(purchaseDate.slice(8, 10));
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${referenceMonth}-${String(Math.min(requestedDay, lastDay)).padStart(2, "0")}`;
+}
+
 /** Normaliza o JSON retornado pelo modelo e mantém apenas cobranças válidas.
  *  Uma compra parcelada continua sendo UM lançamento: somente a parcela que
  *  aparece na fatura atual, nunca o histórico pago ou as parcelas futuras. */
@@ -60,7 +79,7 @@ export function normalizeInvoiceExtraction(
 ): InvoiceExtraction | null {
   if (!parsed.isInvoice || !Array.isArray(parsed.transactions)) return null;
 
-  const transactions: InvoiceTransaction[] = [];
+  const extracted: InvoiceTransaction[] = [];
   for (const rawTransaction of parsed.transactions) {
     const transaction = rawTransaction as Record<string, unknown> | null;
     const billingStatus = String(transaction?.billingStatus || "current").toLocaleLowerCase();
@@ -94,8 +113,9 @@ export function normalizeInvoiceExtraction(
       installmentTotal = undefined;
     }
 
-    transactions.push({
+    extracted.push({
       date,
+      purchaseDate: date,
       description,
       amount,
       category,
@@ -107,7 +127,22 @@ export function normalizeInvoiceExtraction(
     });
   }
 
-  if (!transactions.length) return null;
+  if (!extracted.length) return null;
+  const explicitReferenceMonth = normalizeBillingReferenceMonth(parsed.billingReferenceMonth);
+  const latestRegularPurchaseMonth = extracted
+    .filter(transaction => !transaction.installmentCurrent)
+    .map(transaction => transaction.purchaseDate!.slice(0, 7))
+    .sort()
+    .at(-1);
+  const latestPurchaseMonth = extracted.map(transaction => transaction.purchaseDate!.slice(0, 7)).sort().at(-1);
+  // A data mais recente de uma compra não parcelada é a evidência mais
+  // confiável do ciclo. Alguns modelos confundem "fatura de setembro" com
+  // competência setembro, embora a lista de compras feche em agosto.
+  const billingReferenceMonth = latestRegularPurchaseMonth || explicitReferenceMonth || latestPurchaseMonth || today.slice(0, 7);
+  const transactions = extracted.map(transaction => ({
+    ...transaction,
+    date: dateInReferenceMonth(transaction.purchaseDate!, billingReferenceMonth),
+  }));
   const bankName = String(parsed.bankName || "").trim() || undefined;
   const rawClosingDay = positiveInteger(parsed.closingDay);
   const rawDueDay = positiveInteger(parsed.dueDay);
@@ -128,6 +163,7 @@ export function normalizeInvoiceExtraction(
     dueDay,
     sourceTransactionCount,
     ignoredTransactionCount,
+    billingReferenceMonth,
   };
 }
 
@@ -146,10 +182,13 @@ export function invoiceTransactionDescription(transaction: InvoiceTransaction): 
   const base = transaction.description.trim() || "Lançamento da fatura";
   const current = transaction.installmentCurrent;
   const total = transaction.installmentTotal;
-  if (!current || !total || current > total) return base;
+  const purchaseDate = transaction.purchaseDate && transaction.purchaseDate !== transaction.date
+    ? ` · compra em ${transaction.purchaseDate.split("-").reverse().join("/")}`
+    : "";
+  if (!current || !total || current > total) return `${base}${purchaseDate}`.slice(0, 180);
 
   const remaining = Math.max(0, transaction.installmentsRemaining ?? total - current);
   const alreadyHasFraction = new RegExp(`\\b0?${current}\\s*\\/\\s*0?${total}\\b`).test(base);
   const installment = alreadyHasFraction ? "" : ` · Parcela ${current}/${total}`;
-  return `${base}${installment} · restantes ${remaining}`.slice(0, 180);
+  return `${base}${installment} · restantes ${remaining}${purchaseDate}`.slice(0, 180);
 }

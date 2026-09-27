@@ -86,6 +86,16 @@ describe("isSameInvoiceExpense", () => {
     }, "personal")).toBe(false);
   });
 
+  it("matches a manually registered purchase by its printed date even when the invoice books it in the reference month", () => {
+    expect(isSameInvoiceExpense(existing, {
+      amount: 89.9,
+      date: "2026-10-10",
+      purchaseDate: "2026-09-10",
+      description: "Mercado Central",
+      category: "Alimentação",
+    }, "personal")).toBe(true);
+  });
+
   it("does not flag a different merchant and category on the same day", () => {
     expect(isSameInvoiceExpense(existing, {
       amount: 89.9,
