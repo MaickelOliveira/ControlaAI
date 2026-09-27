@@ -4299,12 +4299,94 @@ Não use markdown.`;
   }
 }
 
+export type FinancialDocumentExtraction = {
+  type: "income" | "expense";
+  amount: number;
+  description: string;
+  category: string;
+  date: string;
+  mode?: "personal" | "business";
+  /** Parcela efetivamente mostrada no comprovante/foto. O valor em `amount`
+   * é somente o valor desta parcela, nunca o total inteiro da compra. */
+  installmentCurrent?: number;
+  installmentTotal?: number;
+  installmentsRemaining?: number;
+};
+
+function positiveDocumentInteger(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+/** Normalização compartilhada entre OpenAI e Gemini. Mantê-la pura permite
+ * provar a regra de parcelamento sem depender de uma chamada externa. */
+export function normalizeFinancialDocumentExtraction(
+  parsed: Record<string, unknown>,
+  fallbackDate: string,
+): FinancialDocumentExtraction | null {
+  if (!parsed.isFinancial) return null;
+
+  // Numa compra parcelada, a IA recebe instrução para devolver o valor da
+  // parcela em installmentAmount. Ele tem prioridade sobre o total impresso.
+  const rawAmount = String(parsed.installmentAmount ?? parsed.amount ?? "0")
+    .replace(/\s/g, "")
+    .replace(/\.(?=\d{3}[,.])/g, "")
+    .replace(",", ".");
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const rawDate = String(parsed.date || "");
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : fallbackDate;
+  let installmentCurrent = positiveDocumentInteger(parsed.installmentCurrent);
+  let installmentTotal = positiveDocumentInteger(parsed.installmentTotal);
+
+  // Fallback conservador: só interpreta fração textual quando ela vem
+  // acompanhada de "parcela/cota"; uma data como 03/10 não vira parcela.
+  if (!installmentCurrent || !installmentTotal) {
+    const fraction = String(parsed.description || "").match(/\b(?:parcela|parcel|cuota)\s*(\d{1,3})\s*(?:\/|de)\s*(\d{1,3})\b/i);
+    installmentCurrent ||= positiveDocumentInteger(fraction?.[1]);
+    installmentTotal ||= positiveDocumentInteger(fraction?.[2]);
+  }
+  if (!installmentCurrent || !installmentTotal
+    || installmentCurrent > installmentTotal || installmentTotal > 120) {
+    installmentCurrent = undefined;
+    installmentTotal = undefined;
+  }
+
+  return {
+    type: parsed.type === "income" ? "income" : "expense",
+    amount,
+    description: String(parsed.description || "documento"),
+    category: String(parsed.category || "Outros"),
+    date,
+    mode: parsed.mode === "business" || parsed.mode === "personal" ? parsed.mode : undefined,
+    ...(installmentCurrent && installmentTotal ? {
+      installmentCurrent,
+      installmentTotal,
+      installmentsRemaining: installmentTotal - installmentCurrent,
+    } : {}),
+  };
+}
+
+/** Acrescenta metadados pesquisáveis ao lançamento salvo. É o mesmo formato
+ * usado nas faturas, portanto "quantas parcelas faltam da geladeira?" também
+ * funciona quando a origem foi uma foto. */
+export function financialDocumentDescription(data: FinancialDocumentExtraction): string {
+  const base = data.description
+    .replace(/\s*·?\s*parcela\s*\d{1,3}\s*\/\s*\d{1,3}/ig, "")
+    .replace(/\s*·?\s*restantes\s*\d+/ig, "")
+    .trim() || "Documento";
+  if (!data.installmentCurrent || !data.installmentTotal) return base.slice(0, 180);
+  const remaining = Math.max(0, data.installmentsRemaining ?? data.installmentTotal - data.installmentCurrent);
+  return `${base} · Parcela ${data.installmentCurrent}/${data.installmentTotal} · restantes ${remaining}`.slice(0, 180);
+}
+
 export async function extractFinanceFromDocument(
   buffer: Buffer,
   mimeType: string,
   caption?: string,
   userId?: string,
-): Promise<{ type: "income" | "expense"; amount: number; description: string; category: string; date: string; mode?: "personal" | "business" } | null> {
+): Promise<FinancialDocumentExtraction | null> {
   const hoje = todayStrBR();
   const prompt = `Analise esta imagem/documento e determine se é um documento financeiro (nota fiscal, recibo, boleto, comprovante de pagamento, cupom fiscal, extrato bancário, fatura, etc.).
 
@@ -4315,11 +4397,14 @@ Se for um documento financeiro, extraia os dados e retorne JSON:
 {
   "isFinancial": true,
   "type": "expense" ou "income",
-  "amount": número (valor total a pagar/recebido),
+  "amount": número (se parcelada, valor SOMENTE da parcela atual; caso contrário, valor total a pagar/recebido),
   "description": "descrição curta do que é (ex: Conta de luz, Nota fiscal Mercado, Boleto aluguel)",
   "category": "uma das categorias abaixo",
   "date": "YYYY-MM-DD (data do documento, ou hoje se não encontrar)",
-  "mode": "personal" ou "business" (omitir se não puder identificar)
+  "mode": "personal" ou "business" (omitir se não puder identificar),
+  "installmentCurrent": "número da parcela atual, ou null se não for parcelada",
+  "installmentTotal": "total de parcelas, ou null se não for parcelada",
+  "installmentAmount": "valor SOMENTE da parcela atual, ou null se não for parcelada"
 }
 
 Se NÃO for um documento financeiro, retorne:
@@ -4327,6 +4412,13 @@ Se NÃO for um documento financeiro, retorne:
 
 CATEGORIAS DE DESPESA: ${CATEGORIES_EXPENSE.join(", ")}
 CATEGORIAS DE RECEITA: ${CATEGORIES_INCOME.join(", ")}
+
+REGRAS PARA FOTO/PRINT DE COMPRA PARCELADA:
+- Leia indicações como "3/10", "parcela 3 de 10", "cuota 3/10" ou "10x".
+- Se o comprovante original mostra apenas "10x", esta compra está na primeira parcela: installmentCurrent=1 e installmentTotal=10.
+- Se aparecer o valor total da compra e o valor de cada parcela, use em installmentAmount e amount SOMENTE o valor de uma parcela.
+- Registre somente a parcela atual. Nunca some parcelas antigas nem projete parcelas futuras.
+- Não confunda datas como 03/10 com parcela sem outra evidência textual de parcelamento.
 
 Retorne APENAS JSON válido, sem markdown.`;
 
@@ -4343,24 +4435,7 @@ Retorne APENAS JSON válido, sem markdown.`;
     }),
   );
   if (openAIAttempt.ok) {
-    const parsed = openAIAttempt.value;
-    if (!parsed.isFinancial) return null;
-    const rawAmount = String(parsed.amount ?? "0")
-      .replace(/\s/g, "")
-      .replace(/\.(?=\d{3}[,.])/g, "")
-      .replace(",", ".");
-    const amount = Number(rawAmount);
-    if (isNaN(amount) || amount <= 0) return null;
-    const rawDate = String(parsed.date || "");
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
-    return {
-      type: parsed.type === "income" ? "income" : "expense",
-      amount,
-      description: String(parsed.description || "documento"),
-      category: String(parsed.category || "Outros"),
-      date,
-      mode: parsed.mode === "business" || parsed.mode === "personal" ? parsed.mode : undefined,
-    };
+    return normalizeFinancialDocumentExtraction(openAIAttempt.value, hoje);
   }
 
   const cfg = await getConfig();
@@ -4385,28 +4460,7 @@ Retorne APENAS JSON válido, sem markdown.`;
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
 
-    if (!parsed.isFinancial) return null;
-
-    // Normaliza formato brasileiro: "1.500,90" → 1500.90, "99,90" → 99.90
-    const rawAmount = String(parsed.amount ?? "0")
-      .replace(/\s/g, "")
-      .replace(/\.(?=\d{3}[,.])/g, "")  // remove separador de milhar (ponto antes de 3 dígitos)
-      .replace(",", ".");                // troca vírgula decimal por ponto
-    const amount = Number(rawAmount);
-    if (isNaN(amount) || amount <= 0) return null;
-
-    // Valida data no formato YYYY-MM-DD
-    const rawDate = String(parsed.date || "");
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
-
-    return {
-      type: parsed.type === "income" ? "income" : "expense",
-      amount,
-      description: String(parsed.description || "documento"),
-      category: String(parsed.category || "Outros"),
-      date,
-      mode: parsed.mode === "business" || parsed.mode === "personal" ? parsed.mode : undefined,
-    };
+    return normalizeFinancialDocumentExtraction(parsed, hoje);
   } catch (e) {
     console.error("[ai-processor] Erro extractFinanceFromDocument:", e);
     return null;

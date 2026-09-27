@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateFinanceBalance, isPostedFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, importedInstallmentStatuses, merchantPurchaseDate, type Finance } from "./finances";
+import { calculateFinanceBalance, isPostedFinance, isSameDocumentFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, importedInstallmentStatuses, merchantPurchaseDate, type Finance } from "./finances";
 
 function makeFinance(overrides: Partial<Finance> = {}): Finance {
   return {
@@ -208,5 +208,49 @@ describe("isSameInvoiceExpense", () => {
       installmentCurrent: 3,
       installmentTotal: 10,
     }, "personal")).toBe(true);
+  });
+});
+
+describe("isSameDocumentFinance", () => {
+  const existing = makeFinance({
+    type: "expense",
+    amount: 200,
+    date: "2026-09-27",
+    description: "Geladeira · Parcela 3/10 · restantes 7",
+    category: "Moradia",
+  });
+
+  it("blocks the same installment repeated in two overlapping screenshots", () => {
+    expect(isSameDocumentFinance(existing, {
+      type: "expense",
+      amount: 200,
+      date: "2026-09-27",
+      description: "Geladeira",
+      category: "Moradia",
+      installmentCurrent: 3,
+      installmentTotal: 10,
+    }, "personal")).toBe(true);
+  });
+
+  it("does not block a later installment in the sequence", () => {
+    expect(isSameDocumentFinance(existing, {
+      type: "expense",
+      amount: 200,
+      date: "2026-10-27",
+      description: "Geladeira",
+      category: "Moradia",
+      installmentCurrent: 4,
+      installmentTotal: 10,
+    }, "personal")).toBe(false);
+  });
+
+  it("does not merge equal values from different establishments", () => {
+    expect(isSameDocumentFinance(existing, {
+      type: "expense",
+      amount: 200,
+      date: "2026-09-27",
+      description: "Posto Avenida",
+      category: "Transporte",
+    }, "personal")).toBe(false);
   });
 });

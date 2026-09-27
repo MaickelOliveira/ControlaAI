@@ -1,9 +1,9 @@
-import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode } from "@/lib/users";
+import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, addFinances, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { addFinance, addFinances, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
@@ -255,11 +255,12 @@ async function wppSendLong(to: string, message: string, maxLength = 3500): Promi
   for (const chunk of splitWhatsAppMessage(message, maxLength)) await wppSend(to, chunk);
 }
 
-export type ImageAction = "save" | "search" | "describe";
+export type ImageAction = "save" | "search" | "describe" | "register";
 
 export function parseImageAction(text: string): ImageAction | null {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
   if (/\b(?:salva(?:r|la|lo)?|guarda(?:r|la|lo)?|archiva(?:r|la|lo)?|arquiva(?:r)?|almacena(?:r|la|lo)?|drive)\b/.test(normalized)) return "save";
+  if (/\b(?:registra(?:r|la|lo)?|registre|lanca(?:r)?|lance|anota(?:r)?|anote|contabiliza(?:r)?|contabilice)\b/.test(normalized)) return "register";
   if (/\b(?:pesquisa|pesquisar|pesquise|procura|procurar|busca|buscar|preco|precio|valor|custa|cuesta|cotacao|cotizacion|investiga|investigar)\b|\bquanto\s+(?:esta|e|sai|custa)\b|\bcuanto\s+(?:esta|vale|sale|cuesta)\b/.test(normalized)) return "search";
   if (/\b(?:descreve|descreva|descrever|identifica|identifique|identificar|analisa|analise|analisar|o que e|que e isso|describe|identifica|analiza|analice|que es)\b/.test(normalized)) return "describe";
   return null;
@@ -305,6 +306,75 @@ function localized(locale: string | undefined, ptBR: string, es: string, ptPT = 
   if (locale === "es") return es;
   if (locale === "pt-PT") return ptPT;
   return ptBR;
+}
+
+/** Lê e grava um comprovante financeiro unitário enviado como foto. Retorna
+ * true quando reconheceu o documento (inclusive quando bloqueou duplicado). */
+async function registerFinanceDocumentFromMedia(options: {
+  from: string;
+  buffer: Buffer;
+  mimeType: string;
+  caption?: string;
+  user: User;
+}): Promise<boolean> {
+  const { from, buffer, mimeType, caption, user } = options;
+  const financeData = await extractFinanceFromDocument(buffer, mimeType, caption, user.id);
+  if (!financeData) return false;
+
+  const mode = financeData.mode || user.activeMode;
+  const description = financialDocumentDescription(financeData);
+  const duplicate = await isLikelyDuplicateDocumentFinance(user.id, mode, {
+    type: financeData.type,
+    amount: financeData.amount,
+    category: financeData.category,
+    description,
+    date: financeData.date,
+    installmentCurrent: financeData.installmentCurrent,
+    installmentTotal: financeData.installmentTotal,
+  });
+  if (duplicate) {
+    await wppSend(from, localized(user.locale,
+      `♻️ Este comprovante já está registrado: *${description}*, ${formatCurrency(financeData.amount)} em ${financeData.date.split("-").reverse().join("/")}. *Não lancei novamente.*`,
+      `♻️ Este comprobante ya está registrado: *${description}*, ${formatCurrency(financeData.amount)} el ${financeData.date.split("-").reverse().join("/")}. *No lo registré de nuevo.*`));
+    return true;
+  }
+
+  const finance = await addFinance({
+    userId: user.id,
+    type: financeData.type,
+    amount: financeData.amount,
+    category: cap(financeData.category),
+    description: cap(description),
+    date: financeData.date,
+    mode,
+    source: "whatsapp",
+    registeredBy: from,
+  });
+  const [financeYear, financeMonth] = finance.date.split("-").map(Number);
+  const balance = await getBalance(user.id, mode, financeYear, financeMonth);
+  const typeLabel = localized(user.locale, financeData.type === "income" ? "Receita" : "Despesa", financeData.type === "income" ? "Ingreso" : "Gasto");
+  const typeEmoji = financeData.type === "income" ? "💰" : "💸";
+  const receiptExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("csv") ? ".csv" : ".jpg";
+  const suggestedName = `${finance.category} - ${finance.description} - ${finance.date}${receiptExt}`.slice(0, 80);
+  await setPendingAction(from, {
+    type: "receipt_save",
+    userId: user.id,
+    fileBase64: buffer.toString("base64"),
+    mimeType,
+    suggestedName,
+    description: finance.description,
+    financeId: finance.id,
+  });
+
+  const installmentLine = financeData.installmentCurrent && financeData.installmentTotal
+    ? localized(user.locale,
+      `\n💳 Parcela ${financeData.installmentCurrent}/${financeData.installmentTotal} — faltam ${financeData.installmentsRemaining ?? financeData.installmentTotal - financeData.installmentCurrent}`,
+      `\n💳 Cuota ${financeData.installmentCurrent}/${financeData.installmentTotal} — faltan ${financeData.installmentsRemaining ?? financeData.installmentTotal - financeData.installmentCurrent}`)
+    : "";
+  await wppSend(from, localized(user.locale,
+    `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo do mês: ${formatCurrency(balance.balance)}\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_`,
+    `${typeEmoji} *¡${typeLabel} registrado!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("es")}\n\n📊 Saldo del mes: ${formatCurrency(balance.balance)}\n\n_💾 ¿Quieres guardar este comprobante en Drive? (sí/no)_`));
+  return true;
 }
 
 /** Mensagem INTEIRA de desistência solta ("cancelar", "deixa pra lá", "no
@@ -749,8 +819,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             originalName,
           });
           await wppSend(from, localized(fileUser.locale,
-            "🖼️ Recebi a imagem. O que você quer fazer com ela?\n\n• *guardar no Drive*\n• *pesquisar o preço*\n• *identificar o que aparece*",
-            "🖼️ Recibí la imagen. ¿Qué quieres hacer con ella?\n\n• *guardarla en Drive*\n• *buscar el precio*\n• *identificar lo que aparece*"));
+            "🖼️ Recebi a imagem. O que você quer fazer com ela?\n\n• *registrar a compra/comprovante*\n• *guardar no Drive*\n• *pesquisar o preço*\n• *identificar o que aparece*",
+            "🖼️ Recibí la imagen. ¿Qué quieres hacer con ella?\n\n• *registrar la compra/comprobante*\n• *guardarla en Drive*\n• *buscar el precio*\n• *identificar lo que aparece*"));
           return;
         }
 
@@ -910,42 +980,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (!hasSaveIntent) {
           // Tenta extrair dados financeiros do documento/foto via Gemini Vision
           try {
-            const financeData = await extractFinanceFromDocument(buffer, mimeType, caption, fileUser.id);
-            if (financeData) {
-              const fNow = nowBR();
-              const fYear = fNow.getFullYear();
-              const fMonth = fNow.getMonth() + 1;
-              const fMode = financeData.mode || fileUser.activeMode;
-              const f = await addFinance({
-                userId: fileUser.id,
-                type: financeData.type,
-                amount: financeData.amount,
-                category: cap(financeData.category),
-                description: cap(financeData.description),
-                date: financeData.date || fNow.toISOString().slice(0, 10),
-                mode: fMode,
-                source: "whatsapp",
-                registeredBy: from,
-              });
-              const bal = await getBalance(fileUser.id, fMode, fYear, fMonth);
-              const typeLabel = financeData.type === "income" ? "Receita" : "Despesa";
-              const typeEmoji = financeData.type === "income" ? "💰" : "💸";
-
-              const receiptExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("csv") ? ".csv" : ".jpg";
-              const suggestedName = `${f.category} - ${f.description} - ${f.date}${receiptExt}`.slice(0, 80);
-              await setPendingAction(from, {
-                type: "receipt_save",
-                userId: fileUser.id,
-                fileBase64: buffer.toString("base64"),
-                mimeType,
-                suggestedName,
-                description: f.description,
-                financeId: f.id,
-              });
-
-              await wppSend(from, `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${f.description}\n💰 ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n📅 ${new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_`);
-              return;
-            }
+            if (await registerFinanceDocumentFromMedia({ from, buffer, mimeType, caption, user: fileUser })) return;
           } catch (e) {
             console.error("[webhook] erro ao extrair finanças do documento:", e);
           }
@@ -1361,7 +1396,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     }
 
     // ── Imagem enviada sem legenda: só executa a ação depois que a pessoa
-    // disser se quer guardar, pesquisar ou identificar. ──
+    // disser se quer registrar, guardar, pesquisar ou identificar. ──
     if (pending?.type === "image_action" && pending.userId === user.id) {
       const imageAction = parseImageAction(messageText);
       const cancelImage = /^(?:cancelar|cancela|deixa pra l[áa]|cancelar|no|não|nao)$/i.test(messageText.trim());
@@ -1376,8 +1411,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           mimeType: pending.mimeType, originalName: pending.originalName,
         });
         await wppSend(from, localized(user.locale,
-          "❓ O que devo fazer com a imagem? Responda *guardar no Drive*, *pesquisar o preço* ou *identificar*.",
-          "❓ ¿Qué debo hacer con la imagen? Responde *guardar en Drive*, *buscar el precio* o *identificar*."));
+          "❓ O que devo fazer com a imagem? Responda *registrar a compra*, *guardar no Drive*, *pesquisar o preço* ou *identificar*.",
+          "❓ ¿Qué debo hacer con la imagen? Responde *registrar la compra*, *guardar en Drive*, *buscar el precio* o *identificar*."));
         return;
       }
 
@@ -1392,6 +1427,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         await wppSend(from, subject
           ? localized(user.locale, `🔎 Identifiquei na imagem: *${subject}*.`, `🔎 Identifiqué en la imagen: *${subject}*.`)
           : localized(user.locale, "❓ Não consegui identificar a imagem com segurança. Envie uma foto mais nítida.", "❓ No pude identificar la imagen con seguridad. Envía una foto más nítida."));
+        return;
+      }
+      if (imageAction === "register") {
+        try {
+          if (await registerFinanceDocumentFromMedia({
+            from, buffer, mimeType: pending.mimeType, caption: messageText, user,
+          })) return;
+        } catch (error) {
+          console.error("[webhook] erro ao registrar comprovante da imagem pendente:", error);
+        }
+        await wppSend(from, localized(user.locale,
+          "❓ Não consegui identificar os dados da compra nessa imagem. Envie uma foto mais nítida, mostrando valor, data e as informações do parcelamento.",
+          "❓ No pude identificar los datos de la compra en esta imagen. Envía una foto más nítida que muestre el importe, la fecha y la información de las cuotas."));
         return;
       }
 

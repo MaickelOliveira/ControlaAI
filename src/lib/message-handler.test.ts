@@ -252,6 +252,8 @@ describe("image instructions", () => {
     ["guárdala en Drive", "save"],
     ["identifique o produto", "describe"],
     ["¿qué es esto?", "describe"],
+    ["registre esta compra", "register"],
+    ["anota este comprobante", "register"],
   ] as const)("maps %s to %s", (message, expected) => {
     expect(parseImageAction(message)).toBe(expected);
   });

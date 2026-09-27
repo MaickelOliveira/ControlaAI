@@ -14,7 +14,7 @@ vi.mock("./whatsapp-config", () => ({
   getConfig: vi.fn(async () => ({ geminiApiKey: "gemini-test-key" })),
 }));
 
-import { extractInvoiceTransactions, processMessage } from "./ai-processor";
+import { extractInvoiceTransactions, financialDocumentDescription, normalizeFinancialDocumentExtraction, processMessage } from "./ai-processor";
 
 const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.OPENAI_API_KEY;
@@ -177,5 +177,54 @@ describe("invoice extraction safety", () => {
       "fatura.pdf",
     )).rejects.toThrow();
     expect(googleGenerateContent).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("financial document installments", () => {
+  it("keeps only the current installment amount and calculates how many remain", () => {
+    const extracted = normalizeFinancialDocumentExtraction({
+      isFinancial: true,
+      type: "expense",
+      amount: "2.000,00",
+      installmentAmount: "200,00",
+      description: "Geladeira",
+      category: "Moradia",
+      date: "2026-09-27",
+      installmentCurrent: 3,
+      installmentTotal: 10,
+    }, "2026-09-28");
+
+    expect(extracted).toMatchObject({
+      amount: 200,
+      installmentCurrent: 3,
+      installmentTotal: 10,
+      installmentsRemaining: 7,
+    });
+    expect(financialDocumentDescription(extracted!))
+      .toBe("Geladeira · Parcela 3/10 · restantes 7");
+  });
+
+  it("does not confuse a date fraction with an installment", () => {
+    const extracted = normalizeFinancialDocumentExtraction({
+      isFinancial: true,
+      type: "expense",
+      amount: 80,
+      description: "Compra realizada em 03/10",
+      category: "Outros",
+      date: "2026-10-03",
+    }, "2026-09-28");
+    expect(extracted).toMatchObject({ amount: 80 });
+    expect(extracted).not.toHaveProperty("installmentCurrent");
+    expect(extracted).not.toHaveProperty("installmentTotal");
+  });
+
+  it("extracts an explicit cuota fraction from a Spanish description", () => {
+    const extracted = normalizeFinancialDocumentExtraction({
+      isFinancial: true,
+      amount: 50,
+      description: "Nevera cuota 4/12",
+      date: "2026-09-27",
+    }, "2026-09-28");
+    expect(extracted).toMatchObject({ installmentCurrent: 4, installmentTotal: 12, installmentsRemaining: 8 });
   });
 });

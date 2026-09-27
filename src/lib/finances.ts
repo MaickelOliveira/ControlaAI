@@ -491,6 +491,78 @@ function storedInstallment(description: string): { current: number; total: numbe
   return { current, total, merchant };
 }
 
+export type DocumentFinanceDuplicateCandidate = {
+  type: FinanceType;
+  amount: number;
+  date: string;
+  description: string;
+  category: string;
+  installmentCurrent?: number;
+  installmentTotal?: number;
+};
+
+function documentDescriptionMatches(leftValue: string, rightValue: string): boolean {
+  const clean = (value: string) => normalizeDuplicateText(value
+    .replace(/\s*·?\s*parcela\s*\d{1,3}\s*\/\s*\d{1,3}/ig, "")
+    .replace(/\s*·?\s*restantes\s*\d+/ig, ""));
+  const left = clean(leftValue);
+  const right = clean(rightValue);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (Math.min(left.length, right.length) >= 5 && (left.includes(right) || right.includes(left))) return true;
+
+  const ignored = new Set(["compra", "comprovante", "recibo", "pagamento", "cartao", "debito", "credito"]);
+  const tokens = (value: string) => [...new Set(value.split(" ").filter(token => token.length >= 2 && !ignored.has(token)))];
+  const leftTokens = tokens(left);
+  const rightTokens = tokens(right);
+  const smaller = Math.min(leftTokens.length, rightTokens.length);
+  if (!smaller) return false;
+  const common = leftTokens.filter(token => rightTokens.includes(token)).length;
+  // Uma descrição de uma palavra precisa coincidir exatamente. Para nomes
+  // compostos, dois termos iguais suportam pequenas variações da visão.
+  return smaller === 1 ? common === 1 : common >= 2 && common / smaller >= 0.67;
+}
+
+/** Deduplicação própria para fotos/prints de comprovantes. Exige a mesma
+ * data, valor, tipo e descrição/estabelecimento; valor sozinho nunca basta.
+ * Quando há parcela explícita, a fração também precisa ser a mesma. */
+export function isSameDocumentFinance(
+  existing: Finance,
+  candidate: DocumentFinanceDuplicateCandidate,
+  mode: FinanceMode,
+): boolean {
+  if (existing.mode !== mode || existing.type !== candidate.type) return false;
+  if (existing.date !== candidate.date || Math.abs(existing.amount - candidate.amount) >= 0.01) return false;
+  if (!documentDescriptionMatches(existing.description, candidate.description)) return false;
+
+  const existingInstallment = storedInstallment(existing.description);
+  const candidateHasInstallment = Boolean(candidate.installmentCurrent && candidate.installmentTotal);
+  if (!existingInstallment || !candidateHasInstallment) {
+    // Se uma das leituras perdeu a fração, a coincidência dos demais campos
+    // ainda protege o reenvio do mesmo print. Não usamos essa regra entre
+    // datas diferentes, então a parcela do mês seguinte continua permitida.
+    return true;
+  }
+  return existingInstallment.current === candidate.installmentCurrent
+    && existingInstallment.total === candidate.installmentTotal;
+}
+
+export async function isLikelyDuplicateDocumentFinance(
+  userId: string,
+  mode: FinanceMode,
+  candidate: DocumentFinanceDuplicateCandidate,
+): Promise<boolean> {
+  const { data, error } = await getSupabase().from("finances").select("*")
+    .eq("user_id", userId)
+    .eq("mode", mode)
+    .eq("date", candidate.date);
+  // Falhar aberto aqui poderia duplicar um print justamente quando o banco
+  // está instável. Nesse caso o handler informa erro e não grava nada.
+  if (error) throw new Error(`[finances] verificação de duplicado de comprovante falhou: ${error.message}`);
+  const sameDay = (data as Row[]).map(fromRow);
+  return sameDay.some(existing => isSameDocumentFinance(existing, candidate, mode));
+}
+
 export type ImportedInstallmentStatus = {
   description: string;
   current: number;
