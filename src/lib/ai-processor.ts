@@ -4551,8 +4551,8 @@ REGRAS OBRIGATÓRIAS:
 - Conte também as linhas de pagamento, crédito, estorno ou reembolso que aparecem DENTRO da seção de transações, mas coloque-as somente em ignoredTransactions. Elas entram em sourceTransactionCount, porém NUNCA em transactions.
 - sourceTransactionCount é a quantidade total de linhas reais da seção de transações: compras válidas + ignoredTransactions. Não conte totais, subtotais, ofertas de parcelamento nem linhas de cabeçalho.
 - billingReferenceMonth é o mês de competência das compras cobradas nesta fatura, no formato YYYY-MM. Use o mês em que termina o ciclo/lista atual de compras (normalmente o mês da data mais recente da seção de transações), NÃO o mês original de uma compra parcelada antiga e NÃO necessariamente o mês do vencimento.
-- statementReferenceMonth é o mês da fatura/pagamento impresso no documento, no formato YYYY-MM (ex.: "fatura de outubro" = 2026-10). É o mês em que a despesa afeta o caixa, mesmo que as compras sejam de setembro ou de meses anteriores.
-- dueDate é a data completa de vencimento impressa na fatura. Ela será usada para contabilizar o valor no mês em que a fatura é paga. Não confunda com a data de uma compra.
+- statementReferenceMonth é o mês de vencimento/pagamento impresso no documento, no formato YYYY-MM (ex.: vencimento em outubro = 2026-10). Ele identifica quando a fatura deve ser paga, mas NÃO muda o mês de competência das compras.
+- dueDate é a data completa de vencimento impressa na fatura. Ela será guardada separadamente para controlar a conta a pagar. Não confunda vencimento/pagamento com a data contábil de uma compra e não crie uma segunda despesa com o total da fatura.
 - statementTotal é o valor LÍQUIDO final impresso como "total da fatura", "total atual" ou equivalente. Não use o subtotal bruto de compras quando houver pagamentos, créditos ou estornos.
 
 Retorne JSON:

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/pt/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
@@ -57,6 +57,7 @@ export default function FinancasPagePt() {
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
+  const loadSequence = useRef(0);
 
   const [catsExpense, setCatsExpense] = useState<string[]>([]);
   const [catsIncome, setCatsIncome] = useState<string[]>([]);
@@ -159,16 +160,18 @@ export default function FinancasPagePt() {
   }
 
   function loadAll(m: string) {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     Promise.all([
       fetch(`/api/finances?mode=${m}&from=${filters.from}&to=${filters.to}`).then(r => r.json()),
       fetch(`/api/recurring?mode=${m}&status=active`).then(r => r.json()),
     ]).then(([fd, rd]) => {
+      if (sequence !== loadSequence.current) return;
       setFinances(fd.finances || []);
       setTotalBalance(fd.totalBalance || { income: 0, expense: 0, balance: 0 });
       setRecs(Array.isArray(rd) ? rd : []);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => { if (sequence === loadSequence.current) setLoading(false); });
   }
 
   // Recarrega quando o período do filtro muda (categoria/tipo/busca filtram
@@ -874,7 +877,7 @@ export default function FinancasPagePt() {
                 </div>
                 {!!importMeta.ignoredTransactionCount && <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">ℹ️ {importMeta.ignoredTransactionCount} pagamento/crédito/estorno foi lido e ignorado corretamente; não vira despesa.</p>}
                 {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/cartão identificado: <strong>{importMeta.bankName}</strong></p>}
-                {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">💳 O total selecionado será contabilizado em <strong>{fmtMonth(importItems[0].date)}</strong>, mês do pagamento da fatura. A data original continua em cada despesa.</p>}
+                {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">📅 As compras serão contabilizadas na competência <strong>{fmtMonth(importItems[0].date)}</strong>.{importMeta.dueDate ? <> A fatura vence em <strong>{fmtDate(importMeta.dueDate)}</strong>; sua baixa não cria outra despesa.</> : ""}</p>}
                 {importMeta.probableRepeat
                   ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Esta parece ser uma fatura atualizada: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} despesas já estão registadas. Apenas as novas foram selecionadas.</p>
                   : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ Você realmente gastou estes valores duas vezes no mesmo dia? Os possíveis duplicados começam desmarcados; marque apenas os que aconteceram duas vezes.</p>}
@@ -887,7 +890,7 @@ export default function FinancasPagePt() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-800 truncate">{item.description}</p>
                         <p className="text-xs text-slate-400">
-                          {item.purchaseDate && item.purchaseDate !== item.date ? `Compra ${fmtDate(item.purchaseDate)} · pagamento ${fmtDate(item.date)}` : fmtDate(item.date)} · {item.category}
+                          {item.purchaseDate && item.purchaseDate !== item.date ? `Data impressa ${fmtDate(item.purchaseDate)} · competência ${fmtDate(item.date)}` : fmtDate(item.date)} · {item.category}
                           {item.installmentCurrent && item.installmentTotal && <span className="ml-1.5 text-blue-600">· parcela {item.installmentCurrent}/{item.installmentTotal} · restantes {item.installmentsRemaining ?? item.installmentTotal - item.installmentCurrent}</span>}
                           {item.duplicate && <span className="ml-1.5 text-amber-600">· possível repetição — marque se gastou 2 vezes</span>}
                         </p>

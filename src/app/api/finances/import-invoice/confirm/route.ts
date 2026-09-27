@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
   const bankName = typeof body.bankName === "string" ? body.bankName.trim() : undefined;
   const closingDay = Number.isInteger(body.closingDay) ? body.closingDay : undefined;
   const dueDay = Number.isInteger(body.dueDay) ? body.dueDay : undefined;
+  const dueDate = typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate) ? body.dueDate : undefined;
+  const billingReferenceMonth = typeof body.billingReferenceMonth === "string" && /^\d{4}-\d{2}$/.test(body.billingReferenceMonth)
+    ? body.billingReferenceMonth
+    : undefined;
 
   const valid = items.filter(i =>
     i && typeof i.amount === "number" && i.amount > 0 &&
@@ -31,6 +35,8 @@ export async function POST(req: NextRequest) {
     closingDay,
     dueDay,
     transactionDate: valid[0].date,
+    billingReferenceMonth,
+    dueDate,
   });
 
   let inserted;
@@ -67,5 +73,7 @@ export async function POST(req: NextRequest) {
     importedTo: valid.reduce((max, item) => item.date > max ? item.date : max, valid[0].date),
     accountName: account.accountName,
     accountCreated: account.created === true,
+    dueDate,
+    billingReferenceMonth,
   });
 }

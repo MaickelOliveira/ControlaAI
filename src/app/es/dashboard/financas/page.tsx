@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/es/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
@@ -57,6 +57,7 @@ export default function FinancasPageEs() {
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
+  const loadSequence = useRef(0);
 
   const [catsExpense, setCatsExpense] = useState<string[]>([]);
   const [catsIncome, setCatsIncome] = useState<string[]>([]);
@@ -159,16 +160,18 @@ export default function FinancasPageEs() {
   }
 
   function loadAll(m: string) {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     Promise.all([
       fetch(`/api/finances?mode=${m}&from=${filters.from}&to=${filters.to}`).then(r => r.json()),
       fetch(`/api/recurring?mode=${m}&status=active`).then(r => r.json()),
     ]).then(([fd, rd]) => {
+      if (sequence !== loadSequence.current) return;
       setFinances(fd.finances || []);
       setTotalBalance(fd.totalBalance || { income: 0, expense: 0, balance: 0 });
       setRecs(Array.isArray(rd) ? rd : []);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => { if (sequence === loadSequence.current) setLoading(false); });
   }
 
   // Recarrega quando o período do filtro muda (categoria/tipo/busca filtram
@@ -875,7 +878,7 @@ export default function FinancasPageEs() {
                 </div>
                 {!!importMeta.ignoredTransactionCount && <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">ℹ️ {importMeta.ignoredTransactionCount} pago/crédito/reverso fue leído e ignorado correctamente; no se convierte en gasto.</p>}
                 {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/tarjeta identificado: <strong>{importMeta.bankName}</strong></p>}
-                {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">💳 El total seleccionado se contabilizará en <strong>{fmtMonth(importItems[0].date)}</strong>, mes de pago de la factura. Cada compra conserva su fecha original.</p>}
+                {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">📅 Las compras se contabilizarán en la competencia de <strong>{fmtMonth(importItems[0].date)}</strong>.{importMeta.dueDate ? <> La factura vence el <strong>{fmtDate(importMeta.dueDate)}</strong>; marcarla como pagada no crea otro gasto.</> : ""}</p>}
                 {importMeta.probableRepeat
                   ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Parece ser una factura actualizada: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} compras ya están registradas. Solo se seleccionaron las nuevas.</p>
                   : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ ¿Realmente gastaste estos importes dos veces el mismo día? Los posibles duplicados empiezan desmarcados; marca solo los que ocurrieron dos veces.</p>}
@@ -888,7 +891,7 @@ export default function FinancasPageEs() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-800 truncate">{item.description}</p>
                         <p className="text-xs text-slate-400">
-                          {item.purchaseDate && item.purchaseDate !== item.date ? `Compra ${fmtDate(item.purchaseDate)} · pago ${fmtDate(item.date)}` : fmtDate(item.date)} · {item.category}
+                          {item.purchaseDate && item.purchaseDate !== item.date ? `Fecha impresa ${fmtDate(item.purchaseDate)} · competencia ${fmtDate(item.date)}` : fmtDate(item.date)} · {item.category}
                           {item.installmentCurrent && item.installmentTotal && <span className="ml-1.5 text-blue-600">· cuota {item.installmentCurrent}/{item.installmentTotal} · restantes {item.installmentsRemaining ?? item.installmentTotal - item.installmentCurrent}</span>}
                           {item.duplicate && <span className="ml-1.5 text-amber-600">· posible repetición — marca si gastaste 2 veces</span>}
                         </p>

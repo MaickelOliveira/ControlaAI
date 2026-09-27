@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -204,6 +204,8 @@ export default function DashboardPage() {
   const [finances, setFinances] = useState<Finance[]>([]);
   const [prevFinances, setPrevFinances] = useState<Finance[]>([]);
   const [finances6mo, setFinances6mo] = useState<Finance[]>([]);
+  const [totalBalance, setTotalBalance] = useState({ income: 0, expense: 0, balance: 0 });
+  const fetchSequence = useRef(0);
 
   // Carrega dados independentes de filtro: usuário, tarefas, categorias, metas
   useEffect(() => {
@@ -237,11 +239,15 @@ export default function DashboardPage() {
   }, [mode]);
 
   const fetchFiltered = useCallback((m: string, f: FinanceFilters) => {
+    const sequence = ++fetchSequence.current;
     fetch(`/api/finances?mode=${m}&from=${f.from}&to=${f.to}`).then(r => r.json()).then(d => {
+      if (sequence !== fetchSequence.current) return;
       setFinances(d.finances || []);
+      setTotalBalance(d.totalBalance || { income: 0, expense: 0, balance: 0 });
     }).catch(() => {});
     const prev = previousRange(f.from, f.to);
     fetch(`/api/finances?mode=${m}&from=${prev.from}&to=${prev.to}`).then(r => r.json()).then(d => {
+      if (sequence !== fetchSequence.current) return;
       setPrevFinances(d.finances || []);
     }).catch(() => {});
   }, []);
@@ -300,12 +306,12 @@ export default function DashboardPage() {
             </div>
             <p className="text-sm text-slate-400">Olá, {user.name.split(" ")[0]}. Este é o seu resultado no período.</p>
             <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{fmt(activeBalance.balance)}</h1>
-              <span className={clsx("mb-1 rounded-full px-2.5 py-1 text-xs font-semibold", activeBalance.balance >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300")}>
-                {activeBalance.balance >= 0 ? "Saldo positivo" : "Atenção ao saldo"}
+              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{fmt(totalBalance.balance)}</h1>
+              <span className={clsx("mb-1 rounded-full px-2.5 py-1 text-xs font-semibold", totalBalance.balance >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300")}>
+                {totalBalance.balance >= 0 ? "Saldo positivo" : "Atenção ao saldo"}
               </span>
             </div>
-            <p className="mt-2 text-xs text-slate-500">Saldo de {rangeLabel}</p>
+            <p className="mt-2 text-xs text-slate-500">Saldo acumulado de caixa · não muda com o filtro de período</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/dashboard/financas" className="rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-300">+ Movimentação</Link>

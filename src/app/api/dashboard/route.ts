@@ -26,7 +26,9 @@ export async function GET() {
     return date.getFullYear() === year && date.getMonth() + 1 === month;
   };
   const balanceFor = (mode: FinanceMode) => {
-    const items = posted.filter(finance => finance.mode === mode && inMonth(finance));
+    // O saldo principal representa o caixa acumulado. Mês/período continua
+    // sendo usado apenas nos gráficos e análises, nunca para zerar o saldo.
+    const items = posted.filter(finance => finance.mode === mode);
     const income = items.filter(finance => finance.type === "income").reduce((sum, finance) => sum + finance.amount, 0);
     const expense = items.filter(finance => finance.type === "expense").reduce((sum, finance) => sum + finance.amount, 0);
     return { income, expense, balance: income - expense };

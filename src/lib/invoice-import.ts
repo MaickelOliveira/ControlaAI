@@ -1,7 +1,7 @@
 export type InvoiceTransaction = {
-  /** Data contábil usada nos filtros do dashboard (vencimento/pagamento da fatura). */
+  /** Data de competência usada nos filtros do dashboard. */
   date: string;
-  /** Data impressa da compra, preservada separadamente da data de pagamento. */
+  /** Data impressa da compra, preservada para auditoria e deduplicação. */
   purchaseDate?: string;
   description: string;
   amount: number;
@@ -23,9 +23,9 @@ export type InvoiceExtraction = {
   sourceTransactionCount?: number;
   /** Linhas lidas corretamente, mas descartadas por não serem compras. */
   ignoredTransactionCount?: number;
-  /** Mês ao qual todas as cobranças desta fatura pertencem. */
+  /** Mês de competência ao qual as cobranças desta fatura pertencem. */
   billingReferenceMonth?: string;
-  /** Mês impresso da fatura/pagamento, usado para afetar o caixa. */
+  /** Mês impresso de vencimento/pagamento da fatura. */
   statementReferenceMonth?: string;
   /** Total líquido impresso como valor final da fatura. */
   statementTotal?: number;
@@ -359,34 +359,6 @@ function removeReversedPurchases(
   };
 }
 
-/** Define quando a fatura afeta o caixa. A data completa impressa tem
- * prioridade. Como fallback, calcula o mês do vencimento a partir do ciclo;
- * se o fechamento não veio no documento, o vencimento normalmente é no mês
- * seguinte ao mês de compras. */
-function invoicePaymentDate(
-  billingReferenceMonth: string,
-  statementReferenceMonth: string | undefined,
-  purchaseDate: string,
-  dueDate: string | undefined,
-  closingDay: number | undefined,
-  dueDay: number | undefined,
-): string {
-  if (dueDate) return dueDate;
-  if (statementReferenceMonth) {
-    if (!dueDay || dueDay > 31) return dateInReferenceMonth(purchaseDate, statementReferenceMonth);
-    const [year, month] = statementReferenceMonth.split("-").map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
-    return `${statementReferenceMonth}-${String(Math.min(dueDay, lastDay)).padStart(2, "0")}`;
-  }
-  if (!dueDay || dueDay > 31) return dateInReferenceMonth(purchaseDate, billingReferenceMonth);
-
-  const [year, month] = billingReferenceMonth.split("-").map(Number);
-  const monthOffset = closingDay ? (dueDay > closingDay ? 0 : 1) : 1;
-  const paymentMonth = new Date(year, month - 1 + monthOffset, 1);
-  const lastDay = new Date(paymentMonth.getFullYear(), paymentMonth.getMonth() + 1, 0).getDate();
-  return `${paymentMonth.getFullYear()}-${String(paymentMonth.getMonth() + 1).padStart(2, "0")}-${String(Math.min(dueDay, lastDay)).padStart(2, "0")}`;
-}
-
 /** Normaliza o JSON retornado pelo modelo e mantém apenas cobranças válidas.
  *  Uma compra parcelada continua sendo UM lançamento: somente a parcela que
  *  aparece na fatura atual, nunca o histórico pago ou as parcelas futuras. */
@@ -450,10 +422,11 @@ export function normalizeInvoiceExtraction(
     .sort()
     .at(-1);
   const latestPurchaseMonth = netPurchases.map(transaction => transaction.purchaseDate!.slice(0, 7)).sort().at(-1);
-  // A data mais recente de uma compra não parcelada é a evidência mais
-  // confiável do ciclo. Alguns modelos confundem "fatura de setembro" com
-  // competência setembro, embora a lista de compras feche em agosto.
-  const billingReferenceMonth = latestRegularPurchaseMonth || explicitReferenceMonth || latestPurchaseMonth || today.slice(0, 7);
+  // O mês explicitamente impresso/extraído da fatura tem prioridade. Sem
+  // ele, a compra não parcelada mais recente é a melhor evidência do ciclo.
+  // Todas as parcelas atuais ficam nesse mês de competência; vencimento é
+  // guardado separadamente e nunca muda a data contábil das compras.
+  const billingReferenceMonth = explicitReferenceMonth || latestRegularPurchaseMonth || latestPurchaseMonth || today.slice(0, 7);
   const statementReferenceMonth = normalizeBillingReferenceMonth(parsed.statementReferenceMonth);
   const bankName = String(parsed.bankName || "").trim() || undefined;
   const rawClosingDay = positiveInteger(parsed.closingDay);
@@ -461,14 +434,7 @@ export function normalizeInvoiceExtraction(
   const dueDate = normalizeIsoDate(parsed.dueDate);
   const transactions = netPurchases.map(transaction => ({
     ...transaction,
-    date: invoicePaymentDate(
-      billingReferenceMonth,
-      statementReferenceMonth,
-      transaction.purchaseDate!,
-      dueDate,
-      rawClosingDay && rawClosingDay <= 31 ? rawClosingDay : undefined,
-      rawDueDay && rawDueDay <= 31 ? rawDueDay : undefined,
-    ),
+    date: dateInReferenceMonth(transaction.purchaseDate!, billingReferenceMonth),
   }));
   const closingDay = rawClosingDay && rawClosingDay <= 28 ? rawClosingDay : undefined;
   const dueDay = rawDueDay && rawDueDay <= 28 ? rawDueDay : undefined;

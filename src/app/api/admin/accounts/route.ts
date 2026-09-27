@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
-  getAccountsByUser, getManualAccountsByUser, createAccount, updateAccount, deleteAccount, setDefaultAccount,
+  getAccountsByUser, createAccount, updateAccount, deleteAccount, setDefaultAccount,
   getInvoicesByAccount, getInvoiceTotal, markInvoicePaid,
 } from "@/lib/accounts";
 
@@ -25,14 +25,8 @@ export async function GET(req: NextRequest) {
   }
 
   // list (padrão) — contas do modo, cada uma já com a fatura em aberto/atual resumida (se cartão)
-  const accounts = mode
-    ? await getManualAccountsByUser(session.sub, mode)
-    : (await Promise.all([
-        getManualAccountsByUser(session.sub, "personal"),
-        getManualAccountsByUser(session.sub, "business"),
-      ])).flat();
+  const accounts = await getAccountsByUser(session.sub, mode);
   const withInvoice = await Promise.all(accounts.map(async a => {
-    if (a.type !== "credit_card") return { ...a, currentInvoice: null };
     const invoices = await getInvoicesByAccount(a.id);
     const open = invoices.find(i => i.status !== "paid") || null;
     const currentInvoice = open ? { ...open, total: await getInvoiceTotal(open.id) } : null;

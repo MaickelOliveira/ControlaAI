@@ -4,7 +4,20 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
-type Account = { id: string; name: string; isDefault: boolean };
+type Account = {
+  id: string;
+  name: string;
+  type: "bank" | "credit_card";
+  isDefault: boolean;
+  currentInvoice?: {
+    id: string;
+    dueDate: string;
+    periodStart: string;
+    periodEnd: string;
+    status: "open" | "closed" | "paid";
+    total: number;
+  } | null;
+};
 
 export default function ContasPage() {
   const pathname = usePathname();
@@ -70,7 +83,15 @@ export default function ContasPage() {
     <div className="flex gap-2">{(["personal", "business"] as const).map(value => <button key={value} onClick={() => { setMode(value); void load(value); }} className={`px-4 py-2 rounded-xl text-sm font-medium border ${mode === value ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-600"}`}>{value === "personal" ? (es ? "Personal" : "Pessoal") : "Empresa"}</button>)}</div>
     {error && <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600">{error}</div>}
     {loading ? <div className="py-16 text-center text-slate-400">{es ? "Cargando..." : "Carregando..."}</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{accounts.map(account => <div key={account.id} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
-      <div className="flex justify-between gap-2"><div><div className="font-semibold text-slate-800">👛 {account.name}</div><div className="text-xs text-slate-400 mt-1">{es ? "Cuenta manual" : "Conta manual"}</div></div>{account.isDefault && <span className="text-xs text-amber-700 bg-amber-100 h-fit px-2 py-1 rounded-full">⭐ {es ? "Predeterminada" : "Padrão"}</span>}</div>
+      <div className="flex justify-between gap-2"><div><div className="font-semibold text-slate-800">{account.currentInvoice || account.type === "credit_card" ? "💳" : "👛"} {account.name}</div><div className="text-xs text-slate-400 mt-1">{account.currentInvoice || account.type === "credit_card" ? (es ? "Tarjeta/factura" : "Cartão/fatura") : (es ? "Cuenta manual" : "Conta manual")}</div></div>{account.isDefault && <span className="text-xs text-amber-700 bg-amber-100 h-fit px-2 py-1 rounded-full">⭐ {es ? "Predeterminada" : "Padrão"}</span>}</div>
+      {account.currentInvoice && <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">{es ? "Factura pendiente" : "Fatura pendente"}</p><p className="mt-1 text-lg font-bold text-slate-900">{account.currentInvoice.total.toLocaleString(es ? "es-419" : "pt-BR", { style: "currency", currency: "BRL" })}</p></div>
+          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-blue-700">{new Date(account.currentInvoice.dueDate + "T12:00:00").toLocaleDateString(es ? "es-419" : "pt-BR")}</span>
+        </div>
+        <button onClick={() => void post({ action: "pay_invoice", invoiceId: account.currentInvoice!.id })} className="mt-3 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">{es ? "Marcar factura como pagada" : "Marcar fatura como paga"}</button>
+        <p className="mt-2 text-[10px] leading-relaxed text-blue-600">{es ? "La baja no crea otro gasto; las compras ya están contabilizadas." : "A baixa não cria outra despesa; as compras já estão contabilizadas."}</p>
+      </div>}
       <div className="flex flex-wrap gap-2 mt-4">
         {!account.isDefault && <button onClick={() => void post({ action: "set_default", id: account.id, mode })} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700">{es ? "Usar como predeterminada" : "Definir como padrão"}</button>}
         <button onClick={() => { setEditing(account); setName(account.name); setShowForm(true); }} className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700">✏️ {es ? "Editar" : "Editar"}</button>

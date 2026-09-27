@@ -208,6 +208,11 @@ export type PendingInvoiceImport = {
   accountHint?: string; // nome do banco/cartão identificado no documento (ver accounts.ts resolveAccountForFinance)
   closingDay?: number;
   dueDay?: number;
+  /** Competência das compras e vencimento são conceitos separados. */
+  billingReferenceMonth?: string;
+  statementReferenceMonth?: string;
+  dueDate?: string;
+  statementTotal?: number;
   /** Marca prévias produzidas pela versão que valida o total antes de salvar. */
   reconciliationChecked?: boolean;
   /** Protege a confirmação contra listas antigas ou alteradas. */

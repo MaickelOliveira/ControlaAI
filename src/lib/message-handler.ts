@@ -3,7 +3,7 @@ import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRel
 import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, addFinances, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
@@ -875,10 +875,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               const totalFatura = withDup.reduce((sum, item) => sum + item.amount, 0);
               const sourceCount = Math.max(invoice.sourceTransactionCount ?? 0, withDup.length);
               const ignoredCount = Math.max(invoice.ignoredTransactionCount ?? 0, sourceCount - withDup.length);
-              const paymentMonth = withDup[0]?.date.slice(0, 7).split("-").reverse().join("/");
+              const competenceMonth = invoice.billingReferenceMonth?.split("-").reverse().join("/")
+                || withDup[0]?.date.slice(0, 7).split("-").reverse().join("/");
+              const dueSummary = invoice.dueDate
+                ? `\n🗓️ Fatura vence em ${invoice.dueDate.split("-").reverse().join("/")} — o pagamento não será lançado como outra despesa`
+                : "";
               const readingSummary = sourceCount > withDup.length
-                ? `${sourceCount} movimentação(ões) lida(s) no documento\n✅ ${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}\nℹ️ ${ignoredCount} pagamento/crédito/estorno ignorado(s)${paymentMonth ? `\n💳 Despesa contabilizada no mês do pagamento: ${paymentMonth}` : ""}`
-                : `${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}${paymentMonth ? `\n💳 Despesa contabilizada no mês do pagamento: ${paymentMonth}` : ""}`;
+                ? `${sourceCount} movimentação(ões) lida(s) no documento\n✅ ${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}\nℹ️ ${ignoredCount} pagamento/crédito/estorno ignorado(s)${competenceMonth ? `\n📅 Compras contabilizadas na competência: ${competenceMonth}` : ""}${dueSummary}`
+                : `${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}${competenceMonth ? `\n📅 Compras contabilizadas na competência: ${competenceMonth}` : ""}${dueSummary}`;
 
               // Quase toda a lista já existe: é a mesma fatura reenviada. Uma
               // nova extração por IA pode variar em uma ou duas datas antigas;
@@ -901,6 +905,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 accountHint: invoice.bankName,
                 closingDay: invoice.closingDay,
                 dueDay: invoice.dueDay,
+                billingReferenceMonth: invoice.billingReferenceMonth,
+                statementReferenceMonth: invoice.statementReferenceMonth,
+                dueDate: invoice.dueDate,
+                statementTotal: invoice.statementTotal,
                 reconciliationChecked: true,
                 expectedImportTotal: novos.reduce((sum, item) => sum + item.amount, 0),
               });
@@ -1546,6 +1554,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           accountHint: pending.accountHint,
           closingDay: pending.closingDay,
           dueDay: pending.dueDay,
+          billingReferenceMonth: pending.billingReferenceMonth,
+          statementReferenceMonth: pending.statementReferenceMonth,
+          dueDate: pending.dueDate,
+          statementTotal: pending.statementTotal,
           reconciliationChecked: pending.reconciliationChecked,
           expectedImportTotal: finalItems.reduce((sum, item) => sum + item.amount, 0),
         });
@@ -1585,6 +1597,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                   closingDay: pending.closingDay,
                   dueDay: pending.dueDay,
                   transactionDate: pending.items[0]?.date,
+                  billingReferenceMonth: pending.billingReferenceMonth,
+                  dueDate: pending.dueDate,
                 })
               : await resolveAccountFields(user.id, pending.mode, undefined);
             if ("created" in account && account.created === true) newlyCreatedAccountId = account.accountId;
@@ -1602,12 +1616,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               cardInvoiceId: account.cardInvoiceId,
             })));
             await clearPendingAction(from);
-            const [paymentYear, paymentMonth] = pending.items[0].date.split("-").map(Number);
-            const bal = await getBalance(user.id, pending.mode, paymentYear, paymentMonth);
+            const [competenceYear, competenceMonth] = pending.items[0].date.split("-").map(Number);
+            const bal = await getAllTimeBalance(user.id, pending.mode);
             const accountLabel = "accountName" in account && typeof account.accountName === "string" && account.accountName
               ? `\n🏦 Conta: *${account.accountName}*${"created" in account && account.created === true ? " (criada agora)" : ""}`
               : "";
-            await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📊 Saldo de ${String(paymentMonth).padStart(2, "0")}/${paymentYear} — ${pending.mode === "business" ? "Empresa" : "Pessoal"}: ${formatCurrency(bal.balance)}`);
+            const dueLabel = pending.dueDate
+              ? `\n🗓️ Fatura com vencimento em *${pending.dueDate.split("-").reverse().join("/")}* — pagar/baixar a fatura não criará outra despesa.`
+              : "";
+            await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📅 Compras registradas na competência ${String(competenceMonth).padStart(2, "0")}/${competenceYear}.${dueLabel}\n📊 Saldo acumulado: ${formatCurrency(bal.balance)}`);
           } catch (error) {
             // A conta identificada no PDF e os lançamentos formam uma única
             // conclusão para o usuário. Se o lote falhar, remove a conta que

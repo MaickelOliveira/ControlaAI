@@ -180,6 +180,40 @@ export async function findOrCreateInvoiceForDate(accountId: string, date: string
   return invoiceFromRow(inserted as InvoiceRow);
 }
 
+/** Cria a fatura explicitamente identificada em um documento importado.
+ * Diferente do cálculo por fechamento, aqui o próprio PDF informa competência
+ * e vencimento. Funciona também para contas antigas criadas como `bank`, para
+ * que elas ganhem controle de fatura sem perder seus lançamentos existentes. */
+export async function findOrCreateStatementInvoice(
+  accountId: string,
+  billingReferenceMonth: string,
+  dueDate: string,
+): Promise<CardInvoice> {
+  if (!/^\d{4}-\d{2}$/.test(billingReferenceMonth) || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    throw new Error("[accounts] competência ou vencimento inválido na fatura importada");
+  }
+  const [year, month] = billingReferenceMonth.split("-").map(Number);
+  if (month < 1 || month > 12) throw new Error("[accounts] mês de competência inválido");
+  const periodStart = `${billingReferenceMonth}-01`;
+  const periodEnd = `${billingReferenceMonth}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+
+  const { data: existing } = await getSupabase().from("card_invoices").select("*")
+    .eq("account_id", accountId).eq("period_end", periodEnd).maybeSingle();
+  if (existing) return invoiceFromRow(existing as InvoiceRow);
+
+  const { data: inserted, error } = await getSupabase().from("card_invoices").insert({
+    id: randomUUID(), account_id: accountId, period_start: periodStart,
+    period_end: periodEnd, due_date: dueDate, status: "open",
+  }).select("*").single();
+  if (!error && inserted) return invoiceFromRow(inserted as InvoiceRow);
+
+  // Duas confirmações simultâneas podem disputar o índice único do período.
+  const { data: raced } = await getSupabase().from("card_invoices").select("*")
+    .eq("account_id", accountId).eq("period_end", periodEnd).maybeSingle();
+  if (raced) return invoiceFromRow(raced as InvoiceRow);
+  throw new Error(`[accounts] findOrCreateStatementInvoice falhou: ${error?.message || "erro desconhecido"}`);
+}
+
 export async function getOpenInvoice(accountId: string): Promise<CardInvoice | null> {
   const { data } = await getSupabase().from("card_invoices").select("*").eq("account_id", accountId).eq("status", "open").order("period_end", { ascending: false }).limit(1).maybeSingle();
   return data ? invoiceFromRow(data as InvoiceRow) : null;
@@ -242,7 +276,13 @@ export async function resolveOrCreateInvoiceAccount(
   userId: string,
   mode: FinanceMode,
   bankName: string | undefined,
-  options: { closingDay?: number; dueDay?: number; transactionDate?: string } = {},
+  options: {
+    closingDay?: number;
+    dueDay?: number;
+    transactionDate?: string;
+    billingReferenceMonth?: string;
+    dueDate?: string;
+  } = {},
 ): Promise<ResolvedInvoiceAccount> {
   const cleanName = bankName?.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!cleanName) return {};
@@ -265,9 +305,12 @@ export async function resolveOrCreateInvoiceAccount(
         userId,
         mode,
         name: cleanName,
-        // A tela atual trabalha com contas manuais. Assim o banco detectado
-        // aparece imediatamente em Contas, sem fingir uma sincronização real.
-        type: "bank",
+        // Se o documento trouxe vencimento, trata o destino como cartão e
+        // mantém a fatura separada das compras. Sem isso, continua sendo uma
+        // conta manual comum (ex.: extrato bancário).
+        type: options.dueDate || options.dueDay ? "credit_card" : "bank",
+        closingDay: options.closingDay,
+        dueDay: options.dueDay,
       });
       created = true;
     } catch {
@@ -286,7 +329,9 @@ export async function resolveOrCreateInvoiceAccount(
   }
 
   let cardInvoiceId: string | undefined;
-  if (account.type === "credit_card" && account.closingDay && account.dueDay && options.transactionDate) {
+  if (options.billingReferenceMonth && options.dueDate) {
+    cardInvoiceId = (await findOrCreateStatementInvoice(account.id, options.billingReferenceMonth, options.dueDate)).id;
+  } else if (account.type === "credit_card" && account.closingDay && account.dueDay && options.transactionDate) {
     cardInvoiceId = (await findOrCreateInvoiceForDate(account.id, options.transactionDate)).id;
   }
 

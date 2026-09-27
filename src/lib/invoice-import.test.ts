@@ -40,7 +40,12 @@ describe("parseInvoiceCsv", () => {
     });
     expect(result?.transactions).toHaveLength(13);
     expect(result?.transactions.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(2260.04, 2);
-    expect(result?.transactions.map(item => item.date)).toEqual(Array(13).fill("2026-11-10"));
+    expect(result?.billingReferenceMonth).toBe("2026-09");
+    expect(result?.transactions.map(item => item.date)).toEqual([
+      "2026-09-27", "2026-09-27", "2026-09-26", "2026-09-26", "2026-09-26",
+      "2026-09-26", "2026-09-26", "2026-09-25", "2026-09-30", "2026-09-06",
+      "2026-09-29", "2026-09-15", "2026-09-27",
+    ]);
     expect(result?.transactions.some(item => item.description.includes("Valor Total"))).toBe(false);
   });
 
@@ -76,7 +81,7 @@ describe("normalizeInvoiceExtraction", () => {
 
     expect(result).toMatchObject({ bankName: "Nubank", closingDay: 8, dueDay: 15 });
     expect(result?.transactions).toEqual([expect.objectContaining({
-      date: "2026-09-15",
+      date: "2026-09-10",
       purchaseDate: "2026-09-10",
       amount: 89.9,
       installmentCurrent: 3,
@@ -178,7 +183,7 @@ describe("normalizeInvoiceExtraction", () => {
     });
   });
 
-  it("books every charge on the invoice due date and preserves the printed purchase date", () => {
+  it("books every charge in the competence month and keeps due date separate", () => {
     const result = normalizeInvoiceExtraction({
       isInvoice: true,
       bankName: "Sicredi",
@@ -195,7 +200,9 @@ describe("normalizeInvoiceExtraction", () => {
 
     expect(result?.billingReferenceMonth).toBe("2026-08");
     expect(result?.dueDate).toBe("2026-09-10");
-    expect(result?.transactions.map(transaction => transaction.date)).toEqual(Array(4).fill("2026-09-10"));
+    expect(result?.transactions.map(transaction => transaction.date)).toEqual([
+      "2026-08-24", "2026-08-31", "2026-08-15", "2026-08-30",
+    ]);
     expect(result?.transactions.map(transaction => transaction.purchaseDate)).toEqual([
       "2026-08-24",
       "2026-07-31",
@@ -205,7 +212,7 @@ describe("normalizeInvoiceExtraction", () => {
     expect(invoiceTransactionDescription(result!.transactions[2])).toContain("compra em 15/06/2026");
   });
 
-  it("derives the payment month from closing and due days when the full due date is missing", () => {
+  it("does not move purchases to the payment month when only closing and due days exist", () => {
     const result = normalizeInvoiceExtraction({
       isInvoice: true,
       billingReferenceMonth: "2026-08",
@@ -217,12 +224,12 @@ describe("normalizeInvoiceExtraction", () => {
     }, "2026-09-27");
 
     expect(result?.transactions[0]).toMatchObject({
-      date: "2026-09-10",
+      date: "2026-08-05",
       purchaseDate: "2026-07-05",
     });
   });
 
-  it("uses the month printed on the statement when purchases belong to an older cycle", () => {
+  it("keeps the printed payment month separate from the purchase competence", () => {
     const result = normalizeInvoiceExtraction({
       isInvoice: true,
       billingReferenceMonth: "2026-08",
@@ -235,7 +242,7 @@ describe("normalizeInvoiceExtraction", () => {
 
     expect(result?.statementReferenceMonth).toBe("2026-10");
     expect(result?.transactions[0]).toMatchObject({
-      date: "2026-10-10",
+      date: "2026-08-05",
       purchaseDate: "2026-08-05",
     });
   });
