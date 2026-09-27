@@ -266,6 +266,22 @@ export function parseImageAction(text: string): ImageAction | null {
   return null;
 }
 
+/** Decide se o arquivo deve passar primeiro pelo leitor itemizado. Fotos e
+ * prints entram aqui mesmo sem legenda para que extratos não virem uma única
+ * despesa; pedido explícito de salvar continua respeitado sem analisar. */
+export function shouldTryItemizedInvoice(
+  mimeType: string,
+  caption: string | undefined,
+  hasSaveIntent: boolean,
+  likelyCsv = false,
+): boolean {
+  if (hasSaveIntent) return false;
+  return mimeType.includes("pdf")
+    || mimeType.includes("image")
+    || /fatura|extrato/i.test(caption || "")
+    || likelyCsv;
+}
+
 function isImageSearchRequest(text?: string): boolean {
   return !!text && parseImageAction(text) === "search";
 }
@@ -807,23 +823,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const requestedImageAction = caption?.trim() ? parseImageAction(caption) : null;
         const hasSaveIntent = requestedImageAction === "save";
 
-        // Sem instrução, a imagem fica temporariamente guardada enquanto o
-        // usuário escolhe o que fazer. Nunca arquiva automaticamente algo que
-        // ele talvez quisesse pesquisar ou apenas identificar.
-        if (mimeType.includes("image") && !caption?.trim()) {
-          await setPendingAction(from, {
-            type: "image_action",
-            userId: fileUser.id,
-            fileBase64: buffer.toString("base64"),
-            mimeType,
-            originalName,
-          });
-          await wppSend(from, localized(fileUser.locale,
-            "🖼️ Recebi a imagem. O que você quer fazer com ela?\n\n• *registrar a compra/comprovante*\n• *guardar no Drive*\n• *pesquisar o preço*\n• *identificar o que aparece*",
-            "🖼️ Recibí la imagen. ¿Qué quieres hacer con ella?\n\n• *registrar la compra/comprobante*\n• *guardarla en Drive*\n• *buscar el precio*\n• *identificar lo que aparece*"));
-          return;
-        }
-
         // Perguntas de preço/pesquisa usam primeiro a visão para identificar
         // o produto e depois uma busca pública atual com fontes e links.
         if (mimeType.includes("image") && isImageSearchRequest(caption)) {
@@ -839,10 +838,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           return;
         }
 
-        // Fatura de cartão/extrato costuma vir em PDF, ou o usuário avisa na legenda —
-        // nesses casos tenta extrair TODOS os lançamentos de uma vez (em vez de assumir
-        // um único gasto), identificando duplicados antes de perguntar se importa.
-        const looksLikeInvoice = !hasSaveIntent && (mimeType.includes("pdf") || /fatura|extrato/i.test(caption || "") || isLikelyInvoiceCsv(buffer, mimeType, originalName));
+        // PDF e planilha sempre passam pelo leitor itemizado. Imagens também
+        // são verificadas antes de perguntar a ação: se forem foto/print de
+        // fatura ou extrato, cada linha vira uma compra separada. Uma imagem
+        // comum retorna isInvoice=false e segue para o menu normal.
+        const likelyInvoiceCsv = isLikelyInvoiceCsv(buffer, mimeType, originalName);
+        const explicitInvoiceRequest = mimeType.includes("pdf") || /fatura|extrato/i.test(caption || "") || likelyInvoiceCsv;
+        const looksLikeInvoice = shouldTryItemizedInvoice(mimeType, caption, hasSaveIntent, likelyInvoiceCsv);
         if (looksLikeInvoice) {
           try {
             const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id, originalName);
@@ -932,12 +934,34 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             }
           } catch (e) {
             console.error("[webhook] erro ao extrair fatura:", e);
-            await clearPendingAction(from);
-            await wppSend(from, localized(fileUser.locale,
-              "⚠️ *Não consegui separar as compras desta fatura com segurança.*\n\n*Nada foi lançado.* Envie o PDF novamente. Se o erro continuar, aguarde alguns minutos e tente de novo.",
-              "⚠️ *No pude separar las compras de esta factura de forma segura.*\n\n*No se registró nada.* Envía el PDF nuevamente. Si el error continúa, espera unos minutos e inténtalo otra vez."));
-            return;
+            // Uma imagem sem legenda pode ser qualquer coisa. Se o leitor de
+            // fatura falhar nela, volta ao menu de imagem em vez de afirmar
+            // incorretamente que era uma fatura quebrada.
+            if (explicitInvoiceRequest || !mimeType.includes("image")) {
+              await clearPendingAction(from);
+              await wppSend(from, localized(fileUser.locale,
+                "⚠️ *Não consegui separar as compras desta fatura com segurança.*\n\n*Nada foi lançado.* Envie o PDF novamente. Se o erro continuar, aguarde alguns minutos e tente de novo.",
+                "⚠️ *No pude separar las compras de esta factura de forma segura.*\n\n*No se registró nada.* Envía el PDF nuevamente. Si el error continúa, espera unos minutos e inténtalo otra vez."));
+              return;
+            }
           }
+        }
+
+        // Só chega aqui quando a imagem sem legenda não era uma fatura nem
+        // um extrato. Ela fica temporariamente guardada até o usuário escolher
+        // se quer registrar, salvar, pesquisar ou apenas identificar.
+        if (mimeType.includes("image") && !caption?.trim()) {
+          await setPendingAction(from, {
+            type: "image_action",
+            userId: fileUser.id,
+            fileBase64: buffer.toString("base64"),
+            mimeType,
+            originalName,
+          });
+          await wppSend(from, localized(fileUser.locale,
+            "🖼️ Recebi a imagem. O que você quer fazer com ela?\n\n• *registrar a compra/comprovante*\n• *guardar no Drive*\n• *pesquisar o preço*\n• *identificar o que aparece*",
+            "🖼️ Recibí la imagen. ¿Qué quieres hacer con ella?\n\n• *registrar la compra/comprobante*\n• *guardarla en Drive*\n• *buscar el precio*\n• *identificar lo que aparece*"));
+          return;
         }
 
         // Cupom fiscal de mercado (produtos individuais) — tenta ANTES do

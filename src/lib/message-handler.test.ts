@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { accountSelectionMessage, appointmentPatchFromAi, buildFirstUseGuideMessages, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, splitWhatsAppMessage } from "./message-handler";
+import { accountSelectionMessage, appointmentPatchFromAi, buildFirstUseGuideMessages, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, shouldTryItemizedInvoice, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
@@ -256,5 +256,19 @@ describe("image instructions", () => {
     ["anota este comprobante", "register"],
   ] as const)("maps %s to %s", (message, expected) => {
     expect(parseImageAction(message)).toBe(expected);
+  });
+
+  it("checks an unlabeled statement photo before treating it as one receipt", () => {
+    expect(shouldTryItemizedInvoice("image/jpeg", undefined, false)).toBe(true);
+  });
+
+  it("keeps an explicit Drive save request out of financial extraction", () => {
+    expect(shouldTryItemizedInvoice("image/png", "guardar no Drive", true)).toBe(false);
+  });
+
+  it("checks PDFs, named statements and detected CSV invoices", () => {
+    expect(shouldTryItemizedInvoice("application/pdf", undefined, false)).toBe(true);
+    expect(shouldTryItemizedInvoice("application/octet-stream", "foto do extrato", false)).toBe(true);
+    expect(shouldTryItemizedInvoice("text/csv", undefined, false, true)).toBe(true);
   });
 });
