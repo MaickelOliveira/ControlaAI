@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { invoiceTransactionDescription, normalizeInvoiceExtraction } from "./invoice-import";
+import { invoiceTransactionDescription, isProbableRepeatedInvoice, normalizeInvoiceExtraction } from "./invoice-import";
 
 describe("normalizeInvoiceExtraction", () => {
   it("keeps only the installment billed now and calculates how many remain", () => {
@@ -36,5 +36,45 @@ describe("normalizeInvoiceExtraction", () => {
       installmentTotal: 6,
       installmentsRemaining: 4,
     })).toBe("Loja Exemplo · Parcela 2/6 · restantes 4");
+  });
+
+  it("moves an impossible future installment date to the previous year", () => {
+    const result = normalizeInvoiceExtraction({
+      isInvoice: true,
+      bankName: "Sicredi",
+      transactions: [
+        { date: "2026-12-30", description: "Compra parcelada", amount: 100, category: "Outros", installmentCurrent: 6, installmentTotal: 6 },
+      ],
+    }, "2026-09-27");
+
+    expect(result?.transactions[0].date).toBe("2025-12-30");
+  });
+
+  it("reports source rows separately from valid purchases", () => {
+    const result = normalizeInvoiceExtraction({
+      isInvoice: true,
+      sourceTransactionCount: 58,
+      ignoredTransactionCount: 1,
+      ignoredTransactions: [{ description: "Pagamento da fatura", transactionKind: "payment", amount: 7069.87 }],
+      transactions: Array.from({ length: 57 }, (_, index) => ({
+        date: "2026-08-01",
+        description: `Compra ${index + 1}`,
+        amount: 1,
+        category: "Outros",
+      })),
+    }, "2026-09-27");
+
+    expect(result).toMatchObject({ sourceTransactionCount: 58, ignoredTransactionCount: 1 });
+    expect(result?.transactions).toHaveLength(57);
+  });
+});
+
+describe("isProbableRepeatedInvoice", () => {
+  it("recognizes a nearly complete reimport", () => {
+    expect(isProbableRepeatedInvoice([...Array(55).fill(true), false, false])).toBe(true);
+  });
+
+  it("keeps isolated duplicate review for genuinely ambiguous purchases", () => {
+    expect(isProbableRepeatedInvoice([true, false, false, false, false, false, false, false, false, false])).toBe(false);
   });
 });

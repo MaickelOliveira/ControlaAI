@@ -5,7 +5,7 @@ import { processMessage, generateAnalysisResponse, generateFallbackResponse, gen
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
-import { invoiceTransactionDescription } from "@/lib/invoice-import";
+import { invoiceTransactionDescription, isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
@@ -794,6 +794,23 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 return rest;
               };
 
+              const totalFatura = withDup.reduce((sum, item) => sum + item.amount, 0);
+              const sourceCount = Math.max(invoice.sourceTransactionCount ?? 0, withDup.length);
+              const ignoredCount = Math.max(invoice.ignoredTransactionCount ?? 0, sourceCount - withDup.length);
+              const readingSummary = sourceCount > withDup.length
+                ? `${sourceCount} movimentação(ões) lida(s) no documento\n✅ ${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}\nℹ️ ${ignoredCount} pagamento/crédito/estorno ignorado(s)`
+                : `${withDup.length} compra(s) válida(s) — total ${formatCurrency(totalFatura)}`;
+
+              // Quase toda a lista já existe: é a mesma fatura reenviada. Uma
+              // nova extração por IA pode variar em uma ou duas datas antigas;
+              // nunca tratamos essas divergências como novas compras nem fazemos
+              // a pergunta absurda de dezenas de gastos "duas vezes".
+              if (isProbableRepeatedInvoice(duplicateFlags)) {
+                await clearPendingAction(from);
+                await wppSend(from, `📄 *Esta fatura parece já ter sido importada.*\n\n${readingSummary}${invoice.bankName ? `\n🏦 Banco/cartão identificado: *${invoice.bankName}*` : ""}\n\n${duplicados.length} de ${withDup.length} compras já estão registradas. As ${novos.length} divergências foram deixadas para revisão e *nada foi gravado nem duplicado*.`);
+                return;
+              }
+
               await setPendingAction(from, {
                 type: "invoice_import",
                 userId: fileUser.id,
@@ -808,7 +825,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
               const total = novos.reduce((s, t) => s + t.amount, 0);
               if (duplicados.length) {
-                await wppSend(from, `📑 *Fatura analisada!*\n\n${withDup.length} lançamento(s) encontrados\n✅ ${novos.length} novo(s) — total ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Banco/cartão: *${invoice.bankName}*` : ""}\n\n⚠️ Encontrei ${duplicados.length} possível(is) pagamento(s) duplicado(s), com mesmo dia, valor e estabelecimento/categoria:`);
+                await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n⚠️ Encontrei ${duplicados.length} possível(is) pagamento(s) duplicado(s), com mesmo dia, valor e estabelecimento/categoria:`);
                 for (let start = 0; start < duplicados.length; start += 15) {
                   const duplicatePreview = duplicados.slice(start, start + 15)
                     .map((item, offset) => `${start + offset + 1}. ${item.description} — ${formatCurrency(item.amount)} em ${item.date.split("-").reverse().join("/")}`)
@@ -817,7 +834,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 }
                 await wppSend(from, "*Você realmente gastou algum desses valores duas vezes no mesmo dia?*\n\nResponda *todos*, *nenhum* ou os números que se repetiram de verdade (ex.: *1 e 3*). Ainda não gravei nada.");
               } else {
-                await wppSend(from, `📑 *Fatura analisada!*\n\n${withDup.length} lançamento(s) encontrados\n✅ ${novos.length} novo(s) — total ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Banco/cartão: *${invoice.bankName}*` : ""}\n\n_💾 Quer que eu registre os ${novos.length} lançamentos novos como despesa? (sim/não)_`);
+                await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n_💾 Quer que eu registre as ${novos.length} compras como despesa? (sim/não)_`);
               }
               return;
             }
@@ -1474,6 +1491,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const answer = parseYesNo(messageText);
       if (answer !== null) {
         if (answer) {
+          let newlyCreatedAccountId: string | undefined;
           try {
             const account = pending.accountHint
               ? await resolveOrCreateInvoiceAccount(user.id, pending.mode, pending.accountHint, {
@@ -1482,6 +1500,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                   transactionDate: pending.items[0]?.date,
                 })
               : await resolveAccountFields(user.id, pending.mode, undefined);
+            if ("created" in account && account.created === true) newlyCreatedAccountId = account.accountId;
             const imported = await addFinances(pending.items.map(item => ({
               userId: user.id,
               type: "expense",
@@ -1503,8 +1522,16 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               : "";
             await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📊 Saldo ${pending.mode === "business" ? "Empresa" : "Pessoal"}: ${formatCurrency(bal.balance)}`);
           } catch (error) {
+            // A conta identificada no PDF e os lançamentos formam uma única
+            // conclusão para o usuário. Se o lote falhar, remove a conta que
+            // acabou de ser criada para não deixar um destino vazio/fantasma.
+            if (newlyCreatedAccountId) {
+              await deleteAccount(newlyCreatedAccountId, user.id).catch(rollbackError => {
+                console.error("[webhook] erro ao desfazer conta da fatura:", rollbackError);
+              });
+            }
             console.error("[webhook] erro ao importar fatura:", error);
-            await wppSend(from, "❌ Não consegui gravar a fatura inteira. Nenhum lançamento foi confirmado; tente novamente.");
+            await wppSend(from, "❌ Não consegui gravar a fatura inteira. Nenhum lançamento foi confirmado e nenhuma conta nova foi mantida; tente novamente.");
           }
         } else {
           await clearPendingAction(from);

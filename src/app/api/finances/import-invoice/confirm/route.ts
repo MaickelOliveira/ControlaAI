@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { addFinances, getBalance } from "@/lib/finances";
-import { resolveOrCreateInvoiceAccount } from "@/lib/accounts";
+import { deleteAccount, resolveOrCreateInvoiceAccount } from "@/lib/accounts";
 import { invoiceTransactionDescription, type InvoiceTransaction } from "@/lib/invoice-import";
 
 type ImportItem = InvoiceTransaction;
@@ -33,18 +33,28 @@ export async function POST(req: NextRequest) {
     transactionDate: valid[0].date,
   });
 
-  const inserted = await addFinances(valid.map(item => ({
-      userId: session.sub,
-      type: "expense",
-      amount: item.amount,
-      category: item.category || "Outros",
-      description: invoiceTransactionDescription(item),
-      date: item.date,
-      mode,
-      source: "web",
-      accountId: account.accountId,
-      cardInvoiceId: account.cardInvoiceId,
-  })));
+  let inserted;
+  try {
+    inserted = await addFinances(valid.map(item => ({
+        userId: session.sub,
+        type: "expense",
+        amount: item.amount,
+        category: item.category || "Outros",
+        description: invoiceTransactionDescription(item),
+        date: item.date,
+        mode,
+        source: "web",
+        accountId: account.accountId,
+        cardInvoiceId: account.cardInvoiceId,
+    })));
+  } catch (error) {
+    if (account.created && account.accountId) {
+      await deleteAccount(account.accountId, session.sub).catch(rollbackError => {
+        console.error("[import-invoice] falha ao desfazer conta criada:", rollbackError);
+      });
+    }
+    throw error;
+  }
 
   const now = new Date();
   const balance = await getBalance(session.sub, mode, now.getFullYear(), now.getMonth() + 1);

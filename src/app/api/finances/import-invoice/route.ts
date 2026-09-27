@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { extractInvoiceTransactions } from "@/lib/ai-processor";
 import { getInvoiceDuplicateFlags } from "@/lib/finances";
+import { isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { MAX_UPLOAD_BYTES, tooLarge, contentLengthTooLarge } from "@/lib/upload-limits";
 
 /** Analisa uma fatura/extrato enviado pelo dashboard e retorna a lista de lançamentos
@@ -31,11 +32,16 @@ export async function POST(req: NextRequest) {
     ...t,
     duplicate: duplicateFlags[index] ?? false,
   }));
+  const probableRepeat = isProbableRepeatedInvoice(duplicateFlags);
 
   return NextResponse.json({
     transactions,
     bankName: invoice.bankName,
     closingDay: invoice.closingDay,
     dueDay: invoice.dueDay,
+    sourceTransactionCount: invoice.sourceTransactionCount,
+    ignoredTransactionCount: invoice.ignoredTransactionCount,
+    probableRepeat,
+    alreadyRegisteredCount: duplicateFlags.filter(Boolean).length,
   });
 }

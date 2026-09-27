@@ -93,7 +93,7 @@ export default function FinancasPageEs() {
   const [importError, setImportError] = useState("");
   type ImportItem = { date: string; description: string; amount: number; category: string; duplicate: boolean; selected: boolean; installmentCurrent?: number; installmentTotal?: number; installmentsRemaining?: number };
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
-  const [importMeta, setImportMeta] = useState<{ bankName?: string; closingDay?: number; dueDay?: number }>({});
+  const [importMeta, setImportMeta] = useState<{ bankName?: string; closingDay?: number; dueDay?: number; sourceTransactionCount?: number; ignoredTransactionCount?: number; probableRepeat?: boolean; alreadyRegisteredCount?: number }>({});
 
   useEffect(() => {
     if (!banner) return;
@@ -115,8 +115,8 @@ export default function FinancasPageEs() {
       const res = await fetch("/api/finances/import-invoice", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Error al analizar la factura"); return; }
-      setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: !t.duplicate })));
-      setImportMeta({ bankName: data.bankName, closingDay: data.closingDay, dueDay: data.dueDay });
+      setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: data.probableRepeat ? false : !t.duplicate })));
+      setImportMeta({ bankName: data.bankName, closingDay: data.closingDay, dueDay: data.dueDay, sourceTransactionCount: data.sourceTransactionCount, ignoredTransactionCount: data.ignoredTransactionCount, probableRepeat: data.probableRepeat, alreadyRegisteredCount: data.alreadyRegisteredCount });
     } catch {
       setImportError("Error de conexión");
     } finally {
@@ -866,11 +866,14 @@ export default function FinancasPageEs() {
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span>{importItems.length} movimiento(s) encontrado(s)</span>
+                  <span>{importMeta.sourceTransactionCount && importMeta.sourceTransactionCount > importItems.length ? `${importMeta.sourceTransactionCount} movimientos leídos · ${importItems.length} compras` : `${importItems.length} compra(s) encontrada(s)`}</span>
                   <span>{importItems.filter(i => i.selected).length} seleccionado(s) — {fmt(importItems.filter(i => i.selected).reduce((s, i) => s + i.amount, 0))}</span>
                 </div>
+                {!!importMeta.ignoredTransactionCount && <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">ℹ️ {importMeta.ignoredTransactionCount} pago/crédito/reverso fue leído e ignorado correctamente; no se convierte en gasto.</p>}
                 {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/tarjeta identificado: <strong>{importMeta.bankName}</strong></p>}
-                {importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ ¿Realmente gastaste estos importes dos veces el mismo día? Los posibles duplicados empiezan desmarcados; marca solo los que ocurrieron dos veces.</p>}
+                {importMeta.probableRepeat
+                  ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Parece ser la misma factura enviada otra vez: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} compras ya están registradas. Nada fue seleccionado ni se duplicará.</p>
+                  : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ ¿Realmente gastaste estos importes dos veces el mismo día? Los posibles duplicados empiezan desmarcados; marca solo los que ocurrieron dos veces.</p>}
                 <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-80 overflow-y-auto">
                   {importItems.map((item, idx) => (
                     <label key={idx} className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-50">

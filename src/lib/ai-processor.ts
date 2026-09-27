@@ -4412,6 +4412,8 @@ REGRAS OBRIGATÓRIAS:
 - NUNCA crie lançamentos para parcelas antigas já pagas nem para parcelas futuras projetadas.
 - Quando a linha trouxer algo como 03/10, identifique installmentCurrent=3, installmentTotal=10 e installmentsRemaining=7. Deixe a descrição apenas com o nome da compra/estabelecimento, sem inventar o valor total da compra.
 - Se o PDF tiver lista de parcelas futuras ou histórico de parcelas pagas, ignore essas linhas; use apenas a cobrança pertencente ao período atual da fatura.
+- Conte também as linhas de pagamento, crédito, estorno ou reembolso que aparecem DENTRO da seção de transações, mas coloque-as somente em ignoredTransactions. Elas entram em sourceTransactionCount, porém NUNCA em transactions.
+- sourceTransactionCount é a quantidade total de linhas reais da seção de transações: compras válidas + ignoredTransactions. Não conte totais, subtotais, ofertas de parcelamento nem linhas de cabeçalho.
 
 Retorne JSON:
 {
@@ -4419,6 +4421,16 @@ Retorne JSON:
   "bankName": "nome do banco/cartão impresso no documento, se identificável (ex: 'Nubank', 'Itaú', 'Inter', 'Bradesco') — null se não conseguir identificar",
   "closingDay": "dia do fechamento entre 1 e 28, se estiver impresso — null caso contrário",
   "dueDay": "dia do vencimento entre 1 e 28, se estiver impresso — null caso contrário",
+  "sourceTransactionCount": "quantidade total de linhas reais na seção de transações, incluindo as ignoradas",
+  "ignoredTransactionCount": "quantidade de linhas listadas em ignoredTransactions",
+  "ignoredTransactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "description": "descrição impressa",
+      "amount": "valor absoluto",
+      "transactionKind": "payment, refund, reversal, credit ou cancelled"
+    }
+  ],
   "transactions": [
     {
       "date": "YYYY-MM-DD (data da compra; se só tiver dia/mês, use o ano da fatura)",

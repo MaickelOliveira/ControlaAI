@@ -13,6 +13,11 @@ export type InvoiceExtraction = {
   bankName?: string;
   closingDay?: number;
   dueDay?: number;
+  /** Quantidade de linhas reais na seção de transações do documento,
+   * incluindo pagamentos/créditos que não viram despesa. */
+  sourceTransactionCount?: number;
+  /** Linhas lidas corretamente, mas descartadas por não serem compras. */
+  ignoredTransactionCount?: number;
 };
 
 function positiveInteger(value: unknown): number | undefined {
@@ -28,6 +33,22 @@ function installmentFromDescription(description: string): { current: number; tot
   const current = Number(match[1]);
   const total = Number(match[2]);
   return current >= 1 && total >= current && total <= 120 ? { current, total } : null;
+}
+
+function subtractOneYear(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return `${String(year - 1).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Faturas podem trazer compras parceladas de nov/dez numa fatura do ano
+ * seguinte. Modelos às vezes aplicam o ano da fatura a todas as linhas e
+ * acabam criando datas futuras. Compra já presente numa fatura nunca pode
+ * estar depois do dia em que o documento foi processado. */
+function normalizeInvoiceDate(rawDate: string, today: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return today;
+  let date = rawDate;
+  while (date > today) date = subtractOneYear(date);
+  return date;
 }
 
 /** Normaliza o JSON retornado pelo modelo e mantém apenas cobranças válidas.
@@ -56,7 +77,7 @@ export function normalizeInvoiceExtraction(
     if (!Number.isFinite(amount) || amount <= 0) continue;
 
     const rawDate = String(transaction?.date || "");
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : today;
+    const date = normalizeInvoiceDate(rawDate, today);
     const description = rawDescription.slice(0, 120) || "Lançamento da fatura";
     const category = String(transaction?.category || "Outros");
 
@@ -92,7 +113,31 @@ export function normalizeInvoiceExtraction(
   const rawDueDay = positiveInteger(parsed.dueDay);
   const closingDay = rawClosingDay && rawClosingDay <= 28 ? rawClosingDay : undefined;
   const dueDay = rawDueDay && rawDueDay <= 28 ? rawDueDay : undefined;
-  return { transactions, bankName, closingDay, dueDay };
+  const rawIgnoredCount = positiveInteger(parsed.ignoredTransactionCount);
+  const ignoredFromList = Array.isArray(parsed.ignoredTransactions) ? parsed.ignoredTransactions.length : 0;
+  const ignoredTransactionCount = rawIgnoredCount ?? (ignoredFromList || undefined);
+  const rawSourceCount = positiveInteger(parsed.sourceTransactionCount);
+  const sourceTransactionCount = Math.max(
+    transactions.length + (ignoredTransactionCount ?? 0),
+    rawSourceCount ?? 0,
+  ) || undefined;
+  return {
+    transactions,
+    bankName,
+    closingDay,
+    dueDay,
+    sourceTransactionCount,
+    ignoredTransactionCount,
+  };
+}
+
+/** Se quase toda a fatura já existe, o caso mais provável é o mesmo PDF
+ * reenviado, não dezenas de compras feitas duas vezes. Mantemos a pergunta
+ * de confirmação para conflitos isolados, mas nunca para uma fatura inteira. */
+export function isProbableRepeatedInvoice(duplicateFlags: boolean[]): boolean {
+  if (duplicateFlags.length < 10) return false;
+  const matched = duplicateFlags.filter(Boolean).length;
+  return matched / duplicateFlags.length >= 0.8;
 }
 
 /** Texto persistido no histórico. A informação fica visível mesmo sem abrir

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { clsx } from "clsx";
+import { last3MonthsRange, monthRange } from "@/lib/calendar-range";
 
 export type FinanceFilters = {
   from: string;   // YYYY-MM-DD
@@ -14,20 +15,6 @@ type Preset = "this_month" | "last_month" | "last_3_months" | "custom";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 function toYMD(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-
-function monthRange(offsetMonths: number): { from: string; to: string } {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth() - offsetMonths, 1);
-  const last = new Date(now.getFullYear(), now.getMonth() - offsetMonths + 1, 0);
-  return { from: toYMD(first), to: toYMD(last) };
-}
-
-function last3MonthsRange(): { from: string; to: string } {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: toYMD(first), to: toYMD(last) };
-}
 
 /** Intervalo imediatamente anterior, de mesma duração — usado pelos
  *  indicadores de tendência ("vs período anterior") no Dashboard. */
