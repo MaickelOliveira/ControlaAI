@@ -34,6 +34,9 @@ describe("parseInvoiceCsv", () => {
       bankName: "Sicredi",
       dueDate: "2026-11-10",
       sourceTransactionCount: 13,
+      statementTotal: 2260.04,
+      reconciled: true,
+      reconciliationDifference: 0,
     });
     expect(result?.transactions).toHaveLength(13);
     expect(result?.transactions.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(2260.04, 2);
@@ -122,6 +125,57 @@ describe("normalizeInvoiceExtraction", () => {
 
     expect(result).toMatchObject({ sourceTransactionCount: 58, ignoredTransactionCount: 1 });
     expect(result?.transactions).toHaveLength(57);
+  });
+
+  it("cancels the matching purchase when the statement contains its reversal", () => {
+    const result = normalizeInvoiceExtraction({
+      isInvoice: true,
+      bankName: "Sicredi",
+      dueDate: "2026-10-10",
+      statementTotal: "R$ 4.804,93",
+      sourceTransactionCount: 48,
+      ignoredTransactionCount: 2,
+      ignoredTransactions: [
+        { date: "2026-09-10", description: "Pagamento da fatura", amount: "R$ 6.213,15", transactionKind: "payment" },
+        { date: "2026-09-09", description: "Estorno Tiktok Shop Evamhcome Sao Paulo Br", amount: "R$ 21,57", transactionKind: "reversal" },
+      ],
+      transactions: [
+        { date: "2026-09-04", description: "Tiktok Shop Evamhcome", amount: "R$ 21,57", category: "Outros" },
+        ...Array.from({ length: 44 }, (_, index) => ({
+          date: "2026-09-05",
+          description: `Compra ${index + 1}`,
+          amount: 100,
+          category: "Outros",
+        })),
+        { date: "2026-09-05", description: "Demais compras", amount: "R$ 404,93", category: "Outros" },
+      ],
+    }, "2026-09-27");
+
+    expect(result).toMatchObject({
+      sourceTransactionCount: 48,
+      ignoredTransactionCount: 3,
+      statementTotal: 4804.93,
+      reconciled: true,
+      reconciliationDifference: 0,
+    });
+    expect(result?.transactions).toHaveLength(45);
+    expect(result?.transactions.some(item => item.description.includes("Tiktok"))).toBe(false);
+  });
+
+  it("marks the extraction unsafe when purchases do not equal the printed net total", () => {
+    const result = normalizeInvoiceExtraction({
+      isInvoice: true,
+      statementTotal: "4,804.93",
+      transactions: [
+        { date: "2026-09-05", description: "Compras", amount: "4,826.50", category: "Outros" },
+      ],
+    }, "2026-09-27");
+
+    expect(result).toMatchObject({
+      statementTotal: 4804.93,
+      reconciled: false,
+      reconciliationDifference: 21.57,
+    });
   });
 
   it("books every charge on the invoice due date and preserves the printed purchase date", () => {

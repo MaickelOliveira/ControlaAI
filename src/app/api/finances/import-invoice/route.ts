@@ -26,6 +26,12 @@ export async function POST(req: NextRequest) {
   if (!invoice || invoice.transactions.length === 0) {
     return NextResponse.json({ error: "Não consegui identificar lançamentos nesse arquivo. Confira se é mesmo uma fatura/extrato." }, { status: 422 });
   }
+  if (invoice.reconciled === false && invoice.statementTotal !== undefined) {
+    const transactionTotal = invoice.transactions.reduce((sum, item) => sum + item.amount, 0);
+    return NextResponse.json({
+      error: `A soma das compras (${transactionTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}) não confere com o total líquido da fatura (${invoice.statementTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}). Nada foi importado; envie o PDF original novamente.`,
+    }, { status: 422 });
+  }
 
   const duplicateFlags = await getInvoiceDuplicateFlags(session.sub, mode, invoice.transactions);
   const transactions = invoice.transactions.map((t, index) => ({
@@ -43,6 +49,8 @@ export async function POST(req: NextRequest) {
     billingReferenceMonth: invoice.billingReferenceMonth,
     sourceTransactionCount: invoice.sourceTransactionCount,
     ignoredTransactionCount: invoice.ignoredTransactionCount,
+    statementTotal: invoice.statementTotal,
+    reconciled: invoice.reconciled,
     probableRepeat,
     alreadyRegisteredCount: duplicateFlags.filter(Boolean).length,
   });

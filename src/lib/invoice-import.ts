@@ -25,6 +25,12 @@ export type InvoiceExtraction = {
   ignoredTransactionCount?: number;
   /** Mês ao qual todas as cobranças desta fatura pertencem. */
   billingReferenceMonth?: string;
+  /** Total líquido impresso como valor final da fatura. */
+  statementTotal?: number;
+  /** Indica se a soma dos lançamentos líquidos confere com o total impresso. */
+  reconciled?: boolean;
+  /** Diferença, em reais, entre os lançamentos e o total impresso. */
+  reconciliationDifference?: number;
 };
 
 function csvText(buffer: Buffer): string {
@@ -78,14 +84,33 @@ function csvDate(value: string): string | undefined {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function csvMoney(value: string): number | undefined {
-  const raw = value.trim();
+function moneyValue(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  const raw = String(value ?? "").trim();
   if (!raw) return undefined;
   const negative = /^\s*-/.test(raw) || /^\s*\(/.test(raw);
-  const cleaned = raw.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", ".");
-  const parsed = Number(cleaned.replace(/[()-]/g, ""));
+  let cleaned = raw.replace(/[^\d,.-]/g, "").replace(/[()-]/g, "");
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimalSeparator = lastComma > lastDot ? "," : ".";
+    const thousandsSeparator = decimalSeparator === "," ? /\./g : /,/g;
+    cleaned = cleaned.replace(thousandsSeparator, "");
+    if (decimalSeparator === ",") cleaned = cleaned.replace(",", ".");
+  } else if (lastComma >= 0) {
+    const decimals = cleaned.length - lastComma - 1;
+    cleaned = decimals >= 1 && decimals <= 2 ? cleaned.replace(",", ".") : cleaned.replace(/,/g, "");
+  } else if (lastDot >= 0) {
+    const decimals = cleaned.length - lastDot - 1;
+    if (decimals < 1 || decimals > 2) cleaned = cleaned.replace(/\./g, "");
+  }
+  const parsed = Number(cleaned);
   if (!Number.isFinite(parsed)) return undefined;
   return negative ? -parsed : parsed;
+}
+
+function csvMoney(value: string): number | undefined {
+  return moneyValue(value);
 }
 
 function csvInstallment(value: string): { current: number; total: number } | undefined {
@@ -156,6 +181,7 @@ export function parseInvoiceCsv(
   const metadata = rows.slice(0, headerIndex);
   const metadataValue = (pattern: RegExp) => metadata.find(row => pattern.test(normalizeCsvHeader(row[0] || "")))?.[1]?.trim();
   const dueDate = csvDate(metadataValue(/vencimento|due date|fecha de vencimiento/) || "");
+  const statementTotal = csvMoney(metadataValue(/valor total|total da fatura|total factura|importe total/) || "");
   const contentSignature = normalizeCsvHeader(lines.slice(0, headerIndex + 1).join(" "));
   const bankName = /sicredi/i.test(originalName)
     || (/associado/.test(contentSignature) && /cooperativa/.test(contentSignature) && /conta corrente/.test(contentSignature))
@@ -163,6 +189,7 @@ export function parseInvoiceCsv(
     : undefined;
 
   const transactions: Array<Record<string, unknown>> = [];
+  const ignoredTransactions: Array<Record<string, unknown>> = [];
   let ignoredTransactionCount = 0;
   let sourceTransactionCount = 0;
   for (const row of rows.slice(headerIndex + 1)) {
@@ -177,6 +204,12 @@ export function parseInvoiceCsv(
     const nonPurchase = amount <= 0 || /\b(?:pagamento|payment|pago|estorno|reembolso|refund|reversal|cashback|credito|cr[eé]dito|cancelad[oa])\b/i.test(description);
     if (nonPurchase) {
       ignoredTransactionCount += 1;
+      ignoredTransactions.push({
+        date,
+        description,
+        amount: Math.abs(amount),
+        transactionKind: /pagamento|payment|pago/i.test(description) ? "payment" : "reversal",
+      });
       continue;
     }
 
@@ -200,6 +233,8 @@ export function parseInvoiceCsv(
     dueDay: dueDate ? Number(dueDate.slice(8, 10)) : undefined,
     sourceTransactionCount,
     ignoredTransactionCount,
+    ignoredTransactions,
+    statementTotal,
     transactions,
   }, today);
 }
@@ -257,6 +292,70 @@ function dateInReferenceMonth(purchaseDate: string, referenceMonth: string): str
   return `${referenceMonth}-${String(Math.min(requestedDay, lastDay)).padStart(2, "0")}`;
 }
 
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function normalizedMerchant(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/\b(?:estorno|reembolso|refund|reversal|credito|credit|cancelad[oa]|ajuste)\b/g, " ")
+    .replace(/\b(?:brasil|brazil|sao paulo|curitiba|rio de janeiro|br)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function merchantDescriptionsMatch(left: unknown, right: unknown): boolean {
+  const a = normalizedMerchant(left);
+  const b = normalizedMerchant(right);
+  if (!a || !b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  const leftTokens = new Set(a.split(/\s+/).filter(token => token.length >= 3));
+  const rightTokens = new Set(b.split(/\s+/).filter(token => token.length >= 3));
+  if (!leftTokens.size || !rightTokens.size) return false;
+  const overlap = [...leftTokens].filter(token => rightTokens.has(token)).length;
+  return overlap >= Math.min(2, leftTokens.size, rightTokens.size);
+}
+
+/** Remove a compra positiva quando a própria fatura também traz um estorno
+ *  correspondente. Ignorar só a linha negativa faria o total ficar maior do
+ *  que o valor realmente cobrado. */
+function removeReversedPurchases(
+  purchases: InvoiceTransaction[],
+  ignoredTransactions: unknown,
+): { purchases: InvoiceTransaction[]; removedCount: number } {
+  if (!Array.isArray(ignoredTransactions) || ignoredTransactions.length === 0) {
+    return { purchases, removedCount: 0 };
+  }
+
+  const removed = new Set<number>();
+  for (const rawIgnored of ignoredTransactions) {
+    const ignored = rawIgnored as Record<string, unknown> | null;
+    const kind = String(ignored?.transactionKind ?? "").toLocaleLowerCase();
+    const description = String(ignored?.description ?? "");
+    const isPayment = /payment|pagamento|pago/.test(kind)
+      || /pagamento\s+(?:da\s+)?fatura|payment\s+(?:of\s+)?statement/i.test(description);
+    const canCancelPurchase = !isPayment && (/refund|reversal|estorno|reembolso|cancel|credit|credito/.test(kind)
+      || /estorno|reembolso|refund|reversal|cancelad[oa]|cr[eé]dito/i.test(description));
+    const amount = Math.abs(moneyValue(ignored?.amount) ?? 0);
+    if (!canCancelPurchase || amount <= 0) continue;
+
+    const sameAmount = purchases
+      .map((purchase, index) => ({ purchase, index }))
+      .filter(({ purchase, index }) => !removed.has(index) && Math.abs(purchase.amount - amount) <= 0.009);
+    const matchingMerchant = sameAmount.filter(({ purchase }) => merchantDescriptionsMatch(purchase.description, description));
+    const match = matchingMerchant[0] ?? (sameAmount.length === 1 ? sameAmount[0] : undefined);
+    if (match) removed.add(match.index);
+  }
+
+  return {
+    purchases: purchases.filter((_, index) => !removed.has(index)),
+    removedCount: removed.size,
+  };
+}
+
 /** Define quando a fatura afeta o caixa. A data completa impressa tem
  * prioridade. Como fallback, calcula o mês do vencimento a partir do ciclo;
  * se o fechamento não veio no documento, o vencimento normalmente é no mês
@@ -296,12 +395,8 @@ export function normalizeInvoiceExtraction(
     if (/past|paid|paga|future|futura|projected|projetada|refund|reversal|estorno|reembolso|cancel/.test(billingStatus)) continue;
     if (/refund|reversal|estorno|reembolso|credit|credito|payment|pagamento|cancel/.test(transactionKind)) continue;
     if (/\b(?:estorno|reembolso|cashback|compra\s+cancelada|lan[cç]amento\s+cancelado|cr[eé]dito\s+recebido|ajuste\s+credor|pagamento\s+(?:recebido|efetuado))\b/i.test(rawDescription)) continue;
-    const rawAmount = String(transaction?.amount ?? "0")
-      .replace(/\s/g, "")
-      .replace(/\.(?=\d{3}[,.])/g, "")
-      .replace(",", ".");
-    const amount = Number(rawAmount);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const amount = moneyValue(transaction?.amount);
+    if (amount === undefined || !Number.isFinite(amount) || amount <= 0) continue;
 
     const rawDate = String(transaction?.date || "");
     const date = normalizeInvoiceDate(rawDate, today);
@@ -335,14 +430,16 @@ export function normalizeInvoiceExtraction(
     });
   }
 
-  if (!extracted.length) return null;
+  const reversalResult = removeReversedPurchases(extracted, parsed.ignoredTransactions);
+  const netPurchases = reversalResult.purchases;
+  if (!netPurchases.length) return null;
   const explicitReferenceMonth = normalizeBillingReferenceMonth(parsed.billingReferenceMonth);
-  const latestRegularPurchaseMonth = extracted
+  const latestRegularPurchaseMonth = netPurchases
     .filter(transaction => !transaction.installmentCurrent)
     .map(transaction => transaction.purchaseDate!.slice(0, 7))
     .sort()
     .at(-1);
-  const latestPurchaseMonth = extracted.map(transaction => transaction.purchaseDate!.slice(0, 7)).sort().at(-1);
+  const latestPurchaseMonth = netPurchases.map(transaction => transaction.purchaseDate!.slice(0, 7)).sort().at(-1);
   // A data mais recente de uma compra não parcelada é a evidência mais
   // confiável do ciclo. Alguns modelos confundem "fatura de setembro" com
   // competência setembro, embora a lista de compras feche em agosto.
@@ -351,7 +448,7 @@ export function normalizeInvoiceExtraction(
   const rawClosingDay = positiveInteger(parsed.closingDay);
   const rawDueDay = positiveInteger(parsed.dueDay);
   const dueDate = normalizeIsoDate(parsed.dueDate);
-  const transactions = extracted.map(transaction => ({
+  const transactions = netPurchases.map(transaction => ({
     ...transaction,
     date: invoicePaymentDate(
       billingReferenceMonth,
@@ -365,12 +462,24 @@ export function normalizeInvoiceExtraction(
   const dueDay = rawDueDay && rawDueDay <= 28 ? rawDueDay : undefined;
   const rawIgnoredCount = positiveInteger(parsed.ignoredTransactionCount);
   const ignoredFromList = Array.isArray(parsed.ignoredTransactions) ? parsed.ignoredTransactions.length : 0;
-  const ignoredTransactionCount = rawIgnoredCount ?? (ignoredFromList || undefined);
+  const baseIgnoredCount = Math.max(rawIgnoredCount ?? 0, ignoredFromList);
   const rawSourceCount = positiveInteger(parsed.sourceTransactionCount);
+  const ignoredTransactionCount = Math.max(
+    baseIgnoredCount + reversalResult.removedCount,
+    (rawSourceCount ?? 0) - transactions.length,
+  ) || undefined;
   const sourceTransactionCount = Math.max(
     transactions.length + (ignoredTransactionCount ?? 0),
     rawSourceCount ?? 0,
   ) || undefined;
+  const statementTotal = moneyValue(parsed.statementTotal ?? parsed.invoiceTotal ?? parsed.totalDue);
+  const transactionTotal = roundCurrency(transactions.reduce((sum, transaction) => sum + transaction.amount, 0));
+  const reconciliationDifference = statementTotal === undefined
+    ? undefined
+    : roundCurrency(transactionTotal - statementTotal);
+  const reconciled = reconciliationDifference === undefined
+    ? undefined
+    : Math.abs(reconciliationDifference) <= 0.01;
   return {
     transactions,
     bankName,
@@ -380,6 +489,9 @@ export function normalizeInvoiceExtraction(
     sourceTransactionCount,
     ignoredTransactionCount,
     billingReferenceMonth,
+    statementTotal: statementTotal === undefined ? undefined : roundCurrency(statementTotal),
+    reconciled,
+    reconciliationDifference,
   };
 }
 

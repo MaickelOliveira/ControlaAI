@@ -778,6 +778,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id, originalName);
             if (invoice && invoice.transactions.length > 0) {
               const fMode = fileUser.activeMode;
+              const reconciledTotal = invoice.transactions.reduce((sum, item) => sum + item.amount, 0);
+              if (invoice.reconciled === false && invoice.statementTotal !== undefined) {
+                await clearPendingAction(from);
+                await wppSend(from, localized(fileUser.locale,
+                  `⚠️ *A fatura não fechou com segurança.*\n\nAs compras lidas somam ${formatCurrency(reconciledTotal)}, mas o total líquido impresso é ${formatCurrency(invoice.statementTotal)}. *Nada foi gravado.*\n\nEnvie o arquivo novamente. Se a diferença continuar, mande o PDF original em vez de foto.`,
+                  `⚠️ *La factura no cuadró de forma segura.*\n\nLas compras leídas suman ${formatCurrency(reconciledTotal)}, pero el total neto impreso es ${formatCurrency(invoice.statementTotal)}. *No se guardó nada.*\n\nEnvía el archivo nuevamente. Si la diferencia continúa, envía el PDF original en vez de una foto.`));
+                return;
+              }
               const duplicateFlags = await getInvoiceDuplicateFlags(fileUser.id, fMode, invoice.transactions);
               const withDup = invoice.transactions.map((t, index) => ({
                 ...t,
@@ -823,6 +831,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 accountHint: invoice.bankName,
                 closingDay: invoice.closingDay,
                 dueDay: invoice.dueDay,
+                reconciliationChecked: true,
+                expectedImportTotal: novos.reduce((sum, item) => sum + item.amount, 0),
               });
 
               const total = novos.reduce((s, t) => s + t.amount, 0);
@@ -1483,6 +1493,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           accountHint: pending.accountHint,
           closingDay: pending.closingDay,
           dueDay: pending.dueDay,
+          reconciliationChecked: pending.reconciliationChecked,
+          expectedImportTotal: finalItems.reduce((sum, item) => sum + item.amount, 0),
         });
         const total = finalItems.reduce((sum, item) => sum + item.amount, 0);
         const selectedSummary = selectedDuplicates.length
@@ -1495,6 +1507,24 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const answer = parseYesNo(messageText);
       if (answer !== null) {
         if (answer) {
+          const pendingTotal = Math.round(pending.items.reduce((sum, item) => sum + item.amount, 0) * 100) / 100;
+          const expectedTotal = pending.expectedImportTotal === undefined
+            ? undefined
+            : Math.round(pending.expectedImportTotal * 100) / 100;
+          if (pending.reconciliationChecked !== true || expectedTotal === undefined) {
+            await clearPendingAction(from);
+            await wppSend(from, localized(user.locale,
+              "⚠️ Esta análise foi feita antes da correção de conciliação e foi cancelada por segurança. *Nada foi gravado.* Reenvie a fatura para eu conferir o valor correto.",
+              "⚠️ Este análisis se hizo antes de la corrección de conciliación y fue cancelado por seguridad. *No se guardó nada.* Vuelve a enviar la factura para que compruebe el valor correcto."));
+            return;
+          }
+          if (Math.abs(pendingTotal - expectedTotal) > 0.01) {
+            await clearPendingAction(from);
+            await wppSend(from, localized(user.locale,
+              "⚠️ A lista mudou depois da conferência e a importação foi cancelada por segurança. *Nada foi gravado.* Reenvie a fatura.",
+              "⚠️ La lista cambió después de la comprobación y la importación fue cancelada por seguridad. *No se guardó nada.* Vuelve a enviar la factura."));
+            return;
+          }
           let newlyCreatedAccountId: string | undefined;
           try {
             const account = pending.accountHint

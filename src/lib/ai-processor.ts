@@ -4441,6 +4441,7 @@ Se for uma fatura/extrato com várias transações, leia TODAS AS PÁGINAS e ext
 REGRAS OBRIGATÓRIAS:
 - Ignore "total da fatura", "pagamento efetuado", "saldo anterior", "valor mínimo", juros globais e resumos — não são compras individuais.
 - Ignore totalmente estornos, reembolsos, créditos, cashback, compras canceladas e pagamentos da própria fatura. Eles NÃO viram despesa.
+- Se houver uma compra e depois um estorno/reembolso do mesmo valor, mantenha a compra em transactions e coloque a linha negativa em ignoredTransactions. O sistema fará a compensação pelo valor e estabelecimento.
 - Compra parcelada deve aparecer UMA ÚNICA VEZ: somente a parcela cobrada NESTA fatura.
 - NUNCA crie lançamentos para parcelas antigas já pagas nem para parcelas futuras projetadas.
 - Quando a linha trouxer algo como 03/10, identifique installmentCurrent=3, installmentTotal=10 e installmentsRemaining=7. Deixe a descrição apenas com o nome da compra/estabelecimento, sem inventar o valor total da compra.
@@ -4449,6 +4450,7 @@ REGRAS OBRIGATÓRIAS:
 - sourceTransactionCount é a quantidade total de linhas reais da seção de transações: compras válidas + ignoredTransactions. Não conte totais, subtotais, ofertas de parcelamento nem linhas de cabeçalho.
 - billingReferenceMonth é o mês de competência das compras cobradas nesta fatura, no formato YYYY-MM. Use o mês em que termina o ciclo/lista atual de compras (normalmente o mês da data mais recente da seção de transações), NÃO o mês original de uma compra parcelada antiga e NÃO necessariamente o mês do vencimento.
 - dueDate é a data completa de vencimento impressa na fatura. Ela será usada para contabilizar o valor no mês em que a fatura é paga. Não confunda com a data de uma compra.
+- statementTotal é o valor LÍQUIDO final impresso como "total da fatura", "total atual" ou equivalente. Não use o subtotal bruto de compras quando houver pagamentos, créditos ou estornos.
 
 Retorne JSON:
 {
@@ -4458,6 +4460,7 @@ Retorne JSON:
   "dueDay": "dia do vencimento entre 1 e 28, se estiver impresso — null caso contrário",
   "dueDate": "YYYY-MM-DD do vencimento completo impresso — null caso contrário",
   "billingReferenceMonth": "YYYY-MM do ciclo atual da fatura",
+  "statementTotal": "valor líquido exato impresso como total final da fatura",
   "sourceTransactionCount": "quantidade total de linhas reais na seção de transações, incluindo as ignoradas",
   "ignoredTransactionCount": "quantidade de linhas listadas em ignoredTransactions",
   "ignoredTransactions": [
