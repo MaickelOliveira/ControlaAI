@@ -4545,6 +4545,8 @@ REGRAS OBRIGATÓRIAS:
 - Ignore totalmente estornos, reembolsos, créditos, cashback, compras canceladas e pagamentos da própria fatura. Eles NÃO viram despesa.
 - Se houver uma compra e depois um estorno/reembolso do mesmo valor, mantenha a compra em transactions e coloque a linha negativa em ignoredTransactions. O sistema fará a compensação pelo valor e estabelecimento.
 - Compra parcelada deve aparecer UMA ÚNICA VEZ: somente a parcela cobrada NESTA fatura.
+- Uma linha parcelada como 11/12 dentro da seção atual É uma cobrança desta fatura, mesmo que a data original seja de meses atrás. Inclua-a; não a confunda com histórico pago.
+- Descrições de estabelecimento/intermediador como "ASAAS *Nome", "PAG*Loja" ou semelhantes são compras quando aparecem com valor cobrado. Não as descarte só por conterem o nome de um meio de pagamento.
 - NUNCA crie lançamentos para parcelas antigas já pagas nem para parcelas futuras projetadas.
 - Quando a linha trouxer algo como 03/10, identifique installmentCurrent=3, installmentTotal=10 e installmentsRemaining=7. Deixe a descrição apenas com o nome da compra/estabelecimento, sem inventar o valor total da compra.
 - Se o PDF tiver lista de parcelas futuras ou histórico de parcelas pagas, ignore essas linhas; use apenas a cobrança pertencente ao período atual da fatura.
@@ -4597,6 +4599,28 @@ CATEGORIAS: ${CATEGORIES_EXPENSE.join(", ")}
 
 Retorne APENAS JSON válido, sem markdown, sem comentários.`;
 
+  const reconciliationRetryPrompt = (candidate: InvoiceExtraction): string => {
+    const readTotal = candidate.transactions.reduce((sum, item) => sum + item.amount, 0);
+    const printedTotal = candidate.statementTotal ?? readTotal;
+    const difference = Math.round((printedTotal - readTotal) * 100) / 100;
+    const amount = Math.abs(difference).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const direction = difference > 0
+      ? `FALTAM ${amount} em uma ou mais compras. Procure especialmente linhas antigas parceladas e cobranças de intermediadores como ASAAS.`
+      : `HÁ ${amount} A MAIS. Procure compra duplicada ou linha de pagamento/crédito/estorno incluída por engano.`;
+    return `${prompt}\n\nCORREÇÃO OBRIGATÓRIA DE CONCILIAÇÃO:\nA primeira leitura encontrou ${candidate.transactions.length} compras, somando ${readTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, mas o total líquido impresso é ${printedTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. ${direction}\nReleia TODAS AS PÁGINAS, linha por linha, inclusive o fim de cada página. Retorne novamente a lista COMPLETA, não apenas a linha corrigida. Só finalize quando a soma das compras válidas, após estornos, fechar exatamente com o total impresso.`;
+  };
+
+  const isSafelyReconciled = (candidate: InvoiceExtraction): boolean => candidate.reconciled !== false;
+  const closerMismatch = (current: InvoiceExtraction | undefined, candidate: InvoiceExtraction): InvoiceExtraction => {
+    if (!current) return candidate;
+    return Math.abs(candidate.reconciliationDifference ?? Number.POSITIVE_INFINITY)
+      < Math.abs(current.reconciliationDifference ?? Number.POSITIVE_INFINITY)
+      ? candidate
+      : current;
+  };
+
+  let bestMismatch: InvoiceExtraction | undefined;
+
   const openAIAttempt = await tryOpenAIForTestUser(
     userId,
     "extractInvoiceTransactions",
@@ -4604,6 +4628,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
       prompt,
       buffer,
       mimeType: mimeType || "application/pdf",
+      filename: originalName,
       schemaName: "invoice_transactions",
       userId,
       maxOutputTokens: 16_000,
@@ -4612,7 +4637,28 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
   if (openAIAttempt.ok) {
     if (openAIAttempt.value.isInvoice !== true) return null;
     const normalized = normalizeInvoiceExtraction(openAIAttempt.value, hoje);
-    if (normalized) return normalized;
+    if (normalized && isSafelyReconciled(normalized)) return normalized;
+    if (normalized) {
+      bestMismatch = normalized;
+      const retry = await tryOpenAIForTestUser(
+        userId,
+        "extractInvoiceTransactions.reconciliationRetry",
+        () => openAIMediaJson<Record<string, unknown>>({
+          prompt: reconciliationRetryPrompt(normalized),
+          buffer,
+          mimeType: mimeType || "application/pdf",
+          filename: originalName,
+          schemaName: "invoice_transactions_reconciled",
+          userId,
+          maxOutputTokens: 16_000,
+        }),
+      );
+      if (retry.ok && retry.value.isInvoice === true) {
+        const retried = normalizeInvoiceExtraction(retry.value, hoje);
+        if (retried && isSafelyReconciled(retried)) return retried;
+        if (retried) bestMismatch = closerMismatch(bestMismatch, retried);
+      }
+    }
   }
 
   const cfg = await getConfig();
@@ -4633,8 +4679,13 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
+      const attemptPrompt = bestMismatch
+        ? reconciliationRetryPrompt(bestMismatch)
+        : attempt === 1
+          ? prompt
+          : `${prompt}\n\nATENÇÃO: esta é uma nova tentativa porque a resposta anterior ficou inválida. Releia todas as páginas e retorne o JSON completo e bem-formado, sem interromper a lista de transações.`;
       const result = await model.generateContent([
-        attempt === 1 ? prompt : `${prompt}\n\nATENÇÃO: esta é uma nova tentativa porque a resposta anterior ficou inválida. Retorne o JSON completo e bem-formado, sem interromper a lista de transações.`,
+        attemptPrompt,
         {
           inlineData: {
             data: buffer.toString("base64"),
@@ -4646,10 +4697,19 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
       const text = result.response.text().trim()
         .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       const parsed = JSON.parse(text) as Record<string, unknown>;
-      if (parsed.isInvoice !== true) return null;
+      if (parsed.isInvoice !== true) {
+        if (!bestMismatch) return null;
+        lastError = new Error("A releitura deixou de reconhecer uma fatura já identificada");
+        continue;
+      }
 
       const normalized = normalizeInvoiceExtraction(parsed, hoje);
-      if (normalized) return normalized;
+      if (normalized && isSafelyReconciled(normalized)) return normalized;
+      if (normalized) {
+        bestMismatch = closerMismatch(bestMismatch, normalized);
+        lastError = new Error(`A leitura da fatura não conciliou: diferença de ${normalized.reconciliationDifference}`);
+        continue;
+      }
       throw new Error("A resposta marcou o arquivo como fatura, mas não trouxe compras válidas");
     } catch (error) {
       lastError = error;
@@ -4657,6 +4717,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
     }
   }
 
+  if (bestMismatch) return bestMismatch;
   throw lastError instanceof Error ? lastError : new Error("Não foi possível extrair a fatura com segurança");
 }
 

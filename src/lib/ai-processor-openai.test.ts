@@ -149,6 +149,65 @@ describe("invoice extraction safety", () => {
     expect(googleGenerateContent).toHaveBeenCalledTimes(2);
   });
 
+  it("re-reads every page when an itemized total is missing a charge", async () => {
+    const base = {
+      isInvoice: true,
+      bankName: "Sicredi",
+      dueDate: "2026-10-10",
+      statementTotal: 100,
+      sourceTransactionCount: 2,
+      ignoredTransactionCount: 0,
+      ignoredTransactions: [],
+    };
+    googleGenerateContent
+      .mockResolvedValueOnce({
+        response: {
+          text: () => JSON.stringify({
+            ...base,
+            transactions: [{
+              date: "2026-09-20", description: "Mercado", amount: 80,
+              category: "Alimentação", billingStatus: "current", transactionKind: "purchase",
+            }],
+          }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: {
+          text: () => JSON.stringify({
+            ...base,
+            transactions: [
+              {
+                date: "2026-09-20", description: "Mercado", amount: 80,
+                category: "Alimentação", billingStatus: "current", transactionKind: "purchase",
+              },
+              {
+                date: "2025-11-27", description: "ASAAS Tintim", amount: 20,
+                category: "Serviços", installmentCurrent: 11, installmentTotal: 12,
+                billingStatus: "current", transactionKind: "purchase",
+              },
+            ],
+          }),
+        },
+      });
+
+    const result = await extractInvoiceTransactions(
+      Buffer.from("pdf"), "application/pdf", undefined, "invoice-user", "fatura.pdf",
+    );
+
+    expect(result).toMatchObject({ reconciled: true, statementTotal: 100 });
+    expect(result?.transactions).toHaveLength(2);
+    expect(result?.transactions.find(item => item.description === "ASAAS Tintim")).toMatchObject({
+      amount: 20,
+      installmentCurrent: 11,
+      installmentTotal: 12,
+    });
+    expect(googleGenerateContent).toHaveBeenCalledTimes(2);
+    const retryPrompt = googleGenerateContent.mock.calls[1]?.[0]?.[0];
+    expect(retryPrompt).toContain("FALTAM");
+    expect(retryPrompt).toContain("20,00");
+    expect(retryPrompt).toContain("TODAS AS PÁGINAS");
+  });
+
   it("keeps a real single receipt out of the itemized invoice flow", async () => {
     googleGenerateContent.mockResolvedValueOnce({
       response: { text: () => '{"isInvoice":false}' },
