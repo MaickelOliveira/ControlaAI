@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   getExplicitDailySummaryResult,
   getExplicitFinanceDetailResult,
@@ -951,20 +951,26 @@ describe("manual account commands", () => {
   });
 
   it("filters queries by account, merchant and relative period", () => {
-    expect(getExplicitAccountCommandResult("quanto gastei na conta Nubank semana passada"))
-      .toMatchObject({ intent: "finance_query", account: { name: "Nubank" }, financeType: "expense", period: { from: "2026-08-31", to: "2026-09-06" } });
-    expect(getExplicitAccountCommandResult("quanto gastei de ifood nessa conta"))
-      .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "ifood" });
-    expect(getExplicitAccountCommandResult("quanto gastou de ifoode nessa conta"))
-      .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "ifoode" });
-    expect(getExplicitAccountCommandResult("quanto gastou semana passada nessa conta"))
-      .toMatchObject({ intent: "finance_query", account: { useContext: true }, period: { from: "2026-08-31", to: "2026-09-06" } });
-    expect(getExplicitAccountCommandResult("cuánto gasté con Rappi en esa cuenta"))
-      .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "Rappi" });
-    expect(getExplicitAccountCommandResult("quanto gastei na conta Nubank com ifood semana passada"))
-      .toMatchObject({ intent: "finance_query", account: { name: "Nubank" }, keyword: "ifood", period: { from: "2026-08-31", to: "2026-09-06" } });
-    expect(getExplicitAccountCommandResult("extrato da conta Nubank"))
-      .toMatchObject({ intent: "finance_detail", account: { name: "Nubank" } });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 13, 12, 0, 0));
+    try {
+      expect(getExplicitAccountCommandResult("quanto gastei na conta Nubank semana passada"))
+        .toMatchObject({ intent: "finance_query", account: { name: "Nubank" }, financeType: "expense", period: { from: "2026-08-31", to: "2026-09-06" } });
+      expect(getExplicitAccountCommandResult("quanto gastei de ifood nessa conta"))
+        .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "ifood" });
+      expect(getExplicitAccountCommandResult("quanto gastou de ifoode nessa conta"))
+        .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "ifoode" });
+      expect(getExplicitAccountCommandResult("quanto gastou semana passada nessa conta"))
+        .toMatchObject({ intent: "finance_query", account: { useContext: true }, period: { from: "2026-08-31", to: "2026-09-06" } });
+      expect(getExplicitAccountCommandResult("cuánto gasté con Rappi en esa cuenta"))
+        .toMatchObject({ intent: "finance_query", account: { useContext: true }, keyword: "Rappi" });
+      expect(getExplicitAccountCommandResult("quanto gastei na conta Nubank com ifood semana passada"))
+        .toMatchObject({ intent: "finance_query", account: { name: "Nubank" }, keyword: "ifood", period: { from: "2026-08-31", to: "2026-09-06" } });
+      expect(getExplicitAccountCommandResult("extrato da conta Nubank"))
+        .toMatchObject({ intent: "finance_detail", account: { name: "Nubank" } });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([

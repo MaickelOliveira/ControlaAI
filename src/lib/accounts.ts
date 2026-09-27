@@ -225,6 +225,74 @@ export async function closeDueInvoices(): Promise<CardInvoice[]> {
 // ── Resolução de conta pra um lançamento ──────────────
 export type ResolvedAccount = { accountId?: string; cardInvoiceId?: string; ambiguous?: Account[] };
 
+export type ResolvedInvoiceAccount = ResolvedAccount & {
+  accountName?: string;
+  created?: boolean;
+};
+
+function normalizeAccountName(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Resolve o banco/cartão impresso numa fatura. Se ainda não houver uma conta
+ *  compatível, cria uma conta manual com esse nome e devolve o vínculo que
+ *  deve ser usado pelos lançamentos importados. A criação é idempotente mesmo
+ *  quando duas importações do mesmo banco chegam quase ao mesmo tempo. */
+export async function resolveOrCreateInvoiceAccount(
+  userId: string,
+  mode: FinanceMode,
+  bankName: string | undefined,
+  options: { closingDay?: number; dueDay?: number; transactionDate?: string } = {},
+): Promise<ResolvedInvoiceAccount> {
+  const cleanName = bankName?.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!cleanName) return {};
+
+  const target = normalizeAccountName(cleanName);
+  const accounts = await getAccountsByUser(userId, mode);
+  let account = accounts.find(candidate => normalizeAccountName(candidate.name) === target);
+  if (!account) {
+    const compatible = accounts.filter(candidate => {
+      const name = normalizeAccountName(candidate.name);
+      return name.includes(target) || target.includes(name);
+    });
+    if (compatible.length === 1) account = compatible[0];
+  }
+
+  let created = false;
+  if (!account) {
+    try {
+      account = await createAccount({
+        userId,
+        mode,
+        name: cleanName,
+        // A tela atual trabalha com contas manuais. Assim o banco detectado
+        // aparece imediatamente em Contas, sem fingir uma sincronização real.
+        type: "bank",
+      });
+      created = true;
+    } catch {
+      // O índice único pode ter vencido uma corrida com outra requisição.
+      account = (await getAccountsByUser(userId, mode))
+        .find(candidate => normalizeAccountName(candidate.name) === target);
+      if (!account) throw new Error(`[accounts] não foi possível criar ou localizar a conta ${cleanName}`);
+    }
+  } else if (account.type === "credit_card" && (
+    (!account.closingDay && options.closingDay) || (!account.dueDay && options.dueDay)
+  )) {
+    account = await updateAccount(account.id, userId, {
+      ...(account.closingDay ? {} : { closingDay: options.closingDay }),
+      ...(account.dueDay ? {} : { dueDay: options.dueDay }),
+    }) || account;
+  }
+
+  let cardInvoiceId: string | undefined;
+  if (account.type === "credit_card" && account.closingDay && account.dueDay && options.transactionDate) {
+    cardInvoiceId = (await findOrCreateInvoiceForDate(account.id, options.transactionDate)).id;
+  }
+
+  return { accountId: account.id, cardInvoiceId, accountName: account.name, created };
+}
+
 /** Garante que todo modo tenha uma carteira manual básica. A criação é
  * idempotente pelo índice único (user_id, mode, lower(name)); isso também
  * atende contas antigas sem exigir que o cliente abra a tela de Contas. */

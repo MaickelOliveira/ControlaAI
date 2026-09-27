@@ -91,8 +91,9 @@ export default function FinancasPagePt() {
   const [importLoading, setImportLoading] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState("");
-  type ImportItem = { date: string; description: string; amount: number; category: string; duplicate: boolean; selected: boolean };
+  type ImportItem = { date: string; description: string; amount: number; category: string; duplicate: boolean; selected: boolean; installmentCurrent?: number; installmentTotal?: number; installmentsRemaining?: number };
   const [importItems, setImportItems] = useState<ImportItem[]>([]);
+  const [importMeta, setImportMeta] = useState<{ bankName?: string; closingDay?: number; dueDay?: number }>({});
 
   useEffect(() => {
     if (!banner) return;
@@ -101,7 +102,7 @@ export default function FinancasPagePt() {
   }, [banner]);
 
   function openImport() {
-    setImportFile(null); setImportError(""); setImportItems([]); setShowImport(true);
+    setImportFile(null); setImportError(""); setImportItems([]); setImportMeta({}); setShowImport(true);
   }
 
   async function handleAnalyzeInvoice() {
@@ -115,6 +116,7 @@ export default function FinancasPagePt() {
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Erro ao analisar fatura"); return; }
       setImportItems((data.transactions || []).map((t: Omit<ImportItem, "selected">) => ({ ...t, selected: !t.duplicate })));
+      setImportMeta({ bankName: data.bankName, closingDay: data.closingDay, dueDay: data.dueDay });
     } catch {
       setImportError("Erro de conexão");
     } finally {
@@ -129,13 +131,13 @@ export default function FinancasPagePt() {
     try {
       const res = await fetch("/api/finances/import-invoice/confirm", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, items: selected.map(({ date, description, amount, category }) => ({ date, description, amount, category })) }),
+        body: JSON.stringify({ mode, ...importMeta, items: selected.map(({ date, description, amount, category, installmentCurrent, installmentTotal, installmentsRemaining }) => ({ date, description, amount, category, installmentCurrent, installmentTotal, installmentsRemaining })) }),
       });
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Erro ao importar"); return; }
       setShowImport(false);
-      setBanner(`✅ ${data.imported} lançamento(s) importado(s) da fatura!`);
-      loadAll(mode);
+      setBanner(`✅ ${data.imported} lançamento(s) importado(s) da fatura!${data.accountName ? ` Conta: ${data.accountName}${data.accountCreated ? " (criada agora)" : ""}.` : ""}`);
+      setFilters(prev => ({ ...prev, from: data.importedFrom || prev.from, to: data.importedTo || prev.to, categories: [], type: "expense", search: "" }));
     } catch {
       setImportError("Erro de conexão");
     } finally {
@@ -169,6 +171,7 @@ export default function FinancasPagePt() {
   // client-side sobre o que já foi buscado, sem precisar de novo fetch).
   useEffect(() => {
     if (!mode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- inicia o carregamento quando período/modo muda
     loadAll(mode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, filters.from, filters.to]);
@@ -400,7 +403,7 @@ export default function FinancasPagePt() {
         </div>
       </div>
 
-      <FinanceFilterBar categories={allCategories} value={filters} onChange={setFilters} />
+      <FinanceFilterBar key={filters.search} categories={allCategories} value={filters} onChange={setFilters} />
 
       {/* Saldo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -865,6 +868,8 @@ export default function FinancasPagePt() {
                   <span>{importItems.length} lançamento(s) encontrado(s)</span>
                   <span>{importItems.filter(i => i.selected).length} selecionado(s) — {fmt(importItems.filter(i => i.selected).reduce((s, i) => s + i.amount, 0))}</span>
                 </div>
+                {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/cartão identificado: <strong>{importMeta.bankName}</strong></p>}
+                {importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ Você realmente gastou estes valores duas vezes no mesmo dia? Os possíveis duplicados começam desmarcados; marque apenas os que aconteceram duas vezes.</p>}
                 <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-80 overflow-y-auto">
                   {importItems.map((item, idx) => (
                     <label key={idx} className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-50">
@@ -875,7 +880,8 @@ export default function FinancasPagePt() {
                         <p className="font-medium text-slate-800 truncate">{item.description}</p>
                         <p className="text-xs text-slate-400">
                           {fmtDate(item.date)} · {item.category}
-                          {item.duplicate && <span className="ml-1.5 text-amber-600">· parece já registado</span>}
+                          {item.installmentCurrent && item.installmentTotal && <span className="ml-1.5 text-blue-600">· parcela {item.installmentCurrent}/{item.installmentTotal} · restantes {item.installmentsRemaining ?? item.installmentTotal - item.installmentCurrent}</span>}
+                          {item.duplicate && <span className="ml-1.5 text-amber-600">· possível repetição — marque se gastou 2 vezes</span>}
                         </p>
                       </div>
                       <span className="font-semibold text-slate-700 shrink-0">{fmt(item.amount)}</span>

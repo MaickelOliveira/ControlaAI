@@ -186,7 +186,15 @@ export type PendingReceiptSave = {
   expiresAt: string;
 };
 
-export type PendingInvoiceImportItem = { date: string; description: string; amount: number; category: string };
+export type PendingInvoiceImportItem = {
+  date: string;
+  description: string;
+  amount: number;
+  category: string;
+  installmentCurrent?: number;
+  installmentTotal?: number;
+  installmentsRemaining?: number;
+};
 
 export type PendingInvoiceImport = {
   type: "invoice_import";
@@ -194,7 +202,11 @@ export type PendingInvoiceImport = {
   userId: string;
   mode: "personal" | "business";
   items: PendingInvoiceImportItem[];
+  duplicateItems?: PendingInvoiceImportItem[];
+  stage?: "duplicate_review" | "confirm";
   accountHint?: string; // nome do banco/cartão identificado no documento (ver accounts.ts resolveAccountForFinance)
+  closingDay?: number;
+  dueDay?: number;
   expiresAt: string;
 };
 

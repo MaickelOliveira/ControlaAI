@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPostedFinance, expandMerchantAliases, formatCurrency, type Finance } from "./finances";
+import { isPostedFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, type Finance } from "./finances";
 
 function makeFinance(overrides: Partial<Finance> = {}): Finance {
   return {
@@ -53,5 +53,45 @@ describe("formatCurrency", () => {
 
   it("formats cents correctly", () => {
     expect(formatCurrency(1234.5)).toContain("1.234,50");
+  });
+});
+
+describe("isSameInvoiceExpense", () => {
+  const existing = makeFinance({
+    amount: 89.9,
+    date: "2026-09-10",
+    description: "Supermercado Central",
+    category: "Alimentação",
+    mode: "personal",
+  });
+
+  it.each(["conta-dinheiro", "conta-carteira", "conta-outro-banco"])(
+    "flags the same day, amount and merchant regardless of the previous account (%s)",
+    accountId => {
+      expect(isSameInvoiceExpense({ ...existing, accountId }, {
+        amount: 89.9,
+        date: "2026-09-10",
+        description: "Mercado Central",
+        category: "Alimentação",
+      }, "personal")).toBe(true);
+    },
+  );
+
+  it("does not flag the same amount on another day", () => {
+    expect(isSameInvoiceExpense(existing, {
+      amount: 89.9,
+      date: "2026-09-11",
+      description: "Mercado Central",
+      category: "Alimentação",
+    }, "personal")).toBe(false);
+  });
+
+  it("does not flag a different merchant and category on the same day", () => {
+    expect(isSameInvoiceExpense(existing, {
+      amount: 89.9,
+      date: "2026-09-10",
+      description: "Posto Avenida",
+      category: "Transporte",
+    }, "personal")).toBe(false);
   });
 });

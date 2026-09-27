@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { extractInvoiceTransactions } from "@/lib/ai-processor";
-import { isLikelyDuplicateExpense } from "@/lib/finances";
+import { getInvoiceDuplicateFlags } from "@/lib/finances";
 import { MAX_UPLOAD_BYTES, tooLarge, contentLengthTooLarge } from "@/lib/upload-limits";
 
 /** Analisa uma fatura/extrato enviado pelo dashboard e retorna a lista de lançamentos
@@ -26,10 +26,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Não consegui identificar lançamentos nesse arquivo. Confira se é mesmo uma fatura/extrato." }, { status: 422 });
   }
 
-  const transactions = invoice.transactions.map(t => ({
+  const duplicateFlags = await getInvoiceDuplicateFlags(session.sub, mode, invoice.transactions);
+  const transactions = invoice.transactions.map((t, index) => ({
     ...t,
-    duplicate: isLikelyDuplicateExpense(session.sub, mode, t.amount, t.date),
+    duplicate: duplicateFlags[index] ?? false,
   }));
 
-  return NextResponse.json({ transactions });
+  return NextResponse.json({
+    transactions,
+    bankName: invoice.bankName,
+    closingDay: invoice.closingDay,
+    dueDay: invoice.dueDay,
+  });
 }

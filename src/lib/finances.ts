@@ -149,6 +149,13 @@ async function load(userId?: string, filters: { mode?: FinanceMode; registeredBy
 }
 
 export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promise<Finance> {
+  const row = financeInsertRow(data);
+  const { data: inserted, error } = await getSupabase().from("finances").insert(row).select("*").single();
+  if (error) throw new Error(`[finances] addFinance falhou: ${error.message}`);
+  return fromRow(inserted as Row);
+}
+
+function financeInsertRow(data: Omit<Finance, "id" | "createdAt">): Record<string, unknown> {
   const row: Record<string, unknown> = {
     id: randomUUID(), user_id: data.userId, type: data.type, amount: data.amount,
     category: data.category, description: data.description, date: data.date,
@@ -160,9 +167,22 @@ export async function addFinance(data: Omit<Finance, "id" | "createdAt">): Promi
   // Compatibilidade durante a implantação da migração: lançamentos comuns
   // não mencionam a coluna nova. Quando há vínculo explícito, ela é enviada.
   if (data.employeeId !== undefined) row.employee_id = data.employeeId;
-  const { data: inserted, error } = await getSupabase().from("finances").insert(row).select("*").single();
-  if (error) throw new Error(`[finances] addFinance falhou: ${error.message}`);
-  return fromRow(inserted as Row);
+  return row;
+}
+
+/** Insere uma importação inteira em uma única operação no banco. Assim a
+ *  confirmação nunca diz "tudo importado" após gravar apenas uma parte. */
+export async function addFinances(
+  items: Array<Omit<Finance, "id" | "createdAt">>,
+): Promise<Finance[]> {
+  if (items.length === 0) return [];
+  const rows = items.map(financeInsertRow);
+  const { data, error } = await getSupabase().from("finances").insert(rows).select("*");
+  if (error) throw new Error(`[finances] addFinances falhou: ${error.message}`);
+  if (!data || data.length !== items.length) {
+    throw new Error(`[finances] addFinances retornou ${data?.length ?? 0}/${items.length} lançamentos`);
+  }
+  return (data as Row[]).map(fromRow);
 }
 
 export async function getFinancesByUser(userId: string, mode?: FinanceMode, registeredBy?: string): Promise<Finance[]> {
@@ -410,6 +430,61 @@ export async function isLikelyDuplicateExpense(userId: string, mode: FinanceMode
     Math.abs(f.amount - amount) < 0.01 &&
     Math.abs(new Date(f.date + "T12:00:00").getTime() - target) <= THREE_DAYS_MS
   );
+}
+
+function normalizeDuplicateText(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function merchantDescriptionsMatch(a: string, b: string): boolean {
+  const left = normalizeDuplicateText(a);
+  const right = normalizeDuplicateText(b);
+  if (!left || !right) return false;
+  if (left === right || left.includes(right) || right.includes(left)) return true;
+
+  const ignored = new Set(["compra", "cartao", "parcela", "parcelado", "pagamento", "lancamento", "fatura", "debito", "credito"]);
+  const tokens = (value: string) => new Set(value.split(" ").filter(token => token.length >= 3 && !ignored.has(token)));
+  const leftTokens = tokens(left);
+  const rightTokens = tokens(right);
+  return [...leftTokens].some(token => rightTokens.has(token));
+}
+
+/** Deduplicação específica da importação de fatura. Cruza o que já existe em
+ *  QUALQUER conta do mesmo modo com a cobrança do cartão somente quando dia e
+ *  valor são iguais e o estabelecimento ou a categoria também é compatível. */
+export function isSameInvoiceExpense(
+  existing: Finance,
+  candidate: { amount: number; date: string; description: string; category: string },
+  mode: FinanceMode,
+): boolean {
+  if (existing.mode !== mode || existing.type !== "expense") return false;
+  if (existing.date !== candidate.date || Math.abs(existing.amount - candidate.amount) >= 0.01) return false;
+  return normalizeDuplicateText(existing.category) === normalizeDuplicateText(candidate.category)
+    || merchantDescriptionsMatch(existing.description, candidate.description);
+}
+
+export async function isLikelyDuplicateInvoiceExpense(
+  userId: string,
+  mode: FinanceMode,
+  candidate: { amount: number; date: string; description: string; category: string },
+): Promise<boolean> {
+  const sameDay = await load(userId, { mode, from: candidate.date, to: candidate.date });
+  return sameDay.some(existing => isSameInvoiceExpense(existing, candidate, mode));
+}
+
+/** Versão em lote para faturas: uma única leitura no banco, mesmo que o PDF
+ *  tenha dezenas de linhas. A posição de cada booleano corresponde à posição
+ *  da cobrança recebida. */
+export async function getInvoiceDuplicateFlags(
+  userId: string,
+  mode: FinanceMode,
+  candidates: Array<{ amount: number; date: string; description: string; category: string }>,
+): Promise<boolean[]> {
+  if (candidates.length === 0) return [];
+  const dates = candidates.map(candidate => candidate.date).sort();
+  const existing = await load(userId, { mode, from: dates[0], to: dates[dates.length - 1] });
+  return candidates.map(candidate => existing.some(item => isSameInvoiceExpense(item, candidate, mode)));
 }
 
 export async function findFinanceByDescription(userId: string, mode: FinanceMode | null, keyword: string, limit = 5): Promise<Finance[]> {

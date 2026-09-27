@@ -6,6 +6,10 @@ import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } fr
 import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
 import { isAllDayAgendaText } from "./agenda-all-day";
 import {
+  normalizeInvoiceExtraction,
+  type InvoiceExtraction,
+} from "./invoice-import";
+import {
   isOpenAITestUser,
   openAIJson,
   openAIMediaJson,
@@ -4381,8 +4385,7 @@ Retorne APENAS JSON válido, sem markdown.`;
   }
 }
 
-export type InvoiceTransaction = { date: string; description: string; amount: number; category: string };
-export type InvoiceExtraction = { transactions: InvoiceTransaction[]; bankName?: string };
+export type { InvoiceExtraction, InvoiceTransaction } from "./invoice-import";
 
 /** Extrai TODAS as transações de uma fatura de cartão de crédito ou extrato (várias
  *  linhas), diferente de extractFinanceFromDocument que assume um único lançamento
@@ -4400,12 +4403,34 @@ export async function extractInvoiceTransactions(
 Hoje é: ${hoje}
 ${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
 
-Se for uma fatura/extrato com várias transações, extraia CADA lançamento de compra individual (ignore o "total da fatura", "pagamento efetuado", "saldo anterior" e "valor mínimo" — esses NÃO são transações individuais, são resumo/pagamento da fatura em si) e retorne JSON:
+Se for uma fatura/extrato com várias transações, leia TODAS AS PÁGINAS e extraia CADA lançamento de compra individual. Antes de responder, confira a quantidade de linhas uma segunda vez para não omitir compras.
+
+REGRAS OBRIGATÓRIAS:
+- Ignore "total da fatura", "pagamento efetuado", "saldo anterior", "valor mínimo", juros globais e resumos — não são compras individuais.
+- Ignore totalmente estornos, reembolsos, créditos, cashback, compras canceladas e pagamentos da própria fatura. Eles NÃO viram despesa.
+- Compra parcelada deve aparecer UMA ÚNICA VEZ: somente a parcela cobrada NESTA fatura.
+- NUNCA crie lançamentos para parcelas antigas já pagas nem para parcelas futuras projetadas.
+- Quando a linha trouxer algo como 03/10, identifique installmentCurrent=3, installmentTotal=10 e installmentsRemaining=7. Deixe a descrição apenas com o nome da compra/estabelecimento, sem inventar o valor total da compra.
+- Se o PDF tiver lista de parcelas futuras ou histórico de parcelas pagas, ignore essas linhas; use apenas a cobrança pertencente ao período atual da fatura.
+
+Retorne JSON:
 {
   "isInvoice": true,
   "bankName": "nome do banco/cartão impresso no documento, se identificável (ex: 'Nubank', 'Itaú', 'Inter', 'Bradesco') — null se não conseguir identificar",
+  "closingDay": "dia do fechamento entre 1 e 28, se estiver impresso — null caso contrário",
+  "dueDay": "dia do vencimento entre 1 e 28, se estiver impresso — null caso contrário",
   "transactions": [
-    { "date": "YYYY-MM-DD (data da compra; se só tiver dia/mês, use o ano da fatura)", "description": "descrição curta e legível (ex: Uber, Supermercado Extra, Netflix)", "amount": número positivo, "category": "uma das categorias abaixo" }
+    {
+      "date": "YYYY-MM-DD (data da compra; se só tiver dia/mês, use o ano da fatura)",
+      "description": "descrição curta e legível (ex: Uber, Supermercado Extra, Netflix)",
+      "amount": "valor positivo SOMENTE da parcela cobrada nesta fatura",
+      "category": "uma das categorias abaixo",
+      "installmentCurrent": "número da parcela atual, ou null se não for parcelada",
+      "installmentTotal": "total de parcelas, ou null se não for parcelada",
+      "installmentsRemaining": "quantas faltam depois desta, ou null se não for parcelada",
+      "billingStatus": "current para cobrança desta fatura; não inclua itens past_paid ou future_projected",
+      "transactionKind": "purchase; não inclua refund, reversal, credit, payment ou cancelled"
+    }
   ]
 }
 
@@ -4416,28 +4441,6 @@ CATEGORIAS: ${CATEGORIES_EXPENSE.join(", ")}
 
 Retorne APENAS JSON válido, sem markdown, sem comentários.`;
 
-  const normalizeInvoice = (parsed: Record<string, unknown>): InvoiceExtraction | null => {
-    if (!parsed.isInvoice || !Array.isArray(parsed.transactions)) return null;
-    const transactions: InvoiceTransaction[] = [];
-    for (const rawTransaction of parsed.transactions) {
-      const transaction = rawTransaction as Record<string, unknown> | null;
-      const rawAmount = String(transaction?.amount ?? "0")
-        .replace(/\s/g, "")
-        .replace(/\.(?=\d{3}[,.])/g, "")
-        .replace(",", ".");
-      const amount = Number(rawAmount);
-      if (isNaN(amount) || amount <= 0) continue;
-      const rawDate = String(transaction?.date || "");
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : hoje;
-      const description = String(transaction?.description || "").trim().slice(0, 80) || "Lançamento da fatura";
-      const category = String(transaction?.category || "Outros");
-      transactions.push({ date, description, amount, category });
-    }
-    if (!transactions.length) return null;
-    const bankName = String(parsed.bankName || "").trim() || undefined;
-    return { transactions, bankName };
-  };
-
   const openAIAttempt = await tryOpenAIForTestUser(
     userId,
     "extractInvoiceTransactions",
@@ -4447,10 +4450,10 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
       mimeType: mimeType || "application/pdf",
       schemaName: "invoice_transactions",
       userId,
-      maxOutputTokens: 8_000,
+      maxOutputTokens: 16_000,
     }),
   );
-  if (openAIAttempt.ok) return normalizeInvoice(openAIAttempt.value);
+  if (openAIAttempt.ok) return normalizeInvoiceExtraction(openAIAttempt.value, hoje);
 
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
@@ -4458,7 +4461,10 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: { maxOutputTokens: 16_000, responseMimeType: "application/json" },
+    });
 
     const result = await model.generateContent([
       prompt,
@@ -4474,7 +4480,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
 
-    return normalizeInvoice(parsed);
+    return normalizeInvoiceExtraction(parsed, hoje);
   } catch (e) {
     console.error("[ai-processor] Erro extractInvoiceTransactions:", e);
     return null;

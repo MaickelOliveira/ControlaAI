@@ -3,8 +3,9 @@ import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRel
 import { checkRateLimit } from "@/lib/rate-limit";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
-import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
+import { addFinance, addFinances, getBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
+import { invoiceTransactionDescription } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
@@ -775,33 +776,49 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (looksLikeInvoice) {
           try {
             const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id);
-            if (invoice && invoice.transactions.length > 1) {
+            if (invoice && invoice.transactions.length > 0) {
               const fMode = fileUser.activeMode;
-              const withDup = await Promise.all(invoice.transactions.map(async t => ({
+              const duplicateFlags = await getInvoiceDuplicateFlags(fileUser.id, fMode, invoice.transactions);
+              const withDup = invoice.transactions.map((t, index) => ({
                 ...t,
                 category: cap(t.category),
                 description: cap(t.description),
-                duplicate: await isLikelyDuplicateExpense(fileUser.id, fMode, t.amount, t.date),
-              })));
+                duplicate: duplicateFlags[index] ?? false,
+              }));
               const novos = withDup.filter(t => !t.duplicate);
               const duplicados = withDup.filter(t => t.duplicate);
 
-              if (novos.length === 0) {
-                await wppSend(from, `📑 Analisei a fatura e encontrei ${withDup.length} lançamento(s), mas todos já parecem estar registrados (mesmo valor e data próxima). Nada novo para importar.`);
-                return;
-              }
+              const withoutDuplicateFlag = (item: typeof withDup[number]) => {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars -- remove apenas o sinalizador da prévia
+                const { duplicate: _duplicate, ...rest } = item;
+                return rest;
+              };
 
               await setPendingAction(from, {
                 type: "invoice_import",
                 userId: fileUser.id,
                 mode: fMode,
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars -- exclui "duplicate" do objeto, não usa a variável em si
-                items: novos.map(({ duplicate: _duplicate, ...rest }) => rest),
+                items: novos.map(withoutDuplicateFlag),
+                duplicateItems: duplicados.map(withoutDuplicateFlag),
+                stage: duplicados.length ? "duplicate_review" : "confirm",
                 accountHint: invoice.bankName,
+                closingDay: invoice.closingDay,
+                dueDay: invoice.dueDay,
               });
 
               const total = novos.reduce((s, t) => s + t.amount, 0);
-              await wppSend(from, `📑 *Fatura analisada!*\n\n${withDup.length} lançamento(s) encontrados\n✅ ${novos.length} novo(s) — total ${formatCurrency(total)}${duplicados.length ? `\n♻️ ${duplicados.length} já registrado(s) (mesmo valor e data próxima) — não serão duplicados` : ""}\n\n_💾 Quer que eu registre os ${novos.length} lançamentos novos como despesa? (sim/não)_`);
+              if (duplicados.length) {
+                await wppSend(from, `📑 *Fatura analisada!*\n\n${withDup.length} lançamento(s) encontrados\n✅ ${novos.length} novo(s) — total ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Banco/cartão: *${invoice.bankName}*` : ""}\n\n⚠️ Encontrei ${duplicados.length} possível(is) pagamento(s) duplicado(s), com mesmo dia, valor e estabelecimento/categoria:`);
+                for (let start = 0; start < duplicados.length; start += 15) {
+                  const duplicatePreview = duplicados.slice(start, start + 15)
+                    .map((item, offset) => `${start + offset + 1}. ${item.description} — ${formatCurrency(item.amount)} em ${item.date.split("-").reverse().join("/")}`)
+                    .join("\n");
+                  await wppSend(from, duplicatePreview);
+                }
+                await wppSend(from, "*Você realmente gastou algum desses valores duas vezes no mesmo dia?*\n\nResponda *todos*, *nenhum* ou os números que se repetiram de verdade (ex.: *1 e 3*). Ainda não gravei nada.");
+              } else {
+                await wppSend(from, `📑 *Fatura analisada!*\n\n${withDup.length} lançamento(s) encontrados\n✅ ${novos.length} novo(s) — total ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Banco/cartão: *${invoice.bankName}*` : ""}\n\n_💾 Quer que eu registre os ${novos.length} lançamentos novos como despesa? (sim/não)_`);
+              }
               return;
             }
           } catch (e) {
@@ -1403,34 +1420,100 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
     // ── Aguardando confirmação de importar lançamentos de uma fatura de cartão ──
     if (pending?.type === "invoice_import" && pending.userId === user.id) {
+      if (pending.stage === "duplicate_review") {
+        const duplicates = pending.duplicateItems || [];
+        const yesNo = parseYesNo(messageText);
+        const normalizedAnswer = messageText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
+        let selectedDuplicateIndexes: number[] | null = null;
+        if (yesNo === true) selectedDuplicateIndexes = duplicates.map((_, index) => index);
+        else if (yesNo === false) selectedDuplicateIndexes = [];
+        else if (/^(?:nenhum|nenhuma|ninguno|ninguna|zero)$/.test(normalizedAnswer)) selectedDuplicateIndexes = [];
+        else {
+          const parsed = parseFinanceChoiceMulti(messageText, duplicates.map((item, index) => ({
+            id: `invoice-duplicate-${index}`,
+            description: item.description,
+            amount: item.amount,
+            date: item.date,
+            category: item.category,
+            mode: pending.mode,
+          })));
+          if (parsed.length > 0) selectedDuplicateIndexes = parsed;
+        }
+
+        if (selectedDuplicateIndexes === null) {
+          await wppSend(from, "Responda *todos*, *nenhum* ou informe os números que realmente foram gastos duas vezes (ex.: *1 e 3*). Ainda não gravei nada.");
+          return;
+        }
+
+        const selectedDuplicates = selectedDuplicateIndexes.map(index => duplicates[index]).filter(Boolean);
+        const finalItems = [...pending.items, ...selectedDuplicates];
+        if (finalItems.length === 0) {
+          await clearPendingAction(from);
+          await wppSend(from, "Certo. Como todos os itens já estavam registrados e você confirmou que não foram gastos duas vezes, não importei nenhum lançamento.");
+          return;
+        }
+
+        await setPendingAction(from, {
+          type: "invoice_import",
+          userId: pending.userId,
+          mode: pending.mode,
+          items: finalItems,
+          stage: "confirm",
+          accountHint: pending.accountHint,
+          closingDay: pending.closingDay,
+          dueDay: pending.dueDay,
+        });
+        const total = finalItems.reduce((sum, item) => sum + item.amount, 0);
+        const selectedSummary = selectedDuplicates.length
+          ? `\n\nRepetidos confirmados:\n${selectedDuplicates.map(item => `• ${item.description} — ${formatCurrency(item.amount)}`).join("\n")}`
+          : "";
+        await wppSend(from, `📋 *Revisão concluída*\n\n${pending.items.length} novo(s) + ${selectedDuplicates.length} confirmado(s) como gasto repetido\n💰 Total a importar: ${formatCurrency(total)}${selectedSummary}\n\n*Posso gravar estes ${finalItems.length} lançamentos agora?* (sim/não)`);
+        return;
+      }
+
       const answer = parseYesNo(messageText);
       if (answer !== null) {
-        await clearPendingAction(from);
         if (answer) {
-          for (const item of pending.items) {
-            const { accountId, cardInvoiceId } = await resolveAccountFields(user.id, pending.mode, pending.accountHint);
-            await addFinance({
+          try {
+            const account = pending.accountHint
+              ? await resolveOrCreateInvoiceAccount(user.id, pending.mode, pending.accountHint, {
+                  closingDay: pending.closingDay,
+                  dueDay: pending.dueDay,
+                  transactionDate: pending.items[0]?.date,
+                })
+              : await resolveAccountFields(user.id, pending.mode, undefined);
+            const imported = await addFinances(pending.items.map(item => ({
               userId: user.id,
               type: "expense",
               amount: item.amount,
               category: item.category,
-              description: item.description,
+              description: invoiceTransactionDescription(item),
               date: item.date,
               mode: pending.mode,
               source: "whatsapp",
               registeredBy: from,
-              accountId, cardInvoiceId,
-            });
+              accountId: account.accountId,
+              cardInvoiceId: account.cardInvoiceId,
+            })));
+            await clearPendingAction(from);
+            const fNow = nowBR();
+            const bal = await getBalance(user.id, pending.mode, fNow.getFullYear(), fNow.getMonth() + 1);
+            const accountLabel = "accountName" in account && typeof account.accountName === "string" && account.accountName
+              ? `\n🏦 Conta: *${account.accountName}*${"created" in account && account.created === true ? " (criada agora)" : ""}`
+              : "";
+            await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📊 Saldo ${pending.mode === "business" ? "Empresa" : "Pessoal"}: ${formatCurrency(bal.balance)}`);
+          } catch (error) {
+            console.error("[webhook] erro ao importar fatura:", error);
+            await wppSend(from, "❌ Não consegui gravar a fatura inteira. Nenhum lançamento foi confirmado; tente novamente.");
           }
-          const fNow = nowBR();
-          const bal = await getBalance(user.id, pending.mode, fNow.getFullYear(), fNow.getMonth() + 1);
-          await wppSend(from, `✅ *${pending.items.length} lançamento(s) importado(s) da fatura!*\n\n📊 Saldo ${pending.mode === "business" ? "Empresa" : "Pessoal"}: ${formatCurrency(bal.balance)}`);
         } else {
+          await clearPendingAction(from);
           await wppSend(from, "Combinado, não importei os lançamentos da fatura. 👍");
         }
         return;
       }
-      await clearPendingAction(from);
+      await wppSend(from, "Responda *sim* para gravar a lista revisada ou *não* para cancelar. Ainda não gravei nada.");
+      return;
     }
 
     if (pending?.type === "vehicle_selection" && pending.userId === user.id) {
