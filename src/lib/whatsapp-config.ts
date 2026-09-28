@@ -29,6 +29,16 @@ export type WhatsAppConfig = {
 
 const DEFAULT_CONFIG: WhatsAppConfig = { provider: "evolution" };
 
+// A configuracao era relida no Supabase em cada etapa de um mesmo envio
+// (escolha do provedor, token, numero e despacho). Uma unica mensagem podia
+// gerar varias consultas identicas no mesmo segundo. O cache curto mantem a
+// configuracao atual no processo, enquanto saveConfig atualiza o valor
+// imediatamente. Em outra instancia, a defasagem maxima fica limitada a dez
+// segundos, sem comprometer um disparo pontual apos troca de credenciais.
+const CONFIG_CACHE_TTL_MS = 10_000;
+let configCache: { value: WhatsAppConfig; expiresAt: number } | null = null;
+let configLoadPromise: Promise<WhatsAppConfig> | null = null;
+
 /** Tokens/keys de todas as integrações (WABA, Evolution, Gemini, Google
  *  OAuth) ficavam em texto puro nesse JSON — qualquer acesso ao arquivo
  *  (backup, dump, cópia acidental) expunha tudo de uma vez. Criptografados
@@ -74,12 +84,37 @@ function encryptSensitive(cfg: WhatsAppConfig): WhatsAppConfig {
 }
 
 export async function getConfig(): Promise<WhatsAppConfig> {
-  const { data, error } = await getSupabase().from("whatsapp_config").select("data").eq("id", 1).maybeSingle();
-  if (error || !data) return { ...DEFAULT_CONFIG };
-  const parsed = (data as { data: WhatsAppConfig }).data;
-  return decryptSensitive({ ...DEFAULT_CONFIG, ...parsed });
+  const now = Date.now();
+  if (configCache && configCache.expiresAt > now) return configCache.value;
+  if (configLoadPromise) return configLoadPromise;
+
+  configLoadPromise = (async () => {
+    const { data, error } = await getSupabase().from("whatsapp_config").select("data").eq("id", 1).maybeSingle();
+    // Falha transitoria nunca entra no cache: o proximo envio tenta o banco
+    // novamente em vez de ficar preso ao provedor padrao durante o TTL.
+    if (error) return { ...DEFAULT_CONFIG };
+    const value = data
+      ? decryptSensitive({ ...DEFAULT_CONFIG, ...(data as { data: WhatsAppConfig }).data })
+      : { ...DEFAULT_CONFIG };
+    configCache = { value, expiresAt: Date.now() + CONFIG_CACHE_TTL_MS };
+    return value;
+  })();
+
+  try {
+    return await configLoadPromise;
+  } finally {
+    configLoadPromise = null;
+  }
 }
 
 export async function saveConfig(config: WhatsAppConfig): Promise<void> {
-  await getSupabase().from("whatsapp_config").upsert({ id: 1, data: encryptSensitive(config) });
+  const { error } = await getSupabase().from("whatsapp_config").upsert({ id: 1, data: encryptSensitive(config) });
+  if (error) {
+    configCache = null;
+    throw new Error(`[whatsapp-config] saveConfig falhou: ${error.message}`);
+  }
+  configCache = {
+    value: { ...DEFAULT_CONFIG, ...config },
+    expiresAt: Date.now() + CONFIG_CACHE_TTL_MS,
+  };
 }

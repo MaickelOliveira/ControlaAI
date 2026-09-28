@@ -1,6 +1,13 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
 
+  // Avisos ao cliente continuam verificados em TODO tick de um minuto.
+  // Somente manutencoes internas baseadas em data (sem horario exato) sao
+  // espacadas: rodar essas duas varreduras vazias a cada minuto gerava mais
+  // de 2.800 requisicoes REST por dia sem melhorar a pontualidade dos avisos.
+  const MAINTENANCE_EVERY_TICKS = 15;
+  let acquiredTickCount = 0;
+
   // Captura qualquer erro não tratado para evitar crash do processo
   process.on("uncaughtException", (err) => {
     console.error("[process] uncaughtException:", err);
@@ -15,29 +22,35 @@ export async function register() {
     const { acquireCronLock, releaseCronLock } = await import("./lib/cron-lock");
     const lockToken = await acquireCronLock();
     if (!lockToken) return; // outra instância/tick já está processando agora
+    const runDateMaintenance = acquiredTickCount % MAINTENANCE_EVERY_TICKS === 0;
+    acquiredTickCount += 1;
 
     try {
       // ── Auto-posta lançamentos pendentes cuja data chegou ──
-      try {
-        const financesModule = await import("./lib/finances").catch(() => null);
-        const dateBrModule = await import("./lib/date-br").catch(() => null);
-        if (financesModule && dateBrModule) {
-          const posted = await financesModule.autoPostPendingFinances(dateBrModule.todayStrBR());
-          if (posted.length > 0) console.log(`[cron] ${posted.length} lançamento(s) pendente(s) postados`);
+      if (runDateMaintenance) {
+        try {
+          const financesModule = await import("./lib/finances").catch(() => null);
+          const dateBrModule = await import("./lib/date-br").catch(() => null);
+          if (financesModule && dateBrModule) {
+            const posted = await financesModule.autoPostPendingFinances(dateBrModule.todayStrBR());
+            if (posted.length > 0) console.log(`[cron] ${posted.length} lançamento(s) pendente(s) postados`);
+          }
+        } catch (e) {
+          console.error("[cron] Erro ao postar pendentes:", e);
         }
-      } catch (e) {
-        console.error("[cron] Erro ao postar pendentes:", e);
       }
 
       // ── Fecha faturas de cartão de crédito cujo ciclo já passou do period_end ──
-      try {
-        const accountsModule = await import("./lib/accounts").catch(() => null);
-        if (accountsModule) {
-          const closed = await accountsModule.closeDueInvoices();
-          if (closed.length > 0) console.log(`[cron] ${closed.length} fatura(s) de cartão fechada(s)`);
+      if (runDateMaintenance) {
+        try {
+          const accountsModule = await import("./lib/accounts").catch(() => null);
+          if (accountsModule) {
+            const closed = await accountsModule.closeDueInvoices();
+            if (closed.length > 0) console.log(`[cron] ${closed.length} fatura(s) de cartão fechada(s)`);
+          }
+        } catch (e) {
+          console.error("[cron] Erro ao fechar faturas:", e);
         }
-      } catch (e) {
-        console.error("[cron] Erro ao fechar faturas:", e);
       }
 
       const remindersModule = await import("./lib/reminders").catch(() => null);
