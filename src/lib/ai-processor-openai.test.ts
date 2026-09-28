@@ -206,6 +206,53 @@ describe("invoice extraction safety", () => {
     expect(retryPrompt).toContain("FALTAM");
     expect(retryPrompt).toContain("20,00");
     expect(retryPrompt).toContain("TODAS AS PÁGINAS");
+    expect(retryPrompt).toContain("QUALQUER banco");
+    expect(retryPrompt).toContain("não descarte uma seção inteira");
+  });
+
+  it("keeps a positive financing charge from an unfamiliar statement section", async () => {
+    const base = {
+      isInvoice: true,
+      bankName: "Banco Exemplo",
+      dueDate: "2026-10-02",
+      statementTotal: 2215.51,
+      sourceTransactionCount: 3,
+      ignoredTransactionCount: 1,
+      ignoredTransactions: [{
+        date: "2026-09-02", description: "Pagamento recebido", amount: 704.46, transactionKind: "payment",
+      }],
+    };
+    googleGenerateContent
+      .mockResolvedValueOnce({
+        response: { text: () => JSON.stringify({
+          ...base,
+          transactions: [{
+            date: "2026-09-20", description: "Compras regulares", amount: 1365.36,
+            category: "Outros", billingStatus: "current", transactionKind: "purchase",
+          }],
+        }) },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => JSON.stringify({
+          ...base,
+          transactions: [
+            {
+              date: "2026-09-20", description: "Compras regulares", amount: 1365.36,
+              category: "Outros", billingStatus: "current", transactionKind: "purchase",
+            },
+            {
+              date: "2026-09-10", description: "Loja financiada", amount: 850.15,
+              category: "Moradia", billingStatus: "current", transactionKind: "purchase",
+            },
+          ],
+        }) },
+      });
+
+    const result = await extractInvoiceTransactions(
+      Buffer.from("pdf"), "application/pdf", undefined, "invoice-user", "banco-desconhecido.pdf",
+    );
+    expect(result).toMatchObject({ reconciled: true, statementTotal: 2215.51 });
+    expect(result?.transactions.find(item => item.description === "Loja financiada")?.amount).toBe(850.15);
   });
 
   it("keeps a real single receipt out of the itemized invoice flow", async () => {

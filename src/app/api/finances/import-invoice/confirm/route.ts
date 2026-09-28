@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { addFinances, getBalance } from "@/lib/finances";
+import { addFinances, deleteFinance, getBalance, type Finance } from "@/lib/finances";
 import { deleteAccount, resolveOrCreateInvoiceAccount } from "@/lib/accounts";
 import { invoiceTransactionDescription, type InvoiceTransaction } from "@/lib/invoice-import";
+import { upsertImportedInstallmentSchedules } from "@/lib/recurring";
 
 type ImportItem = InvoiceTransaction;
 
@@ -39,7 +40,8 @@ export async function POST(req: NextRequest) {
     dueDate,
   });
 
-  let inserted;
+  let inserted: Finance[] = [];
+  let installmentTracking = { created: 0, advanced: 0, completed: 0 };
   try {
     inserted = await addFinances(valid.map(item => ({
         userId: session.sub,
@@ -53,7 +55,17 @@ export async function POST(req: NextRequest) {
         accountId: account.accountId,
         cardInvoiceId: account.cardInvoiceId,
     })));
+    installmentTracking = await upsertImportedInstallmentSchedules({
+      userId: session.sub,
+      mode,
+      source: "web",
+      items: valid,
+      currentStatementDueDate: dueDate,
+    });
   } catch (error) {
+    await Promise.all(inserted.map(item => deleteFinance(item.id, session.sub).catch(rollbackError => {
+      console.error("[import-invoice] falha ao desfazer lançamento:", rollbackError);
+    })));
     if (account.created && account.accountId) {
       await deleteAccount(account.accountId, session.sub).catch(rollbackError => {
         console.error("[import-invoice] falha ao desfazer conta criada:", rollbackError);
@@ -73,6 +85,7 @@ export async function POST(req: NextRequest) {
     importedTo: valid.reduce((max, item) => item.date > max ? item.date : max, valid[0].date),
     accountName: account.accountName,
     accountCreated: account.created === true,
+    installmentTracking,
     dueDate,
     billingReferenceMonth,
   });

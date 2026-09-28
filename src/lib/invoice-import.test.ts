@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { invoiceTransactionDescription, isLikelyInvoiceCsv, isProbableRepeatedInvoice, normalizeInvoiceExtraction, parseInvoiceCsv } from "./invoice-import";
+import ExcelJS from "exceljs";
+import { categoryForInvoiceTransaction, invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice, normalizeInvoiceExtraction, parseInvoiceCsv, parseInvoiceWorkbook } from "./invoice-import";
 
 const SICREDI_CSV = `\uFEFF Associado ;Cliente Teste;;;;
  Cooperativa ;0726;;;;
@@ -54,6 +55,7 @@ describe("parseInvoiceCsv", () => {
     const amazonas = result!.transactions.filter(item => item.description === "AMAZONAS MERCAD" && item.purchaseDate?.startsWith("2026-09"));
     expect(amazonas).toHaveLength(5);
     expect(amazonas.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(436.06, 2);
+    expect(amazonas.every(item => item.category === "Alimentação")).toBe(true);
     expect(result?.transactions.find(item => item.description === "LOJAS G")).toMatchObject({
       purchaseDate: "2026-08-06",
       installmentCurrent: 3,
@@ -63,7 +65,58 @@ describe("parseInvoiceCsv", () => {
   });
 });
 
+describe("parseInvoiceWorkbook", () => {
+  it("reads every row from every transaction sheet", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const first = workbook.addWorksheet("Cartão principal");
+    first.addRow(["Banco", "Nubank"]);
+    first.addRow(["Data de vencimento", "02/10/2026"]);
+    first.addRow(["Data", "Descrição", "Parcela", "Valor"]);
+    first.addRow(["20/09/2026", "AMAZONAS MERCAD", "", 80.5]);
+    first.addRow(["18/08/2026", "Geladeira", "2/10", 250]);
+
+    const second = workbook.addWorksheet("Cartão adicional");
+    second.addRow(["Data", "Descrição", "Parcela", "Valor"]);
+    second.addRow(["21/09/2026", "Netflix", "", 39.9]);
+    second.addRow(["22/09/2026", "Pagamento da fatura", "", -704.46]);
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    expect(isInvoiceWorkbook("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "fatura.xlsx")).toBe(true);
+    const result = await parseInvoiceWorkbook(buffer, "2026-09-27", "Nubank_fatura.xlsx");
+
+    expect(result).toMatchObject({
+      bankName: "Nubank",
+      dueDate: "2026-10-02",
+      sourceTransactionCount: 4,
+      ignoredTransactionCount: 1,
+    });
+    expect(result?.transactions).toHaveLength(3);
+    expect(result?.transactions.find(item => item.description === "AMAZONAS MERCAD")?.category).toBe("Alimentação");
+    expect(result?.transactions.find(item => item.description === "Geladeira")).toMatchObject({
+      installmentCurrent: 2,
+      installmentTotal: 10,
+      installmentsRemaining: 8,
+    });
+  });
+});
+
 describe("normalizeInvoiceExtraction", () => {
+  it("corrects a supermarket merchant categorized as Outros by the model", () => {
+    const result = normalizeInvoiceExtraction({
+      isInvoice: true,
+      transactions: [
+        { date: "2026-09-10", description: "AMAZONAS MERCAD", amount: 89.9, category: "Outros" },
+      ],
+    }, "2026-09-27");
+
+    expect(result?.transactions[0].category).toBe("Alimentação");
+  });
+
+  it("does not mistake Mercado Pago or Mercado Livre for a supermarket", () => {
+    expect(categoryForInvoiceTransaction("MERCADO PAGO *LOJA", "Outros")).toBe("Outros");
+    expect(categoryForInvoiceTransaction("MERCADO LIVRE", "Tecnologia")).toBe("Tecnologia");
+  });
+
   it("keeps only the installment billed now and calculates how many remain", () => {
     const result = normalizeInvoiceExtraction({
       isInvoice: true,

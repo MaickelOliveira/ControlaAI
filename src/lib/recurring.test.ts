@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchDueRecurringTransactions, type RecurringTransaction } from "./recurring";
+import { isSameImportedInstallmentSchedule, matchDueRecurringTransactions, type RecurringTransaction } from "./recurring";
 
 function recurring(overrides: Partial<RecurringTransaction> = {}): RecurringTransaction {
   return {
@@ -70,5 +70,40 @@ describe("due recurring reconciliation", () => {
       today: "2026-09-11",
     });
     expect(matches.map(item => item.id)).toEqual(["exact"]);
+  });
+});
+
+describe("imported installment schedules", () => {
+  const schedule = recurring({
+    recurrenceType: "installment",
+    type: "expense",
+    description: "Geladeira · compra em 31/08/2026",
+    amount: 250,
+    totalInstallments: 10,
+    paidInstallments: 2,
+  });
+
+  it("recognizes the next statement as the same installment sequence", () => {
+    expect(isSameImportedInstallmentSchedule(schedule, {
+      date: "2026-10-31",
+      purchaseDate: "2026-08-31",
+      description: "Geladeira",
+      amount: 250,
+      category: "Moradia",
+      installmentCurrent: 3,
+      installmentTotal: 10,
+    })).toBe(true);
+  });
+
+  it("does not merge different purchases with the same merchant and amount", () => {
+    expect(isSameImportedInstallmentSchedule(schedule, {
+      date: "2026-10-15",
+      purchaseDate: "2026-09-15",
+      description: "Geladeira",
+      amount: 250,
+      category: "Moradia",
+      installmentCurrent: 2,
+      installmentTotal: 10,
+    })).toBe(false);
   });
 });

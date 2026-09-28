@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { addFinance, deleteFinance } from "./finances";
+import type { InvoiceTransaction } from "./invoice-import";
 import { withRetry } from "./retry";
 
 const TZ = "America/Sao_Paulo";
@@ -162,14 +163,17 @@ function calcFirstDueDate(startDate: string, dayOfMonth?: number): string {
   return next.toISOString().slice(0, 10);
 }
 
-export type CreateRecurringInput = Omit<RecurringTransaction, "id" | "paidInstallments" | "status" | "createdAt" | "nextDueDate"> & { nextDueDate?: string };
+export type CreateRecurringInput = Omit<RecurringTransaction, "id" | "paidInstallments" | "status" | "createdAt" | "nextDueDate"> & {
+  nextDueDate?: string;
+  paidInstallments?: number;
+};
 
 export async function createRecurring(data: CreateRecurringInput): Promise<RecurringTransaction> {
   const nextDueDate = data.nextDueDate || calcFirstDueDate(data.startDate, data.dayOfMonth);
   const row: Record<string, unknown> = {
     id: randomUUID(), user_id: data.userId, type: data.type, amount: data.amount, total_amount: data.totalAmount,
     category: data.category, description: data.description, mode: data.mode, recurrence_type: data.recurrenceType,
-    total_installments: data.totalInstallments, paid_installments: 0, repeat_unit: data.repeatUnit,
+    total_installments: data.totalInstallments, paid_installments: data.paidInstallments ?? 0, repeat_unit: data.repeatUnit,
     day_of_month: data.dayOfMonth, start_date: data.startDate, next_due_date: nextDueDate, status: "active",
     source: data.source,
   };
@@ -184,6 +188,149 @@ export async function createRecurring(data: CreateRecurringInput): Promise<Recur
     return row_;
   });
   return fromRow(inserted as Row);
+}
+
+function addMonthsClamped(date: string, months: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const shifted = new Date(year, month - 1 + months, 1, 12, 0, 0);
+  const lastDay = new Date(shifted.getFullYear(), shifted.getMonth() + 1, 0).getDate();
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+}
+
+function purchaseDateFromDescription(description: string): string | undefined {
+  const match = description.match(/\bcompra em (\d{2})\/(\d{2})\/(\d{4})\b/i);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : undefined;
+}
+
+function importedInstallmentDescription(item: InvoiceTransaction): string {
+  const purchaseDate = item.purchaseDate || item.date;
+  return `${item.description.trim() || "Compra parcelada"} · compra em ${purchaseDate.split("-").reverse().join("/")}`.slice(0, 180);
+}
+
+export function isSameImportedInstallmentSchedule(
+  recurring: RecurringTransaction,
+  item: InvoiceTransaction,
+): boolean {
+  const current = item.installmentCurrent;
+  const total = item.installmentTotal;
+  if (!current || !total || recurring.recurrenceType !== "installment" || recurring.type !== "expense") return false;
+  if (recurring.totalInstallments !== total || Math.abs(recurring.amount - item.amount) > 0.009) return false;
+  const purchaseDate = item.purchaseDate || item.date;
+  const storedPurchaseDate = purchaseDateFromDescription(recurring.description);
+  if (storedPurchaseDate && storedPurchaseDate !== purchaseDate) return false;
+  return descriptionsLikelyMatch(item.description, recurring.description);
+}
+
+export type ImportedInstallmentScheduleResult = {
+  created: number;
+  advanced: number;
+  completed: number;
+};
+
+/** Mantém uma única pendência para cada compra parcelada importada.
+ * A parcela da fatura atual já foi paga/contabilizada; somente a próxima fica
+ * ativa. Ao importar a fatura do mês seguinte, a mesma sequência avança em
+ * vez de criar outra recorrência. */
+export async function upsertImportedInstallmentSchedules(options: {
+  userId: string;
+  mode: RecurringTransaction["mode"];
+  source: RecurringTransaction["source"];
+  items: readonly InvoiceTransaction[];
+  /** Vencimento da fatura que contém a parcela atual. A próxima vence um mês depois. */
+  currentStatementDueDate?: string;
+}): Promise<ImportedInstallmentScheduleResult> {
+  const { userId, mode, source } = options;
+  const result: ImportedInstallmentScheduleResult = { created: 0, advanced: 0, completed: 0 };
+  const installments = options.items.filter(item =>
+    Number.isInteger(item.installmentCurrent)
+    && Number.isInteger(item.installmentTotal)
+    && item.installmentCurrent! >= 1
+    && item.installmentTotal! >= item.installmentCurrent!,
+  );
+  if (!installments.length) return result;
+
+  const existingRows = await withRetry(async () => {
+    const { data, error } = await getSupabase().from("recurring_transactions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("mode", mode)
+      .eq("recurrence_type", "installment")
+      .eq("type", "expense");
+    if (error) throw new Error(`[recurring] falha ao consultar parcelas importadas: ${error.message}`);
+    return data as Row[];
+  });
+  const existing = existingRows.map(fromRow);
+
+  for (const item of installments) {
+    const current = item.installmentCurrent!;
+    const total = item.installmentTotal!;
+    const purchaseDate = item.purchaseDate || item.date;
+    const description = importedInstallmentDescription(item);
+    const match = existing.find(recurring => isSameImportedInstallmentSchedule(recurring, item));
+
+    // Uma sequência cancelada pelo usuário não deve reaparecer sozinha.
+    if (match?.status === "cancelled") continue;
+
+    const currentDueDate = options.currentStatementDueDate || item.date;
+    const nextDueDate = addMonthsClamped(currentDueDate, 1);
+    if (match) {
+      const paidInstallments = Math.max(match.paidInstallments, current);
+      const completed = paidInstallments >= total;
+      const patch: Record<string, unknown> = {
+        amount: item.amount,
+        category: item.category || "Outros",
+        description,
+        total_installments: total,
+        paid_installments: paidInstallments,
+        status: completed ? "completed" : "active",
+      };
+      if (!completed && paidInstallments === current) {
+        patch.next_due_date = nextDueDate;
+        patch.day_of_month = Number(nextDueDate.slice(8, 10));
+        patch.last_notified_date = null;
+      }
+      const { data, error } = await withRetry(async () => {
+        const response = await getSupabase().from("recurring_transactions")
+          .update(patch)
+          .eq("id", match.id)
+          .eq("user_id", userId)
+          .select("*")
+          .maybeSingle();
+        if (response.error) throw new Error(`[recurring] falha ao avançar parcela importada: ${response.error.message}`);
+        return response;
+      });
+      if (!error && data) {
+        const updated = fromRow(data as Row);
+        const index = existing.findIndex(candidate => candidate.id === match.id);
+        if (index >= 0) existing[index] = updated;
+        if (completed && match.status !== "completed") result.completed += 1;
+        else if (paidInstallments > match.paidInstallments) result.advanced += 1;
+      }
+      continue;
+    }
+
+    if (current >= total) continue;
+    const created = await createRecurring({
+      userId,
+      type: "expense",
+      amount: item.amount,
+      category: item.category || "Outros",
+      description,
+      mode,
+      recurrenceType: "installment",
+      totalInstallments: total,
+      paidInstallments: current,
+      repeatUnit: "monthly",
+      dayOfMonth: Number(nextDueDate.slice(8, 10)),
+      startDate: purchaseDate,
+      nextDueDate,
+      source,
+    });
+    existing.push(created);
+    result.created += 1;
+  }
+
+  return result;
 }
 
 export async function getRecurringByUser(userId: string, mode?: string, status?: string): Promise<RecurringTransaction[]> {
@@ -232,9 +379,14 @@ export async function confirmRecurring(
   const rec = fromRow(current as Row);
   if (rec.status !== "active" || (expectedDueDate && rec.nextDueDate !== expectedDueDate)) return null;
 
-  const today = todaySP();
+  const importedInstallment = rec.recurrenceType === "installment" && Boolean(purchaseDateFromDescription(rec.description));
+  const accountingDate = importedInstallment ? rec.nextDueDate : todaySP();
+  const nextInstallment = rec.paidInstallments + 1;
+  const remainingAfter = rec.totalInstallments ? Math.max(0, rec.totalInstallments - nextInstallment) : undefined;
   const installmentLabel = rec.recurrenceType === "installment"
-    ? ` (${rec.paidInstallments + 1}/${rec.totalInstallments})`
+    ? importedInstallment
+      ? ` · Parcela ${nextInstallment}/${rec.totalInstallments} · restantes ${remainingAfter ?? 0}`
+      : ` (${nextInstallment}/${rec.totalInstallments})`
     : "";
   const finance = await addFinance({
     userId,
@@ -242,7 +394,7 @@ export async function confirmRecurring(
     amount: rec.amount,
     category: rec.category,
     description: rec.description + installmentLabel,
-    date: today,
+    date: accountingDate,
     mode: rec.mode,
     source: "whatsapp",
     employeeId: rec.employeeId,

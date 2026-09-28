@@ -5,7 +5,7 @@ import { processMessage, generateAnalysisResponse, generateFallbackResponse, gen
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
-import { invoiceTransactionDescription, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
+import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
@@ -29,7 +29,7 @@ import {
   isClearlyNewActionDuringContinuation,
   mergeActionContinuation,
 } from "@/lib/action-completion";
-import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription, findDueRecurringMatches, descriptionsLikelyMatch, type RecurringTransaction } from "@/lib/recurring";
+import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription, findDueRecurringMatches, descriptionsLikelyMatch, upsertImportedInstallmentSchedules, type RecurringTransaction } from "@/lib/recurring";
 import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
@@ -366,6 +366,28 @@ async function registerFinanceDocumentFromMedia(options: {
     source: "whatsapp",
     registeredBy: from,
   });
+  if (financeData.type === "expense" && financeData.installmentCurrent && financeData.installmentTotal) {
+    try {
+      await upsertImportedInstallmentSchedules({
+        userId: user.id,
+        mode,
+        source: "whatsapp",
+        items: [{
+          date: financeData.date,
+          purchaseDate: financeData.date,
+          description: financeData.description,
+          amount: financeData.amount,
+          category: cap(financeData.category),
+          installmentCurrent: financeData.installmentCurrent,
+          installmentTotal: financeData.installmentTotal,
+          installmentsRemaining: financeData.installmentsRemaining,
+        }],
+      });
+    } catch (error) {
+      await deleteFinance(finance.id, user.id);
+      throw error;
+    }
+  }
   const [financeYear, financeMonth] = finance.date.split("-").map(Number);
   const balance = await getBalance(user.id, mode, financeYear, financeMonth);
   const typeLabel = localized(user.locale, financeData.type === "income" ? "Receita" : "Despesa", financeData.type === "income" ? "Ingreso" : "Gasto");
@@ -810,7 +832,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         responseLocale = fileUser.locale;
         const buffer = msg.fileBuffer!;
         const mimeType = msg.fileMimeType || "application/octet-stream";
-        const defaultExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("image") ? ".jpg" : mimeType.includes("csv") ? ".csv" : "";
+        const defaultExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("image") ? ".jpg" : mimeType.includes("csv") ? ".csv" : mimeType.includes("spreadsheet") ? ".xlsx" : "";
         const caption = msg.fileCaption;
 
         // Extrai um nome explícito da legenda (ex: "salva como etac", "guarda como contrato assinado")
@@ -842,9 +864,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // são verificadas antes de perguntar a ação: se forem foto/print de
         // fatura ou extrato, cada linha vira uma compra separada. Uma imagem
         // comum retorna isInvoice=false e segue para o menu normal.
-        const likelyInvoiceCsv = isLikelyInvoiceCsv(buffer, mimeType, originalName);
-        const explicitInvoiceRequest = mimeType.includes("pdf") || /fatura|extrato/i.test(caption || "") || likelyInvoiceCsv;
-        const looksLikeInvoice = shouldTryItemizedInvoice(mimeType, caption, hasSaveIntent, likelyInvoiceCsv);
+        const likelyInvoiceDataFile = isLikelyInvoiceCsv(buffer, mimeType, originalName) || isInvoiceWorkbook(mimeType, originalName);
+        const explicitInvoiceRequest = mimeType.includes("pdf") || /fatura|extrato/i.test(caption || "") || likelyInvoiceDataFile;
+        const looksLikeInvoice = shouldTryItemizedInvoice(mimeType, caption, hasSaveIntent, likelyInvoiceDataFile);
         if (looksLikeInvoice) {
           try {
             const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id, originalName);
@@ -854,8 +876,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               if (invoice.reconciled === false && invoice.statementTotal !== undefined) {
                 await clearPendingAction(from);
                 await wppSend(from, localized(fileUser.locale,
-                  `⚠️ *A fatura não fechou com segurança.*\n\nAs compras lidas somam ${formatCurrency(reconciledTotal)}, mas o total líquido impresso é ${formatCurrency(invoice.statementTotal)}. *Nada foi gravado.*\n\nEnvie o arquivo novamente. Se a diferença continuar, mande o PDF original em vez de foto.`,
-                  `⚠️ *La factura no cuadró de forma segura.*\n\nLas compras leídas suman ${formatCurrency(reconciledTotal)}, pero el total neto impreso es ${formatCurrency(invoice.statementTotal)}. *No se guardó nada.*\n\nEnvía el archivo nuevamente. Si la diferencia continúa, envía el PDF original en vez de una foto.`));
+                  `⚠️ *A fatura não fechou com segurança.*\n\nAs compras lidas somam ${formatCurrency(reconciledTotal)}, mas o total líquido impresso é ${formatCurrency(invoice.statementTotal)}. *Nada foi gravado.*\n\nReenvie o arquivo original ou fotos mais nítidas de todas as páginas.`,
+                  `⚠️ *La factura no cuadró de forma segura.*\n\nLas compras leídas suman ${formatCurrency(reconciledTotal)}, pero el total neto impreso es ${formatCurrency(invoice.statementTotal)}. *No se guardó nada.*\n\nVuelve a enviar el archivo original o fotos más nítidas de todas las páginas.`));
                 return;
               }
               const duplicateFlags = await getInvoiceDuplicateFlags(fileUser.id, fMode, invoice.transactions);
@@ -940,8 +962,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             if (explicitInvoiceRequest || !mimeType.includes("image")) {
               await clearPendingAction(from);
               await wppSend(from, localized(fileUser.locale,
-                "⚠️ *Não consegui separar as compras desta fatura com segurança.*\n\n*Nada foi lançado.* Envie o PDF novamente. Se o erro continuar, aguarde alguns minutos e tente de novo.",
-                "⚠️ *No pude separar las compras de esta factura de forma segura.*\n\n*No se registró nada.* Envía el PDF nuevamente. Si el error continúa, espera unos minutos e inténtalo otra vez."));
+                "⚠️ *Não consegui separar as compras com segurança.*\n\n*Nada foi lançado.* Reenvie o PDF, a foto ou a planilha original. Se o erro continuar, aguarde alguns minutos e tente de novo.",
+                "⚠️ *No pude separar las compras de forma segura.*\n\n*No se registró nada.* Vuelve a enviar el PDF, la foto o la hoja de cálculo original. Si el error continúa, espera unos minutos e inténtalo otra vez."));
               return;
             }
           }
@@ -1615,6 +1637,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             return;
           }
           let newlyCreatedAccountId: string | undefined;
+          let importedFinanceIds: string[] = [];
           try {
             const account = pending.accountHint
               ? await resolveOrCreateInvoiceAccount(user.id, pending.mode, pending.accountHint, {
@@ -1639,6 +1662,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               accountId: account.accountId,
               cardInvoiceId: account.cardInvoiceId,
             })));
+            importedFinanceIds = imported.map(item => item.id);
+            const installmentTracking = await upsertImportedInstallmentSchedules({
+              userId: user.id,
+              mode: pending.mode,
+              source: "whatsapp",
+              items: pending.items,
+              currentStatementDueDate: pending.dueDate,
+            });
             await clearPendingAction(from);
             const [competenceYear, competenceMonth] = pending.items[0].date.split("-").map(Number);
             const bal = await getAllTimeBalance(user.id, pending.mode);
@@ -1648,11 +1679,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const dueLabel = pending.dueDate
               ? `\n🗓️ Fatura com vencimento em *${pending.dueDate.split("-").reverse().join("/")}* — pagar/baixar a fatura não criará outra despesa.`
               : "";
-            await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📅 Compras registradas na competência ${String(competenceMonth).padStart(2, "0")}/${competenceYear}.${dueLabel}\n📊 Saldo acumulado: ${formatCurrency(bal.balance)}`);
+            const installmentLabel = installmentTracking.created || installmentTracking.advanced
+              ? `\n💳 ${installmentTracking.created + installmentTracking.advanced} compra(s) parcelada(s) acompanhada(s); a próxima parcela ficou pendente.`
+              : "";
+            await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📅 Compras registradas na competência ${String(competenceMonth).padStart(2, "0")}/${competenceYear}.${dueLabel}${installmentLabel}\n📊 Saldo acumulado: ${formatCurrency(bal.balance)}`);
           } catch (error) {
             // A conta identificada no PDF e os lançamentos formam uma única
             // conclusão para o usuário. Se o lote falhar, remove a conta que
             // acabou de ser criada para não deixar um destino vazio/fantasma.
+            await Promise.all(importedFinanceIds.map(id => deleteFinance(id, user.id).catch(rollbackError => {
+              console.error("[webhook] erro ao desfazer lançamento da fatura:", rollbackError);
+            })));
             if (newlyCreatedAccountId) {
               await deleteAccount(newlyCreatedAccountId, user.id).catch(rollbackError => {
                 console.error("[webhook] erro ao desfazer conta da fatura:", rollbackError);
@@ -4321,8 +4358,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
           };
           const imported = await getImportedInstallmentStatuses(user.id, mode);
+          // Importações novas também criam uma pendência recorrente real para
+          // permitir "Pago" no painel/bot. Mantemos o fallback histórico para
+          // lançamentos antigos, mas nunca contamos a mesma compra duas vezes.
+          const importedWithoutSchedule = imported.filter(item => !recs.some(recurring =>
+            recurring.recurrenceType === "installment"
+            && recurring.totalInstallments === item.total
+            && Math.abs(recurring.amount - item.amount) <= 0.009
+            && descriptionsLikelyMatch(item.description, recurring.description),
+          ));
           const ending = [
-            ...imported.map(item => ({
+            ...importedWithoutSchedule.map(item => ({
               description: item.description,
               amount: item.amount,
               current: item.current,
@@ -4371,6 +4417,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const normalizedKeyword = keyword.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
           const matchingRecurring = recs.filter(item => item.description.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().includes(normalizedKeyword));
           if (matchingRecurring.length > 0) {
+            const installment = matchingRecurring.length === 1 && matchingRecurring[0].recurrenceType === "installment"
+              ? matchingRecurring[0]
+              : null;
+            if (installment?.totalInstallments) {
+              const remaining = Math.max(0, installment.totalInstallments - installment.paidInstallments);
+              const next = Math.min(installment.totalInstallments, installment.paidInstallments + 1);
+              await wppSend(from, localized(user.locale,
+                `💳 *${installment.description.split(" · compra em ")[0]}*: a próxima é a parcela *${next}/${installment.totalInstallments}* e faltam *${remaining} parcela(s)* para terminar.\n📅 Próximo vencimento: *${installment.nextDueDate.split("-").reverse().join("/")}*.`,
+                `💳 *${installment.description.split(" · compra em ")[0]}*: la próxima es la cuota *${next}/${installment.totalInstallments}* y faltan *${remaining} cuota(s)* para terminar.\n📅 Próximo vencimiento: *${installment.nextDueDate.split("-").reverse().join("/")}*.`));
+              break;
+            }
             await wppSend(from, replyRecurringList(matchingRecurring, user.locale));
             break;
           }

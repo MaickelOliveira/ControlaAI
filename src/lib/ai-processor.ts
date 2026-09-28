@@ -7,8 +7,11 @@ import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
 import { isAllDayAgendaText } from "./agenda-all-day";
 import {
   isLikelyInvoiceCsv,
+  isInvoiceWorkbook,
+  invoiceWorkbookToText,
   normalizeInvoiceExtraction,
   parseInvoiceCsv,
+  parseInvoiceWorkbook,
   type InvoiceExtraction,
 } from "./invoice-import";
 import {
@@ -2296,7 +2299,7 @@ INTENÇÕES POSSÍVEIS:
 - how_to: o usuário quer saber COMO USAR o bot ("como faço para", "como registro", "como funciona", "como crio", "como apago", "me explica", "como uso", "quais comandos", "posso adicionar alguém aqui", "como adiciono uma pessoa", "como acesso o painel/site", "qual o site/link do Zelo", "estou conectado no Google", "como conecto o Google", "verificar conexão do Google"). Nesse caso, escreva uma explicação clara e amigável no campo "response", com base SÓ no que o sistema realmente faz (nunca invente passos, funcionalidades ou endereços/links que não existem). ⚠️ Se a resposta precisar citar o endereço do painel, use EXATAMENTE o "Endereço do painel web" informado no início da mensagem — nunca invente um domínio diferente.
   CONTAS MANUAIS: é possível criar, listar, renomear, excluir e definir como padrão contas manuais (ex.: Dinheiro, Nubank, Caixa). Não há cartão de crédito. O Zelo NÃO conecta nem sincroniza bancos e NÃO usa Open Finance/Open Banking. Para conexão bancária, explique apenas essa limitação.
   ÁUDIO, FOTOS E DOCUMENTOS: o Zelo recebe áudios do WhatsApp, transcreve e compreende o conteúdo para executar o pedido do usuário. Também analisa fotos/imagens, identifica o conteúdo, pesquisa um item quando solicitado e lê comprovantes, notas fiscais, boletos, recibos, faturas e documentos PDF. NUNCA diga que o Zelo não consegue ouvir, transcrever, compreender ou processar áudio; NUNCA diga que ele não consegue ler fotos ou PDFs. Se o formato específico não estiver confirmado nestas instruções, não prometa esse formato.
-  IMPORTAR COMPROVANTE/FATURA: o usuário PODE mandar a foto ou o PDF de uma nota fiscal, recibo, boleto, comprovante de pagamento ou cupom fiscal que o Zelo lê e registra (pergunta antes de guardar o arquivo no Drive). Também PODE mandar o PDF ou CSV de uma fatura de cartão/extrato com VÁRIAS transações — o Zelo extrai cada lançamento, avisa quantos já estão registrados (evita duplicar) e pergunta se importa somente o restante. CSV de fatura é lido linha por linha; planilha Excel .xlsx ainda não é suportada.
+  IMPORTAR COMPROVANTE/FATURA: o usuário PODE mandar foto, PDF, CSV ou planilha Excel .xlsx de uma nota, fatura ou extrato. Em fatura/extrato com VÁRIAS transações, o Zelo lê todas as páginas, imagens, linhas e abas, extrai cada lançamento, avisa quantos já estão registrados (evita duplicar) e pergunta se importa somente o restante. CSV e Excel são lidos linha por linha, sem virar um lançamento único pelo total.
   - account_create/account_list/account_update/account_delete/account_set_default: use account.name; em update use também account.newName. Funciona em português e espanhol.
   - Consultas por conta continuam como finance_query ou finance_detail e usam account.name. Para "nessa conta"/"en esa cuenta", use account.useContext=true; o sistema recupera a conta da conversa ou pergunta qual.
   ⚠️ Se o usuário perguntar sobre qualquer funcionalidade que não esteja descrita nestas instruções, ou se você não tiver informação confirmada para responder, NÃO improvise. Diga que não consegue confirmar por ali e oriente a acessar o painel do Zelo e abrir o *Suporte* no canto inferior direito.
@@ -4019,7 +4022,7 @@ Instruções:
 - No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
 - ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Se o pedido não estiver claramente coberto pela lista ou faltar informação confirmada, diga isso com naturalidade e oriente a pessoa a entrar no painel do Zelo e abrir o *Suporte* no canto inferior direito. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
 - Existem contas manuais, mas não existe cartão de crédito nem conexão/sincronização bancária via Open Finance/Open Banking. Nunca invente integração bancária.
-- Nunca diga que o Zelo não consegue transcrever ou compreender áudios, nem que não consegue analisar fotos ou ler PDFs: essas funções existem. Não prometa formatos não confirmados, como planilhas .xlsx/.csv.
+- Nunca diga que o Zelo não consegue transcrever ou compreender áudios, analisar fotos, ler PDFs, CSVs ou planilhas Excel .xlsx: essas funções existem. Não prometa formatos legados não confirmados, como .xls.
 - Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
 
   const openAIAttempt = await tryOpenAIForTestUser(
@@ -4533,16 +4536,30 @@ export async function extractInvoiceTransactions(
     ? parseInvoiceCsv(buffer, hoje, originalName)
     : null;
   if (csvInvoice) return csvInvoice;
+  let analysisBuffer = buffer;
+  let analysisMimeType = mimeType || "application/pdf";
+  let analysisFilename = originalName;
+  if (isInvoiceWorkbook(mimeType, originalName)) {
+    const workbookInvoice = await parseInvoiceWorkbook(buffer, hoje, originalName);
+    if (workbookInvoice) return workbookInvoice;
+    // Layouts de Excel desconhecidos ainda passam pela IA, porém como texto
+    // estruturado com marcadores de aba. Assim o modelo recebe todas as
+    // células, inclusive quando os cabeçalhos não seguem o padrão conhecido.
+    analysisBuffer = Buffer.from(await invoiceWorkbookToText(buffer), "utf8");
+    analysisMimeType = "text/plain";
+    analysisFilename = `${originalName || "planilha"}.txt`;
+  }
   const prompt = `Analise este documento e determine se é uma FATURA DE CARTÃO DE CRÉDITO ou EXTRATO com MÚLTIPLAS transações/lançamentos (compras individuais).
 
 Hoje é: ${hoje}
 ${caption ? `\nLegenda enviada pelo usuário: "${caption}"` : ""}
 
-Se for uma fatura/extrato com várias transações, leia TODAS AS PÁGINAS e extraia CADA lançamento de compra individual. Antes de responder, confira a quantidade de linhas uma segunda vez para não omitir compras.
+Se for uma fatura/extrato com várias transações, faça primeiro um inventário interno de TODAS AS PÁGINAS/IMAGENS e das seções ou tabelas presentes em cada uma. Depois leia cada página do início ao fim e extraia CADA lançamento de compra individual. Antes de responder, percorra novamente todas as páginas/linhas e confirme que nenhuma página, rodapé, continuação de tabela ou seção de cobranças ficou sem leitura. Isso vale para QUALQUER banco ou formato visual, mesmo que você nunca tenha visto esse modelo.
 
 REGRAS OBRIGATÓRIAS:
-- Ignore "total da fatura", "pagamento efetuado", "saldo anterior", "valor mínimo", juros globais e resumos — não são compras individuais.
+- Ignore "total da fatura", "pagamento efetuado", "saldo anterior", "valor mínimo" e meros resumos — eles não são compras individuais. Porém, tarifas, IOF, juros ou encargos POSITIVOS efetivamente cobrados no período são despesas válidas e devem ser incluídos; se já estiverem incorporados no "Total a pagar" de um bloco de financiamento, não os some outra vez.
 - Ignore totalmente estornos, reembolsos, créditos, cashback, compras canceladas e pagamentos da própria fatura. Eles NÃO viram despesa.
+- REGRA GERAL PARA QUALQUER BANCO — não classifique uma seção inteira pelo título. Seções chamadas "pagamentos", "financiamentos", "ajustes", "outros lançamentos", "encargos" ou equivalentes podem misturar pagamentos negativos com cobranças positivas. Ignore apenas a linha que for realmente pagamento/crédito/estorno; inclua toda cobrança positiva atual com estabelecimento/descrição e valor. Quando um bloco trouxer "Total a pagar" ou equivalente, use exatamente esse total como uma única cobrança, sem somar novamente os componentes internos.
 - Se houver uma compra e depois um estorno/reembolso do mesmo valor, mantenha a compra em transactions e coloque a linha negativa em ignoredTransactions. O sistema fará a compensação pelo valor e estabelecimento.
 - Compra parcelada deve aparecer UMA ÚNICA VEZ: somente a parcela cobrada NESTA fatura.
 - Uma linha parcelada como 11/12 dentro da seção atual É uma cobrança desta fatura, mesmo que a data original seja de meses atrás. Inclua-a; não a confunda com histórico pago.
@@ -4605,7 +4622,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
     const difference = Math.round((printedTotal - readTotal) * 100) / 100;
     const amount = Math.abs(difference).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     const direction = difference > 0
-      ? `FALTAM ${amount} em uma ou mais compras. Procure especialmente linhas antigas parceladas e cobranças de intermediadores como ASAAS.`
+      ? `FALTAM ${amount} em uma ou mais cobranças. Em QUALQUER banco, revise todas as seções e não descarte uma seção inteira pelo título: procure parcelas antigas, intermediadores, encargos e blocos positivos de financiamento/renegociação com estabelecimento e "Total a pagar" ou expressão equivalente.`
       : `HÁ ${amount} A MAIS. Procure compra duplicada ou linha de pagamento/crédito/estorno incluída por engano.`;
     return `${prompt}\n\nCORREÇÃO OBRIGATÓRIA DE CONCILIAÇÃO:\nA primeira leitura encontrou ${candidate.transactions.length} compras, somando ${readTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, mas o total líquido impresso é ${printedTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. ${direction}\nReleia TODAS AS PÁGINAS, linha por linha, inclusive o fim de cada página. Retorne novamente a lista COMPLETA, não apenas a linha corrigida. Só finalize quando a soma das compras válidas, após estornos, fechar exatamente com o total impresso.`;
   };
@@ -4626,9 +4643,9 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
     "extractInvoiceTransactions",
     () => openAIMediaJson<Record<string, unknown>>({
       prompt,
-      buffer,
-      mimeType: mimeType || "application/pdf",
-      filename: originalName,
+      buffer: analysisBuffer,
+      mimeType: analysisMimeType,
+      filename: analysisFilename,
       schemaName: "invoice_transactions",
       userId,
       maxOutputTokens: 16_000,
@@ -4645,9 +4662,9 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
         "extractInvoiceTransactions.reconciliationRetry",
         () => openAIMediaJson<Record<string, unknown>>({
           prompt: reconciliationRetryPrompt(normalized),
-          buffer,
-          mimeType: mimeType || "application/pdf",
-          filename: originalName,
+          buffer: analysisBuffer,
+          mimeType: analysisMimeType,
+          filename: analysisFilename,
           schemaName: "invoice_transactions_reconciled",
           userId,
           maxOutputTokens: 16_000,
@@ -4688,8 +4705,8 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
         attemptPrompt,
         {
           inlineData: {
-            data: buffer.toString("base64"),
-            mimeType: mimeType || "application/pdf",
+            data: analysisBuffer.toString("base64"),
+            mimeType: analysisMimeType,
           },
         },
       ]);

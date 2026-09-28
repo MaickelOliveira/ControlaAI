@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     invoice = await extractInvoiceTransactions(buffer, mimeType, undefined, session.sub, fileObj.name);
   } catch (error) {
     console.error("[import-invoice] falha ao extrair lançamentos:", error);
-    return NextResponse.json({ error: "Não consegui separar as compras da fatura com segurança. Nada foi importado; envie o PDF novamente." }, { status: 422 });
+    return NextResponse.json({ error: "Não consegui separar os lançamentos com segurança. Nada foi importado; reenvie o arquivo original ou uma imagem mais nítida." }, { status: 422 });
   }
   if (!invoice || invoice.transactions.length === 0) {
     return NextResponse.json({ error: "Não consegui identificar lançamentos nesse arquivo. Confira se é mesmo uma fatura/extrato." }, { status: 422 });
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   if (invoice.reconciled === false && invoice.statementTotal !== undefined) {
     const transactionTotal = invoice.transactions.reduce((sum, item) => sum + item.amount, 0);
     return NextResponse.json({
-      error: `A soma das compras (${transactionTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}) não confere com o total líquido da fatura (${invoice.statementTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}). Nada foi importado; envie o PDF original novamente.`,
+      error: `A soma das compras (${transactionTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}) não confere com o total líquido da fatura (${invoice.statementTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}). Nada foi importado; reenvie o arquivo original ou imagens mais nítidas.`,
     }, { status: 422 });
   }
 

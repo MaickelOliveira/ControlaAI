@@ -1,3 +1,5 @@
+import ExcelJS from "exceljs";
+
 export type InvoiceTransaction = {
   /** Data de competência usada nos filtros do dashboard. */
   date: string;
@@ -77,8 +79,8 @@ function csvDelimiter(lines: string[]): string {
 
 function csvDate(value: string): string | undefined {
   const raw = value.trim();
-  const br = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const br = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  const iso = raw.match(/^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);
   const parts = br ? [Number(br[3]), Number(br[2]), Number(br[1])] : iso ? [Number(iso[1]), Number(iso[2]), Number(iso[3])] : null;
   if (!parts) return undefined;
   const [year, month, day] = parts;
@@ -123,26 +125,37 @@ function csvInstallment(value: string): { current: number; total: number } | und
   return current >= 1 && total >= current && total <= 120 ? { current, total } : undefined;
 }
 
-function csvCategory(description: string): string {
+const INVOICE_EXPENSE_CATEGORIES = new Set([
+  "Alimentação", "Transporte", "Moradia", "Saúde", "Educação", "Lazer",
+  "Vestuário", "Tecnologia", "Serviços", "Impostos", "Funcionários",
+  "Marketing", "Fornecedores", "Outros",
+]);
+
+/** Classificação determinística para comerciantes reconhecíveis na fatura.
+ *  O modelo pode ler corretamente o nome e ainda escolher "Outros". As
+ *  regras abaixo prevalecem somente quando o ramo do estabelecimento é
+ *  inequívoco; nos demais casos, preservamos a categoria sugerida. */
+export function categoryForInvoiceTransaction(description: string, suggestedCategory = "Outros"): string {
   const normalized = normalizeCsvHeader(description);
-  if (/mercad|supermerc|condor|ifd|ifood|restaurante|lanch|esfih|acai|alimento/.test(normalized)) return "Alimentação";
+  const paymentMarketplace = /\bmercado\s*(?:pago|livre)\b|\bmercadopago\b|\bmercadolivre\b/.test(normalized);
+  if (!paymentMarketplace && /\bamazonas?\s+mercad|\bmercad(?:o|inho|ao)?\b|supermerc|hipermerc|atacadao|assai|condor|carrefour|ifd|ifood|ze delivery|dog king|restaurante|lanch|esfih|acai|alimento|burger|pizz|padaria|panificadora/.test(normalized)) return "Alimentação";
   if (/farmac|hospital|clinica|diagnosti|medic|odont|laboratorio/.test(normalized)) return "Saúde";
-  if (/academia|cinema|parque|viagem|hotel|show/.test(normalized)) return "Lazer";
-  if (/uber|posto|combust|pedagio|estacion|transporte/.test(normalized)) return "Transporte";
+  if (/academia|cinema|parque|viagem|hotel|show|netflix/.test(normalized)) return "Lazer";
+  if (/uber|posto|combust|pedagio|estacion|transporte|pare\s*azul/.test(normalized)) return "Transporte";
   if (/havan|material|condominio|aluguel|energia|moveis/.test(normalized)) return "Moradia";
   if (/lojas|roupa|calcado|moda/.test(normalized)) return "Vestuário";
   if (/escola|curso|faculdade|livraria/.test(normalized)) return "Educação";
   if (/asaas|assinatura|mensalidade|servico/.test(normalized)) return "Serviços";
   if (/software|apple|google|microsoft|tecnologia/.test(normalized)) return "Tecnologia";
-  return "Outros";
+  return INVOICE_EXPENSE_CATEGORIES.has(suggestedCategory) ? suggestedCategory : "Outros";
 }
 
 function findInvoiceCsvHeader(rows: string[][]): number {
   return rows.findIndex(row => {
     const headers = row.map(normalizeCsvHeader);
-    return headers.includes("data")
-      && headers.some(value => /descricao|historico|estabelecimento|merchant/.test(value))
-      && headers.some(value => /^valor$|amount|valor da compra/.test(value));
+    return headers.some(value => /^data$|^date$|^fecha(?: de compra)?$/.test(value))
+      && headers.some(value => /descricao|historico|estabelecimento|merchant|concepto|detalle|comercio/.test(value))
+      && headers.some(value => /^valor$|amount|valor da compra|importe|monto/.test(value));
   });
 }
 
@@ -155,6 +168,11 @@ export function isLikelyInvoiceCsv(buffer: Buffer, mimeType = "", originalName =
   if (lines.length < 2) return false;
   const delimiter = csvDelimiter(lines);
   return findInvoiceCsvHeader(lines.map(line => parseCsvLine(line, delimiter))) >= 0;
+}
+
+export function isInvoiceWorkbook(mimeType = "", originalName = ""): boolean {
+  return /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/i.test(mimeType)
+    || /\.xlsx$/i.test(originalName);
 }
 
 /** Lê CSVs de fatura de forma determinística, linha por linha. Isso evita que
@@ -174,9 +192,9 @@ export function parseInvoiceCsv(
 
   const headers = rows[headerIndex].map(normalizeCsvHeader);
   const columnIndex = (patterns: RegExp[]) => headers.findIndex(header => patterns.some(pattern => pattern.test(header)));
-  const dateIndex = columnIndex([/^data$/, /^date$/]);
-  const descriptionIndex = columnIndex([/descricao/, /historico/, /estabelecimento/, /merchant/]);
-  const amountIndex = columnIndex([/^valor$/, /amount/, /valor da compra/]);
+  const dateIndex = columnIndex([/^data$/, /^date$/, /^fecha(?: de compra)?$/]);
+  const descriptionIndex = columnIndex([/descricao/, /historico/, /estabelecimento/, /merchant/, /concepto/, /detalle/, /comercio/]);
+  const amountIndex = columnIndex([/^valor$/, /amount/, /valor da compra/, /importe/, /monto/]);
   const installmentIndex = columnIndex([/parcela/, /cuota/, /installment/]);
   if (dateIndex < 0 || descriptionIndex < 0 || amountIndex < 0) return null;
 
@@ -185,10 +203,11 @@ export function parseInvoiceCsv(
   const dueDate = csvDate(metadataValue(/vencimento|due date|fecha de vencimiento/) || "");
   const statementTotal = csvMoney(metadataValue(/valor total|total da fatura|total factura|importe total/) || "");
   const contentSignature = normalizeCsvHeader(lines.slice(0, headerIndex + 1).join(" "));
-  const bankName = /sicredi/i.test(originalName)
+  const bankFromMetadata = metadataValue(/^banco$|^bank$|institui[cç][aã]o|institucion|emisor/);
+  const bankName = bankFromMetadata || (/sicredi/i.test(originalName)
     || (/associado/.test(contentSignature) && /cooperativa/.test(contentSignature) && /conta corrente/.test(contentSignature))
     ? "Sicredi"
-    : undefined;
+    : undefined);
 
   const transactions: Array<Record<string, unknown>> = [];
   const ignoredTransactions: Array<Record<string, unknown>> = [];
@@ -220,7 +239,7 @@ export function parseInvoiceCsv(
       date,
       description,
       amount,
-      category: csvCategory(description),
+      category: categoryForInvoiceTransaction(description),
       ...(installment ? { installmentCurrent: installment.current, installmentTotal: installment.total } : {}),
       billingStatus: "current",
       transactionKind: "purchase",
@@ -231,6 +250,156 @@ export function parseInvoiceCsv(
   return normalizeInvoiceExtraction({
     isInvoice: true,
     bankName,
+    dueDate,
+    dueDay: dueDate ? Number(dueDate.slice(8, 10)) : undefined,
+    sourceTransactionCount,
+    ignoredTransactionCount,
+    ignoredTransactions,
+    statementTotal,
+    statementReferenceMonth: dueDate?.slice(0, 7),
+    transactions,
+  }, today);
+}
+
+function workbookCellText(value: ExcelJS.CellValue, numFmt = ""): string {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) {
+    return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`;
+  }
+  if (typeof value === "number" && /[dmy]/i.test(numFmt)) {
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.round(value) * 86_400_000);
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "object") {
+    if ("result" in value && value.result !== undefined) return workbookCellText(value.result as ExcelJS.CellValue, numFmt);
+    if ("richText" in value && Array.isArray(value.richText)) return value.richText.map(part => part.text).join("");
+    if ("text" in value && typeof value.text === "string") return value.text;
+    if ("hyperlink" in value && typeof value.hyperlink === "string") return value.hyperlink;
+  }
+  return String(value);
+}
+
+function workbookRows(sheet: ExcelJS.Worksheet): string[][] {
+  const rows: string[][] = [];
+  sheet.eachRow({ includeEmpty: true }, row => {
+    const width = Math.max(row.cellCount, row.actualCellCount);
+    rows.push(Array.from({ length: width }, (_, index) => {
+      const cell = row.getCell(index + 1);
+      return workbookCellText(cell.value, cell.numFmt).trim();
+    }));
+  });
+  return rows;
+}
+
+export async function invoiceWorkbookToText(buffer: Buffer): Promise<string> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Uint8Array.from(buffer).buffer);
+  return workbook.worksheets.map(sheet => {
+    const rows = workbookRows(sheet).map(row => row.join("\t")).join("\n");
+    return `=== ABA: ${sheet.name} ===\n${rows}`;
+  }).join("\n\n");
+}
+
+function bankNameFromSpreadsheet(originalName: string, signature: string): string | undefined {
+  const value = normalizeCsvHeader(`${originalName} ${signature}`);
+  const banks: Array<[RegExp, string]> = [
+    [/\bnubank\b|\bnu pagamentos\b/, "Nubank"],
+    [/\bsicredi\b|\bcooperativa sicredi\b/, "Sicredi"],
+    [/\binter\b|\bbanco inter\b/, "Inter"],
+    [/\bitau\b/, "Itaú"],
+    [/\bbradesco\b/, "Bradesco"],
+    [/\bsantander\b/, "Santander"],
+    [/\bcaixa\b/, "Caixa"],
+    [/\bbanco do brasil\b|\bbb cartoes\b/, "Banco do Brasil"],
+    [/\bc6 bank\b|\bc6\b/, "C6 Bank"],
+    [/\bneon\b/, "Neon"],
+  ];
+  return banks.find(([pattern]) => pattern.test(value))?.[1];
+}
+
+/** Lê todas as abas de uma planilha Excel. Cada aba com colunas de data,
+ * descrição e valor é importada linha por linha; abas de resumo não viram um
+ * único lançamento. */
+export async function parseInvoiceWorkbook(
+  buffer: Buffer,
+  today: string,
+  originalName = "",
+): Promise<InvoiceExtraction | null> {
+  const workbook = new ExcelJS.Workbook();
+  // ExcelJS tipa o argumento como ArrayBuffer, enquanto os uploads chegam
+  // como Buffer do Node. A cópia também impede que bytes externos ao slice
+  // original sejam lidos quando o Buffer compartilha memória.
+  await workbook.xlsx.load(Uint8Array.from(buffer).buffer);
+
+  const transactions: Array<Record<string, unknown>> = [];
+  const ignoredTransactions: Array<Record<string, unknown>> = [];
+  let sourceTransactionCount = 0;
+  let ignoredTransactionCount = 0;
+  let dueDate: string | undefined;
+  let statementTotal: number | undefined;
+  let bankFromMetadata: string | undefined;
+  const signatureParts: string[] = [];
+
+  for (const sheet of workbook.worksheets) {
+    const rows = workbookRows(sheet);
+    signatureParts.push(sheet.name, ...rows.slice(0, 30).flat());
+    const headerIndex = findInvoiceCsvHeader(rows);
+    if (headerIndex < 0) continue;
+
+    const headers = rows[headerIndex].map(normalizeCsvHeader);
+    const columnIndex = (patterns: RegExp[]) => headers.findIndex(header => patterns.some(pattern => pattern.test(header)));
+    const dateIndex = columnIndex([/^data$/, /^date$/, /^fecha(?: de compra)?$/]);
+    const descriptionIndex = columnIndex([/descricao/, /historico/, /estabelecimento/, /merchant/, /concepto/, /detalle/, /comercio/]);
+    const amountIndex = columnIndex([/^valor$/, /amount/, /valor da compra/, /importe/, /monto/]);
+    const installmentIndex = columnIndex([/parcela/, /cuota/, /installment/]);
+    if (dateIndex < 0 || descriptionIndex < 0 || amountIndex < 0) continue;
+
+    const metadata = rows.slice(0, headerIndex);
+    const metadataValue = (pattern: RegExp) => metadata.find(row => pattern.test(normalizeCsvHeader(row[0] || "")))?.[1]?.trim();
+    bankFromMetadata ||= metadataValue(/^banco$|^bank$|institui[cç][aã]o|institucion|emisor/);
+    dueDate ||= csvDate(metadataValue(/vencimento|due date|fecha de vencimiento/) || "");
+    statementTotal ??= csvMoney(metadataValue(/valor total|total da fatura|total factura|importe total/) || "");
+
+    for (const row of rows.slice(headerIndex + 1)) {
+      const rawDate = row[dateIndex] || "";
+      const description = (row[descriptionIndex] || "").trim();
+      const amount = csvMoney(row[amountIndex] || "");
+      if (!rawDate && !description && amount === undefined) continue;
+      const date = csvDate(rawDate);
+      if (!date || !description || amount === undefined) continue;
+      sourceTransactionCount += 1;
+
+      const nonPurchase = amount <= 0 || /\b(?:pagamento|payment|pago|estorno|reembolso|refund|reversal|cashback|credito|cr[eé]dito|cancelad[oa])\b/i.test(description);
+      if (nonPurchase) {
+        ignoredTransactionCount += 1;
+        ignoredTransactions.push({
+          date,
+          description,
+          amount: Math.abs(amount),
+          transactionKind: /pagamento|payment|pago/i.test(description) ? "payment" : "reversal",
+        });
+        continue;
+      }
+
+      const installment = installmentIndex >= 0 ? csvInstallment(row[installmentIndex] || "") : undefined;
+      transactions.push({
+        date,
+        description,
+        amount,
+        category: categoryForInvoiceTransaction(description),
+        ...(installment ? { installmentCurrent: installment.current, installmentTotal: installment.total } : {}),
+        billingStatus: "current",
+        transactionKind: "purchase",
+      });
+    }
+  }
+
+  if (!transactions.length) return null;
+  const signature = signatureParts.join(" ");
+  return normalizeInvoiceExtraction({
+    isInvoice: true,
+    bankName: bankFromMetadata || bankNameFromSpreadsheet(originalName, signature),
     dueDate,
     dueDay: dueDate ? Number(dueDate.slice(8, 10)) : undefined,
     sourceTransactionCount,
@@ -383,7 +552,10 @@ export function normalizeInvoiceExtraction(
     const rawDate = String(transaction?.date || "");
     const date = normalizeInvoiceDate(rawDate, today);
     const description = rawDescription.slice(0, 120) || "Lançamento da fatura";
-    const category = String(transaction?.category || "Outros");
+    const category = categoryForInvoiceTransaction(
+      description,
+      String(transaction?.category || "Outros"),
+    );
 
     let installmentCurrent = positiveInteger(transaction?.installmentCurrent);
     let installmentTotal = positiveInteger(transaction?.installmentTotal);

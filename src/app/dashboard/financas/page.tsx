@@ -6,7 +6,6 @@ import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
 type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
 type Balance = { income: number; expense: number; balance: number };
-
 type Recurring = {
   id: string;
   type: "income" | "expense";
@@ -28,6 +27,18 @@ type Recurring = {
 function fmt(v: number | undefined | null) { return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtDate(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-BR"); }
 function fmtMonth(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" }); }
+function purchaseDateFromDescription(description: string): string | undefined {
+  const match = description.match(/\bcompra em (\d{2})\/(\d{2})\/(\d{4})\b/i);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : undefined;
+}
+function visibleFinanceDescription(description: string) {
+  return description.replace(/\s*·\s*compra em \d{2}\/\d{2}\/\d{4}\s*$/i, "").trim();
+}
+function visibleFinanceDate(finance: Finance) {
+  const purchaseDate = purchaseDateFromDescription(finance.description);
+  if (!purchaseDate || purchaseDate === finance.date) return fmtDate(finance.date);
+  return `Compra em ${fmtDate(purchaseDate)} · competência ${finance.date.slice(5, 7)}/${finance.date.slice(0, 4)}`;
+}
 
 const UNIT_LABEL: Record<string, string> = { monthly: "Mensal", weekly: "Semanal", daily: "Diário", yearly: "Anual" };
 
@@ -140,7 +151,8 @@ export default function FinancasPage() {
       const data = await res.json();
       if (!res.ok) { setImportError(data.error || "Erro ao importar"); return; }
       setShowImport(false);
-      setBanner(`✅ ${data.imported} lançamento(s) importado(s) da fatura!${data.accountName ? ` Conta: ${data.accountName}${data.accountCreated ? " (criada agora)" : ""}.` : ""}`);
+      const trackedInstallments = (data.installmentTracking?.created || 0) + (data.installmentTracking?.advanced || 0);
+      setBanner(`✅ ${data.imported} lançamento(s) importado(s) da fatura!${data.accountName ? ` Conta: ${data.accountName}${data.accountCreated ? " (criada agora)" : ""}.` : ""}${trackedInstallments ? ` ${trackedInstallments} compra(s) parcelada(s) ficaram em acompanhamento.` : ""}`);
       setFilters(prev => ({ ...prev, from: data.importedFrom || prev.from, to: data.importedTo || prev.to, categories: [], type: "expense", search: "" }));
     } catch {
       setImportError("Erro de conexão");
@@ -515,10 +527,10 @@ export default function FinancasPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-medium text-slate-800 truncate">{r.description}{installLabel}</p>
+                            <p className="text-sm font-medium text-slate-800 truncate">{visibleFinanceDescription(r.description)}{installLabel}</p>
                             <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0", st.color)}>{st.label}</span>
                           </div>
-                          <p className="text-xs text-slate-400">{r.category}</p>
+                          <p className="text-xs text-slate-400">{r.category}{purchaseDateFromDescription(r.description) ? ` · compra em ${fmtDate(purchaseDateFromDescription(r.description)!)}` : ""}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
@@ -606,8 +618,8 @@ export default function FinancasPage() {
                         {f.type === "income" ? "↑" : "↓"}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{f.description}</p>
-                        <p className="text-xs text-slate-400">{f.category} · {new Date(f.date + "T12:00:00").toLocaleDateString("pt-BR")}</p>
+                        <p className="text-sm font-medium text-slate-800 truncate">{visibleFinanceDescription(f.description)}</p>
+                        <p className="text-xs text-slate-400">{f.category} · {visibleFinanceDate(f)}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-3">
@@ -856,7 +868,7 @@ export default function FinancasPage() {
 
             {importItems.length === 0 ? (
               <div className="space-y-3">
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.csv,text/csv"
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={e => setImportFile(e.target.files?.[0] ?? null)}
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-50 file:text-amber-700 file:text-xs file:font-semibold" />
                 {importError && <p className="text-xs text-red-500">{importError}</p>}
