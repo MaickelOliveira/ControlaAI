@@ -808,6 +808,30 @@ export function replyRecurringConfirmed(r: RecurringTransaction, locale?: string
   return `Certo, ${typeLabel} confirmado.\n\n💳 ${r.description} — ${fmt(r.amount)}\n\nJá registrei em Finanças.\n📅 Próximo vencimento: ${nextStr}`;
 }
 
+/** Confirma a pendência sem afirmar que criou outra despesa quando a parcela
+ * já estava contabilizada por uma fatura importada. */
+export function replyRecurringAlreadyPosted(r: RecurringTransaction, locale?: string): string {
+  if (isEs(locale)) {
+    if (r.status === "completed") {
+      return `✅ La cuota ya estaba registrada en el extracto. Solo cerré el seguimiento, *sin sumar el importe otra vez*.\n\nTodas las cuotas de *${r.description}* quedaron saldadas.`;
+    }
+    const next = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString(dateLocale(locale));
+    return `✅ La cuota ya estaba registrada en el extracto. Solo le di de baja, *sin sumar el importe otra vez*.\n\n📅 Próximo vencimiento: ${next}`;
+  }
+  if (isPtPt(locale)) {
+    if (r.status === "completed") {
+      return `✅ A prestação já estava registada no extrato. Apenas encerrei o acompanhamento, *sem somar o valor novamente*.\n\nTodas as prestações de *${r.description}* ficaram liquidadas.`;
+    }
+    const next = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString(dateLocale(locale));
+    return `✅ A prestação já estava registada no extrato. Apenas lhe dei baixa, *sem somar o valor novamente*.\n\n📅 Próximo vencimento: ${next}`;
+  }
+  if (r.status === "completed") {
+    return `✅ A parcela já estava registrada no extrato. Apenas encerrei o acompanhamento, *sem somar o valor novamente*.\n\nTodas as parcelas de *${r.description}* ficaram quitadas.`;
+  }
+  const next = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString(dateLocale(locale));
+  return `✅ A parcela já estava registrada no extrato. Apenas dei baixa, *sem somar o valor novamente*.\n\n📅 Próximo vencimento: ${next}`;
+}
+
 export function replyRecurringCreated(r: RecurringTransaction, locale?: string): string {
   const fmt = (v: number) => formatCurrency(v);
   const nextStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString(dateLocale(locale));

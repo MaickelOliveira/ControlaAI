@@ -353,6 +353,8 @@ export default function FinancasPagePt() {
   }), [finances, filters]);
 
   const filteredRecs = useMemo(() => recs.filter(r => {
+    if (filters.from && r.nextDueDate < filters.from) return false;
+    if (filters.to && r.nextDueDate > filters.to) return false;
     if (filters.type !== "all" && r.type !== filters.type) return false;
     if (filters.categories.length > 0 && !filters.categories.includes(r.category)) return false;
     if (filters.search.trim() && !r.description.toLowerCase().includes(filters.search.trim().toLowerCase())) return false;

@@ -281,21 +281,43 @@ export async function getCategoryTotal(userId: string, mode: FinanceMode, type: 
 const MERCHANT_ALIASES: Record<string, string[]> = {
   ifood: ["ifood", "ifd", "i food"],
   amazonas: ["amazonas mercad", "mercado amazonas", "amazonas mercado", "amazonas"],
+  zedelivery: ["ze delivery", "zedelivery"],
   aiqfome: ["aiqfome", "aiq fome", "ai que fome", "aiquefome"],
   "99food": ["99food", "99 food", "99app", "app 99"],
   rappi: ["rappi"],
   ubereats: ["uber eats", "ubereats"],
 };
 
+function normalizeMerchantText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 /** Expande um termo de busca digitado pelo usuário pras variantes conhecidas
  *  do mesmo comerciante (ex: "ifood" → também busca "ifd"), pra não perder
  *  lançamentos cuja descrição ficou abreviada. */
 export function expandMerchantAliases(term: string): string[] {
-  const lower = term.trim().toLowerCase();
+  const rawLower = term.trim().toLowerCase();
+  const lower = normalizeMerchantText(term);
   for (const variants of Object.values(MERCHANT_ALIASES)) {
-    if (variants.some(v => lower === v || lower.includes(v) || v.includes(lower))) return variants;
+    if (variants.some(v => {
+      const normalizedVariant = normalizeMerchantText(v);
+      return lower === normalizedVariant || lower.includes(normalizedVariant) || normalizedVariant.includes(lower);
+    })) return variants;
   }
-  return [lower];
+  return [rawLower];
+}
+
+/** Compara comerciante sem depender de acento, caixa ou separadores do
+ * extrato ("Zé Delivery", "ZE*DELIVERY" e "ze delivery" são equivalentes). */
+export function merchantDescriptionMatchesTerms(description: string, terms: readonly string[]): boolean {
+  const normalizedDescription = normalizeMerchantText(description);
+  return terms.some(term => normalizedDescription.includes(normalizeMerchantText(term)));
 }
 
 /** Soma os lançamentos cuja descrição bate com algum dos termos (busca OR,
@@ -309,11 +331,11 @@ export function merchantPurchaseDate(finance: Pick<Finance, "date" | "descriptio
 export async function getKeywordTotal(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string, accountId?: string): Promise<number> {
   return (await getFinancesByUser(userId, mode, registeredBy))
     .filter(f => isPostedFinance(f) && f.type === type && (!accountId || f.accountId === accountId))
-    .filter(f => {
-      const purchaseDate = merchantPurchaseDate(f);
-      return (!from || purchaseDate >= from) && (!to || purchaseDate <= to);
-    })
-    .filter(f => terms.some(t => f.description.toLowerCase().includes(t.toLowerCase())))
+    // Perguntas como "quanto gastei este mês" seguem a competência em que a
+    // fatura foi contabilizada. A data original da compra continua preservada
+    // na descrição para auditoria e deduplicação, mas não muda o mês da soma.
+    .filter(f => (!from || f.date >= from) && (!to || f.date <= to))
+    .filter(f => merchantDescriptionMatchesTerms(f.description, terms))
     .reduce((s, f) => s + f.amount, 0);
 }
 

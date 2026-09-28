@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
-import { addFinance, deleteFinance } from "./finances";
+import { addFinance, deleteFinance, getFinancesByUser, isPostedFinance, type Finance } from "./finances";
 import type { InvoiceTransaction } from "./invoice-import";
 import { withRetry } from "./retry";
 
@@ -221,6 +221,36 @@ export function isSameImportedInstallmentSchedule(
   return descriptionsLikelyMatch(item.description, recurring.description);
 }
 
+function installmentFractionFromDescription(description: string): { current: number; total: number } | null {
+  const match = description.match(/(?:parcela|cuota)?\s*0?(\d{1,3})\s*\/\s*0?(\d{1,3})\b/i);
+  if (!match) return null;
+  const current = Number(match[1]);
+  const total = Number(match[2]);
+  return current >= 1 && total >= current ? { current, total } : null;
+}
+
+/** Detecta que a parcela que o usuário está baixando já veio numa fatura.
+ * A combinação de sequência, valor, modo, comerciante e data original evita
+ * dar baixa usando por engano outra compra de mesmo valor. */
+export function isFinanceForImportedInstallment(
+  recurring: RecurringTransaction,
+  finance: Finance,
+): boolean {
+  if (recurring.recurrenceType !== "installment" || recurring.type !== "expense") return false;
+  if (!recurring.totalInstallments || !isPostedFinance(finance) || finance.type !== "expense") return false;
+  if (finance.mode !== recurring.mode || Math.abs(finance.amount - recurring.amount) > 0.009) return false;
+
+  const fraction = installmentFractionFromDescription(finance.description);
+  if (!fraction
+    || fraction.current !== recurring.paidInstallments + 1
+    || fraction.total !== recurring.totalInstallments) return false;
+
+  const recurringPurchaseDate = purchaseDateFromDescription(recurring.description);
+  const financePurchaseDate = purchaseDateFromDescription(finance.description);
+  if (recurringPurchaseDate && financePurchaseDate && recurringPurchaseDate !== financePurchaseDate) return false;
+  return descriptionsLikelyMatch(recurring.description, finance.description);
+}
+
 export type ImportedInstallmentScheduleResult = {
   created: number;
   advanced: number;
@@ -373,7 +403,7 @@ export async function confirmRecurring(
   id: string,
   userId: string,
   expectedDueDate?: string,
-): Promise<{ updated: RecurringTransaction; finance: Awaited<ReturnType<typeof addFinance>> } | null> {
+): Promise<{ updated: RecurringTransaction; finance: Awaited<ReturnType<typeof addFinance>>; alreadyPosted: boolean } | null> {
   const { data: current, error: readError } = await getSupabase().from("recurring_transactions").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
   if (readError || !current) return null;
   const rec = fromRow(current as Row);
@@ -388,17 +418,21 @@ export async function confirmRecurring(
       ? ` · Parcela ${nextInstallment}/${rec.totalInstallments} · restantes ${remainingAfter ?? 0}`
       : ` (${nextInstallment}/${rec.totalInstallments})`
     : "";
-  const finance = await addFinance({
-    userId,
-    type: rec.type,
-    amount: rec.amount,
-    category: rec.category,
-    description: rec.description + installmentLabel,
-    date: accountingDate,
-    mode: rec.mode,
-    source: "whatsapp",
-    employeeId: rec.employeeId,
-  });
+  const existingFinance = importedInstallment
+    ? (await getFinancesByUser(userId, rec.mode)).find(finance => isFinanceForImportedInstallment(rec, finance))
+    : undefined;
+  const finance = existingFinance ?? await addFinance({
+      userId,
+      type: rec.type,
+      amount: rec.amount,
+      category: rec.category,
+      description: rec.description + installmentLabel,
+      date: accountingDate,
+      mode: rec.mode,
+      source: "whatsapp",
+      employeeId: rec.employeeId,
+    });
+  const alreadyPosted = Boolean(existingFinance);
 
   const paidInstallments = rec.paidInstallments + 1;
   const rowPatch: Record<string, unknown> = { paid_installments: paidInstallments };
@@ -425,10 +459,10 @@ export async function confirmRecurring(
   if (error || !updated) {
     // Outra confirmação venceu a corrida depois da leitura. Remove apenas o
     // lançamento que esta tentativa acabou de criar, sem tocar no vencedor.
-    await deleteFinance(finance.id, userId);
+    if (!alreadyPosted) await deleteFinance(finance.id, userId);
     return null;
   }
-  return { updated: fromRow(updated as Row), finance };
+  return { updated: fromRow(updated as Row), finance, alreadyPosted };
 }
 
 export async function cancelRecurring(id: string, userId: string): Promise<RecurringTransaction | null> {

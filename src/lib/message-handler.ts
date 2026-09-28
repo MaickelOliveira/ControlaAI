@@ -47,7 +47,7 @@ import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTasksCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
   replyTrialExpired, replyAccountInactive, replyUnknown, replyLowConfidence,
-  replyRecurringConfirmed, replyRecurringList,
+  replyRecurringAlreadyPosted, replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
   replyAgendaList, replyAgendaUpdated, replyAgendaDeleted, replyAgendaReminderPolicy,
   replyMeetCreated, replyMeetInvite,
@@ -324,6 +324,33 @@ function localized(locale: string | undefined, ptBR: string, es: string, ptPT = 
   return ptBR;
 }
 
+const DOCUMENT_ACCOUNT_NAMES = [
+  "Santander", "Nubank", "Sicredi", "Itaú", "Inter", "Bradesco", "Caixa",
+  "Banco do Brasil", "C6 Bank", "PicPay", "Mercado Pago", "PagBank", "Neon",
+  "BTG", "Sicoob", "Banrisul",
+];
+
+/** A legenda é uma instrução explícita de destino. Assim uma foto enviada
+ * com "Santander" é vinculada à conta Santander mesmo que o logotipo esteja
+ * cortado ou o leitor identifique outro texto no documento. */
+export function documentAccountHintFromCaption(caption?: string): string | undefined {
+  const raw = caption?.replace(/\s+/g, " ").trim();
+  if (!raw) return undefined;
+  const normalized = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  const known = DOCUMENT_ACCOUNT_NAMES.find(name => {
+    const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return new RegExp(`(?:^|[^a-z0-9])${normalizedName.replace(/\s+/g, "\\s+")}(?:$|[^a-z0-9])`).test(normalized);
+  });
+  if (known) return known;
+
+  const explicit = raw.match(/\b(?:conta|cuenta|banco|bank|cart[aã]o|tarjeta)\s+(?:do|da|de|del)?\s*([\p{L}\p{N}][\p{L}\p{N} .&-]{1,60})/iu)?.[1]
+    ?.replace(/\s+(?:para|pra|a fim de)\s+(?:registrar|lan[cç]ar|guardar).*$/iu, "")
+    .replace(/[.,;:!?]+$/g, "")
+    .trim();
+  return explicit || undefined;
+}
+
 /** Lê e grava um comprovante financeiro unitário enviado como foto. Retorna
  * true quando reconheceu o documento (inclusive quando bloqueou duplicado). */
 async function registerFinanceDocumentFromMedia(options: {
@@ -339,6 +366,7 @@ async function registerFinanceDocumentFromMedia(options: {
 
   const mode = financeData.mode || user.activeMode;
   const description = financialDocumentDescription(financeData);
+  const accountHint = documentAccountHintFromCaption(caption);
   const duplicate = await isLikelyDuplicateDocumentFinance(user.id, mode, {
     type: financeData.type,
     amount: financeData.amount,
@@ -355,19 +383,31 @@ async function registerFinanceDocumentFromMedia(options: {
     return true;
   }
 
-  const finance = await addFinance({
-    userId: user.id,
-    type: financeData.type,
-    amount: financeData.amount,
-    category: cap(financeData.category),
-    description: cap(description),
-    date: financeData.date,
-    mode,
-    source: "whatsapp",
-    registeredBy: from,
-  });
-  if (financeData.type === "expense" && financeData.installmentCurrent && financeData.installmentTotal) {
-    try {
+  let newlyCreatedAccountId: string | undefined;
+  let finance: Awaited<ReturnType<typeof addFinance>> | undefined;
+  let accountName: string | undefined;
+  try {
+    const account = accountHint
+      ? await resolveOrCreateInvoiceAccount(user.id, mode, accountHint, { transactionDate: financeData.date })
+      : await resolveAccountFields(user.id, mode, undefined);
+    if ("created" in account && account.created === true) newlyCreatedAccountId = account.accountId;
+    accountName = "accountName" in account && typeof account.accountName === "string"
+      ? account.accountName
+      : accountHint;
+    finance = await addFinance({
+      userId: user.id,
+      type: financeData.type,
+      amount: financeData.amount,
+      category: cap(financeData.category),
+      description: cap(description),
+      date: financeData.date,
+      mode,
+      source: "whatsapp",
+      registeredBy: from,
+      accountId: account.accountId,
+      cardInvoiceId: account.cardInvoiceId,
+    });
+    if (financeData.type === "expense" && financeData.installmentCurrent && financeData.installmentTotal) {
       await upsertImportedInstallmentSchedules({
         userId: user.id,
         mode,
@@ -383,11 +423,13 @@ async function registerFinanceDocumentFromMedia(options: {
           installmentsRemaining: financeData.installmentsRemaining,
         }],
       });
-    } catch (error) {
-      await deleteFinance(finance.id, user.id);
-      throw error;
     }
+  } catch (error) {
+    if (finance) await deleteFinance(finance.id, user.id);
+    if (newlyCreatedAccountId) await deleteAccount(newlyCreatedAccountId, user.id);
+    throw error;
   }
+  if (!finance) return false;
   const [financeYear, financeMonth] = finance.date.split("-").map(Number);
   const balance = await getBalance(user.id, mode, financeYear, financeMonth);
   const typeLabel = localized(user.locale, financeData.type === "income" ? "Receita" : "Despesa", financeData.type === "income" ? "Ingreso" : "Gasto");
@@ -409,9 +451,12 @@ async function registerFinanceDocumentFromMedia(options: {
       `\n💳 Parcela ${financeData.installmentCurrent}/${financeData.installmentTotal} — faltam ${financeData.installmentsRemaining ?? financeData.installmentTotal - financeData.installmentCurrent}`,
       `\n💳 Cuota ${financeData.installmentCurrent}/${financeData.installmentTotal} — faltan ${financeData.installmentsRemaining ?? financeData.installmentTotal - financeData.installmentCurrent}`)
     : "";
+  const accountLine = accountName
+    ? `\n🏦 ${localized(user.locale, "Conta", "Cuenta")}: ${accountName}`
+    : "";
   await wppSend(from, localized(user.locale,
-    `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo do mês: ${formatCurrency(balance.balance)}\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_`,
-    `${typeEmoji} *¡${typeLabel} registrado!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("es")}\n\n📊 Saldo del mes: ${formatCurrency(balance.balance)}\n\n_💾 ¿Quieres guardar este comprobante en Drive? (sí/no)_`));
+    `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}${accountLine}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo do mês: ${formatCurrency(balance.balance)}\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_`,
+    `${typeEmoji} *¡${typeLabel} registrado!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}${accountLine}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("es")}\n\n📊 Saldo del mes: ${formatCurrency(balance.balance)}\n\n_💾 ¿Quieres guardar este comprobante en Drive? (sí/no)_`));
   return true;
 }
 
@@ -459,6 +504,7 @@ async function prepareFinancialTransactionListImport(options: {
   }
 
   const mode = extraction.mode || user.activeMode;
+  const accountHint = documentAccountHintFromCaption(caption) || extraction.bankName;
   const items: PendingFinancialDocumentImportItem[] = extraction.transactions.map(item => ({
     type: item.type,
     amount: item.amount,
@@ -479,7 +525,7 @@ async function prepareFinancialTransactionListImport(options: {
     items: newItems,
     duplicateItems,
     stage,
-    accountHint: extraction.bankName,
+    accountHint,
     expectedItemCount: newItems.length,
     expectedIncomeTotal: totals.income,
     expectedExpenseTotal: totals.expense,
@@ -489,8 +535,8 @@ async function prepareFinancialTransactionListImport(options: {
   });
 
   await wppSend(from, localized(user.locale,
-    `📊 *Lista financeira analisada!*\n\nLi ${items.length} movimentações separadas. *Ainda não registrei nada.*${extraction.bankName ? `\n🏦 Banco identificado: *${extraction.bankName}*` : ""}`,
-    `📊 *¡Lista financiera analizada!*\n\nLeí ${items.length} movimientos separados. *Todavía no registré nada.*${extraction.bankName ? `\n🏦 Banco identificado: *${extraction.bankName}*` : ""}`));
+    `📊 *Lista financeira analisada!*\n\nLi ${items.length} movimentações separadas. *Ainda não registrei nada.*${accountHint ? `\n🏦 Conta de destino: *${accountHint}*` : ""}`,
+    `📊 *¡Lista financiera analizada!*\n\nLeí ${items.length} movimientos separados. *Todavía no registré nada.*${accountHint ? `\n🏦 Cuenta de destino: *${accountHint}*` : ""}`));
   if (newItems.length) await wppSendLong(from, financialDocumentImportPreview(newItems, user.locale));
 
   if (duplicateItems.length) {
@@ -979,6 +1025,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id, originalName);
             if (invoice && invoice.transactions.length > 0) {
               const fMode = fileUser.activeMode;
+              const invoiceAccountHint = documentAccountHintFromCaption(caption) || invoice.bankName;
               const reconciledTotal = invoice.transactions.reduce((sum, item) => sum + item.amount, 0);
               if (invoice.reconciled === false && invoice.statementTotal !== undefined) {
                 await clearPendingAction(from);
@@ -1022,7 +1069,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               const probableRepeatedInvoice = isProbableRepeatedInvoice(duplicateFlags);
               if (probableRepeatedInvoice && novos.length === 0) {
                 await clearPendingAction(from);
-                await wppSend(from, `📄 *Esta fatura já foi importada.*\n\n${readingSummary}${invoice.bankName ? `\n🏦 Banco/cartão identificado: *${invoice.bankName}*` : ""}\n\nAs ${duplicados.length} compras já estão registradas. *Nada foi gravado nem duplicado*.`);
+                await wppSend(from, `📄 *Esta fatura já foi importada.*\n\n${readingSummary}${invoiceAccountHint ? `\n🏦 Conta identificada: *${invoiceAccountHint}*` : ""}\n\nAs ${duplicados.length} compras já estão registradas. *Nada foi gravado nem duplicado*.`);
                 return;
               }
 
@@ -1033,7 +1080,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 items: novos.map(withoutDuplicateFlag),
                 duplicateItems: probableRepeatedInvoice ? [] : duplicados.map(withoutDuplicateFlag),
                 stage: probableRepeatedInvoice || !duplicados.length ? "confirm" : "duplicate_review",
-                accountHint: invoice.bankName,
+                accountHint: invoiceAccountHint,
                 closingDay: invoice.closingDay,
                 dueDay: invoice.dueDay,
                 billingReferenceMonth: invoice.billingReferenceMonth,
@@ -1046,9 +1093,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
               const total = novos.reduce((s, t) => s + t.amount, 0);
               if (probableRepeatedInvoice) {
-                await wppSend(from, `📄 *Fatura atualizada analisada!*\n\n${readingSummary}\n\n⏭️ ${duplicados.length} compra(s) já registrada(s) foram ignoradas\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}*` : ""}\n\n_💾 Quer que eu registre somente as ${novos.length} compras novas? (sim/não)_`);
+                await wppSend(from, `📄 *Fatura atualizada analisada!*\n\n${readingSummary}\n\n⏭️ ${duplicados.length} compra(s) já registrada(s) foram ignoradas\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoiceAccountHint ? `\n🏦 Conta de destino: *${invoiceAccountHint}*` : ""}\n\n_💾 Quer que eu registre somente as ${novos.length} compras novas? (sim/não)_`);
               } else if (duplicados.length) {
-                await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n⚠️ Encontrei ${duplicados.length} possível(is) pagamento(s) duplicado(s), com mesmo dia, valor e estabelecimento/categoria:`);
+                await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}\n✅ ${novos.length} compra(s) nova(s) — ${formatCurrency(total)}${invoiceAccountHint ? `\n🏦 Conta de destino: *${invoiceAccountHint}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n⚠️ Encontrei ${duplicados.length} possível(is) pagamento(s) duplicado(s), com mesmo dia, valor e estabelecimento/categoria:`);
                 for (let start = 0; start < duplicados.length; start += 15) {
                   const duplicatePreview = duplicados.slice(start, start + 15)
                     .map((item, offset) => `${start + offset + 1}. ${item.description} — ${formatCurrency(item.amount)} em ${(item.purchaseDate || item.date).split("-").reverse().join("/")}`)
@@ -1057,7 +1104,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 }
                 await wppSend(from, "*Você realmente gastou algum desses valores duas vezes no mesmo dia?*\n\nResponda *todos*, *nenhum* ou os números que se repetiram de verdade (ex.: *1 e 3*). Ainda não gravei nada.");
               } else {
-                await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}${invoice.bankName ? `\n🏦 Conta de destino: *${invoice.bankName}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n_💾 Quer que eu registre as ${novos.length} compras como despesa? (sim/não)_`);
+                await wppSend(from, `📑 *Fatura analisada!*\n\n${readingSummary}${invoiceAccountHint ? `\n🏦 Conta de destino: *${invoiceAccountHint}* (será criada somente após sua confirmação, se ainda não existir)` : ""}\n\n_💾 Quer que eu registre as ${novos.length} compras como despesa? (sim/não)_`);
               }
               return;
             }
@@ -1116,9 +1163,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 userId: fileUser.id, storeId: store.id, storeName: store.name,
                 date: receipt.date, items, total: receipt.total, source: "whatsapp_receipt",
               });
+              const receiptAccountHint = documentAccountHintFromCaption(caption);
+              const receiptAccount = receiptAccountHint
+                ? await resolveOrCreateInvoiceAccount(fileUser.id, gMode, receiptAccountHint, { transactionDate: receipt.date })
+                : await resolveAccountFields(fileUser.id, gMode, undefined);
               const finance = await addFinance({
                 userId: fileUser.id, type: "expense", amount: receipt.total, category: "Alimentação",
                 description: `Compra no ${store.name}`, date: receipt.date, mode: gMode, source: "whatsapp", registeredBy: from,
+                accountId: receiptAccount.accountId, cardInvoiceId: receiptAccount.cardInvoiceId,
               });
               await setPurchaseFinanceId(purchase.id, fileUser.id, finance.id);
               const bal = await getBalance(fileUser.id, gMode, nowBR().getFullYear(), nowBR().getMonth() + 1);
@@ -1130,7 +1182,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               });
 
               const itemsList = items.map(i => `• ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity} = ${formatCurrency(i.price * i.quantity)}`).join("\n");
-              await wppSend(from, `🧾 *Compra registrada — ${store.name}!*\n\n${itemsList}\n\n💰 Total: ${formatCurrency(receipt.total)}\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar a foto do cupom no Drive? (sim/não)_`);
+              const receiptAccountLine = receiptAccountHint ? `\n🏦 Conta: *${receiptAccountHint}*` : "";
+              await wppSend(from, `🧾 *Compra registrada — ${store.name}!*\n\n${itemsList}\n\n💰 Total: ${formatCurrency(receipt.total)}${receiptAccountLine}\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar a foto do cupom no Drive? (sim/não)_`);
               return;
             }
           } catch (e) {
@@ -2463,13 +2516,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const selected = pending.candidates[selectedIndex];
       const result = await confirmRecurring(selected.id, user.id, selected.dueDate);
       if (result) {
-        await setLastFinanceBatch(from, [{
-          id: result.finance.id,
-          description: result.finance.description,
-          amount: result.finance.amount,
-          type: result.finance.type,
-        }], result.finance.mode);
-        await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
+        if (!result.alreadyPosted) {
+          await setLastFinanceBatch(from, [{
+            id: result.finance.id,
+            description: result.finance.description,
+            amount: result.finance.amount,
+            type: result.finance.type,
+          }], result.finance.mode);
+        }
+        await wppSend(from, result.alreadyPosted
+          ? replyRecurringAlreadyPosted(result.updated, user.locale)
+          : replyRecurringConfirmed(result.updated, user.locale));
       } else {
         await wppSend(from, localized(user.locale,
           "Essa ocorrência já foi confirmada ou alterada. Nenhum pagamento foi duplicado.",
@@ -2486,7 +2543,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         await clearPendingAction(from);
         const result = await confirmRecurring(pending.recurringId, user.id, pending.dueDate);
         if (result) {
-          await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
+          await wppSend(from, result.alreadyPosted
+            ? replyRecurringAlreadyPosted(result.updated, user.locale)
+            : replyRecurringConfirmed(result.updated, user.locale));
         } else await wppSend(from, localized(user.locale, "❌ Não consegui confirmar esse pagamento agora. Nada foi alterado; tente novamente.", "❌ No pude confirmar este pago. No se modificó nada; inténtalo de nuevo."));
         return;
       }
@@ -2645,13 +2704,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         if (matches.length === 1) {
           const result = await confirmRecurring(matches[0].id, user.id, matches[0].nextDueDate);
           if (result) {
-            await setLastFinanceBatch(from, [{
-              id: result.finance.id,
-              description: result.finance.description,
-              amount: result.finance.amount,
-              type: result.finance.type,
-            }], result.finance.mode);
-            await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
+            if (!result.alreadyPosted) {
+              await setLastFinanceBatch(from, [{
+                id: result.finance.id,
+                description: result.finance.description,
+                amount: result.finance.amount,
+                type: result.finance.type,
+              }], result.finance.mode);
+            }
+            await wppSend(from, result.alreadyPosted
+              ? replyRecurringAlreadyPosted(result.updated, user.locale)
+              : replyRecurringConfirmed(result.updated, user.locale));
           } else {
             await wppSend(from, localized(user.locale,
               "Essa ocorrência já foi confirmada ou alterada. Nenhum pagamento foi duplicado.",
@@ -3355,13 +3418,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const recurringTarget = dueRecurringItems[0];
           const result = await confirmRecurring(recurringTarget.id, user.id, recurringTarget.nextDueDate);
           if (result) {
-            await setLastFinanceBatch(from, [{
-              id: result.finance.id,
-              description: result.finance.description,
-              amount: result.finance.amount,
-              type: result.finance.type,
-            }], result.finance.mode);
-            await wppSend(from, replyRecurringConfirmed(result.updated, user.locale));
+            if (!result.alreadyPosted) {
+              await setLastFinanceBatch(from, [{
+                id: result.finance.id,
+                description: result.finance.description,
+                amount: result.finance.amount,
+                type: result.finance.type,
+              }], result.finance.mode);
+            }
+            await wppSend(from, result.alreadyPosted
+              ? replyRecurringAlreadyPosted(result.updated, user.locale)
+              : replyRecurringConfirmed(result.updated, user.locale));
           } else {
             await wppSend(from, localized(user.locale,
               "Essa ocorrência já foi confirmada ou alterada. Nenhum pagamento foi duplicado.",

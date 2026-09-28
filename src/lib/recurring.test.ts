@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isSameImportedInstallmentSchedule, matchDueRecurringTransactions, type RecurringTransaction } from "./recurring";
+import { isFinanceForImportedInstallment, isSameImportedInstallmentSchedule, matchDueRecurringTransactions, type RecurringTransaction } from "./recurring";
+import type { Finance } from "./finances";
 
 function recurring(overrides: Partial<RecurringTransaction> = {}): RecurringTransaction {
   return {
@@ -104,6 +105,30 @@ describe("imported installment schedules", () => {
       category: "Moradia",
       installmentCurrent: 2,
       installmentTotal: 10,
+    })).toBe(false);
+  });
+
+  it("recognizes an installment already posted by a card statement", () => {
+    const finance: Finance = {
+      id: "finance-3", userId: "user-1", type: "expense", amount: 250,
+      category: "Moradia", description: "Geladeira · Parcela 3/10 · restantes 7 · compra em 31/08/2026",
+      mode: "personal", date: "2026-10-10", source: "whatsapp", status: "posted",
+      createdAt: "2026-10-01T12:00:00.000Z",
+    };
+    expect(isFinanceForImportedInstallment(schedule, finance)).toBe(true);
+  });
+
+  it("does not reconcile a different installment or purchase", () => {
+    const base: Finance = {
+      id: "finance", userId: "user-1", type: "expense", amount: 250,
+      category: "Moradia", description: "Geladeira · Parcela 4/10 · restantes 6 · compra em 31/08/2026",
+      mode: "personal", date: "2026-11-10", source: "whatsapp", status: "posted",
+      createdAt: "2026-11-01T12:00:00.000Z",
+    };
+    expect(isFinanceForImportedInstallment(schedule, base)).toBe(false);
+    expect(isFinanceForImportedInstallment(schedule, {
+      ...base,
+      description: "Geladeira · Parcela 3/10 · restantes 7 · compra em 30/08/2026",
     })).toBe(false);
   });
 });

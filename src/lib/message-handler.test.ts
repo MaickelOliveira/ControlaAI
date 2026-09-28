@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { accountSelectionMessage, appointmentPatchFromAi, buildFirstUseGuideMessages, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, shouldTryItemizedInvoice, splitWhatsAppMessage } from "./message-handler";
+import { accountSelectionMessage, appointmentPatchFromAi, buildFirstUseGuideMessages, documentAccountHintFromCaption, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, shouldTryItemizedInvoice, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
@@ -33,6 +33,21 @@ describe("phoneMatches", () => {
   it("returns false for empty input", () => {
     expect(phoneMatches("", "5511987654321")).toBe(false);
     expect(phoneMatches("5511987654321", "")).toBe(false);
+  });
+});
+
+describe("documentAccountHintFromCaption", () => {
+  it.each([
+    ["Santander", "Santander"],
+    ["registrar este extrato no nubank", "Nubank"],
+    ["fatura do Itaú", "Itaú"],
+    ["guardar na conta Banco XP", "Banco XP"],
+  ])("uses the photo caption as its account destination: %s", (caption, expected) => {
+    expect(documentAccountHintFromCaption(caption)).toBe(expected);
+  });
+
+  it("does not confuse a generic registration instruction with an account", () => {
+    expect(documentAccountHintFromCaption("registrar receitas")).toBeUndefined();
   });
 });
 

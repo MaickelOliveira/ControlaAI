@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateFinanceBalance, isPostedFinance, isSameDocumentFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, importedInstallmentStatuses, merchantPurchaseDate, type Finance } from "./finances";
+import { calculateFinanceBalance, isPostedFinance, isSameDocumentFinance, isSameInvoiceExpense, expandMerchantAliases, formatCurrency, importedInstallmentStatuses, merchantDescriptionMatchesTerms, merchantPurchaseDate, type Finance } from "./finances";
 
 function makeFinance(overrides: Partial<Finance> = {}): Finance {
   return {
@@ -63,6 +63,11 @@ describe("expandMerchantAliases", () => {
 
   it("recognizes Mercado Amazonas even when the statement abbreviates and reverses the name", () => {
     expect(expandMerchantAliases("Mercado Amazonas")).toContain("amazonas mercad");
+  });
+
+  it("recognizes Zé Delivery with or without accent", () => {
+    expect(expandMerchantAliases("Zé Delivery")).toEqual(["ze delivery", "zedelivery"]);
+    expect(merchantDescriptionMatchesTerms("Pg *Zé Delivery", expandMerchantAliases("ze delivery"))).toBe(true);
   });
 });
 
