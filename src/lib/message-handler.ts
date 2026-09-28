@@ -1,9 +1,9 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
@@ -20,7 +20,7 @@ import {
 import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { getContactsByUser, findContactByName, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
@@ -412,6 +412,100 @@ async function registerFinanceDocumentFromMedia(options: {
   await wppSend(from, localized(user.locale,
     `${typeEmoji} *${typeLabel} registrada!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n📊 Saldo do mês: ${formatCurrency(balance.balance)}\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_`,
     `${typeEmoji} *¡${typeLabel} registrado!*\n\n📝 ${finance.description}\n💰 ${formatCurrency(finance.amount)}${installmentLine}\n🏷️ ${finance.category}\n📅 ${new Date(finance.date + "T12:00:00").toLocaleDateString("es")}\n\n📊 Saldo del mes: ${formatCurrency(balance.balance)}\n\n_💾 ¿Quieres guardar este comprobante en Drive? (sí/no)_`));
+  return true;
+}
+
+function financialDocumentImportTotals(items: PendingFinancialDocumentImportItem[]): {
+  income: number;
+  expense: number;
+} {
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return {
+    income: round(items.filter(item => item.type === "income").reduce((sum, item) => sum + item.amount, 0)),
+    expense: round(items.filter(item => item.type === "expense").reduce((sum, item) => sum + item.amount, 0)),
+  };
+}
+
+function financialDocumentImportPreview(items: PendingFinancialDocumentImportItem[], locale?: string): string {
+  return items.map((item, index) => {
+    const icon = item.type === "income" ? "🟢" : "🔴";
+    const type = item.type === "income"
+      ? (locale === "es" ? "Ingreso" : "Receita")
+      : (locale === "es" ? "Gasto" : "Despesa");
+    return `${index + 1}. ${icon} ${type} — ${item.description} — ${formatCurrency(item.amount)} em ${item.date.split("-").reverse().join("/")}`;
+  }).join("\n");
+}
+
+/** Detecta e prepara uma foto de extrato com várias entradas/saídas. A
+ * função nunca grava: ela deixa uma lista revisável em pending_actions. */
+async function prepareFinancialTransactionListImport(options: {
+  from: string;
+  buffer: Buffer;
+  mimeType: string;
+  caption?: string;
+  originalName?: string;
+  user: User;
+}): Promise<boolean> {
+  const { from, buffer, mimeType, caption, originalName, user } = options;
+  const extraction = await extractFinancialTransactionsFromDocument(buffer, mimeType, caption, user.id);
+  if (!extraction) return false;
+
+  if (!extraction.complete || extraction.transactions.length !== extraction.sourceTransactionCount) {
+    await clearPendingAction(from);
+    await wppSend(from, localized(user.locale,
+      `⚠️ *Encontrei ${extraction.sourceTransactionCount} movimentações, mas só consegui ler ${extraction.transactions.length} por completo.*\n\n*Nada foi registrado.* Envie uma imagem mais nítida mostrando todas as linhas, valores e datas.`,
+      `⚠️ *Encontré ${extraction.sourceTransactionCount} movimientos, pero solo pude leer ${extraction.transactions.length} por completo.*\n\n*No se registró nada.* Envía una imagen más nítida que muestre todas las líneas, importes y fechas.`));
+    return true;
+  }
+
+  const mode = extraction.mode || user.activeMode;
+  const items: PendingFinancialDocumentImportItem[] = extraction.transactions.map(item => ({
+    type: item.type,
+    amount: item.amount,
+    description: cap(item.description),
+    category: cap(item.category),
+    date: item.date,
+  }));
+  const duplicateFlags = await getDocumentFinanceDuplicateFlags(user.id, mode, items);
+  const newItems = items.filter((_, index) => !duplicateFlags[index]);
+  const duplicateItems = items.filter((_, index) => duplicateFlags[index]);
+  const totals = financialDocumentImportTotals(newItems);
+  const stage = duplicateItems.length ? "duplicate_review" as const : "confirm" as const;
+
+  await setPendingAction(from, {
+    type: "financial_document_import",
+    userId: user.id,
+    mode,
+    items: newItems,
+    duplicateItems,
+    stage,
+    accountHint: extraction.bankName,
+    expectedItemCount: newItems.length,
+    expectedIncomeTotal: totals.income,
+    expectedExpenseTotal: totals.expense,
+    fileBase64: buffer.toString("base64"),
+    mimeType,
+    originalName,
+  });
+
+  await wppSend(from, localized(user.locale,
+    `📊 *Lista financeira analisada!*\n\nLi ${items.length} movimentações separadas. *Ainda não registrei nada.*${extraction.bankName ? `\n🏦 Banco identificado: *${extraction.bankName}*` : ""}`,
+    `📊 *¡Lista financiera analizada!*\n\nLeí ${items.length} movimientos separados. *Todavía no registré nada.*${extraction.bankName ? `\n🏦 Banco identificado: *${extraction.bankName}*` : ""}`));
+  if (newItems.length) await wppSendLong(from, financialDocumentImportPreview(newItems, user.locale));
+
+  if (duplicateItems.length) {
+    await wppSend(from, localized(user.locale,
+      `⚠️ Encontrei ${duplicateItems.length} possível(is) repetição(ões), com a mesma data, tipo, valor e descrição:\n\n${financialDocumentImportPreview(duplicateItems, user.locale)}\n\n*Alguma dessas movimentações realmente aconteceu duas vezes?* Responda *todas*, *nenhuma* ou os números (ex.: *1 e 3*).`,
+      `⚠️ Encontré ${duplicateItems.length} posible(s) repetición(es), con la misma fecha, tipo, importe y descripción:\n\n${financialDocumentImportPreview(duplicateItems, user.locale)}\n\n*¿Alguno de estos movimientos realmente ocurrió dos veces?* Responde *todos*, *ninguno* o los números (ej.: *1 y 3*).`));
+  } else {
+    const totalsLine = [
+      totals.income ? `🟢 ${localized(user.locale, "Receitas", "Ingresos")}: ${formatCurrency(totals.income)}` : "",
+      totals.expense ? `🔴 ${localized(user.locale, "Despesas", "Gastos")}: ${formatCurrency(totals.expense)}` : "",
+    ].filter(Boolean).join("\n");
+    await wppSend(from, localized(user.locale,
+      `${totalsLine}\n\n*Quer registrar estas ${newItems.length} movimentações separadamente?* (sim/não)`,
+      `${totalsLine}\n\n*¿Quieres registrar estos ${newItems.length} movimientos por separado?* (sí/no)`));
+  }
   return true;
 }
 
@@ -858,6 +952,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             ? localized(fileUser.locale, `🔎 Identifiquei na imagem: *${subject}*.`, `🔎 Identifiqué en la imagen: *${subject}*.`)
             : localized(fileUser.locale, "❓ Não consegui identificar a imagem com segurança. Envie uma foto mais nítida.", "❓ No pude identificar la imagen con seguridad. Envía una foto más nítida."));
           return;
+        }
+
+        // Antes dos fluxos de fatura e comprovante unitário, procura uma
+        // lista bancária com várias entradas/saídas. Isso evita transformar
+        // um print com diversas receitas em um único valor inventado.
+        if (!hasSaveIntent && mimeType.includes("image")) {
+          try {
+            if (await prepareFinancialTransactionListImport({
+              from, buffer, mimeType, caption, originalName, user: fileUser,
+            })) return;
+          } catch (error) {
+            console.error("[webhook] erro ao extrair lista financeira da imagem:", error);
+          }
         }
 
         // PDF e planilha sempre passam pelo leitor itemizado. Imagens também
@@ -1485,6 +1592,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
       if (imageAction === "register") {
         try {
+          if (await prepareFinancialTransactionListImport({
+            from,
+            buffer,
+            mimeType: pending.mimeType,
+            caption: messageText,
+            originalName: pending.originalName,
+            user,
+          })) return;
           if (await registerFinanceDocumentFromMedia({
             from, buffer, mimeType: pending.mimeType, caption: messageText, user,
           })) return;
@@ -1512,6 +1627,179 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         aiKeywords: keywords, source: "whatsapp", buffer,
       });
       await wppSend(from, replyFileSaved(suggestedName, folder, user.locale));
+      return;
+    }
+
+    // ── Aguardando revisão/confirmação de uma foto de extrato com várias
+    // movimentações. A prévia inteira já foi lida, mas nenhuma linha é
+    // gravada até esta etapa terminar. ──
+    if (pending?.type === "financial_document_import" && pending.userId === user.id) {
+      if (pending.stage === "duplicate_review") {
+        const duplicates = pending.duplicateItems || [];
+        const yesNo = parseYesNo(messageText);
+        const normalizedAnswer = messageText.normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .trim()
+          .toLocaleLowerCase();
+        let selectedDuplicateIndexes: number[] | null = null;
+        if (yesNo === true || /^(?:todos|todas)$/.test(normalizedAnswer)) {
+          selectedDuplicateIndexes = duplicates.map((_, index) => index);
+        } else if (yesNo === false || /^(?:nenhum|nenhuma|ninguno|ninguna|zero)$/.test(normalizedAnswer)) {
+          selectedDuplicateIndexes = [];
+        } else {
+          const parsed = parseFinanceChoiceMulti(messageText, duplicates.map((item, index) => ({
+            id: `financial-document-duplicate-${index}`,
+            description: item.description,
+            amount: item.amount,
+            date: item.date,
+            category: item.category,
+            mode: pending.mode,
+          })));
+          if (parsed.length > 0) selectedDuplicateIndexes = parsed;
+        }
+
+        if (selectedDuplicateIndexes === null) {
+          await wppSend(from, localized(user.locale,
+            "Responda *todas*, *nenhuma* ou os números das movimentações que realmente aconteceram duas vezes (ex.: *1 e 3*). Ainda não gravei nada.",
+            "Responde *todos*, *ninguno* o los números de los movimientos que realmente ocurrieron dos veces (ej.: *1 y 3*). Todavía no guardé nada."));
+          return;
+        }
+
+        const selectedDuplicates = selectedDuplicateIndexes.map(index => duplicates[index]).filter(Boolean);
+        const finalItems = [...pending.items, ...selectedDuplicates];
+        if (finalItems.length === 0) {
+          await clearPendingAction(from);
+          await wppSend(from, localized(user.locale,
+            "Certo. Todas as movimentações já estavam registradas e você confirmou que não aconteceram duas vezes. Não importei nada.",
+            "De acuerdo. Todos los movimientos ya estaban registrados y confirmaste que no ocurrieron dos veces. No importé nada."));
+          return;
+        }
+
+        const totals = financialDocumentImportTotals(finalItems);
+        await setPendingAction(from, {
+          type: "financial_document_import",
+          userId: pending.userId,
+          mode: pending.mode,
+          items: finalItems,
+          stage: "confirm",
+          accountHint: pending.accountHint,
+          expectedItemCount: finalItems.length,
+          expectedIncomeTotal: totals.income,
+          expectedExpenseTotal: totals.expense,
+          fileBase64: pending.fileBase64,
+          mimeType: pending.mimeType,
+          originalName: pending.originalName,
+        });
+        const totalsLine = [
+          totals.income ? `🟢 ${localized(user.locale, "Receitas", "Ingresos")}: ${formatCurrency(totals.income)}` : "",
+          totals.expense ? `🔴 ${localized(user.locale, "Despesas", "Gastos")}: ${formatCurrency(totals.expense)}` : "",
+        ].filter(Boolean).join("\n");
+        await wppSend(from, localized(user.locale,
+          `📋 *Revisão concluída*\n\n${pending.items.length} nova(s) + ${selectedDuplicates.length} repetida(s) confirmada(s)\n${totalsLine}\n\n*Posso gravar estas ${finalItems.length} movimentações separadamente agora?* (sim/não)`,
+          `📋 *Revisión concluida*\n\n${pending.items.length} nueva(s) + ${selectedDuplicates.length} repetida(s) confirmada(s)\n${totalsLine}\n\n*¿Puedo guardar ahora estos ${finalItems.length} movimientos por separado?* (sí/no)`));
+        return;
+      }
+
+      const answer = parseYesNo(messageText);
+      if (answer === null) {
+        await wppSend(from, localized(user.locale,
+          "Responda *sim* para gravar cada movimentação separadamente ou *não* para cancelar. Ainda não gravei nada.",
+          "Responde *sí* para guardar cada movimiento por separado o *no* para cancelar. Todavía no guardé nada."));
+        return;
+      }
+      if (!answer) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale,
+          "Combinado, não importei nenhuma movimentação da imagem. 👍",
+          "De acuerdo, no importé ningún movimiento de la imagen. 👍"));
+        return;
+      }
+
+      const totals = financialDocumentImportTotals(pending.items);
+      const totalsMatch = pending.items.length === pending.expectedItemCount
+        && Math.abs(totals.income - pending.expectedIncomeTotal) <= 0.01
+        && Math.abs(totals.expense - pending.expectedExpenseTotal) <= 0.01;
+      if (!totalsMatch) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale,
+          "⚠️ A lista mudou depois da conferência e foi cancelada por segurança. *Nada foi gravado.* Reenvie a imagem.",
+          "⚠️ La lista cambió después de la revisión y se canceló por seguridad. *No se guardó nada.* Vuelve a enviar la imagen."));
+        return;
+      }
+
+      let newlyCreatedAccountId: string | undefined;
+      let importedFinanceIds: string[] = [];
+      try {
+        const account = pending.accountHint
+          ? await resolveOrCreateInvoiceAccount(user.id, pending.mode, pending.accountHint, {
+              transactionDate: pending.items[0]?.date,
+            })
+          : await resolveAccountFields(user.id, pending.mode, undefined);
+        if ("created" in account && account.created === true) newlyCreatedAccountId = account.accountId;
+        const imported = await addFinances(pending.items.map(item => ({
+          userId: user.id,
+          type: item.type,
+          amount: item.amount,
+          category: item.category,
+          description: item.description,
+          date: item.date,
+          mode: pending.mode,
+          source: "whatsapp",
+          registeredBy: from,
+          accountId: account.accountId,
+          cardInvoiceId: account.cardInvoiceId,
+        })));
+        importedFinanceIds = imported.map(item => item.id);
+        const balance = await getAllTimeBalance(user.id, pending.mode);
+        const accountName = "accountName" in account && typeof account.accountName === "string"
+          ? account.accountName
+          : pending.accountHint;
+        const accountLine = accountName
+          ? `\n🏦 ${localized(user.locale, "Conta", "Cuenta")}: *${accountName}*${"created" in account && account.created === true ? localized(user.locale, " (criada agora)", " (creada ahora)") : ""}`
+          : "";
+        const totalsLine = [
+          totals.income ? `🟢 ${localized(user.locale, "Receitas", "Ingresos")}: ${formatCurrency(totals.income)}` : "",
+          totals.expense ? `🔴 ${localized(user.locale, "Despesas", "Gastos")}: ${formatCurrency(totals.expense)}` : "",
+        ].filter(Boolean).join("\n");
+
+        if (pending.fileBase64 && pending.mimeType) {
+          const extension = pending.originalName?.match(/\.[a-z0-9]{2,5}$/i)?.[0]
+            || (pending.mimeType.includes("png") ? ".png" : ".jpg");
+          await setPendingAction(from, {
+            type: "receipt_save",
+            userId: user.id,
+            fileBase64: pending.fileBase64,
+            mimeType: pending.mimeType,
+            suggestedName: `${accountName || localized(user.locale, "Extrato", "Extracto")} - ${todayStrBR()}${extension}`,
+            description: localized(user.locale,
+              `${imported.length} movimentações importadas separadamente`,
+              `${imported.length} movimientos importados por separado`),
+          });
+        } else {
+          await clearPendingAction(from);
+        }
+
+        const saveQuestion = pending.fileBase64 && pending.mimeType
+          ? localized(user.locale, "\n\n_💾 Quer guardar esta imagem no Drive? (sim/não)_", "\n\n_💾 ¿Quieres guardar esta imagen en Drive? (sí/no)_")
+          : "";
+        await wppSend(from, localized(user.locale,
+          `✅ *${imported.length} movimentações registradas separadamente!*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`,
+          `✅ *¡${imported.length} movimientos registrados por separado!*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`));
+      } catch (error) {
+        await Promise.all(importedFinanceIds.map(id => deleteFinance(id, user.id).catch(rollbackError => {
+          console.error("[webhook] erro ao desfazer movimentação da imagem:", rollbackError);
+        })));
+        if (newlyCreatedAccountId) {
+          await deleteAccount(newlyCreatedAccountId, user.id).catch(rollbackError => {
+            console.error("[webhook] erro ao desfazer conta da imagem:", rollbackError);
+          });
+        }
+        await clearPendingAction(from);
+        console.error("[webhook] erro ao importar movimentações da imagem:", error);
+        await wppSend(from, localized(user.locale,
+          "❌ Não consegui gravar a lista inteira. Nenhuma movimentação do lote e nenhuma conta nova foram mantidas; tente novamente.",
+          "❌ No pude guardar la lista completa. No se mantuvo ningún movimiento del lote ni ninguna cuenta nueva; inténtalo de nuevo."));
+      }
       return;
     }
 

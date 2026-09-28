@@ -563,6 +563,26 @@ export async function isLikelyDuplicateDocumentFinance(
   return sameDay.some(existing => isSameDocumentFinance(existing, candidate, mode));
 }
 
+/** Deduplica uma foto de extrato inteiro com uma única consulta. Mantém a
+ * mesma regra rigorosa do comprovante unitário: data, tipo, valor e descrição
+ * precisam coincidir; valor sozinho nunca elimina uma movimentação. */
+export async function getDocumentFinanceDuplicateFlags(
+  userId: string,
+  mode: FinanceMode,
+  candidates: DocumentFinanceDuplicateCandidate[],
+): Promise<boolean[]> {
+  if (candidates.length === 0) return [];
+  const dates = candidates.map(candidate => candidate.date).sort();
+  const { data, error } = await getSupabase().from("finances").select("*")
+    .eq("user_id", userId)
+    .eq("mode", mode)
+    .gte("date", dates[0])
+    .lte("date", dates[dates.length - 1]);
+  if (error) throw new Error(`[finances] verificação de duplicados do extrato falhou: ${error.message}`);
+  const existing = (data as Row[]).map(fromRow);
+  return candidates.map(candidate => existing.some(item => isSameDocumentFinance(item, candidate, mode)));
+}
+
 export type ImportedInstallmentStatus = {
   description: string;
   current: number;

@@ -4317,6 +4317,16 @@ export type FinancialDocumentExtraction = {
   installmentsRemaining?: number;
 };
 
+export type FinancialTransactionListExtraction = {
+  transactions: FinancialDocumentExtraction[];
+  /** Quantidade de linhas financeiras visíveis na lista/extrato. */
+  sourceTransactionCount: number;
+  /** false impede qualquer gravação quando uma linha ficou sem leitura. */
+  complete: boolean;
+  bankName?: string;
+  mode?: "personal" | "business";
+};
+
 function positiveDocumentInteger(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
@@ -4370,6 +4380,180 @@ export function normalizeFinancialDocumentExtraction(
       installmentsRemaining: installmentTotal - installmentCurrent,
     } : {}),
   };
+}
+
+function strictFinancialListDate(value: unknown, today: string): string | undefined {
+  const raw = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;
+  const [rawYear, month, day] = raw.split("-").map(Number);
+  let year = rawYear;
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return undefined;
+  let date = raw;
+  // Em prints que mostram apenas dia/mês, o modelo pode aplicar o ano atual
+  // a uma movimentação de dezembro vista em janeiro. Nunca criamos uma
+  // movimentação futura a partir de um histórico bancário já ocorrido.
+  while (date > today) {
+    year -= 1;
+    date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  return date;
+}
+
+/** Normaliza listas de movimentações vistas em fotos/prints. Diferente de
+ * um comprovante unitário, uma lista só é aceita com pelo menos duas linhas e
+ * fica bloqueada se o modelo disser que viu mais linhas do que conseguiu ler. */
+export function normalizeFinancialTransactionListExtraction(
+  parsed: Record<string, unknown>,
+  today: string,
+): FinancialTransactionListExtraction | null {
+  if (parsed.isTransactionList !== true || !Array.isArray(parsed.transactions)) return null;
+
+  const transactions: FinancialDocumentExtraction[] = [];
+  for (const rawItem of parsed.transactions) {
+    const item = rawItem as Record<string, unknown> | null;
+    if (!item) continue;
+    const date = strictFinancialListDate(item.date, today);
+    if (!date) continue;
+    const normalized = normalizeFinancialDocumentExtraction({
+      ...item,
+      isFinancial: true,
+      date,
+    }, date);
+    if (!normalized) continue;
+    const allowedCategories = normalized.type === "income" ? CATEGORIES_INCOME : CATEGORIES_EXPENSE;
+    transactions.push({
+      ...normalized,
+      category: allowedCategories.includes(normalized.category)
+        ? normalized.category
+        : "Outros",
+    });
+  }
+
+  const rawCount = positiveDocumentInteger(parsed.sourceTransactionCount)
+    ?? positiveDocumentInteger(parsed.visibleTransactionCount)
+    ?? transactions.length;
+  const sourceTransactionCount = Math.max(rawCount, transactions.length);
+  if (sourceTransactionCount < 2) return null;
+  const bankName = String(parsed.bankName ?? "").replace(/\s+/g, " ").trim().slice(0, 80) || undefined;
+  const mode = parsed.mode === "business" || parsed.mode === "personal" ? parsed.mode : undefined;
+  return {
+    transactions,
+    sourceTransactionCount,
+    complete: transactions.length === sourceTransactionCount,
+    bankName,
+    mode,
+  };
+}
+
+const financialTransactionListSchema = {
+  type: "object",
+  properties: {
+    isTransactionList: { type: "boolean" },
+    bankName: { type: "string", nullable: true },
+    mode: { type: "string", nullable: true },
+    sourceTransactionCount: { type: "integer", nullable: true },
+    transactions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          amount: { type: "number" },
+          description: { type: "string" },
+          category: { type: "string" },
+          date: { type: "string" },
+        },
+        required: ["type", "amount", "description", "category", "date"],
+      },
+    },
+  },
+  required: ["isTransactionList"],
+} as ResponseSchema;
+
+/** Lê prints de extrato/lista bancária com várias entradas e saídas. Não
+ * registra nada: o handler sempre mostra a lista inteira e pede confirmação. */
+export async function extractFinancialTransactionsFromDocument(
+  buffer: Buffer,
+  mimeType: string,
+  caption?: string,
+  userId?: string,
+): Promise<FinancialTransactionListExtraction | null> {
+  const hoje = todayStrBR();
+  const prompt = `Analise esta imagem/documento e determine se ela mostra uma LISTA ou EXTRATO BANCÁRIO com DUAS OU MAIS movimentações financeiras independentes.
+
+Hoje é ${hoje}.
+${caption ? `Pedido do usuário: "${caption}"` : ""}
+
+Use isTransactionList=true somente quando houver pelo menos duas linhas distintas, cada uma com descrição, valor e data. Exemplos: tela de extrato, lista de transferências recebidas, PIX recebidos/enviados ou histórico da conta.
+
+NÃO é lista de movimentações: comprovante único, boleto, nota fiscal, cupom com produtos, fatura de cartão ou resumo sem linhas individuais. Nesses casos retorne {"isTransactionList":false}.
+
+REGRAS OBRIGATÓRIAS:
+- Leia todas as linhas visíveis, de cima a baixo. Uma linha = uma movimentação. Nunca some tudo em um único valor.
+- "Transferência recebida", "PIX recebido", depósito, recebimento ou valor que entrou = type "income".
+- Compra, pagamento, PIX enviado, saque, tarifa ou valor que saiu = type "expense".
+- Use o valor exato impresso em cada linha como número positivo. O campo type informa se entrou ou saiu.
+- Ignore saldo, limite, totais, cabeçalhos e datas de agrupamento sem valor próprio.
+- sourceTransactionCount é a quantidade exata de linhas financeiras visíveis. Se uma linha estiver cortada e não der para ler descrição, valor e data, conte-a, mas não invente os campos.
+- Se a imagem mostrar apenas dia/mês, use o ano compatível mais recente sem criar data futura.
+- Preserve o nome do pagador/recebedor na descrição. Não invente nomes ou valores.
+- Identifique bankName apenas se o banco estiver visível; caso contrário, null.
+
+CATEGORIAS DE RECEITA: ${CATEGORIES_INCOME.join(", ")}
+CATEGORIAS DE DESPESA: ${CATEGORIES_EXPENSE.join(", ")}
+
+Retorne APENAS JSON:
+{
+  "isTransactionList": true,
+  "bankName": "banco visível ou null",
+  "mode": "personal, business ou null",
+  "sourceTransactionCount": 3,
+  "transactions": [
+    {"type":"income", "amount":1406.03, "description":"Transferência recebida de Eva Santos Estética", "category":"Serviços", "date":"2026-09-17"}
+  ]
+}`;
+
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "extractFinancialTransactionsFromDocument",
+    () => openAIMediaJson<Record<string, unknown>>({
+      prompt,
+      buffer,
+      mimeType: mimeType || "image/jpeg",
+      schemaName: "financial_transaction_list",
+      userId,
+      maxOutputTokens: 8_000,
+    }),
+  );
+  if (openAIAttempt.ok) {
+    return normalizeFinancialTransactionListExtraction(openAIAttempt.value, hoje);
+  }
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        maxOutputTokens: 8_000,
+        temperature: 0,
+        responseMimeType: "application/json",
+        responseSchema: financialTransactionListSchema,
+      },
+    });
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
+    ]);
+    const text = result.response.text().trim()
+      .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    return normalizeFinancialTransactionListExtraction(JSON.parse(text), hoje);
+  } catch (error) {
+    console.error("[ai-processor] Erro extractFinancialTransactionsFromDocument:", error);
+    return null;
+  }
 }
 
 /** Acrescenta metadados pesquisáveis ao lançamento salvo. É o mesmo formato

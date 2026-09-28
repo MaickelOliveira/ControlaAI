@@ -14,7 +14,7 @@ vi.mock("./whatsapp-config", () => ({
   getConfig: vi.fn(async () => ({ geminiApiKey: "gemini-test-key" })),
 }));
 
-import { extractInvoiceTransactions, financialDocumentDescription, normalizeFinancialDocumentExtraction, processMessage } from "./ai-processor";
+import { extractInvoiceTransactions, financialDocumentDescription, normalizeFinancialDocumentExtraction, normalizeFinancialTransactionListExtraction, processMessage } from "./ai-processor";
 
 const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.OPENAI_API_KEY;
@@ -332,5 +332,51 @@ describe("financial document installments", () => {
       date: "2026-09-27",
     }, "2026-09-28");
     expect(extracted).toMatchObject({ installmentCurrent: 4, installmentTotal: 12, installmentsRemaining: 8 });
+  });
+});
+
+describe("financial transaction lists", () => {
+  it("keeps every visible income as an independent transaction", () => {
+    const extracted = normalizeFinancialTransactionListExtraction({
+      isTransactionList: true,
+      bankName: "Banco Exemplo",
+      sourceTransactionCount: 3,
+      transactions: [
+        { type: "income", amount: 1406.03, description: "Transferência recebida de Eva Santos Estética", category: "Serviços", date: "2026-09-17" },
+        { type: "income", amount: 155.06, description: "iFood Pago Instituição de Pagamento", category: "Vendas", date: "2026-09-15" },
+        { type: "income", amount: 3135.65, description: "Transferência recebida de Eva Santos Estética", category: "Serviços", date: "2026-09-12" },
+      ],
+    }, "2026-09-28");
+
+    expect(extracted).toMatchObject({
+      bankName: "Banco Exemplo",
+      sourceTransactionCount: 3,
+      complete: true,
+    });
+    expect(extracted?.transactions).toHaveLength(3);
+    expect(extracted?.transactions.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(4696.74, 2);
+    expect(extracted?.transactions.every(item => item.type === "income")).toBe(true);
+  });
+
+  it("fails closed when one visible row was not fully read", () => {
+    const extracted = normalizeFinancialTransactionListExtraction({
+      isTransactionList: true,
+      sourceTransactionCount: 3,
+      transactions: [
+        { type: "income", amount: 100, description: "PIX recebido", category: "Outros", date: "2026-09-20" },
+        { type: "expense", amount: 20, description: "Tarifa", category: "Outros", date: "2026-09-20" },
+      ],
+    }, "2026-09-28");
+
+    expect(extracted).toMatchObject({ sourceTransactionCount: 3, complete: false });
+    expect(extracted?.transactions).toHaveLength(2);
+  });
+
+  it("does not treat a single receipt as a transaction list", () => {
+    expect(normalizeFinancialTransactionListExtraction({
+      isTransactionList: false,
+      sourceTransactionCount: 1,
+      transactions: [],
+    }, "2026-09-28")).toBeNull();
   });
 });
