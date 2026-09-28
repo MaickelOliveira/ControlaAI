@@ -191,8 +191,10 @@ describe("normalizeInvoiceExtraction", () => {
       bankName: "Sicredi",
       dueDate: "2026-10-10",
       statementTotal: "R$ 4.804,93",
-      sourceTransactionCount: 48,
-      ignoredTransactionCount: 2,
+      // Os contadores soltos da IA podem variar. A lista detalhada e as
+      // transações concretas precisam continuar produzindo 48/3.
+      sourceTransactionCount: 50,
+      ignoredTransactionCount: 5,
       ignoredTransactions: [
         { date: "2026-09-10", description: "Pagamento da fatura", amount: "R$ 6.213,15", transactionKind: "payment" },
         { date: "2026-09-09", description: "Estorno Tiktok Shop Evamhcome Sao Paulo Br", amount: "R$ 21,57", transactionKind: "reversal" },

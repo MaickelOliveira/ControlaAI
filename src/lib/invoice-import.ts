@@ -612,16 +612,24 @@ export function normalizeInvoiceExtraction(
   const dueDay = rawDueDay && rawDueDay <= 28 ? rawDueDay : undefined;
   const rawIgnoredCount = positiveInteger(parsed.ignoredTransactionCount);
   const ignoredFromList = Array.isArray(parsed.ignoredTransactions) ? parsed.ignoredTransactions.length : 0;
-  const baseIgnoredCount = Math.max(rawIgnoredCount ?? 0, ignoredFromList);
+  // Quando há a lista concreta das linhas ignoradas, ela é a fonte da
+  // verdade. Contadores soltos gerados pela IA podem variar sem que o
+  // documento mude (por exemplo 3 numa leitura e 5 na seguinte).
+  const baseIgnoredCount = ignoredFromList || rawIgnoredCount || 0;
   const rawSourceCount = positiveInteger(parsed.sourceTransactionCount);
-  const ignoredTransactionCount = Math.max(
-    baseIgnoredCount + reversalResult.removedCount,
-    (rawSourceCount ?? 0) - transactions.length,
-  ) || undefined;
-  const sourceTransactionCount = Math.max(
-    transactions.length + (ignoredTransactionCount ?? 0),
-    rawSourceCount ?? 0,
-  ) || undefined;
+  const verifiedSourceCount = parsed.sourceTransactionCountVerified === true;
+  const ignoredTransactionCount = (verifiedSourceCount
+    ? Math.max(
+      baseIgnoredCount + reversalResult.removedCount,
+      (rawSourceCount ?? 0) - transactions.length,
+    )
+    : baseIgnoredCount + reversalResult.removedCount) || undefined;
+  const calculatedSourceCount = transactions.length + (ignoredTransactionCount ?? 0);
+  const sourceTransactionCount = (verifiedSourceCount && rawSourceCount
+    ? rawSourceCount
+    : ignoredFromList
+    ? calculatedSourceCount
+    : Math.max(calculatedSourceCount, rawSourceCount ?? 0)) || undefined;
   const statementTotal = moneyValue(parsed.statementTotal ?? parsed.invoiceTotal ?? parsed.totalDue);
   const transactionTotal = roundCurrency(transactions.reduce((sum, transaction) => sum + transaction.amount, 0));
   const reconciliationDifference = statementTotal === undefined

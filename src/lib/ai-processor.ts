@@ -14,6 +14,7 @@ import {
   parseInvoiceWorkbook,
   type InvoiceExtraction,
 } from "./invoice-import";
+import { extractPdfTransactionInventory, mergePdfInventory } from "./invoice-pdf-text";
 import {
   isOpenAITestUser,
   openAIJson,
@@ -4549,6 +4550,11 @@ export async function extractInvoiceTransactions(
     analysisMimeType = "text/plain";
     analysisFilename = `${originalName || "planilha"}.txt`;
   }
+  const pdfInventory = analysisMimeType === "application/pdf"
+    ? await extractPdfTransactionInventory(analysisBuffer, hoje)
+    : null;
+  const withPdfEvidence = (parsed: Record<string, unknown>): Record<string, unknown> =>
+    mergePdfInventory(parsed, pdfInventory);
   const prompt = `Analise este documento e determine se é uma FATURA DE CARTÃO DE CRÉDITO ou EXTRATO com MÚLTIPLAS transações/lançamentos (compras individuais).
 
 Hoje é: ${hoje}
@@ -4653,7 +4659,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
   );
   if (openAIAttempt.ok) {
     if (openAIAttempt.value.isInvoice !== true) return null;
-    const normalized = normalizeInvoiceExtraction(openAIAttempt.value, hoje);
+    const normalized = normalizeInvoiceExtraction(withPdfEvidence(openAIAttempt.value), hoje);
     if (normalized && isSafelyReconciled(normalized)) return normalized;
     if (normalized) {
       bestMismatch = normalized;
@@ -4671,7 +4677,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
         }),
       );
       if (retry.ok && retry.value.isInvoice === true) {
-        const retried = normalizeInvoiceExtraction(retry.value, hoje);
+        const retried = normalizeInvoiceExtraction(withPdfEvidence(retry.value), hoje);
         if (retried && isSafelyReconciled(retried)) return retried;
         if (retried) bestMismatch = closerMismatch(bestMismatch, retried);
       }
@@ -4720,7 +4726,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
         continue;
       }
 
-      const normalized = normalizeInvoiceExtraction(parsed, hoje);
+      const normalized = normalizeInvoiceExtraction(withPdfEvidence(parsed), hoje);
       if (normalized && isSafelyReconciled(normalized)) return normalized;
       if (normalized) {
         bestMismatch = closerMismatch(bestMismatch, normalized);
