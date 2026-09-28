@@ -53,4 +53,19 @@ describe("finance detail reply", () => {
     expect(reply).toContain("Alquiler casa");
     expect(reply).toContain("todavía no forman parte del saldo realizado");
   });
+
+  it("includes every scheduled item instead of stopping at twenty", () => {
+    const upcoming = Array.from({ length: 25 }, (_, index) => ({
+      ...rent,
+      id: `rent-${index + 1}`,
+      description: `Conta futura ${index + 1}`,
+    }));
+    const reply = replyFinanceDetail([], upcoming, {
+      type: "expense", mode: "personal", periodLabel: "setembro de 2026", locale: "pt-BR",
+    });
+
+    expect(reply).toContain("Conta futura 1");
+    expect(reply).toContain("Conta futura 25");
+    expect(reply).not.toContain("primeiros 20");
+  });
 });

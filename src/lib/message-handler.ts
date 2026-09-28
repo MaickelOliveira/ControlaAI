@@ -3451,7 +3451,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           const withAccount = accountFilter
             ? `${user.locale === "es" ? "🏦 Cuenta" : "🏦 Conta"}: *${accountFilter.name}*\n\n${finalMsg}`
             : finalMsg;
-          await wppSend(from, withAccount.length > 4000 ? withAccount.slice(0, 3950) + "\n\n_(lista truncada — veja o restante no dashboard)_" : withAccount);
+          await wppSendLong(from, withAccount);
         } catch (detailErr) {
           console.error("[finance_detail]", detailErr);
           await wppSend(from, "❌ Não consegui gerar o extrato. Tente novamente.");
@@ -5089,7 +5089,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               msg += `${i + 1}. ${emoji} ${f.description} — ${formatCurrency(f.amount)}\n   📅 ${new Date(f.date + "T12:00:00").toLocaleDateString(dateLocale)} · ${f.category}\n\n`;
             });
             msg = msg.trim();
-            await wppSend(from, msg.length > 4000 ? msg.slice(0, 3950) + "\n\n_(lista truncada — veja o restante no dashboard)_" : msg);
+            await wppSendLong(from, msg);
           }
         } else {
           const fallback = await generateFallbackResponse(messageText, recentHistory, user.locale, user.id);

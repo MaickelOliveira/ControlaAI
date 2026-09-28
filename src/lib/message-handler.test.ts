@@ -201,6 +201,18 @@ describe("localized WhatsApp help and errors", () => {
     expect(chunks.join("\n")).toContain("Zelo — tu asesor personal");
   });
 
+  it("splits a long financial list without omitting any movement", () => {
+    const rows = Array.from({ length: 120 }, (_, index) =>
+      `${index + 1}. Mercado ${index + 1} — R$ 10,00 — 28/09/2026`);
+    const completeMessage = `📋 *Despesas do mês*\n\n${rows.join("\n")}`;
+    const chunks = splitWhatsAppMessage(completeMessage);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(chunk => chunk.length <= 3500)).toBe(true);
+    expect(chunks.join("\n")).toBe(completeMessage);
+    expect(chunks.join("\n")).not.toContain("lista truncada");
+  });
+
   it("never returns the Portuguese processing error to a Spanish account", () => {
     const reply = replyProcessingError("es");
     expect(reply).toContain("Tuve un problema");

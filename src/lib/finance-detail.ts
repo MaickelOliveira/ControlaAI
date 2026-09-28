@@ -90,14 +90,9 @@ export function replyFinanceDetail(
     message += options.locale === "es"
       ? `\n\n⏳ *Programados / ${text.scheduled}*\n`
       : `\n\n⏳ *Programadas / ${text.scheduled}*\n`;
-    for (const item of upcoming.slice(0, 20)) {
+    for (const item of upcoming) {
       message += `• *${item.description}* — ${formatCurrency(item.amount)}\n`;
       message += `  📅 ${dateLabel(item.dueDate, options.locale)} · ${originLabel(item.origin, options.locale)}\n`;
-    }
-    if (upcoming.length > 20) {
-      message += options.locale === "es"
-        ? `_Mostré los primeros 20 de ${upcoming.length}._\n`
-        : `_Mostrei os primeiros 20 de ${upcoming.length}._\n`;
     }
     const upcomingTotal = upcoming.reduce((sum, item) => sum + item.amount, 0);
     message += `\n${options.type === "income" ? "💰" : "💸"} *${options.locale === "es" ? "Total" : "Total"} ${text.scheduled}: ${formatCurrency(upcomingTotal)}*`;
