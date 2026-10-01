@@ -3869,16 +3869,71 @@ function groundedSources(result: GenerateContentResult): GroundedSource[] {
 
 /** Pesquisa pública em tempo real com Grounding do Google Search.
  * Se a API não devolver fontes, não repassamos uma resposta sem comprovação. */
+function webSearchFailureMessage(locale?: string): string {
+  return locale === "es"
+    ? "No pude confirmar esa búsqueda con fuentes públicas ahora. Inténtalo de nuevo en unos minutos."
+    : locale === "pt-PT"
+      ? "Não consegui confirmar essa pesquisa com fontes públicas agora. Tenta novamente dentro de alguns minutos."
+      : "Não consegui confirmar essa pesquisa com fontes públicas agora. Tente novamente em alguns minutos.";
+}
+
+const WEB_SEARCH_BATCH_SIZE = 3;
+
+/** Pedidos com muitos itens (ex.: preço de 10 remédios) estouram uma única
+ * busca com fontes. Divide em lotes pequenos, cada um com o mesmo contexto. */
+async function splitWebSearchBatches(query: string): Promise<string[]> {
+  if (query.length < 160 || (query.match(/,/g) || []).length < 5) return [query];
+  try {
+    const cfg = await getConfig();
+    const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+    if (!apiKey) return [query];
+    const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: { temperature: 0, responseMimeType: "application/json" },
+    });
+    const result = await model.generateContent(
+      `Separe o pedido de pesquisa abaixo em "request" (o que deve ser pesquisado e onde, sem a lista) e "items" (cada item da lista, completo, exatamente como escrito). Se não houver lista de itens independentes, retorne items vazio. Responda só JSON: {"request": string, "items": string[]}.\n\nPedido: ${query}`,
+    );
+    const parsed = JSON.parse(result.response.text()) as { request?: string; items?: string[] };
+    const items = (parsed.items || []).map(item => String(item).trim()).filter(Boolean);
+    const request = (parsed.request || "").trim();
+    if (!request || items.length <= WEB_SEARCH_BATCH_SIZE) return [query];
+    const batches: string[] = [];
+    for (let i = 0; i < items.length; i += WEB_SEARCH_BATCH_SIZE) {
+      batches.push(`${request}: ${items.slice(i, i + WEB_SEARCH_BATCH_SIZE).join(", ")}`);
+    }
+    return batches;
+  } catch (error) {
+    console.error("[ai-processor] Erro ao dividir pesquisa em lotes:", String(error));
+    return [query];
+  }
+}
+
 export async function generateWebSearchResponse(
   query: string,
   locale?: string,
   userId?: string,
 ): Promise<string> {
-  const failure = locale === "es"
-    ? "No pude confirmar esa búsqueda con fuentes públicas ahora. Inténtalo de nuevo en unos minutos."
-    : locale === "pt-PT"
-      ? "Não consegui confirmar essa pesquisa com fontes públicas agora. Tenta novamente dentro de alguns minutos."
-      : "Não consegui confirmar essa pesquisa com fontes públicas agora. Tente novamente em alguns minutos.";
+  const batches = await splitWebSearchBatches(query);
+  if (batches.length === 1) return generateSingleWebSearch(query, locale, userId);
+
+  const failure = webSearchFailureMessage(locale);
+  const answers = await Promise.all(batches.map(batch => generateSingleWebSearch(batch, locale, userId)));
+  const ok = answers.filter(answer => answer !== failure);
+  if (!ok.length) return failure;
+  const missed = answers.length - ok.length;
+  const note = missed
+    ? `\n\n⚠️ ${missed === 1 ? "Um grupo de itens não pôde" : `${missed} grupos de itens não puderam`} ser confirmado(s). Peça de novo só os itens que faltaram.`
+    : "";
+  return ok.join("\n\n———\n\n") + note;
+}
+
+async function generateSingleWebSearch(
+  query: string,
+  locale?: string,
+  userId?: string,
+): Promise<string> {
+  const failure = webSearchFailureMessage(locale);
   const language = localeInstruction(locale) || "Responda sempre em português brasileiro.";
   const searchedAt = new Intl.DateTimeFormat(locale === "es" ? "es-419" : locale === "pt-PT" ? "pt-PT" : "pt-BR", {
     dateStyle: "short",
