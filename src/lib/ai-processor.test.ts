@@ -323,6 +323,11 @@ describe("internet research classification", () => {
       .toMatchObject({ intent: "web_search", confidence: 1 });
   });
 
+  it("routes product price research that is not about medicine", () => {
+    expect(getExplicitWebSearchResult("Pesquise na internet o preço de sofá, mesa de jantar, cama box e geladeira"))
+      .toMatchObject({ intent: "web_search", confidence: 1 });
+  });
+
   it("does not steal finance, reminder, task or agenda messages that mention today", () => {
     expect(getExplicitWebSearchResult("Gastei 60 na farmácia hoje")).toBeNull();
     expect(getExplicitWebSearchResult("me lembre do dólar hoje às 18h")).toBeNull();

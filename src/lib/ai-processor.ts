@@ -3882,7 +3882,8 @@ const WEB_SEARCH_BATCH_SIZE = 3;
 /** Pedidos com muitos itens (ex.: preço de 10 remédios) estouram uma única
  * busca com fontes. Divide em lotes pequenos, cada um com o mesmo contexto. */
 async function splitWebSearchBatches(query: string): Promise<string[]> {
-  if (query.length < 160 || (query.match(/,/g) || []).length < 5) return [query];
+  const separators = (query.match(/,|;|\n|•|(?:^|\s)-\s/g) || []).length;
+  if (query.length < 80 || separators < 3) return [query];
   try {
     const cfg = await getConfig();
     const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
@@ -3945,6 +3946,7 @@ Você é o Zelo, assessor pessoal do usuário. Faça uma pesquisa real na intern
 - Use informações atuais e verificáveis; não complete lacunas com suposições.
 - Seja direto e útil para WhatsApp. Informe preço, disponibilidade, horário e condições somente quando a fonte realmente trouxer esses dados.
 - Em preços e disponibilidade, avise brevemente que podem mudar e que o usuário deve confirmar no link antes de comprar.
+- Para qualquer produto (móveis, eletrodomésticos, decoração, materiais, eletrônicos, roupas, etc.), informe loja, preço e link de cada opção encontrada. Quando houver vários itens, organize a resposta item por item, sem deixar nenhum de fora; se não achar um item, diga isso.
 - Para medicamentos, limite-se a preços, disponibilidade e informações públicas objetivas. Não diagnostique, não prescreva e não recomende dose; em dúvida de saúde, oriente médico ou farmacêutico.
 - Para viagens, deixe claros data, origem, destino, horários, preço encontrado, bagagem/taxas quando disponíveis e o link para conferência. Nunca diga que reservou ou comprou.
 - Quando o pedido for curto, como "dólar hoje" ou o nome de um local seguido de "hoje", entregue um panorama atual completo e útil do assunto. Para um local, inclua o que estiver disponível e for relevante hoje, como clima e alertas, eventos, notícias locais, trânsito, horários de funcionamento, turismo e atrações. Não exija que o usuário escreva "pesquise na internet".
