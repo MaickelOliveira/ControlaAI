@@ -329,6 +329,9 @@ describe("internet research classification", () => {
     expect(getExplicitWebSearchResult("tarefa de hoje: pesquisar hotéis")).toBeNull();
     expect(getExplicitWebSearchResult("tenho reunião hoje em Bogotá")).toBeNull();
     expect(getExplicitWebSearchResult("qual meu saldo hoje?")).toBeNull();
+    expect(getExplicitWebSearchResult("Pagamento Tate, R$ 1.000 efetuado hoje.")).toBeNull();
+    expect(getExplicitWebSearchResult("Pagamento Tati, personal, R$ 1.000,00, feito hoje.")).toBeNull();
+    expect(getExplicitWebSearchResult("Pagamento Taty personal Treiner 1.000 feito hoje")).toBeNull();
   });
 
   it("does not steal an expense registration just because it mentions 'valor'", () => {

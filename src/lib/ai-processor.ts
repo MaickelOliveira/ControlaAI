@@ -514,8 +514,10 @@ export function getExplicitWebSearchResult(message: string, history?: WebSearchH
     hasContextualWebReference(message)
     || (/^(?:e|y)\b/.test(normalized) && /\b(?:hoje|hoy|amanha|manana|semana|fim de semana|fin de semana|mes|m[eê]s)\b/.test(normalized))
   );
-  const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|pagar|recebi|recibi|receber|cobrar|ganhei|comprei|compra|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|coloc|coloqu|bot|lanc|agreg|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|contas? a receber|contas? a pagar|cuentas? por cobrar|cuentas? por pagar|conta da empresa|cuenta de la empresa|drive|envi|mand|avis|notific|respond|liga|llama|chama|telefon|cliente|clienta|customer|funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa])\w*/.test(normalized);
+  const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|pagar|pagament|pagou|pagaram|efetuad|realizad|quitei|quitad|transferi|transferenc|pix|deposit|recebi|recibi|receber|cobrar|ganhei|comprei|compra|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|coloc|coloqu|bot|lanc|agreg|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|contas? a receber|contas? a pagar|cuentas? por cobrar|cuentas? por pagar|conta da empresa|cuenta de la empresa|drive|envi|mand|avis|notific|respond|liga|llama|chama|telefon|cliente|clienta|customer|funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa])\w*/.test(normalized);
 
+  const hasMoneyAmount = /\br\$\s*\d|\b\d+(?:[.,]\d{2,3})+\b/.test(normalized);
+  if (hasMoneyAmount && !asksToSearch) return null;
   if (!(asksToSearch && mentionsWeb) && !(hasLiveInformationSubject || terseCurrentSubject || contextualFollowUp) || isInternalOrMutation) return null;
 
   const keyword = contextualWebSearchKeyword(message, history);
