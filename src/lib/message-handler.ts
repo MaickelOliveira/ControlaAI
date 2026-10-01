@@ -5077,7 +5077,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           await wppSend(from, missingQuestion);
           break;
         }
-        await wppSend(from, await generateWebSearchResponse(query, user.locale, user.id));
+        await wppSendLong(from, await generateWebSearchResponse(query, user.locale, user.id));
         break;
       }
 
