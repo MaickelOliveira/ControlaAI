@@ -3902,7 +3902,7 @@ Consulta iniciada em ${searchedAt} (horário de Brasília).`;
     userId,
     "generateWebSearchResponse",
     async () => {
-      const result = await openAIWebSearch({ prompt, userId, maxOutputTokens: 2_048 });
+      const result = await openAIWebSearch({ prompt, userId, maxOutputTokens: 4_096 });
       if (!result.text || !result.sources.length) {
         throw new Error("pesquisa OpenAI sem resposta ou sem fontes");
       }
@@ -3932,7 +3932,10 @@ Consulta iniciada em ${searchedAt} (horário de Brasília).`;
     const result = await model.generateContent(prompt);
     const answer = result.response.text().trim();
     const sources = groundedSources(result);
-    if (!answer || !sources.length) return failure;
+    if (!answer || !sources.length) {
+      console.error(`[ai-processor] Pesquisa web sem ${answer ? "fontes" : "resposta"} (consulta de ${query.length} caracteres)`);
+      return failure;
+    }
 
     const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
     const sourceList = sources.map((source, index) => `${index + 1}. ${source.title}: ${source.url}`).join("\n");
@@ -3940,6 +3943,45 @@ Consulta iniciada em ${searchedAt} (horário de Brasília).`;
   } catch (error) {
     console.error("[ai-processor] Erro na pesquisa web:", String(error));
     return failure;
+  }
+}
+
+/** Transcreve o conteúdo legível de uma imagem (escalas, listas, tabelas,
+ * mensagens) para que um pedido livre sobre ela siga o fluxo normal de texto. */
+export async function readImageText(
+  buffer: Buffer,
+  mimeType: string,
+  locale?: string,
+  userId?: string,
+): Promise<string | null> {
+  const prompt = `${locale === "es" ? "Transcribe fielmente todo el contenido legible de la imagen (textos, fechas, horarios, nombres, valores, listas y tablas), conservando la estructura." : "Transcreva fielmente todo o conteúdo legível da imagem (textos, datas, horários, nomes, valores, listas e tabelas), mantendo a estrutura."}\nNão invente nada. Se não houver texto legível, retorne exatamente: SEM_TEXTO`;
+  const clean = (raw: string) => {
+    const text = raw.trim();
+    return !text || /^SEM_TEXTO$/i.test(text) ? null : text.slice(0, 6000);
+  };
+  const openAIAttempt = await tryOpenAIForTestUser(
+    userId,
+    "readImageText",
+    async () => clean(await openAIMediaText({
+      prompt, buffer, mimeType: mimeType || "image/jpeg", userId, maxOutputTokens: 1500,
+    })),
+  );
+  if (openAIAttempt.ok) return openAIAttempt.value;
+
+  const cfg = await getConfig();
+  const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  if (!apiKey) return null;
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0 } });
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
+    ]);
+    return clean(result.response.text());
+  } catch (error) {
+    console.error("[ai-processor] Erro ao ler texto da imagem:", String(error));
+    return null;
   }
 }
 

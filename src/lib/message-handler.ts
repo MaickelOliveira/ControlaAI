@@ -1,7 +1,7 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
@@ -1609,9 +1609,26 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
+    let imageFreeFormConsumed = false;
+    // Pedido livre sobre a imagem pendente ("agendar os dias e o que precisa"):
+    // lê o conteúdo e segue o fluxo normal de texto, em vez de repetir o menu.
+    if (pending?.type === "image_action" && pending.userId === user.id
+      && !parseImageAction(messageText)
+      && !/^(?:cancelar|cancela|deixa pra l[áa]|no|não|nao)$/i.test(messageText.trim())
+      && messageText.trim().split(/\s+/).length >= 3) {
+      const imageText = await readImageText(
+        Buffer.from(pending.fileBase64, "base64"), pending.mimeType, user.locale, user.id,
+      );
+      if (imageText) {
+        await clearPendingAction(from);
+        messageText = `${messageText.trim()}\n\nConteúdo da imagem enviada:\n${imageText}`;
+        imageFreeFormConsumed = true;
+      }
+    }
+
     // ── Imagem enviada sem legenda: só executa a ação depois que a pessoa
     // disser se quer registrar, guardar, pesquisar ou identificar. ──
-    if (pending?.type === "image_action" && pending.userId === user.id) {
+    if (pending?.type === "image_action" && pending.userId === user.id && !imageFreeFormConsumed) {
       const imageAction = parseImageAction(messageText);
       const cancelImage = /^(?:cancelar|cancela|deixa pra l[áa]|cancelar|no|não|nao)$/i.test(messageText.trim());
       if (cancelImage) {
