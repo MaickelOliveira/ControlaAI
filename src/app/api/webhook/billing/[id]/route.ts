@@ -22,26 +22,29 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   const authOk = body ? verifyBillingWebhookAuth(cfg, body, req.headers) : false;
 
   if (!cfg.active) {
-    await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: false, authOk, body });
+    await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: false, authOk, body }, cfg);
     return NextResponse.json({ ok: true });
   }
   if (!body) {
-    await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: false, body: null });
+    await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: false, body: null }, cfg);
     return NextResponse.json({ ok: true });
   }
   if (!authOk) {
     console.error(`[webhook/billing/${cfg.label}] autenticação falhou — requisição rejeitada`);
-    await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: false, body });
+    await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: false, body }, cfg);
     return NextResponse.json({ ok: true }); // 200 mesmo assim — não ajuda um atacante a descobrir por tentativa e erro
   }
 
   const result = await evaluateBillingWebhook(cfg, body);
-  await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: true, body, result });
+  await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: true, body, result }, cfg);
   if (!result.ok) {
     console.error(`[webhook/billing/${cfg.label}] ${result.error.replace(/[\w.+-]+@[\w.-]+/g, m => maskEmail(m))}`);
   } else {
     console.log(`[webhook/billing/${cfg.label}] ${result.action}${result.email ? ` — ${maskEmail(result.email)}` : ""}${result.detail ? ` (${result.detail})` : ""}`);
   }
 
+  // Falha ao gravar no banco: responde 503 para a plataforma de venda reenviar
+  // o evento, em vez de dar 200 e deixar um reembolso sem efeito.
+  if (!result.ok && result.retryable) return NextResponse.json({ ok: false }, { status: 503 });
   return NextResponse.json({ ok: true });
 }

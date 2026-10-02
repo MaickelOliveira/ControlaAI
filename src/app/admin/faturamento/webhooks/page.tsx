@@ -8,6 +8,7 @@ type WebhookAttempt = {
   authOk: boolean;
   body: unknown;
   result?: { ok: boolean; action?: string; email?: string; detail?: string; error?: string };
+  history?: { at: string; event?: string; email?: string; authOk: boolean; outcome: string }[];
 };
 
 type Config = {
@@ -184,6 +185,20 @@ export default function BillingWebhooksPage() {
                       </span>
                     )}
                   </div>
+                  {!!c.lastAttempt.history?.length && (
+                    <details className="text-[11px]">
+                      <summary className="cursor-pointer text-slate-500 hover:text-slate-800">Histórico dos últimos {c.lastAttempt.history.length} eventos</summary>
+                      <ul className="mt-1.5 divide-y divide-slate-100 border border-slate-200 rounded-lg max-h-72 overflow-y-auto">
+                        {c.lastAttempt.history.map((h, i) => (
+                          <li key={i} className="px-2 py-1.5 flex flex-col gap-0.5">
+                            <span className="text-slate-400">{new Date(h.at).toLocaleString("pt-BR")}</span>
+                            <span className="font-mono text-slate-700 break-all">{h.event || "—"} · {h.email || "sem e-mail"}</span>
+                            <span className={h.authOk ? "text-slate-600" : "text-red-600"}>{h.outcome}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
                   <details className="text-[11px]">
                     <summary className="cursor-pointer text-slate-500 hover:text-slate-800">Ver payload recebido (JSON real)</summary>
                     <pre className="mt-1.5 bg-slate-50 border border-slate-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(c.lastAttempt.body, null, 2)}</pre>

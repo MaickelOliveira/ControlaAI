@@ -57,7 +57,20 @@ export type WebhookAttempt = {
   authOk: boolean;
   body: unknown;
   result?: BillingWebhookResult;
+  // Últimos eventos recebidos (mais novo primeiro), sem o corpo completo.
+  // Vive dentro do mesmo JSON de last_attempt para não exigir migração.
+  history?: WebhookHistoryEntry[];
 };
+
+export type WebhookHistoryEntry = {
+  at: string;
+  event?: string;
+  email?: string;
+  authOk: boolean;
+  outcome: string;
+};
+
+const WEBHOOK_HISTORY_LIMIT = 100;
 
 type Row = {
   id: string;
@@ -133,9 +146,24 @@ export async function getBillingWebhookById(id: string): Promise<BillingWebhookC
  *  200 OK, o admin acha que "testou e funcionou", mas nada acontece porque
  *  ninguém tinha ligado a integração ainda). Best-effort: nunca deve
  *  derrubar o processamento do webhook por causa de erro aqui. */
-export async function recordWebhookAttempt(id: string, attempt: WebhookAttempt): Promise<void> {
+export async function recordWebhookAttempt(id: string, attempt: WebhookAttempt, cfg?: Pick<BillingWebhookConfig, "emailPath" | "statusPath" | "lastAttempt">): Promise<void> {
   try {
-    await getSupabase().from("billing_webhooks").update({ last_attempt: attempt }).eq("id", id);
+    const event = cfg ? getByPath(attempt.body, cfg.statusPath) : undefined;
+    const email = cfg ? (getByPath(attempt.body, cfg.emailPath) ?? getByPath(attempt.body, "data.subscriber.email")) : undefined;
+    const outcome = !attempt.wasActive ? "integração desativada"
+      : !attempt.authOk ? "autenticação falhou"
+        : !attempt.result ? "sem resultado"
+          : attempt.result.ok ? `${attempt.result.action}${attempt.result.detail ? ` — ${attempt.result.detail}` : ""}`
+            : `erro: ${attempt.result.error}`;
+    const entry: WebhookHistoryEntry = {
+      at: attempt.at,
+      ...(typeof event === "string" ? { event } : {}),
+      ...(typeof email === "string" ? { email } : {}),
+      authOk: attempt.authOk,
+      outcome,
+    };
+    const history = [entry, ...(cfg?.lastAttempt?.history ?? [])].slice(0, WEBHOOK_HISTORY_LIMIT);
+    await getSupabase().from("billing_webhooks").update({ last_attempt: { ...attempt, history } }).eq("id", id);
   } catch (e) {
     console.error("[billing-webhook] falha ao gravar last_attempt:", e);
   }
@@ -376,7 +404,7 @@ export function classifyBillingStatus(
 
 export type BillingWebhookResult =
   | { ok: true; action: "activated" | "deactivated" | "plan_changed" | "ignored"; email?: string; detail?: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; retryable?: boolean };
 
 /** Processa um payload já autenticado — separado da checagem de auth pra
  *  poder ser usado também no "testar mapeamento" do admin (dry run). */
@@ -459,10 +487,14 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     if (isStaleActivation(user, body)) {
       return { ok: true, action: "ignored", email, detail: "evento de ativação anterior à desativação do cliente (reenvio ou atraso); acesso mantido bloqueado" };
     }
-    if (!dryRun) await activateUser(user.id);
+    if (!dryRun && !await activateUser(user.id)) {
+      return { ok: false, error: `Não consegui ativar ${email} no banco`, retryable: true };
+    }
     return { ok: true, action: "activated", email };
   }
-  if (!dryRun) await deactivateUser(user.id);
+  if (!dryRun && !await deactivateUser(user.id)) {
+    return { ok: false, error: `Não consegui desativar ${email} no banco — o acesso continua liberado`, retryable: true };
+  }
   return { ok: true, action: "deactivated", email };
 }
 
