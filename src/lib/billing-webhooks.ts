@@ -181,7 +181,7 @@ export const BILLING_WEBHOOK_PRESETS: Record<string, Omit<BillingWebhookConfig, 
     emailPath: "data.buyer.email",
     statusPath: "event",
     activateValues: ["PURCHASE_APPROVED", "PURCHASE_COMPLETE", "SUBSCRIPTION_RENEWED"],
-    deactivateValues: ["PURCHASE_CANCELED", "PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK", "PURCHASE_EXPIRED", "SUBSCRIPTION_CANCELLATION"],
+    deactivateValues: ["PURCHASE_DELAYED", "PURCHASE_PROTEST", "PURCHASE_CANCELED", "PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK", "PURCHASE_EXPIRED", "SUBSCRIPTION_CANCELLATION"],
     planPath: "data.product.id",
     planMap: {},
     localePath: "data.product.id",
@@ -350,6 +350,30 @@ export function isStaleActivation(user: { status: string; deactivatedAt?: string
   return eventAt !== null && Number.isFinite(deactivatedAt) && eventAt <= deactivatedAt;
 }
 
+/** Eventos que SEMPRE tiram o acesso, mesmo que a lista salva no banco (que
+ *  vem do preset da época da criação) não os tenha: pagamento atrasado,
+ *  pedido de reembolso, reembolso, chargeback, cancelamento e expiração. */
+const ALWAYS_DEACTIVATE_STATUSES = [
+  "PURCHASE_DELAYED",
+  "PURCHASE_PROTEST",
+  "PURCHASE_REFUNDED",
+  "PURCHASE_CHARGEBACK",
+  "PURCHASE_CANCELED",
+  "PURCHASE_EXPIRED",
+  "SUBSCRIPTION_CANCELLATION",
+];
+
+export function classifyBillingStatus(
+  cfg: Pick<BillingWebhookConfig, "activateValues" | "deactivateValues">,
+  status: string,
+): { isActivate: boolean; isDeactivate: boolean } {
+  const forced = ALWAYS_DEACTIVATE_STATUSES.includes(status);
+  return {
+    isDeactivate: forced || cfg.deactivateValues.includes(status),
+    isActivate: !forced && cfg.activateValues.includes(status),
+  };
+}
+
 export type BillingWebhookResult =
   | { ok: true; action: "activated" | "deactivated" | "plan_changed" | "ignored"; email?: string; detail?: string }
   | { ok: false; error: string };
@@ -373,8 +397,7 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
     return { ok: false, error: `Não achei o status em "${cfg.statusPath}" — confira o caminho do campo.` };
   }
 
-  const isActivate = cfg.activateValues.includes(status);
-  const isDeactivate = cfg.deactivateValues.includes(status);
+  const { isActivate, isDeactivate } = classifyBillingStatus(cfg, status);
 
   if (!isActivate && !isDeactivate) {
     return { ok: true, action: "ignored", email, detail: `status "${status}" não está mapeado pra nenhuma ação` };

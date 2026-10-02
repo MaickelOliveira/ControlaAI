@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BILLING_WEBHOOK_PRESETS,
+  classifyBillingStatus,
   inferCheckoutLocale,
   isStaleActivation,
   normalizedCheckoutPhone,
@@ -127,5 +128,19 @@ describe("reativação por evento atrasado", () => {
     expect(isStaleActivation({ status: "active", deactivatedAt: refunded.deactivatedAt }, at("2026-10-01T14:00:00.000Z"))).toBe(false);
     expect(isStaleActivation({ status: "inactive" }, at("2026-10-01T14:00:00.000Z"))).toBe(false);
     expect(isStaleActivation(refunded, { event: "PURCHASE_APPROVED" })).toBe(false);
+  });
+});
+
+describe("eventos que desativam o cliente", () => {
+  const saved = { activateValues: ["PURCHASE_APPROVED", "PURCHASE_COMPLETE"], deactivateValues: ["PURCHASE_REFUNDED"] };
+
+  it("compra atrasada e pedido de reembolso desativam mesmo com a lista antiga salva", () => {
+    expect(classifyBillingStatus(saved, "PURCHASE_DELAYED")).toEqual({ isActivate: false, isDeactivate: true });
+    expect(classifyBillingStatus(saved, "PURCHASE_PROTEST")).toEqual({ isActivate: false, isDeactivate: true });
+  });
+
+  it("aprovação e compra completa continuam ativando", () => {
+    expect(classifyBillingStatus(saved, "PURCHASE_APPROVED")).toEqual({ isActivate: true, isDeactivate: false });
+    expect(classifyBillingStatus(saved, "PURCHASE_COMPLETE")).toEqual({ isActivate: true, isDeactivate: false });
   });
 });
