@@ -1248,6 +1248,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         return;
       }
       const codeUser = await getUserByWppCode(codeMatch[1]);
+      if (codeUser && !hasAccess(codeUser)) {
+        await wppSend(from, codeUser.status === "inactive" ? replyAccountInactive(codeUser.locale) : replyTrialExpired(codeUser.locale));
+        return;
+      }
       if (codeUser) {
         const isSpanish = codeUser.locale === "es";
         const linkedCount = await countPhonesForUser(codeUser.id);
@@ -1269,6 +1273,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const linkPending = await getPendingAction(from);
     if (linkPending?.type === "awaiting_wpp_link_info") {
       const linkOwner = await getUserById(linkPending.userId);
+      if (!linkOwner || !hasAccess(linkOwner)) {
+        await clearPendingAction(from);
+        await wppSend(from, linkOwner?.status === "inactive" ? replyAccountInactive(linkOwner.locale) : replyTrialExpired(linkOwner?.locale));
+        return;
+      }
       const isSpanish = linkOwner?.locale === "es";
       if (linkPending.step === "name") {
         const name = cap(messageText.trim().slice(0, 40)) || (isSpanish ? "Sin nombre" : "Sem nome");

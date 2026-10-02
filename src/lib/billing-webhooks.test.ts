@@ -4,6 +4,7 @@ import {
   classifyBillingStatus,
   inferCheckoutLocale,
   isStaleActivation,
+  isBlockedByInactivePhone,
   normalizedCheckoutPhone,
   verifyBillingWebhookAuth,
   type BillingWebhookConfig,
@@ -142,5 +143,21 @@ describe("eventos que desativam o cliente", () => {
   it("aprovação e compra completa continuam ativando", () => {
     expect(classifyBillingStatus(saved, "PURCHASE_APPROVED")).toEqual({ isActivate: true, isDeactivate: false });
     expect(classifyBillingStatus(saved, "PURCHASE_COMPLETE")).toEqual({ isActivate: true, isDeactivate: false });
+  });
+});
+
+describe("troca de e-mail para contornar desativação", () => {
+  const users = [{ status: "inactive", phone: "5562981496162" }, { status: "active", phone: "5511988887777" }];
+
+  it("bloqueia nova conta com o telefone de cliente desativado, com ou sem DDI/máscara", () => {
+    expect(isBlockedByInactivePhone("62981496162", users)).toBe(true);
+    expect(isBlockedByInactivePhone("+55 (62) 98149-6162", users)).toBe(true);
+  });
+
+  it("não bloqueia telefone de cliente ativo, telefone novo ou ausente", () => {
+    expect(isBlockedByInactivePhone("11988887777", users)).toBe(false);
+    expect(isBlockedByInactivePhone("21977776666", users)).toBe(false);
+    expect(isBlockedByInactivePhone(undefined, users)).toBe(false);
+    expect(isBlockedByInactivePhone("123", users)).toBe(false);
   });
 });

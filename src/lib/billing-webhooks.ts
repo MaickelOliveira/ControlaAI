@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { encryptField, decryptField } from "./crypto-store";
-import { getUserByEmail, activateUser, createPaidUser, deactivateUser, updateUser, type UserPlan, type UserLocale } from "./users";
+import { getUserByEmail, getUsers, activateUser, createPaidUser, deactivateUser, updateUser, type UserPlan, type UserLocale } from "./users";
 import { createPasswordSetupLink } from "./password-reset";
 import { sendFirstAccessLinkEmail } from "./brevo";
 import { sendWelcomeTemplate } from "./whatsapp";
@@ -402,6 +402,23 @@ export function classifyBillingStatus(
   };
 }
 
+function phoneTail(phone: string | undefined): string {
+  const digits = (phone || "").replace(/\D/g, "");
+  return digits.length >= 8 ? digits.slice(-10) : "";
+}
+
+/** Compra com e-mail NOVO feita pelo telefone de um cliente já desativado
+ *  (reembolso, chargeback, cancelamento): não cria conta nem libera acesso,
+ *  senão trocar de e-mail contornava a desativação. Recompra com o MESMO
+ *  e-mail continua reativando normalmente. */
+export function isBlockedByInactivePhone(
+  phone: string | undefined,
+  users: { status: string; phone: string }[],
+): boolean {
+  const tail = phoneTail(phone);
+  return !!tail && users.some(u => u.status === "inactive" && phoneTail(u.phone) === tail);
+}
+
 export type BillingWebhookResult =
   | { ok: true; action: "activated" | "deactivated" | "plan_changed" | "ignored"; email?: string; detail?: string }
   | { ok: false; error: string; retryable?: boolean };
@@ -449,6 +466,9 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
 
   let user = await getUserByEmail(email);
   if (!user && !isActivate) return { ok: true, action: "ignored", email, detail: "cliente ainda não possui conta" };
+  if (!user && isActivate && isBlockedByInactivePhone(normalizedCheckoutPhone(body), await getUsers())) {
+    return { ok: true, action: "ignored", email, detail: "telefone pertence a um cliente desativado (reembolso/cancelamento); conta não criada" };
+  }
   if (!user && dryRun) return { ok: true, action: "activated", email, detail: "conta paga seria criada e o acesso enviado por e-mail" };
   if (!user) {
     const name = firstString(body, ["data.buyer.name", "data.buyer.first_name", "data.subscriber.name", "Customer.full_name", "Customer.first_name"]) || email.split("@")[0];
