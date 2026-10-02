@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BILLING_WEBHOOK_PRESETS,
   inferCheckoutLocale,
+  isStaleActivation,
   normalizedCheckoutPhone,
   verifyBillingWebhookAuth,
   type BillingWebhookConfig,
@@ -106,5 +107,25 @@ describe("Hotmart international checkout", () => {
     [{ data: { buyer: { checkout_phone: "99999-9999", checkout_phone_code: "11", address: { country_iso: "BR" } } } }, "5511999999999"],
   ])("normalizes checkout phones from any country", (payload, expected) => {
     expect(normalizedCheckoutPhone(payload)).toBe(expected);
+  });
+});
+
+describe("reativação por evento atrasado", () => {
+  const refunded = { status: "inactive", deactivatedAt: "2026-10-01T15:00:00.000Z" };
+  const at = (iso: string) => ({ event: "PURCHASE_APPROVED", creation_date: new Date(iso).getTime() });
+
+  it("ignora ativação anterior ao reembolso (reenvio/atraso da Hotmart)", () => {
+    expect(isStaleActivation(refunded, at("2026-10-01T14:00:00.000Z"))).toBe(true);
+    expect(isStaleActivation(refunded, at("2026-10-01T15:00:00.000Z"))).toBe(true);
+  });
+
+  it("permite recompra posterior ao reembolso", () => {
+    expect(isStaleActivation(refunded, at("2026-10-02T09:00:00.000Z"))).toBe(false);
+  });
+
+  it("não interfere em cliente ativo, sem data de desativação ou sem data no evento", () => {
+    expect(isStaleActivation({ status: "active", deactivatedAt: refunded.deactivatedAt }, at("2026-10-01T14:00:00.000Z"))).toBe(false);
+    expect(isStaleActivation({ status: "inactive" }, at("2026-10-01T14:00:00.000Z"))).toBe(false);
+    expect(isStaleActivation(refunded, { event: "PURCHASE_APPROVED" })).toBe(false);
   });
 });

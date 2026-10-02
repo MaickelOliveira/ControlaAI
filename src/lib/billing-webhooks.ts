@@ -331,6 +331,25 @@ export function normalizedCheckoutPhone(body: unknown): string | undefined {
   return normalized || undefined;
 }
 
+/** Momento em que o provedor gerou o evento (Hotmart: "creation_date", em ms). */
+function billingEventTimeMs(body: unknown): number | null {
+  const raw = getByPath(body, "creation_date");
+  const value = typeof raw === "number" ? raw : typeof raw === "string" && /^\d+$/.test(raw.trim()) ? Number(raw) : NaN;
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value < 1e12 ? value * 1000 : value;
+}
+
+/** Evento de ativação mais antigo que a última desativação do cliente: é
+ *  reenvio ou entrega atrasada (Hotmart reenvia quando demoramos a responder)
+ *  e não pode desfazer um reembolso/chargeback já processado. Uma recompra
+ *  de verdade gera evento NOVO, com data posterior, e passa normalmente. */
+export function isStaleActivation(user: { status: string; deactivatedAt?: string }, body: unknown): boolean {
+  if (user.status !== "inactive" || !user.deactivatedAt) return false;
+  const eventAt = billingEventTimeMs(body);
+  const deactivatedAt = new Date(user.deactivatedAt).getTime();
+  return eventAt !== null && Number.isFinite(deactivatedAt) && eventAt <= deactivatedAt;
+}
+
 export type BillingWebhookResult =
   | { ok: true; action: "activated" | "deactivated" | "plan_changed" | "ignored"; email?: string; detail?: string }
   | { ok: false; error: string };
@@ -414,6 +433,9 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
   if (mappedPlan && dryRun) return { ok: true, action: "plan_changed", email, detail: `plano seria trocado pra "${mappedPlan}"` };
 
   if (isActivate) {
+    if (isStaleActivation(user, body)) {
+      return { ok: true, action: "ignored", email, detail: "evento de ativação anterior à desativação do cliente (reenvio ou atraso); acesso mantido bloqueado" };
+    }
     if (!dryRun) await activateUser(user.id);
     return { ok: true, action: "activated", email };
   }
