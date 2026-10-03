@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getExplicitDailySummaryResult,
+  getExplicitLastFinanceRelabelResult,
   getExplicitFinanceDetailResult,
   getExplicitFinanceConfirmPendingResult,
   getExplicitPendingFinanceRegisterResult,
@@ -1139,5 +1140,33 @@ describe("getExplicitVehicleCrudResult", () => {
 
   it("does not confuse a vehicle expense with registration", () => {
     expect(getExplicitVehicleCrudResult("Registre um gasto de gasolina no carro")).toBeNull();
+  });
+});
+
+describe("correção do último lançamento logo após o registro", () => {
+  const afterRegister = [
+    { role: "assistant" as const, content: "💸 *Despesa registrada!*\n\n📝 Comprovante de Pagamento 99 Food\n\n_💾 Quer guardar esse comprovante no Drive? (sim/não)_" },
+  ];
+
+  it("'Anotar como alimentação.99 food' corrige categoria e descrição do último lançamento", () => {
+    expect(getExplicitLastFinanceRelabelResult("Anotar como alimentação.99 food", afterRegister)).toMatchObject({
+      intent: "finance_edit",
+      finance: { category: "Alimentação" },
+      newDescription: "99 food",
+      lastFinanceReference: "last",
+    });
+  });
+
+  it("aceita só a categoria", () => {
+    expect(getExplicitLastFinanceRelabelResult("anote como transporte", afterRegister)).toMatchObject({
+      finance: { category: "Transporte" },
+      lastFinanceReference: "last",
+    });
+  });
+
+  it("não age sem um registro logo antes, nem em lançamento novo com valor", () => {
+    expect(getExplicitLastFinanceRelabelResult("Anotar como alimentação.99 food", [])).toBeNull();
+    expect(getExplicitLastFinanceRelabelResult("Anotar como alimentação.99 food", [{ role: "assistant", content: "Bom dia!" }])).toBeNull();
+    expect(getExplicitLastFinanceRelabelResult("Gastei 50 no mercado", afterRegister)).toBeNull();
   });
 });

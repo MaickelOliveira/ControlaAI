@@ -430,6 +430,9 @@ async function registerFinanceDocumentFromMedia(options: {
     throw error;
   }
   if (!finance) return false;
+  // Sem isso, "anotar como alimentação" logo depois do comprovante corrigiria
+  // um lançamento antigo em vez do que acabou de ser registrado.
+  await setLastFinanceBatch(from, [{ id: finance.id, description: finance.description, amount: finance.amount, type: finance.type }], mode);
   const [financeYear, financeMonth] = finance.date.split("-").map(Number);
   const balance = await getBalance(user.id, mode, financeYear, financeMonth);
   const typeLabel = localized(user.locale, financeData.type === "income" ? "Receita" : "Despesa", financeData.type === "income" ? "Ingreso" : "Gasto");

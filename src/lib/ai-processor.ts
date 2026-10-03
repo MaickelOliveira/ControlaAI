@@ -3483,6 +3483,36 @@ export function getExplicitLastFinanceAccountEditResult(message: string): AIResu
   };
 }
 
+/** Correção de categoria/descrição logo depois de um registro: "Anotar como
+ * alimentação.99 food" responde ao "Despesa registrada!" anterior e corrige o
+ * último lançamento. Sem o histórico, uma frase assim cairia na listagem do
+ * mês. Só vale quando a última resposta do bot foi um registro. */
+export function getExplicitLastFinanceRelabelResult(
+  message: string,
+  history?: { role: "user" | "assistant"; content: string }[],
+): AIResult | null {
+  const lastBot = [...(history ?? [])].reverse().find(item => item.role === "assistant")?.content ?? "";
+  if (!/(?:despesa|receita|gasto|ingreso)\s+registrad[ao]!|registrad[ao]!|guardar esse comprovante/i.test(lastBot)) return null;
+
+  const match = message.trim().match(/^(?:anot(?:ar|e)|registr(?:ar|e)|classific(?:ar|a|que)|colo(?:car|que)|lan[çc](?:ar|e)|marc(?:ar|que))\s+(?:isso\s+|esse\s+|essa\s+|o\s+)?como\s+(.+)$/i);
+  if (!match) return null;
+  const rest = match[1].trim().replace(/[.!?]+$/g, "");
+  if (!rest || rest.length > 80) return null;
+
+  const [rawCategory, ...descriptionParts] = rest.split(/\s*[.,;:]\s*/);
+  const category = rawCategory.trim();
+  const description = descriptionParts.join(" ").trim();
+  if (!category || category.split(/\s+/).length > 3 || /\d/.test(category)) return null;
+
+  return {
+    intent: "finance_edit",
+    confidence: 1,
+    finance: { category: category.charAt(0).toUpperCase() + category.slice(1) } as FinanceData,
+    ...(description ? { newDescription: description } : {}),
+    lastFinanceReference: "last",
+  };
+}
+
 /** As regex de correção de funcionário usam ".+" pra capturar o nome porque
  *  não sabem de antemão onde ele termina — mas isso também casa com o resto
  *  de uma frase inteira quando "foi"/"é"/"e" aparece de novo mais adiante por
@@ -3705,6 +3735,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitLastFinanceAccountEdit = getExplicitLastFinanceAccountEditResult(message);
   if (explicitLastFinanceAccountEdit) return explicitLastFinanceAccountEdit;
+
+  const explicitLastFinanceRelabel = getExplicitLastFinanceRelabelResult(message, ctx?.history);
+  if (explicitLastFinanceRelabel) return explicitLastFinanceRelabel;
 
   const explicitAccount = getExplicitAccountCommandResult(message);
   if (explicitAccount) return explicitAccount;
