@@ -3923,7 +3923,8 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
   // Chamadas sem ID de usuário (rotinas internas e testes antigos) preservam o
   // caminho determinístico; conversas reais trazem ctx.user e passam pela IA.
-  if (!ctx?.user?.id) {
+  // Chave de retorno rápido para a ordem anterior, sem mudar as ações nem dados.
+  if (!ctx?.user?.id || process.env.AI_FIRST_INTENT_ENABLED === "false") {
     const standalone = getExplicitIntentFallback(message, ctx);
     if (standalone) return standalone;
   }
