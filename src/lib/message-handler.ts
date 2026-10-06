@@ -261,6 +261,8 @@ export function parseImageAction(text: string): ImageAction | null {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
   if (/\b(?:salva(?:r|la|lo)?|guarda(?:r|la|lo)?|archiva(?:r|la|lo)?|arquiva(?:r)?|almacena(?:r|la|lo)?|drive)\b/.test(normalized)) return "save";
   if (/\b(?:registra(?:r|la|lo)?|registre|lanca(?:r)?|lance|anota(?:r)?|anote|contabiliza(?:r)?|contabilice)\b/.test(normalized)) return "register";
+  // "pagamento", "paguei", "pix"... numa foto = comprovante pago: registra direto.
+  if (/\b(?:pagamentos?|pagos?|pagou|paguei|pagado|pague|pagar|pix|comprovantes?|comprobantes?|transferencia|recibo|boleto)\b/.test(normalized)) return "register";
   if (/\b(?:pesquisa|pesquisar|pesquise|procura|procurar|busca|buscar|preco|precio|valor|custa|cuesta|cotacao|cotizacion|investiga|investigar)\b|\bquanto\s+(?:esta|e|sai|custa)\b|\bcuanto\s+(?:esta|vale|sale|cuesta)\b/.test(normalized)) return "search";
   if (/\b(?:descreve|descreva|descrever|identifica|identifique|identificar|analisa|analise|analisar|o que e|que e isso|describe|identifica|analiza|analice|que es)\b/.test(normalized)) return "describe";
   return null;
@@ -1126,23 +1128,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           }
         }
 
-        // Só chega aqui quando a imagem sem legenda não era uma fatura nem
-        // um extrato. Ela fica temporariamente guardada até o usuário escolher
-        // se quer registrar, salvar, pesquisar ou apenas identificar.
-        if (mimeType.includes("image") && !caption?.trim()) {
-          await setPendingAction(from, {
-            type: "image_action",
-            userId: fileUser.id,
-            fileBase64: buffer.toString("base64"),
-            mimeType,
-            originalName,
-          });
-          await wppSend(from, localized(fileUser.locale,
-            "🖼️ Recebi a imagem. O que você quer fazer com ela?\n\n• *registrar a compra/comprovante*\n• *guardar no Drive*\n• *pesquisar o preço*\n• *identificar o que aparece*",
-            "🖼️ Recibí la imagen. ¿Qué quieres hacer con ella?\n\n• *registrar la compra/comprobante*\n• *guardarla en Drive*\n• *buscar el precio*\n• *identificar lo que aparece*"));
-          return;
-        }
-
         // Cupom fiscal de mercado (produtos individuais) — tenta ANTES do
         // caminho de "documento financeiro simples" (1 valor só), senão um
         // cupom de mercado cairia lá como um gasto único sem os itens.
@@ -1200,6 +1185,29 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             if (await registerFinanceDocumentFromMedia({ from, buffer, mimeType, caption, user: fileUser })) return;
           } catch (e) {
             console.error("[webhook] erro ao extrair finanças do documento:", e);
+          }
+          // Imagem sem legenda: tenta registrar direto (cupom, comprovante). Só
+          // pergunta a ação se não for documento financeiro.
+          if (mimeType.includes("image") && !caption?.trim()) {
+            await setPendingAction(from, {
+              type: "image_action",
+              userId: fileUser.id,
+              fileBase64: buffer.toString("base64"),
+              mimeType,
+              originalName,
+            });
+            await wppSend(from, localized(fileUser.locale,
+              "🖼️ Recebi a imagem. O que você quer fazer com ela?\n\n• *registrar a compra/comprovante*\n• *guardar no Drive*\n• *pesquisar o preço*\n• *identificar o que aparece*",
+              "🖼️ Recibí la imagen. ¿Qué quieres hacer con ella?\n\n• *registrar la compra/comprobante*\n• *guardarla en Drive*\n• *buscar el precio*\n• *identificar lo que aparece*"));
+            return;
+          }
+          // Legenda de pagamento/registro e a leitura não achou os dados: avisa
+          // em vez de guardar no Drive e devolver a legenda solta pra IA perguntar.
+          if (requestedImageAction === "register" && mimeType.includes("image")) {
+            await wppSend(from, localized(fileUser.locale,
+              "❓ Não consegui identificar os dados do pagamento nessa imagem. Envie uma foto mais nítida, mostrando valor e data.",
+              "❓ No pude identificar los datos del pago en esta imagen. Envía una foto más nítida que muestre el importe y la fecha."));
+            return;
           }
         }
 

@@ -281,6 +281,9 @@ describe("image instructions", () => {
     ["¿qué es esto?", "describe"],
     ["registre esta compra", "register"],
     ["anota este comprobante", "register"],
+    ["pagamento", "register"],
+    ["paguei direto", "register"],
+    ["pix", "register"],
   ] as const)("maps %s to %s", (message, expected) => {
     expect(parseImageAction(message)).toBe(expected);
   });
