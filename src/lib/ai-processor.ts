@@ -3944,12 +3944,15 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   }
 
   // Respostas do modelo com intenção ou confiança ausentes não executam ações.
-  if (modeled?.intent === "unknown" && modeled.response?.trim()) return modeled;
+  if (modeled?.intent === "unknown" && modeled.response?.trim() && !explicit) return modeled;
   if (!modeled || typeof modeled.intent !== "string" || typeof modeled.confidence !== "number"
     || !Number.isFinite(modeled.confidence) || modeled.confidence < 0.75 || modeled.intent === "unknown") {
     return explicit ?? (modeled && typeof modeled.intent === "string" && typeof modeled.confidence === "number" ? modeled : { intent: "unknown", confidence: 0 });
   }
 
+  // Preserve os dados extraídos pelos comandos existentes quando IA e regra
+  // concordam; a IA resolve as frases que as regras não cobrem.
+  if (explicit?.intent === modeled.intent) return explicit;
   // Regras que representam limites da plataforma devem prevalecer.
   if (explicit?.intent === "how_to" && explicit.response) return explicit;
   return modeled;
