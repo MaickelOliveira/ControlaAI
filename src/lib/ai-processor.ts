@@ -2190,6 +2190,9 @@ Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 As categorias válidas, a data de hoje, o calendário e os períodos pré-calculados vêm no início da mensagem do usuário a cada chamada — use sempre os valores de lá, nunca invente.
 
+Leia a mensagem como linguagem natural, mesmo com erro de digitação, abreviação, áudio transcrito ou numeração de lista. Um número solto antes de um verbo de comando é apenas o número do item: "1 cadastrar conta Sicoob" significa cadastrar a conta Sicoob; NÃO use 1 como valor, quantidade ou nome. Preserve números que fazem parte de valores, datas ou nomes.
+Se o pedido tiver duas interpretações com ações diferentes ou alvo incerto, responda com "intent": "unknown" e uma pergunta curta em "response". Nunca adivinhe qual registro deve ser apagado ou alterado. Se a intenção estiver clara mas faltar um dado obrigatório, mantenha a intenção e os campos conhecidos para o sistema perguntar o que falta.
+
 PRIORIDADE DE INTERPRETAÇÃO:
 1. Obedeça primeiro ao pedido explícito da mensagem ATUAL.
 2. Use o histórico somente para resolver referências como "isso", "ela" ou uma resposta curta a uma pergunta anterior.
@@ -3731,7 +3734,7 @@ function normalizeAIResult(message: string, result: AIResult): AIResult {
   )))));
 }
 
-export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+function getExplicitIntentFallback(message: string, ctx?: AiContext): AIResult | null {
   const explicitUnscheduledReminder = getExplicitUnscheduledReminderResult(message, ctx?.history);
   if (explicitUnscheduledReminder) return explicitUnscheduledReminder;
 
@@ -3836,6 +3839,10 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     return { intent: "how_to", confidence: 1, response: unsupportedBankConnection };
   }
 
+  return null;
+}
+
+async function classifyMessageWithModel(message: string, ctx?: AiContext): Promise<AIResult> {
   const prompt = `${buildVolatileContext(ctx)}\n\nMensagem do usuário: "${message}"`;
   const openAIAttempt = await tryOpenAIForTestUser(
     ctx?.user.id,
@@ -3908,6 +3915,44 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     console.error("[ai-processor] Erro Gemini:", String(e));
     return { intent: "unknown", confidence: 0 };
   }
+
+}
+
+/** A IA interpreta a mensagem primeiro; os caminhos antigos ficam como reserva
+ * quando o provedor falha ou não entende o pedido com confiança. */
+export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  // Chamadas sem ID de usuário (rotinas internas e testes antigos) preservam o
+  // caminho determinístico; conversas reais trazem ctx.user e passam pela IA.
+  if (!ctx?.user?.id) {
+    const standalone = getExplicitIntentFallback(message, ctx);
+    if (standalone) return standalone;
+  }
+  const modeled = await classifyMessageWithModel(message, ctx);
+  const explicit = getExplicitIntentFallback(message, ctx);
+
+  // Uma frase sobre um total pode nomear um lançamento ou um número agregado.
+  // Não converta a ambiguidade numa exclusão de dados sem identificar o alvo.
+  const ambiguousTotal = message.trim().match(/^(?:apag(?:a|ar|ue)|exclu(?:a|ir)|remov(?:a|er)|delet(?:a|ar|e)|elimin(?:a|ar|e)|borr(?:a|ar|e))\s+(?:(?:a|o|la|el)\s+)?(receita|despesa|ingreso|gasto)\s+total\s*[.!?]*$/i);
+  if (ambiguousTotal) {
+    const label = `${ambiguousTotal[1][0].toUpperCase()}${ambiguousTotal[1].slice(1)} Total`;
+    const response = ctx?.user.locale === "es"
+      ? `¿Quieres borrar un movimiento llamado "${label}" o corregir el total mostrado? Si es un movimiento, dime la descripción, el importe o la fecha para encontrarlo.`
+      : ctx?.user.locale === "pt-PT"
+        ? `Queres apagar um lançamento chamado "${label}" ou corrigir o total apresentado? Se for um lançamento, diz-me a descrição, o valor ou a data para o encontrar.`
+        : `Você quer apagar um lançamento chamado "${label}" ou corrigir o total mostrado? Se for um lançamento, diga a descrição, o valor ou a data para eu encontrar o registro certo.`;
+    return { intent: "how_to", confidence: 1, response };
+  }
+
+  // Respostas do modelo com intenção ou confiança ausentes não executam ações.
+  if (modeled?.intent === "unknown" && modeled.response?.trim()) return modeled;
+  if (!modeled || typeof modeled.intent !== "string" || typeof modeled.confidence !== "number"
+    || !Number.isFinite(modeled.confidence) || modeled.confidence < 0.75 || modeled.intent === "unknown") {
+    return explicit ?? (modeled && typeof modeled.intent === "string" && typeof modeled.confidence === "number" ? modeled : { intent: "unknown", confidence: 0 });
+  }
+
+  // Regras que representam limites da plataforma devem prevalecer.
+  if (explicit?.intent === "how_to" && explicit.response) return explicit;
+  return modeled;
 }
 
 type GroundedSource = { title: string; url: string };
