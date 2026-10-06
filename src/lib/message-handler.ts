@@ -2261,7 +2261,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           return;
         }
 
-        const editAi = await processMessage(messageText, { user });
+        const editAi = await processMessage(messageText, { user, phone: from });
         const editPatch = appointmentPatchFromAi(editAi, full);
         if (Object.keys(editPatch).length === 0) {
           await setPendingAction(from, { ...pending, appointments: pending.appointments, awaitingPatch: true });
@@ -2726,7 +2726,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
-    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, history: recentHistory });
+    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi;
