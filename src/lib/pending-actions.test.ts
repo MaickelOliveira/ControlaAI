@@ -57,6 +57,8 @@ describe("parseFinanceEmployeeChoice", () => {
 describe("parseAccountCreateRequest", () => {
   it.each([
     ["cadastrar conta", ""],
+    ["1 cadastrar conta Sicoob", "Sicoob"],
+    ["1) cadastrar conta Sicoob", "Sicoob"],
     ["cadastrar uma conta Inter", "Inter"],
     ["crie a conta chamada Itaú", "Itaú"],
     ["registrar cuenta", ""],

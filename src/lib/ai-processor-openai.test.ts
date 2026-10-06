@@ -19,8 +19,11 @@ import { extractInvoiceTransactions, financialDocumentDescription, normalizeFina
 const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.OPENAI_API_KEY;
 const originalTestUserIds = process.env.OPENAI_TEST_USER_IDS;
+const originalAiFirst = process.env.AI_FIRST_INTENT_ENABLED;
+const originalTestPhones = process.env.AI_FIRST_INTENT_TEST_PHONES;
 
 const context = {
+  phone: "5544999887766",
   user: {
     id: "test-user",
     activeMode: "personal" as const,
@@ -41,6 +44,7 @@ describe("AI provider routing", () => {
   beforeEach(() => {
     process.env.OPENAI_API_KEY = "openai-test-key";
     process.env.OPENAI_TEST_USER_IDS = "test-user";
+    process.env.AI_FIRST_INTENT_TEST_PHONES = context.phone;
     googleGenerateContent.mockReset();
     googleGenerateContent.mockResolvedValue({
       response: {
@@ -57,6 +61,10 @@ describe("AI provider routing", () => {
     else process.env.OPENAI_API_KEY = originalApiKey;
     if (originalTestUserIds === undefined) delete process.env.OPENAI_TEST_USER_IDS;
     else process.env.OPENAI_TEST_USER_IDS = originalTestUserIds;
+    if (originalAiFirst === undefined) delete process.env.AI_FIRST_INTENT_ENABLED;
+    else process.env.AI_FIRST_INTENT_ENABLED = originalAiFirst;
+    if (originalTestPhones === undefined) delete process.env.AI_FIRST_INTENT_TEST_PHONES;
+    else process.env.AI_FIRST_INTENT_TEST_PHONES = originalTestPhones;
   });
 
   it("uses OpenAI only for an allowlisted user", async () => {
@@ -79,6 +87,75 @@ describe("AI provider routing", () => {
       .resolves.toMatchObject({ intent: "unknown", confidence: 0.4 });
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(googleGenerateContent).toHaveBeenCalledOnce();
+  });
+
+  it("lets the model interpret a numbered account request before the rules", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({
+      response: { text: () => JSON.stringify({
+        intent: "account_create", confidence: 0.94, account: { name: "Sicoob", type: "bank" },
+      }) },
+    });
+
+    await expect(processMessage("1 cadastrar conta Sicoob", context))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).toHaveBeenCalledOnce();
+  });
+
+  it("passes the model's clarification question to the conversation", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({
+      response: { text: () => '{"intent":"unknown","confidence":0.35,"response":"Qual lançamento você quer alterar?"}' },
+    });
+
+    await expect(processMessage("muda isso", context))
+      .resolves.toMatchObject({ intent: "unknown", response: "Qual lançamento você quer alterar?" });
+  });
+
+  it("uses the existing parser if the model cannot classify a clear request", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({
+      response: { text: () => '{"intent":"unknown","confidence":0}' },
+    });
+
+    await expect(processMessage("1 cadastrar conta Sicoob", context))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+  });
+
+  it("asks which record is meant by an ambiguous total deletion", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({
+      response: { text: () => '{"intent":"finance_delete","confidence":0.99,"keyword":"receita total"}' },
+    });
+
+    await expect(processMessage("apagar receita total", context))
+      .resolves.toMatchObject({ intent: "how_to", response: expect.stringContaining("Você quer apagar") });
+  });
+
+  it("keeps the previous routing when no test phone is configured", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    delete process.env.AI_FIRST_INTENT_TEST_PHONES;
+
+    await expect(processMessage("1 cadastrar conta Sicoob", context))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("keeps another customer's phone on the previous routing", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+
+    await expect(processMessage("1 cadastrar conta Sicoob", { ...context, phone: "5544999887700" }))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("can return to the previous routing without changing stored data", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    process.env.AI_FIRST_INTENT_ENABLED = "false";
+
+    await expect(processMessage("1 cadastrar conta Sicoob", context))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).not.toHaveBeenCalled();
   });
 
   it("keeps non-allowlisted users on Gemini", async () => {

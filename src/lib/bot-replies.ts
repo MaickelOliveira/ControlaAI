@@ -1179,9 +1179,11 @@ export function replyLowConfidence(intent: string, details: string, originalMsg:
   };
   const dict = intentLabels[locale ?? "pt-BR"] ?? intentLabels["pt-BR"];
   const label = dict[intent] || intent;
-  if (isEs(locale)) return `Entendí que quieres *${label}*, pero no quedé seguro de un detalle.\n\n> _"${originalMsg}"_\n\n${details}\n\n¿Está correcto? Si es así, solo confirma. Si no, corrígeme y lo ajusto.`;
-  if (isPtPt(locale)) return `Percebi que queres *${label}*, mas não fiquei seguro de um detalhe.\n\n> _"${originalMsg}"_\n\n${details}\n\nEstá certo? Se sim, é só confirmares. Se não, corrige-me que eu ajusto.`;
-  return `Entendi que você quer *${label}*, mas não fiquei seguro de um detalhe.\n\n> _"${originalMsg}"_\n\n${details}\n\nEstá certo? Se sim, é só confirmar. Se não, me corrige que eu ajusto.`;
+  const needsRecord = intent === "finance_edit" || intent === "finance_delete";
+  const shownDetails = details ? `\n\n${details}` : "";
+  if (isEs(locale)) return `Entendí que quieres *${label}*, pero me falta seguridad para hacerlo.\n\n> _"${originalMsg}"_${shownDetails}\n\n${needsRecord ? "¿Qué movimiento es? Envíame la descripción, el importe o la fecha junto con lo que quieres hacer." : "¿Puedes decirme de nuevo lo que quieres hacer con un poco más de detalle?"}`;
+  if (isPtPt(locale)) return `Percebi que queres *${label}*, mas não tenho segurança para o fazer.\n\n> _"${originalMsg}"_${shownDetails}\n\n${needsRecord ? "Qual é o lançamento? Envia a descrição, o valor ou a data junto com o que queres fazer." : "Podes dizer-me novamente o que queres fazer com um pouco mais de detalhe?"}`;
+  return `Entendi que você quer *${label}*, mas ainda não tenho segurança para fazer isso.\n\n> _"${originalMsg}"_${shownDetails}\n\n${needsRecord ? "Qual é o lançamento? Envie a descrição, o valor ou a data junto com o que quer fazer." : "Pode me dizer de novo o que quer fazer com um pouco mais de detalhe?"}`;
 }
 
 // ── Supermercado ──────────────────────────

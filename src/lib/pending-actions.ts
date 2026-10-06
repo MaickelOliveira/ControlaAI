@@ -542,7 +542,7 @@ export function parseAccountChoice(
  * quando não é um pedido de cadastro, string vazia quando falta o nome e o
  * nome quando a pessoa já responde tudo de uma vez. */
 export function parseAccountCreateRequest(text: string): string | null {
-  const match = text.trim().match(/^(?:quero\s+)?(?:cadastrar|cadastre|cadastra|criar|crie|cria|adicionar|adicione|adiciona|registrar|registre|registra|crear|crea|agregar|agrega|a[nñ]adir|a[nñ]ade)\s+(?:(?:uma|una|a|la)\s+)?(?:(?:nova|nueva)\s+)?(?:conta|cuenta)\b(?:\s+(?:chamada|llamada|com\s+o\s+nome|con\s+el\s+nombre(?:\s+de)?))?\s*(.*)$/i);
+  const match = text.trim().match(/^(?:(?:\d{1,2})\s*(?:[.)\-:]\s*)?)?(?:quero\s+)?(?:cadastrar|cadastre|cadastra|criar|crie|cria|adicionar|adicione|adiciona|registrar|registre|registra|crear|crea|agregar|agrega|a[nñ]adir|a[nñ]ade)\s+(?:(?:uma|una|a|la)\s+)?(?:(?:nova|nueva)\s+)?(?:conta|cuenta)\b(?:\s+(?:chamada|llamada|com\s+o\s+nome|con\s+el\s+nombre(?:\s+de)?))?\s*(.*)$/i);
   if (!match) return null;
   return match[1].replace(/^["“”']+|["“”'.!?;,]+$/g, "").trim();
 }

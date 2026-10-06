@@ -2261,7 +2261,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           return;
         }
 
-        const editAi = await processMessage(messageText, { user });
+        const editAi = await processMessage(messageText, { user, phone: from });
         const editPatch = appointmentPatchFromAi(editAi, full);
         if (Object.keys(editPatch).length === 0) {
           await setPendingAction(from, { ...pending, appointments: pending.appointments, awaitingPatch: true });
@@ -2726,7 +2726,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
-    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, history: recentHistory });
+    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi;
@@ -2836,7 +2836,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // Confiança baixa — pede esclarecimento antes de agir. Consultas são
     // seguras para executar e devem responder diretamente; pedir "confirma"
     // para uma simples pergunta de saldo soa robótico e não cria valor.
-    const isEditIntent = ai.intent === "finance_edit" || ai.intent === "finance_delete";
     const isReadOnlyIntent = [
       "finance_query", "finance_upcoming", "daily_summary", "weekly_summary", "balance_query", "finance_detail", "finance_analysis",
       "task_query", "reminder_list", "goal_query", "recurring_query", "agenda_list", "vehicle_query",
@@ -2846,7 +2845,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       "account_list", "web_search",
     ].includes(ai.intent);
     const shouldCollectMissingSlots = hasMissingSlotFields(ai, { user, userId: user.id, phone: from, mode });
-    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isEditIntent && !isReadOnlyIntent && !shouldCollectMissingSlots) {
+    if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isReadOnlyIntent && !shouldCollectMissingSlots) {
       const details = ai.finance
         ? `💰 Valor: ${formatCurrency(ai.finance.amount)}\n🏷️ Categoria: ${ai.finance.category}\n📝 Descrição: ${ai.finance.description}`
         : ai.task
@@ -5213,6 +5212,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
 
       default: {
+        if (ai.intent === "unknown" && ai.response?.trim()) {
+          await wppSend(from, ai.response.trim());
+          break;
+        }
         const lower = messageText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         if (lower.includes("ajuda") || lower.includes("ayuda") || lower === "help" || lower === "?") {
           await wppSendLong(from, replyHelp(user.locale));
