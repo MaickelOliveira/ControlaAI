@@ -59,6 +59,8 @@ describe("parseAccountCreateRequest", () => {
     ["cadastrar conta", ""],
     ["1 cadastrar conta Sicoob", "Sicoob"],
     ["1) cadastrar conta Sicoob", "Sicoob"],
+    ["cadastra sicoob", "sicoob"],
+    ["cadastrar", ""],
     ["cadastrar uma conta Inter", "Inter"],
     ["crie a conta chamada Itaú", "Itaú"],
     ["registrar cuenta", ""],
