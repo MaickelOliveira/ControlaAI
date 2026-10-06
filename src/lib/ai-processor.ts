@@ -695,6 +695,7 @@ export function getWebSearchMissingQuestion(query: string, locale?: string): str
 export type AiContext = {
   user: Pick<User, "activeMode" | "customCategoriesExpense" | "customCategoriesIncome" | "locale">
     & Partial<Pick<User, "id">>;
+  phone?: string;
   // Últimas mensagens da conversa (mais antiga primeiro), sem incluir a
   // mensagem atual — dá ao classificador memória de curto prazo pra
   // resolver respostas curtas que só fazem sentido junto da pergunta
@@ -3918,13 +3919,17 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
 
 }
 
-/** A IA interpreta a mensagem primeiro; os caminhos antigos ficam como reserva
- * quando o provedor falha ou não entende o pedido com confiança. */
+/** A IA interpreta primeiro somente os números de teste autorizados. Para os
+ * demais, mantém a ordem anterior: regras explícitas e, se necessário, IA. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
-  // Chamadas sem ID de usuário (rotinas internas e testes antigos) preservam o
-  // caminho determinístico; conversas reais trazem ctx.user e passam pela IA.
-  // Chave de retorno rápido para a ordem anterior, sem mudar as ações nem dados.
-  if (!ctx?.user?.id || process.env.AI_FIRST_INTENT_ENABLED === "false") {
+  // Lista vazia por padrão: uma publicação sem configuração não altera o fluxo
+  // de interpretação dos clientes. Aceita números com ou sem pontuação.
+  const phone = ctx?.phone?.replace(/\D/g, "") ?? "";
+  const testPhones = (process.env.AI_FIRST_INTENT_TEST_PHONES ?? "")
+    .split(",").map(value => value.replace(/\D/g, "")).filter(Boolean);
+  const aiFirstForThisPhone = !!ctx?.user?.id && !!phone
+    && testPhones.includes(phone) && process.env.AI_FIRST_INTENT_ENABLED !== "false";
+  if (!aiFirstForThisPhone) {
     const standalone = getExplicitIntentFallback(message, ctx);
     if (standalone) return standalone;
   }
