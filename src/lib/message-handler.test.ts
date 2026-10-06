@@ -174,6 +174,8 @@ describe("account selection guidance", () => {
     const message = accountSelectionMessage(accounts, "pt-BR");
     expect(message).toContain("cadastrar conta");
     expect(message).toContain("cadastrar conta Itaú");
+    expect(accountSelectionMessage(accounts, "pt-BR", "personal")).toContain("Modo Pessoal");
+    expect(accountSelectionMessage(accounts, "pt-BR", "business")).toContain("Modo Empresa");
   });
 
   it("provides the same option in Spanish", () => {
