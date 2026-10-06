@@ -403,7 +403,21 @@ export type PendingAccountDefaultConfirm = {
   expiresAt: string;
 };
 
-export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection;
+/** O usuário pediu para usar uma conta que ainda não existe. Pergunta se pode
+ * criar; no "sim", cria e retoma a ação original (ex.: vincular o último
+ * lançamento) já apontando para a conta nova. */
+export type PendingAccountCreateConfirm = {
+  type: "account_create_confirm";
+  phone: string;
+  userId: string;
+  mode: string;
+  accountName: string;
+  ai: AIResult;
+  originalText: string;
+  expiresAt: string;
+};
+
+export type PendingAction = PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection;
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -437,6 +451,7 @@ type PendingActionInput =
   | Omit<PendingFinanceEmployeeCreate, "phone" | "expiresAt">
   | Omit<PendingAccountSelection, "phone" | "expiresAt">
   | Omit<PendingAccountCreateName, "phone" | "expiresAt">
+  | Omit<PendingAccountCreateConfirm, "phone" | "expiresAt">
   | Omit<PendingAccountDefaultConfirm, "phone" | "expiresAt">
   | Omit<PendingClearHistory, "phone" | "expiresAt">
   | Omit<PendingSlotCorrection, "phone" | "expiresAt">;

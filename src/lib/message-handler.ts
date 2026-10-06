@@ -916,13 +916,14 @@ async function resolveFinanceEditAccount(
   mode: FinanceMode,
   message: string,
   preferredHint?: string,
-): Promise<{ requested: boolean; account?: Account; choices?: Account[] }> {
+): Promise<{ requested: boolean; account?: Account; choices?: Account[]; notFound?: string }> {
   const accounts = await getManualAccountsByUser(userId, mode);
   const hint = preferredHint?.trim() || getFinanceAccountDestinationHint(message)?.trim();
   if (hint) {
     const matches = await findAccountByName(userId, mode, hint, "bank");
     if (matches.length === 1) return { requested: true, account: matches[0] };
-    return { requested: true, choices: matches.length > 1 ? matches : accounts };
+    if (matches.length === 0) return { requested: true, notFound: hint, choices: accounts };
+    return { requested: true, choices: matches };
   }
 
   const normalizedMessage = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
@@ -1520,6 +1521,40 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           mode: pending.mode as FinanceMode,
           account: { name, type: "bank", mode: pending.mode as FinanceMode },
         };
+      }
+    }
+
+    if (pending?.type === "account_create_confirm" && pending.userId === user.id) {
+      const answer = parseYesNo(messageText);
+      if (answer === null) {
+        await setPendingAction(from, {
+          type: "account_create_confirm", userId: user.id, mode: pending.mode,
+          accountName: pending.accountName, ai: pending.ai, originalText: pending.originalText,
+        });
+        await wppSend(from, localized(user.locale,
+          `Responda *sim* para criar a conta *${pending.accountName}* e vincular o lançamento, ou *não* para cancelar.`,
+          `Responde *sí* para crear la cuenta *${pending.accountName}* y vincular el movimiento, o *no* para cancelar.`));
+        return;
+      }
+      await clearPendingAction(from);
+      if (!answer) {
+        await wppSend(from, localized(user.locale,
+          "Combinado, não criei a conta e o lançamento continua como estava.",
+          "De acuerdo, no creé la cuenta y el movimiento queda como estaba."));
+        return;
+      }
+      try {
+        const { account, created } = await createOrReuseAccountForAction(user.id, pending.mode as FinanceMode, pending.accountName);
+        accountSelectionResume = applyAccountToAi(pending.ai, account.name, pending.mode as FinanceMode);
+        messageText = pending.originalText;
+        await wppSend(from, localized(user.locale,
+          created ? `✅ Conta *${account.name}* criada.` : `ℹ️ A conta *${account.name}* já existia.`,
+          created ? `✅ Cuenta *${account.name}* creada.` : `ℹ️ La cuenta *${account.name}* ya existía.`));
+      } catch {
+        await wppSend(from, localized(user.locale,
+          `❌ Não consegui criar a conta *${pending.accountName}*. Tente de novo.`,
+          `❌ No pude crear la cuenta *${pending.accountName}*. Inténtalo de nuevo.`));
+        return;
       }
     }
 
@@ -3173,6 +3208,16 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             // manual, remove qualquer associação antiga com fatura.
             editPatch.cardInvoiceId = null;
             changedAccountName = accountEdit.account.name;
+          } else if (accountEdit.notFound && (ai.lastFinanceReference || ai.finance?.accountHint)) {
+            // Conta inexistente: oferece criar e, no "sim", vincula o lançamento.
+            await setPendingAction(from, {
+              type: "account_create_confirm", userId: user.id, mode: accountMode,
+              accountName: cap(accountEdit.notFound), ai, originalText: messageText,
+            });
+            await wppSend(from, localized(user.locale,
+              `🏦 Você ainda não tem a conta *${cap(accountEdit.notFound)}*. Quer que eu crie e vincule esse lançamento a ela? *(sim/não)*`,
+              `🏦 Todavía no tienes la cuenta *${cap(accountEdit.notFound)}*. ¿Quieres que la cree y vincule este movimiento a ella? *(sí/no)*`));
+            break;
           } else {
             const choices = accountEdit.choices ?? [];
             if (choices.length) {

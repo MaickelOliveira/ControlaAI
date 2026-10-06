@@ -3483,6 +3483,29 @@ export function getExplicitLastFinanceAccountEditResult(message: string): AIResu
   };
 }
 
+/** "Vincular conta sicoob" logo depois de um registro: é trocar a conta
+ * manual do lançamento recém-criado, não conectar banco. Só vale quando a
+ * última resposta do bot foi um registro e a conta tem nome. */
+export function getExplicitAccountLinkResult(
+  message: string,
+  history?: { role: "user" | "assistant"; content: string }[],
+): AIResult | null {
+  const lastBot = [...(history ?? [])].reverse().find(item => item.role === "assistant")?.content ?? "";
+  if (!/anotado\.|(?:despesa|receita|gasto|ingreso)\s+registrad[ao]!|registrad[ao]!|anotad[ao]!/i.test(lastBot)) return null;
+  const match = message.trim().match(/^(?:vincul\w+|associ\w+|lig(?:ar|ue|a)|lan[cç]\w*|coloc\w+|pass(?:ar|e)|asoci\w+|pon(?:er|e)?)\s+(?:isso\s+|esse\s+|este\s+|essa\s+|esto\s+|o\s+[uú]ltimo\s+)?(?:(?:na|a|à|para\s+a|pra|pela|en\s+la|a\s+la|con\s+la)\s+)?(?:conta|cuenta)\s+["“”']?(.{2,40}?)["“”']?\s*[.!?]?$/i);
+  if (!match) return null;
+  const name = cleanManualAccountName(match[1]);
+  const normalized = normalizeCapabilityText(name);
+  if (!name || /\b(?:bancari[ao]s?|bancarias?|banco|open|finance|banking|cartao|tarjeta)\b/.test(normalized)) return null;
+  return {
+    intent: "finance_edit",
+    confidence: 1,
+    finance: { accountHint: name } as FinanceData,
+    account: { name },
+    lastFinanceReference: "last",
+  };
+}
+
 /** Correção de categoria/descrição logo depois de um registro: "Anotar como
  * alimentação.99 food" responde ao "Despesa registrada!" anterior e corrige o
  * último lançamento. Sem o histórico, uma frase assim cairia na listagem do
@@ -3747,6 +3770,9 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   const explicitFinanceTransfer = getExplicitFinanceTransferResult(message);
   if (explicitFinanceTransfer) return explicitFinanceTransfer;
+
+  const explicitAccountLink = getExplicitAccountLinkResult(message, ctx?.history);
+  if (explicitAccountLink) return explicitAccountLink;
 
   const explicitCustomer = getExplicitCustomerCrudResult(message);
   if (explicitCustomer) return explicitCustomer;

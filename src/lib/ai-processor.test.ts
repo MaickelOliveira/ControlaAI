@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getExplicitDailySummaryResult,
   getExplicitLastFinanceRelabelResult,
+  getExplicitAccountLinkResult,
   getExplicitFinanceDetailResult,
   getExplicitFinanceConfirmPendingResult,
   getExplicitPendingFinanceRegisterResult,
@@ -1168,5 +1169,22 @@ describe("correção do último lançamento logo após o registro", () => {
     expect(getExplicitLastFinanceRelabelResult("Anotar como alimentação.99 food", [])).toBeNull();
     expect(getExplicitLastFinanceRelabelResult("Anotar como alimentação.99 food", [{ role: "assistant", content: "Bom dia!" }])).toBeNull();
     expect(getExplicitLastFinanceRelabelResult("Gastei 50 no mercado", afterRegister)).toBeNull();
+  });
+});
+
+describe("vincular conta logo após um registro", () => {
+  const afterRegister = [{ role: "assistant" as const, content: "Anotado. 💰 *R$ 28.736,32* — Investimentos (receita)" }];
+
+  it("trata 'vincular conta sicoob' como troca de conta do último lançamento", () => {
+    expect(getExplicitAccountLinkResult("Vincular conta sicoob", afterRegister)).toMatchObject({
+      intent: "finance_edit",
+      lastFinanceReference: "last",
+      finance: { accountHint: expect.stringMatching(/sicoob/i) },
+    });
+  });
+
+  it("não intercepta pedido de conexão bancária nem sem registro anterior", () => {
+    expect(getExplicitAccountLinkResult("Vincular conta bancária", afterRegister)).toBeNull();
+    expect(getExplicitAccountLinkResult("Vincular conta sicoob", [])).toBeNull();
   });
 });
