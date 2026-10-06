@@ -540,7 +540,7 @@ Também posso guardar o arquivo no Drive do Zelo quando você pedir.
 • _"Gastei 60 na farmácia pela conta Caixa"_ → registro nessa conta
 • _"Quanto gastei no iFood nessa conta na semana passada?"_ → filtro por conta, comerciante e período
 • _"Renomeie a conta Caixa para Dinheiro"_ / _"Exclua a conta Viagens"_
-Se houver uma única conta, uso automaticamente; se houver várias, pergunto qual. Não há conexão bancária nem cartão de crédito.
+Se houver uma única conta, uso automaticamente; se houver várias, pergunto qual. Não há cartão de crédito. A conexão direta com bancos ainda não está disponível: estamos implementando e em breve vai estar disponível para todos.
 
 ━━━━━━━━━━━━━━━
 🛒 *SUPERMERCADO*

@@ -876,8 +876,9 @@ describe("getUnsupportedBankConnectionResponse", () => {
     );
 
     expect(response).toContain("criar e usar contas manuais");
-    expect(response).toContain("não é possível conectá-las ou sincronizá-las");
-    expect(response).toContain("não utiliza Open Finance nem Open Banking");
+    expect(response).toContain("ainda não está disponível");
+    expect(response).toContain("em breve vai estar disponível para todos");
+    expect(response).not.toMatch(/\d+\s*(?:dias|semanas|meses)/);
     expect(response).toContain("*Suporte* no canto inferior direito");
     expect(response).not.toContain("Configurações");
     expect(response).not.toContain("Integrações Bancárias");
@@ -904,7 +905,7 @@ describe("getUnsupportedBankConnectionResponse", () => {
       [{ role: "user", content: "Quero conectar minha conta bancária." }],
     );
 
-    expect(response).toContain("não é possível conectá-las ou sincronizá-las");
+    expect(response).toContain("ainda não está disponível");
   });
 
   it("does not let an old bank question hijack a new task or help request", () => {

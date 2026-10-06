@@ -76,7 +76,7 @@ export default function ContasPage() {
 
   return <div className="space-y-5">
     <div className="flex items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-slate-900">🏦 {es ? "Cuentas" : "Contas"}</h1><p className="text-sm text-slate-500 mt-1">{es ? "Organiza tus movimientos en cuentas manuales, sin conexión bancaria." : "Organize seus lançamentos em contas manuais, sem conexão bancária."}</p></div>
+      <div><h1 className="text-2xl font-bold text-slate-900">🏦 {es ? "Cuentas" : "Contas"}</h1><p className="text-sm text-slate-500 mt-1">{es ? "Organiza tus movimientos en cuentas manuales. La conexión con bancos está en implementación y pronto estará disponible para todos." : "Organize seus lançamentos em contas manuais. A conexão com bancos está em implementação e em breve vai estar disponível para todos."}</p></div>
       <button onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold">+ {es ? "Nueva cuenta" : "Nova conta"}</button>
     </div>
 
@@ -102,7 +102,7 @@ export default function ContasPage() {
     {showForm && <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center p-4"><form onSubmit={submit} className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
       <h2 className="font-bold text-lg mb-4">{editing ? (es ? "Editar cuenta" : "Editar conta") : (es ? "Nueva cuenta" : "Nova conta")}</h2>
       <input autoFocus required maxLength={60} value={name} onChange={event => setName(event.target.value)} placeholder={es ? "Ej.: Efectivo, Nubank, Caja" : "Ex.: Dinheiro, Nubank, Caixa"} className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200" />
-      <p className="text-xs text-slate-400 mt-2">{es ? "No se conecta ni sincroniza con el banco." : "Não conecta nem sincroniza com o banco."}</p>
+      <p className="text-xs text-slate-400 mt-2">{es ? "Conexión con el banco: en implementación, pronto disponible para todos." : "Conexão com o banco: em implementação, em breve disponível para todos."}</p>
       <div className="flex gap-3 mt-5"><button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm">Cancelar</button><button type="submit" className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold">{es ? "Guardar" : "Salvar"}</button></div>
     </form></div>}
   </div>;
