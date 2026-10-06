@@ -20,8 +20,10 @@ const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.OPENAI_API_KEY;
 const originalTestUserIds = process.env.OPENAI_TEST_USER_IDS;
 const originalAiFirst = process.env.AI_FIRST_INTENT_ENABLED;
+const originalTestPhones = process.env.AI_FIRST_INTENT_TEST_PHONES;
 
 const context = {
+  phone: "5544999887766",
   user: {
     id: "test-user",
     activeMode: "personal" as const,
@@ -42,6 +44,7 @@ describe("AI provider routing", () => {
   beforeEach(() => {
     process.env.OPENAI_API_KEY = "openai-test-key";
     process.env.OPENAI_TEST_USER_IDS = "test-user";
+    process.env.AI_FIRST_INTENT_TEST_PHONES = context.phone;
     googleGenerateContent.mockReset();
     googleGenerateContent.mockResolvedValue({
       response: {
@@ -60,6 +63,8 @@ describe("AI provider routing", () => {
     else process.env.OPENAI_TEST_USER_IDS = originalTestUserIds;
     if (originalAiFirst === undefined) delete process.env.AI_FIRST_INTENT_ENABLED;
     else process.env.AI_FIRST_INTENT_ENABLED = originalAiFirst;
+    if (originalTestPhones === undefined) delete process.env.AI_FIRST_INTENT_TEST_PHONES;
+    else process.env.AI_FIRST_INTENT_TEST_PHONES = originalTestPhones;
   });
 
   it("uses OpenAI only for an allowlisted user", async () => {
@@ -125,6 +130,23 @@ describe("AI provider routing", () => {
 
     await expect(processMessage("apagar receita total", context))
       .resolves.toMatchObject({ intent: "how_to", response: expect.stringContaining("Você quer apagar") });
+  });
+
+  it("keeps the previous routing when no test phone is configured", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    delete process.env.AI_FIRST_INTENT_TEST_PHONES;
+
+    await expect(processMessage("1 cadastrar conta Sicoob", context))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("keeps another customer's phone on the previous routing", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+
+    await expect(processMessage("1 cadastrar conta Sicoob", { ...context, phone: "5544999887700" }))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).not.toHaveBeenCalled();
   });
 
   it("can return to the previous routing without changing stored data", async () => {
