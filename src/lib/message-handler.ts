@@ -791,13 +791,14 @@ async function resolveAccountFields(
   return { accountId: resolved.accountId, cardInvoiceId: resolved.cardInvoiceId };
 }
 
-export function accountSelectionMessage(accounts: Account[], locale?: string): string {
+export function accountSelectionMessage(accounts: Account[], locale?: string, mode?: FinanceMode): string {
+  const modeLabel = mode ? `_Modo ${mode === "business" ? "Empresa" : locale === "es" ? "Personal" : "Pessoal"}_` : "";
   const heading = locale === "es" ? "🏦 ¿Qué cuenta quieres usar?" : "🏦 Qual conta deseja usar?";
   const instruction = locale === "es" ? "Responde con el número o el nombre." : "Responda com o número ou nome.";
   const createHint = locale === "es"
     ? "➕ Para registrar una nueva, responde *registrar cuenta*. Si ya sabes el nombre, puedes escribir, por ejemplo: *registrar cuenta Itaú*."
     : "➕ Para cadastrar uma nova, responda *cadastrar conta*. Se já souber o nome, pode escrever, por exemplo: *cadastrar conta Itaú*.";
-  return `${heading}\n\n${accounts.map((account, index) => `${listNumberLabel(index)} ${account.name}${account.isDefault ? " ⭐" : ""}`).join("\n")}\n\n${instruction}\n${createHint}\n⏱ _${locale === "es" ? "Válido durante 5 minutos" : "Válido por 5 min"}._`;
+  return `${heading}${modeLabel ? `\n${modeLabel}` : ""}\n\n${accounts.map((account, index) => `${listNumberLabel(index)} ${account.name}${account.isDefault ? " ⭐" : ""}`).join("\n")}\n\n${instruction}\n${createHint}\n⏱ _${locale === "es" ? "Válido durante 5 minutos" : "Válido por 5 min"}._`;
 }
 
 function accountNameQuestion(locale?: string): string {
@@ -1415,6 +1416,11 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     let employeeSelectionResume: AIResult | null = null;
 
     if (pending?.type === "account_selection" && pending.userId === user.id) {
+      if (BARE_CANCEL_RE.test(messageText.trim())) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale, "Ok, cancelei esse lançamento.", "Listo, cancelé ese movimiento."));
+        return;
+      }
       const requestedAccountName = parseAccountCreateRequest(messageText);
       if (requestedAccountName !== null) {
         if (!requestedAccountName) {
@@ -1455,20 +1461,44 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           return;
         }
       } else {
-      const choice = parseAccountChoice(messageText, pending.accounts);
-      if (choice < 0) {
-        await setPendingAction(from, {
-          type: "account_selection", userId: user.id, mode: pending.mode,
-          action: "resume_ai", ai: pending.ai, originalText: pending.originalText,
-          accounts: pending.accounts,
-        });
-        await wppSend(from, accountSelectionMessage(pending.accounts as Account[], user.locale));
-        return;
-      }
-      await clearPendingAction(from);
-      const chosen = pending.accounts[choice];
-      accountSelectionResume = applyAccountToAi(pending.ai, chosen.name, pending.mode as FinanceMode);
-      messageText = pending.originalText;
+        const choice = parseAccountChoice(messageText, pending.accounts);
+        if (choice < 0) {
+          const normalizedChoice = messageText.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+          const otherMode = pending.mode === "business" ? "personal" : "business";
+          const otherAccounts = await getManualAccountsByUser(user.id, otherMode);
+          const otherMatches = normalizedChoice.length >= 3
+            ? otherAccounts.filter(account => {
+                const name = account.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+                return name.includes(normalizedChoice) || normalizedChoice.includes(name);
+              })
+            : [];
+          if (otherMatches.length === 1) {
+            const account = otherMatches[0];
+            const currentLabel = pending.mode === "business" ? "Empresa" : user.locale === "es" ? "Personal" : "Pessoal";
+            const otherLabel = otherMode === "business" ? "Empresa" : user.locale === "es" ? "Personal" : "Pessoal";
+            await wppSend(from, localized(user.locale,
+              `A conta *${account.name}* está no modo *${otherLabel}*, mas este lançamento está no modo *${currentLabel}*. Para usar aquela conta, envie o lançamento novamente indicando *na empresa* ou *no pessoal*. Para criar uma conta neste modo, responda *cadastra ${messageText.trim()}*.`,
+              `La cuenta *${account.name}* está en el modo *${otherLabel}*, pero este movimiento está en *${currentLabel}*. Para usarla, envía el movimiento de nuevo indicando *empresa* o *personal*. Para crear una cuenta en este modo, responde *registrar cuenta ${messageText.trim()}*.`,
+            ));
+            return;
+          }
+          if (looksLikeNewCommand(messageText) || /^(?:pagamento|lancamento|lançamento)\b/i.test(messageText.trim())) {
+            await clearPendingAction(from);
+          } else {
+            await setPendingAction(from, {
+              type: "account_selection", userId: user.id, mode: pending.mode,
+              action: "resume_ai", ai: pending.ai, originalText: pending.originalText,
+              accounts: pending.accounts,
+            });
+            await wppSend(from, accountSelectionMessage(pending.accounts as Account[], user.locale, pending.mode as FinanceMode));
+            return;
+          }
+        } else {
+          await clearPendingAction(from);
+          const chosen = pending.accounts[choice];
+          accountSelectionResume = applyAccountToAi(pending.ai, chosen.name, pending.mode as FinanceMode);
+          messageText = pending.originalText;
+        }
       }
     }
 
@@ -2920,7 +2950,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               action: "resume_ai", ai, originalText: messageText,
               accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
             });
-            await wppSend(from, accountSelectionMessage(choices, user.locale));
+            await wppSend(from, accountSelectionMessage(choices, user.locale, accountMode));
           }
           break;
         }
@@ -3034,7 +3064,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
               action: "resume_ai", ai, originalText: messageText,
               accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
             });
-            await wppSend(from, accountSelectionMessage(choices, user.locale));
+            await wppSend(from, accountSelectionMessage(choices, user.locale, financeMode));
             return;
           }
         }
@@ -3230,7 +3260,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 action: "resume_ai", ai: resumeAi, originalText: messageText,
                 accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
               });
-              await wppSend(from, accountSelectionMessage(choices, user.locale));
+              await wppSend(from, accountSelectionMessage(choices, user.locale, accountMode));
               break;
             }
           }
@@ -3557,7 +3587,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                   action: "resume_ai", ai, originalText: messageText,
                   accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
                 });
-                await wppSend(from, accountSelectionMessage(choices, user.locale));
+                await wppSend(from, accountSelectionMessage(choices, user.locale, detailMode));
               }
               break;
             }
@@ -3739,7 +3769,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
                 action: "resume_ai", ai, originalText: messageText,
                 accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
               });
-              await wppSend(from, accountSelectionMessage(choices, user.locale));
+              await wppSend(from, accountSelectionMessage(choices, user.locale, queryMode));
             }
             break;
           }
