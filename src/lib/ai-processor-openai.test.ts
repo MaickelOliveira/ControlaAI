@@ -19,6 +19,7 @@ import { extractInvoiceTransactions, financialDocumentDescription, normalizeFina
 const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.OPENAI_API_KEY;
 const originalTestUserIds = process.env.OPENAI_TEST_USER_IDS;
+const originalAiFirst = process.env.AI_FIRST_INTENT_ENABLED;
 
 const context = {
   user: {
@@ -57,6 +58,8 @@ describe("AI provider routing", () => {
     else process.env.OPENAI_API_KEY = originalApiKey;
     if (originalTestUserIds === undefined) delete process.env.OPENAI_TEST_USER_IDS;
     else process.env.OPENAI_TEST_USER_IDS = originalTestUserIds;
+    if (originalAiFirst === undefined) delete process.env.AI_FIRST_INTENT_ENABLED;
+    else process.env.AI_FIRST_INTENT_ENABLED = originalAiFirst;
   });
 
   it("uses OpenAI only for an allowlisted user", async () => {
@@ -122,6 +125,15 @@ describe("AI provider routing", () => {
 
     await expect(processMessage("apagar receita total", context))
       .resolves.toMatchObject({ intent: "how_to", response: expect.stringContaining("Você quer apagar") });
+  });
+
+  it("can return to the previous routing without changing stored data", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    process.env.AI_FIRST_INTENT_ENABLED = "false";
+
+    await expect(processMessage("1 cadastrar conta Sicoob", context))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).not.toHaveBeenCalled();
   });
 
   it("keeps non-allowlisted users on Gemini", async () => {
