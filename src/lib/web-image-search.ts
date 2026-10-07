@@ -140,7 +140,7 @@ export async function findPublicProductImage(request: PublicImageRequest): Promi
       const image = await fetchPublic(candidate.imageUrl, 4_500_000);
       if (!image || !["image/jpeg", "image/png"].includes(image.type) || image.data.length < 1_000) continue;
       const mimeType = image.type as "image/jpeg" | "image/png";
-      return { result: { title: candidate.title, pageUrl: candidate.pageUrl, image: image.data, mimeType } };
+      return { result: { title: candidate.title, pageUrl: candidate.pageUrl, image: image.data, mimeType }, pageUrl: candidate.pageUrl };
     }
     return { pageUrl: candidates[0]?.pageUrl };
   } catch (error) {
