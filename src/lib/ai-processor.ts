@@ -4107,18 +4107,36 @@ function hasIndividualRides(answer: string, date: string | null): boolean {
   );
 }
 
+/** Abre a busca oficial já filtrada pela data e pelo trajeto, sem inventar viagens. */
+export function datedCarpoolSearchUrl(query: string, date: string | null): string | null {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const normalized = normalizeCapabilityText(query);
+  const cities = /campo mourao[\s\S]*curitiba/.test(normalized)
+    ? ["Campo Mourão", "Curitiba"]
+    : /curitiba[\s\S]*campo mourao/.test(normalized)
+      ? ["Curitiba", "Campo Mourão"]
+      : null;
+  if (!cities) return null;
+  const params = new URLSearchParams({
+    db: date, fn: cities[0], search_origin: "CARPOOL_AXIS",
+    seats: "1", tn: cities[1], transport_type: "CARPOOLING",
+  });
+  return `https://www.blablacar.com.br/search?${params}`;
+}
+
 function rideListingUnavailable(query: string, date: string | null, sources: GroundedSource[], locale?: string): string {
   const normalized = normalizeCapabilityText(query);
   const official = sources.find(source => /^https:\/\/www\.blablacar\.com\.br\/(?:carpool|ride-sharing)\//.test(source.url))?.url;
-  const route = /campo mourao[\s\S]*curitiba/.test(normalized)
-    ? "https://www.blablacar.com.br/carpool/routes/campo-mourao-pr/curitiba-pr"
-    : /curitiba[\s\S]*campo mourao/.test(normalized)
-      ? "https://www.blablacar.com.br/carpool/routes/curitiba-pr/campo-mourao-pr"
-      : official ?? "https://www.blablacar.com.br/";
+  const route = datedCarpoolSearchUrl(query, date)
+    ?? (/campo mourao[\s\S]*curitiba/.test(normalized)
+      ? "https://www.blablacar.com.br/carpool/routes/campo-mourao-pr/curitiba-pr"
+      : /curitiba[\s\S]*campo mourao/.test(normalized)
+        ? "https://www.blablacar.com.br/carpool/routes/curitiba-pr/campo-mourao-pr"
+        : official ?? "https://www.blablacar.com.br/");
   const day = date ?? (locale === "es" ? "la fecha solicitada" : "a data solicitada");
   return locale === "es"
-    ? `No pude confirmar una lista de viajes individuales para ${day} con horario y precio de cada uno. Consulta la fecha en BlaBlaCar: ${route}`
-    : `Não consegui confirmar as caronas individuais para ${day} com horário e preço de cada uma. Consulte a data na BlaBlaCar: ${route}`;
+    ? `Encontré referencias a la ruta, pero no pude confirmar los horarios y precios de cada viaje para ${day}. Abre la búsqueda de caronas para esa fecha: ${route}`
+    : `Encontrei informações sobre a rota, mas não consegui confirmar os horários e preços de cada carona para ${day}. Abra a busca de caronas nessa data: ${route}`;
 }
 
 /** Rejeita saídas degeneradas do provedor antes que virem dezenas de mensagens. */
