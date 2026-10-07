@@ -59,7 +59,7 @@ async function fetchPublic(url: string, maxBytes: number): Promise<{ data: Buffe
   try {
     for (let hop = 0; hop < 4; hop += 1) {
       if (!isPublicImageUrl(url) || !await publicDns(url)) return null;
-      const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(9_000),
+      const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(maxBytes > 2_000_000 ? 25_000 : 9_000),
         headers: { Accept: "text/html,image/jpeg,image/png;q=0.9", "User-Agent": "Zelo/1.0 (public product preview)" } });
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
