@@ -408,9 +408,10 @@ export async function deleteFinance(id: string, userId: string): Promise<boolean
  *  ANTES de executar — usado só pra montar a mensagem de confirmação, nunca
  *  pra decidir se apaga (a contagem real é recontada na hora de apagar de
  *  verdade, ver deleteAllFinances). */
-export async function countFinances(userId: string, mode: FinanceMode | "both"): Promise<number> {
+export async function countFinances(userId: string, mode: FinanceMode | "both", type?: "income" | "expense"): Promise<number> {
   let query = getSupabase().from("finances").select("id", { count: "exact", head: true }).eq("user_id", userId);
   if (mode !== "both") query = query.eq("mode", mode);
+  if (type) query = query.eq("type", type);
   const { count, error } = await query;
   return error ? 0 : (count ?? 0);
 }
@@ -419,9 +420,10 @@ export async function countFinances(userId: string, mode: FinanceMode | "both"):
  *  irreversível, só deve ser chamada depois de confirmação explícita e
  *  forte do usuário (ver "confirm_clear_history" em message-handler.ts).
  *  Retorna quantos foram apagados de fato. */
-export async function deleteAllFinances(userId: string, mode: FinanceMode | "both"): Promise<number> {
+export async function deleteAllFinances(userId: string, mode: FinanceMode | "both", type?: "income" | "expense"): Promise<number> {
   let query = getSupabase().from("finances").delete({ count: "exact" }).eq("user_id", userId);
   if (mode !== "both") query = query.eq("mode", mode);
+  if (type) query = query.eq("type", type);
   const { error, count } = await query;
   if (error) { console.error("[finances] deleteAllFinances falhou:", error.message); return 0; }
   return count ?? 0;

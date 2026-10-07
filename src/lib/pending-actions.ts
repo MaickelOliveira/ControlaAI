@@ -72,6 +72,8 @@ export type PendingClearHistory = {
   phone: string;
   userId: string;
   mode: "personal" | "business" | "both";
+  /** Quando presente, só apaga receitas ou só despesas (ex.: "limpar todas as receitas"). */
+  entryType?: "income" | "expense";
   count: number; // quantos lançamentos seriam apagados — só informativo, recontado na hora de executar
   expiresAt: string;
 };

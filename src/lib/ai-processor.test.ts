@@ -3,6 +3,7 @@ import {
   getExplicitDailySummaryResult,
   getExplicitLastFinanceRelabelResult,
   getExplicitAccountLinkResult,
+  getExplicitFinanceClearByTypeResult,
   getExplicitFinanceDetailResult,
   getExplicitFinanceConfirmPendingResult,
   getExplicitPendingFinanceRegisterResult,
@@ -1187,5 +1188,26 @@ describe("vincular conta logo após um registro", () => {
   it("não intercepta pedido de conexão bancária nem sem registro anterior", () => {
     expect(getExplicitAccountLinkResult("Vincular conta bancária", afterRegister)).toBeNull();
     expect(getExplicitAccountLinkResult("Vincular conta sicoob", [])).toBeNull();
+  });
+});
+
+describe("limpar todas as receitas/despesas", () => {
+  it.each([
+    ["Limpar receita total", "income"],
+    ["limpar todas as receitas", "income"],
+    ["Apagar todas as despesas", "expense"],
+    ["zerar despesas", "expense"],
+    ["borrar todos los ingresos", "income"],
+  ] as const)("trata %s como limpeza por tipo (com confirmação)", (message, type) => {
+    expect(getExplicitFinanceClearByTypeResult(message)).toMatchObject({
+      intent: "finance_clear_history",
+      finance: { type },
+    });
+  });
+
+  it("não captura exclusão de um lançamento específico", () => {
+    expect(getExplicitFinanceClearByTypeResult("apaga a receita do aluguel")).toBeNull();
+    expect(getExplicitFinanceClearByTypeResult("apagar receita")).toBeNull();
+    expect(getExplicitFinanceClearByTypeResult("apaga isso")).toBeNull();
   });
 });

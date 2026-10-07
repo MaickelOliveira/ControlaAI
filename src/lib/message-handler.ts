@@ -2363,7 +2363,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const confirmed = confirmationText === "apagar tudo" || confirmationText === "borrar todo";
       await clearPendingAction(from);
       if (confirmed) {
-        const deleted = await deleteAllFinances(user.id, pending.mode);
+        const deleted = await deleteAllFinances(user.id, pending.mode, pending.entryType);
         const modeLabel = user.locale === "es"
           ? pending.mode === "personal" ? "personal" : pending.mode === "business" ? "empresarial" : "personal y empresarial"
           : pending.mode === "personal" ? "pessoal" : pending.mode === "business" ? "empresarial" : "pessoal e empresarial";
@@ -5213,12 +5213,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // Sem sinal explícito na mensagem (nem da IA, nem no texto cru),
         // pergunta em vez de assumir "os dois" ou só um dos modos.
         const lowerMsg = messageText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const clearType = ai.finance?.type === "income" || ai.finance?.type === "expense" ? ai.finance.type : undefined;
         let clearMode: "personal" | "business" | "both" | null = ai.mode ?? null;
         if (!clearMode) {
           if (/\b(?:pessoal|personal)\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b|\blos dos\b|\btodo\b/.test(lowerMsg)) clearMode = "personal";
           else if (/\bempresa(rial)?\b|\bnegocio\b/.test(lowerMsg) && !/\bos dois\b|\btudo\b|\bambos\b|\blos dos\b|\btodo\b/.test(lowerMsg)) clearMode = "business";
           else if (/\bos dois\b|\btudo\b|\bambos\b|\blos dos\b|\btodo\b/.test(lowerMsg)) clearMode = "both";
         }
+        // Apagar só receitas/despesas assume o modo ativo (a confirmação mostra qual é).
+        if (!clearMode && clearType) clearMode = mode as "personal" | "business";
         if (!clearMode) {
           await wppSend(from, user.locale === "es"
             ? "❓ Esto borrará tu historial financiero. ¿Es del modo *personal*, *empresarial* o *los dos*?"
@@ -5226,7 +5229,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           break;
         }
 
-        const count = await countFinances(user.id, clearMode);
+        const count = await countFinances(user.id, clearMode, clearType);
         if (count === 0) {
           await wppSend(from, user.locale === "es" ? "No encontré ningún movimiento para borrar en ese modo." : "Não encontrei nenhum lançamento pra apagar nesse modo.");
           break;
@@ -5234,7 +5237,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const modeLabel = user.locale === "es"
           ? clearMode === "personal" ? "personal" : clearMode === "business" ? "empresarial" : "personal y empresarial"
           : clearMode === "personal" ? "pessoal" : clearMode === "business" ? "empresarial" : "pessoal e empresarial";
-        await setPendingAction(from, { type: "confirm_clear_history", userId: user.id, mode: clearMode, count });
+        await setPendingAction(from, { type: "confirm_clear_history", userId: user.id, mode: clearMode, count, ...(clearType ? { entryType: clearType } : {}) });
+        if (clearType) {
+          const noun = clearType === "income" ? "receita" : "despesa";
+          await wppSend(from, user.locale === "es"
+            ? `⚠️ Esto borrará *${count} ${clearType === "income" ? "ingreso" : "gasto"}${count === 1 ? "" : "s"}* del historial ${modeLabel}, definitivamente. Los demás movimientos no se tocan.\n\nSi estás seguro, responde exactamente *borrar todo*. Cualquier otra respuesta cancela la acción.`
+            : `⚠️ Isso vai apagar *${count} ${noun}${count === 1 ? "" : "s"}* do histórico ${modeLabel}, de vez, sem como desfazer. Os outros lançamentos não são mexidos.\n\nSe tiver certeza, responda exatamente *apagar tudo*. Qualquer outra coisa cancela.`);
+          break;
+        }
         await wppSend(from, user.locale === "es"
           ? `⚠️ Esto borrará *${count} ${count === 1 ? "movimiento" : "movimientos"}* del historial ${modeLabel} — gastos e ingresos, definitivamente.\n\nSi estás seguro, responde exactamente *borrar todo*. Cualquier otra respuesta cancela la acción.`
           : `⚠️ Isso vai apagar *${count} lançamento${count === 1 ? "" : "s"}* do histórico ${modeLabel} — despesas e receitas, de vez, sem como desfazer.\n\nSe tiver certeza, responda exatamente *apagar tudo*. Qualquer outra coisa cancela.`);
