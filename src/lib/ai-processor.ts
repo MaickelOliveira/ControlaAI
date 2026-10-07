@@ -2078,9 +2078,16 @@ export function getUnsupportedBankConnectionResponse(
 export function getMediaCapabilityResponse(message: string, locale?: string): string | null {
   const normalized = normalizeCapabilityText(message.trim());
   const mentionsSupportedMedia = /\b(?:audio|audios|mensagem de voz|mensagens de voz|nota de voz|notas de voz|foto|fotos|fotografia|fotografias|imagem|imagens|imagen|imagenes|pdf|pdfs|documento|documentos|arquivo|arquivos|archivo|archivos|ficheiro|ficheiros|recibo|recibos|fatura|faturas|factura|facturas|boleto|boletos|comprovante|comprovantes)\b/.test(normalized);
-  const asksAboutCapability = /\b(?:transcrev\w*|entend\w*|compreend\w*|assimil\w*|process\w*|aceit\w*|analis\w*|interpret\w*|identific\w*|reconhec\w*|escut\w*|ouv\w*|consig\w*|pod\w*|le|ler|lee|leer|entiend\w*|comprend\w*|pued\w*|acept\w*|escuch\w*)\b/.test(normalized);
+  const asksAboutCapability = /\b(?:transcrev\w*|entend\w*|compreend\w*|assimil\w*|process\w*|aceit\w*|analis\w*|interpret\w*|identific\w*|reconhec\w*|escut\w*|ouv\w*|consig\w*|conseg\w*|pod\w*|le|ler|lee|leer|entiend\w*|comprend\w*|pued\w*|acept\w*|escuch\w*)\b/.test(normalized);
 
   if (!mentionsSupportedMedia || !asksAboutCapability) return null;
+
+  const asksToFindImage = /\b(?:busc\w*|procur\w*|pesquis\w*|encontr\w*|ach\w*|mand\w*|envi\w*|mostr\w*)\b[\s\S]*\b(?:foto|fotos|imagem|imagens|imagen|imagenes)\b/.test(normalized);
+  if (asksToFindImage) {
+    return locale === "es"
+      ? "Sí. Dime el producto y el modelo: buscaré una foto pública en la página del producto y la enviaré aquí cuando pueda confirmar que corresponde al modelo pedido."
+      : "Sim. Diga o produto e o modelo: vou buscar uma foto pública na página do produto e enviá-la aqui quando conseguir confirmar que corresponde ao modelo pedido.";
+  }
 
   if (locale === "es") {
     return "Sí. Puedes enviarme audios: los transcribo y entiendo su contenido para registrar información o ejecutar lo que me pidas. También analizo fotos, comprobantes, recibos, facturas y documentos PDF; puedo extraer los datos, identificar el contenido o guardar el archivo en el Drive de Zelo. Solo envíalo y dime qué quieres hacer.";
@@ -4114,6 +4121,12 @@ function rideListingUnavailable(query: string, date: string | null, sources: Gro
     : `Não consegui confirmar as caronas individuais para ${day} com horário e preço de cada uma. Consulte a data na BlaBlaCar: ${route}`;
 }
 
+/** Rejeita saídas degeneradas do provedor antes que virem dezenas de mensagens. */
+export function isUsableWebSearchAnswer(value: string): boolean {
+  const answer = value.trim();
+  return !!answer && answer.length <= 11_000 && !/([^\s])\1{64,}/u.test(answer);
+}
+
 async function generateSingleWebSearch(
   query: string,
   locale?: string,
@@ -4152,7 +4165,7 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
     "generateWebSearchResponse",
     async () => {
       const result = await openAIWebSearch({ prompt, userId, maxOutputTokens: 4_096 });
-      if (!result.text || !result.sources.length || (rideDetails && !hasIndividualRides(result.text, rideDate))) {
+      if (!isUsableWebSearchAnswer(result.text) || !result.sources.length || (rideDetails && !hasIndividualRides(result.text, rideDate))) {
         throw new Error("pesquisa OpenAI sem lista individual confirmada");
       }
       const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
@@ -4176,12 +4189,12 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
       // O SDK instalado ainda tipa apenas o nome antigo da ferramenta, mas
       // Gemini 2.5 usa `googleSearch`, conforme a API atual.
       tools: [{ googleSearch: {} } as never],
-      generationConfig: { temperature: 0.1 },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2_048 },
     });
     const result = await model.generateContent(prompt);
     const answer = result.response.text().trim();
     const sources = groundedSources(result);
-    if (!answer || !sources.length || (rideDetails && !hasIndividualRides(answer, rideDate))) {
+    if (!isUsableWebSearchAnswer(answer) || !sources.length || (rideDetails && !hasIndividualRides(answer, rideDate))) {
       console.error(`[ai-processor] Pesquisa web sem lista confirmada (consulta de ${query.length} caracteres)`);
       return rideDetails ? rideListingUnavailable(query, rideDate, sources, locale) : failure;
     }

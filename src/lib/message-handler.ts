@@ -39,6 +39,7 @@ import { createMeetEvent } from "@/lib/google-meet";
 import { addMeetToGoogleCalendarEvent } from "@/lib/google-calendar";
 import { isConnected } from "@/lib/google-oauth";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
+import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
 import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
@@ -252,7 +253,13 @@ export function buildFirstUseGuideMessages(locale?: string): string[] {
 
 /** Mantém respostas dentro do limite prático do WhatsApp sem omitir dados. */
 async function wppSendLong(to: string, message: string, maxLength = 3500): Promise<void> {
-  for (const chunk of splitWhatsAppMessage(message, maxLength)) await wppSend(to, chunk);
+  const chunks = splitWhatsAppMessage(message, maxLength);
+  // Valida a resposta INTEIRA antes do primeiro envio. Uma saída repetitiva
+  // do modelo não pode virar dezenas de mensagens no telefone do cliente.
+  if (chunks.length > 8 || /([^\s])\1{64,}/u.test(message)) {
+    throw new Error("[message-handler] resposta longa ou repetitiva bloqueada");
+  }
+  for (const chunk of chunks) await wppSend(to, chunk);
 }
 
 export type ImageAction = "save" | "search" | "describe" | "register";
@@ -2756,6 +2763,26 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
+    const imageRequest = parsePublicImageRequest(messageText, recentHistory);
+    if (imageRequest) {
+      const found = await findPublicProductImage(imageRequest);
+      if (found.result) {
+        const { image, mimeType, title, pageUrl } = found.result;
+        const filename = mimeType === "image/png" ? "produto.png" : "produto.jpg";
+        const caption = localized(user.locale,
+          `📷 *${title}*\nFonte: ${pageUrl}`,
+          `📷 *${title}*\nFuente: ${pageUrl}`);
+        if (await wppSendFile(from, image, filename, mimeType, caption)) return;
+      }
+      await wppSend(from, found.pageUrl
+        ? localized(user.locale,
+          `Não consegui enviar a foto de *${imageRequest.subject}* agora. Você pode ver a imagem na página do produto: ${found.pageUrl}`,
+          `No pude enviar la foto de *${imageRequest.subject}* ahora. Puedes verla en la página del producto: ${found.pageUrl}`)
+        : localized(user.locale,
+          `Não encontrei uma foto verificável de *${imageRequest.subject}* para enviar. Diga o modelo e a cor/material, se souber, para eu tentar novamente.`,
+          `No encontré una foto verificable de *${imageRequest.subject}* para enviar. Dime el modelo y el color/material para intentarlo de nuevo.`));
+      return;
+    }
     const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)

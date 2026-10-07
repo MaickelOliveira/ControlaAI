@@ -34,6 +34,7 @@ import {
   getExplicitVehicleCrudResult,
   getExplicitWebSearchResult,
   getWebSearchMissingQuestion,
+  isUsableWebSearchAnswer,
   getExplicitWeeklySummaryResult,
   getMediaCapabilityResponse,
   getUnsupportedBankConnectionResponse,
@@ -298,6 +299,14 @@ describe("action reminder vs agenda parity", () => {
   it("leaves other intents untouched", () => {
     const result = { intent: "reminder_set" as const, confidence: 0.9, reminder: { message: "Pagar conta" } };
     expect(normalizeActionReminder("Pagar conta amanhã às 9h", result)).toBe(result);
+  });
+});
+
+describe("web search response guard", () => {
+  it("rejects a long stream of zeroes before it can be sent in WhatsApp chunks", () => {
+    expect(isUsableWebSearchAnswer("0".repeat(80_000))).toBe(false);
+    expect(isUsableWebSearchAnswer("0".repeat(100))).toBe(false);
+    expect(isUsableWebSearchAnswer("Bolsa Alma BB — R$ 13.200,00. Fonte: https://example.com")).toBe(true);
   });
 });
 
@@ -980,6 +989,11 @@ describe("getMediaCapabilityResponse", () => {
 
     expect(result).toMatchObject({ intent: "how_to", confidence: 1 });
     expect(result.response).toContain("Sim. Pode me enviar áudios");
+  });
+
+  it("explains that it can find and send a verified public product photo", () => {
+    expect(getMediaCapabilityResponse("Você consegue buscar uma imagem do produto?", "pt-BR"))
+      .toContain("foto pública na página do produto");
   });
 
   it("does not hijack unrelated messages", () => {
