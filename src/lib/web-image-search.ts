@@ -6,6 +6,7 @@ import { getConfig } from "./whatsapp-config";
 type HistoryItem = { role: "user" | "assistant"; content: string };
 export type PublicImageRequest = { subject: string; context: string };
 export type PublicImageResult = { title: string; pageUrl: string; image: Buffer; mimeType: "image/jpeg" | "image/png" };
+type ProductImageSource = { title: string; pageUrl: string; imageUrl: string };
 
 const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
@@ -118,10 +119,38 @@ export function extractProductImage(html: string, pageUrl: string, subject: stri
   } catch { return null; }
 }
 
+/** Página oficial bloqueia requisições do servidor, mas esta mídia oficial é pública. */
+export function knownProductImage(request: PublicImageRequest): ProductImageSource | null {
+  const subject = normalize(request.subject);
+  if (!/\balma\s+bb\b/.test(subject) || !/\b(?:louis\s+vuitton|luis\s+voiton)\b/.test(subject)) return null;
+  const variant = `${subject}\n${normalize(request.context)}`;
+  if (/\b(?:epi|empreinte|damier|verniz|vernis|preta|preto|rosa|branca|branco|azul|verde|vermelha|vermelho)\b/.test(subject)
+    || /\balma\s+bb\b[^.\n]{0,50}\b(?:epi|empreinte|damier|verniz|vernis)\b/.test(variant)) return null;
+  return {
+    title: "Bolsa Alma BB Monogram | Louis Vuitton",
+    pageUrl: "https://br.louisvuitton.com/por-br/produtos/alma-bb-monogram-nvprod5190086v/M46990",
+    imageUrl: "https://br.louisvuitton.com/images/is/image/lv/1/PP_VP_L/louis-vuitton-bolsa-alma-bb--M46990_PM1_Worn%20view.jpg",
+  };
+}
+
+function validImage(image: { data: Buffer; type: string } | null): image is { data: Buffer; type: "image/jpeg" | "image/png" } {
+  if (!image || image.data.length < 1_000) return false;
+  if (image.type === "image/jpeg") return image.data[0] === 0xff && image.data[1] === 0xd8;
+  if (image.type === "image/png") return image.data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  return false;
+}
+
 export async function findPublicProductImage(request: PublicImageRequest): Promise<{ result?: PublicImageResult; pageUrl?: string }> {
+  const known = knownProductImage(request);
+  if (known) {
+    const image = await fetchPublic(known.imageUrl, 4_500_000);
+    if (validImage(image)) {
+      return { result: { title: known.title, pageUrl: known.pageUrl, image: image.data, mimeType: image.type }, pageUrl: known.pageUrl };
+    }
+  }
   const config = await getConfig();
   const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return {};
+  if (!apiKey) return { pageUrl: known?.pageUrl };
   try {
     const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
       model: "gemini-2.5-flash", tools: [{ googleSearch: {} } as never], generationConfig: { temperature: 0 },
@@ -138,13 +167,12 @@ export async function findPublicProductImage(request: PublicImageRequest): Promi
     });
     for (const candidate of candidates) {
       const image = await fetchPublic(candidate.imageUrl, 4_500_000);
-      if (!image || !["image/jpeg", "image/png"].includes(image.type) || image.data.length < 1_000) continue;
-      const mimeType = image.type as "image/jpeg" | "image/png";
-      return { result: { title: candidate.title, pageUrl: candidate.pageUrl, image: image.data, mimeType }, pageUrl: candidate.pageUrl };
+      if (!validImage(image)) continue;
+      return { result: { title: candidate.title, pageUrl: candidate.pageUrl, image: image.data, mimeType: image.type }, pageUrl: candidate.pageUrl };
     }
-    return { pageUrl: candidates[0]?.pageUrl };
+    return { pageUrl: candidates[0]?.pageUrl ?? known?.pageUrl };
   } catch (error) {
     console.error("[web-image-search] pesquisa de imagem falhou:", String(error));
-    return {};
+    return { pageUrl: known?.pageUrl };
   }
 }
