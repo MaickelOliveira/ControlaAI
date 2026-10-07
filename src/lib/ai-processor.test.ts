@@ -33,6 +33,7 @@ import {
   getExplicitUnscheduledReminderResult,
   getExplicitVehicleCrudResult,
   getExplicitWebSearchResult,
+  datedCarpoolSearchUrl,
   getWebSearchMissingQuestion,
   isUsableWebSearchAnswer,
   getExplicitWeeklySummaryResult,
@@ -299,6 +300,30 @@ describe("action reminder vs agenda parity", () => {
   it("leaves other intents untouched", () => {
     const result = { intent: "reminder_set" as const, confidence: 0.9, reminder: { message: "Pagar conta" } };
     expect(normalizeActionReminder("Pagar conta amanhã às 9h", result)).toBe(result);
+  });
+});
+
+describe("dated carpool fallback", () => {
+  it("opens the official search for the requested day and direction", () => {
+    const url = datedCarpoolSearchUrl(
+      "busca todas as caronas de Campo Mourão para Curitiba amanhã", "2026-10-08",
+    );
+    expect(url).not.toBeNull();
+    const parsed = new URL(url!);
+    expect(parsed.hostname).toBe("www.blablacar.com.br");
+    expect(parsed.pathname).toBe("/search");
+    expect(parsed.searchParams.get("db")).toBe("2026-10-08");
+    expect(parsed.searchParams.get("fn")).toBe("Campo Mourão");
+    expect(parsed.searchParams.get("tn")).toBe("Curitiba");
+    expect(parsed.searchParams.get("transport_type")).toBe("CARPOOLING");
+    const reverse = new URL(datedCarpoolSearchUrl("Curitiba para Campo Mourão", "2026-10-08")!);
+    expect(reverse.searchParams.get("fn")).toBe("Curitiba");
+    expect(reverse.searchParams.get("tn")).toBe("Campo Mourão");
+  });
+
+  it("does not guess locations or dates for a different route", () => {
+    expect(datedCarpoolSearchUrl("caronas de São Paulo para Santos", "2026-10-08")).toBeNull();
+    expect(datedCarpoolSearchUrl("Campo Mourão para Curitiba", null)).toBeNull();
   });
 });
 
