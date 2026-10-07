@@ -2078,7 +2078,7 @@ export function getUnsupportedBankConnectionResponse(
 export function getMediaCapabilityResponse(message: string, locale?: string): string | null {
   const normalized = normalizeCapabilityText(message.trim());
   const mentionsSupportedMedia = /\b(?:audio|audios|mensagem de voz|mensagens de voz|nota de voz|notas de voz|foto|fotos|fotografia|fotografias|imagem|imagens|imagen|imagenes|pdf|pdfs|documento|documentos|arquivo|arquivos|archivo|archivos|ficheiro|ficheiros|recibo|recibos|fatura|faturas|factura|facturas|boleto|boletos|comprovante|comprovantes)\b/.test(normalized);
-  const asksAboutCapability = /\b(?:transcrev\w*|entend\w*|compreend\w*|assimil\w*|process\w*|aceit\w*|analis\w*|interpret\w*|identific\w*|reconhec\w*|escut\w*|ouv\w*|consig\w*|pod\w*|le|ler|lee|leer|entiend\w*|comprend\w*|pued\w*|acept\w*|escuch\w*)\b/.test(normalized);
+  const asksAboutCapability = /\b(?:transcrev\w*|entend\w*|compreend\w*|assimil\w*|process\w*|aceit\w*|analis\w*|interpret\w*|identific\w*|reconhec\w*|escut\w*|ouv\w*|consig\w*|conseg\w*|pod\w*|le|ler|lee|leer|entiend\w*|comprend\w*|pued\w*|acept\w*|escuch\w*)\b/.test(normalized);
 
   if (!mentionsSupportedMedia || !asksAboutCapability) return null;
 
