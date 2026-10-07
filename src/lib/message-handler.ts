@@ -253,7 +253,13 @@ export function buildFirstUseGuideMessages(locale?: string): string[] {
 
 /** Mantém respostas dentro do limite prático do WhatsApp sem omitir dados. */
 async function wppSendLong(to: string, message: string, maxLength = 3500): Promise<void> {
-  for (const chunk of splitWhatsAppMessage(message, maxLength)) await wppSend(to, chunk);
+  const chunks = splitWhatsAppMessage(message, maxLength);
+  // Valida a resposta INTEIRA antes do primeiro envio. Uma saída repetitiva
+  // do modelo não pode virar dezenas de mensagens no telefone do cliente.
+  if (chunks.length > 8 || /([^\s])\1{64,}/u.test(message)) {
+    throw new Error("[message-handler] resposta longa ou repetitiva bloqueada");
+  }
+  for (const chunk of chunks) await wppSend(to, chunk);
 }
 
 export type ImageAction = "save" | "search" | "describe" | "register";
