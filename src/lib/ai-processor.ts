@@ -2082,6 +2082,13 @@ export function getMediaCapabilityResponse(message: string, locale?: string): st
 
   if (!mentionsSupportedMedia || !asksAboutCapability) return null;
 
+  const asksToFindImage = /\b(?:busc\w*|procur\w*|pesquis\w*|encontr\w*|ach\w*|mand\w*|envi\w*|mostr\w*)\b[\s\S]*\b(?:foto|fotos|imagem|imagens|imagen|imagenes)\b/.test(normalized);
+  if (asksToFindImage) {
+    return locale === "es"
+      ? "Sí. Dime el producto y el modelo: buscaré una foto pública en la página del producto y la enviaré aquí cuando pueda confirmar que corresponde al modelo pedido."
+      : "Sim. Diga o produto e o modelo: vou buscar uma foto pública na página do produto e enviá-la aqui quando conseguir confirmar que corresponde ao modelo pedido.";
+  }
+
   if (locale === "es") {
     return "Sí. Puedes enviarme audios: los transcribo y entiendo su contenido para registrar información o ejecutar lo que me pidas. También analizo fotos, comprobantes, recibos, facturas y documentos PDF; puedo extraer los datos, identificar el contenido o guardar el archivo en el Drive de Zelo. Solo envíalo y dime qué quieres hacer.";
   }
