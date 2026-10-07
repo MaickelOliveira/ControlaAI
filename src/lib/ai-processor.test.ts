@@ -372,6 +372,33 @@ describe("internet research classification", () => {
       .toMatchObject({ intent: "web_search", keyword: expect.stringContaining("Campo Mourão") });
   });
 
+  it("keeps the original route when the user asks for every ride tomorrow", async () => {
+    const history = [
+      { role: "user" as const, content: "Procure caronas de Campo Mourão para Curitiba amanhã" },
+      { role: "assistant" as const, content: "Encontrei média da rota.\n\n🔎 *Fontes consultadas:*\n1. BlaBlaCar: https://www.blablacar.com.br/carpool/routes/campo-mourao-pr/curitiba-pr" },
+      { role: "user" as const, content: "traga os detalhes da carona de amanhã" },
+      { role: "assistant" as const, content: "Não consegui confirmar essa pesquisa com fontes públicas agora." },
+    ];
+    const message = "me descrevas todas que tem amanhã com preço e horário específico de cada liste todas";
+    const result = getExplicitWebSearchResult(message, history);
+    expect(result).toMatchObject({
+      intent: "web_search",
+      keyword: expect.stringContaining("Campo Mourão para Curitiba amanhã"),
+    });
+    expect(result?.keyword).toContain(message);
+    expect(getWebSearchMissingQuestion(result?.keyword ?? "", "pt-BR")).toBeNull();
+    expect(await processMessage(message, {
+      user: { activeMode: "personal", customCategoriesExpense: [], customCategoriesIncome: [], locale: "pt-BR" },
+      history,
+    })).toMatchObject({ intent: "web_search", keyword: result?.keyword });
+  });
+
+  it("asks for a missing ride date and route instead of searching generic averages", () => {
+    expect(getWebSearchMissingQuestion("Caronas de Campo Mourão para Curitiba", "pt-BR")).toContain("qual data");
+    expect(getWebSearchMissingQuestion("Caronas amanhã", "pt-BR")).toContain("origem");
+    expect(getWebSearchMissingQuestion("Caronas de Campo Mourão para Curitiba amanhã", "pt-BR")).toBeNull();
+  });
+
   it("resolves the same contextual research flow in Spanish", () => {
     const history = [
       { role: "user" as const, content: "hoteles en Cartagena" },
