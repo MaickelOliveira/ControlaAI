@@ -4121,6 +4121,12 @@ function rideListingUnavailable(query: string, date: string | null, sources: Gro
     : `Não consegui confirmar as caronas individuais para ${day} com horário e preço de cada uma. Consulte a data na BlaBlaCar: ${route}`;
 }
 
+/** Rejeita saídas degeneradas do provedor antes que virem dezenas de mensagens. */
+export function isUsableWebSearchAnswer(value: string): boolean {
+  const answer = value.trim();
+  return !!answer && answer.length <= 11_000 && !/([^\s])\1{64,}/u.test(answer);
+}
+
 async function generateSingleWebSearch(
   query: string,
   locale?: string,
@@ -4159,7 +4165,7 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
     "generateWebSearchResponse",
     async () => {
       const result = await openAIWebSearch({ prompt, userId, maxOutputTokens: 4_096 });
-      if (!result.text || !result.sources.length || (rideDetails && !hasIndividualRides(result.text, rideDate))) {
+      if (!isUsableWebSearchAnswer(result.text) || !result.sources.length || (rideDetails && !hasIndividualRides(result.text, rideDate))) {
         throw new Error("pesquisa OpenAI sem lista individual confirmada");
       }
       const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
@@ -4183,12 +4189,12 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
       // O SDK instalado ainda tipa apenas o nome antigo da ferramenta, mas
       // Gemini 2.5 usa `googleSearch`, conforme a API atual.
       tools: [{ googleSearch: {} } as never],
-      generationConfig: { temperature: 0.1 },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2_048 },
     });
     const result = await model.generateContent(prompt);
     const answer = result.response.text().trim();
     const sources = groundedSources(result);
-    if (!answer || !sources.length || (rideDetails && !hasIndividualRides(answer, rideDate))) {
+    if (!isUsableWebSearchAnswer(answer) || !sources.length || (rideDetails && !hasIndividualRides(answer, rideDate))) {
       console.error(`[ai-processor] Pesquisa web sem lista confirmada (consulta de ${query.length} caracteres)`);
       return rideDetails ? rideListingUnavailable(query, rideDate, sources, locale) : failure;
     }
