@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractProductImage, isPublicImageUrl, parsePublicImageRequest } from "./web-image-search";
+import { extractProductImage, isPublicImageUrl, knownProductImage, parsePublicImageRequest } from "./web-image-search";
 
 describe("public product images", () => {
   it("keeps the product model from the conversation when asked for its photo", () => {
@@ -36,6 +36,16 @@ describe("public product images", () => {
       <img alt="Bolsa Alma BB Louis Vuitton (Zoom no Produto)" src="/images/alma-bb.jpg">`;
     expect(extractProductImage(html, "https://br.louisvuitton.com/produtos/alma-bb", "Alma BB Louis Vuitton"))
       .toEqual({ title: "Bolsa Alma BB Monogram | Louis Vuitton", imageUrl: "https://br.louisvuitton.com/images/alma-bb.jpg" });
+  });
+
+  it("uses the verified official media for Alma BB Monogram when the product page blocks the server", () => {
+    const source = knownProductImage({ subject: "Alma BB Louis Vuitton", context: "" });
+    expect(source?.title).toContain("Alma BB Monogram");
+    expect(source?.imageUrl).toContain("br.louisvuitton.com/images/is/image/lv/");
+    expect(source?.pageUrl).toContain("/M46990");
+    expect(knownProductImage({ subject: "Alma BB Epi Louis Vuitton", context: "" })).toBeNull();
+    expect(knownProductImage({ subject: "Alma PM Louis Vuitton", context: "" })).toBeNull();
+    expect(knownProductImage({ subject: "Alma BB Louis Vuitton", context: "Alma BB em couro Epi" })).toBeNull();
   });
 
   it("rejects local addresses and unsafe image URLs", () => {
