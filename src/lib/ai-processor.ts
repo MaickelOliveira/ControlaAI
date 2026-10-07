@@ -3919,16 +3919,15 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
 
 }
 
-/** A IA interpreta primeiro somente os números de teste autorizados. Para os
- * demais, mantém a ordem anterior: regras explícitas e, se necessário, IA. */
+/** A IA interpreta primeiro para todos os usuários reais após o rollout.
+ * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
-  // Lista vazia por padrão: uma publicação sem configuração não altera o fluxo
-  // de interpretação dos clientes. Aceita números com ou sem pontuação.
+  const rolloutMode = process.env.AI_FIRST_INTENT_ENABLED;
   const phone = ctx?.phone?.replace(/\D/g, "") ?? "";
   const testPhones = (process.env.AI_FIRST_INTENT_TEST_PHONES ?? "")
     .split(",").map(value => value.replace(/\D/g, "")).filter(Boolean);
-  const aiFirstForThisPhone = !!ctx?.user?.id && !!phone
-    && testPhones.includes(phone) && process.env.AI_FIRST_INTENT_ENABLED !== "false";
+  const aiFirstForThisPhone = !!ctx?.user?.id && rolloutMode !== "false"
+    && (rolloutMode !== "canary" || (!!phone && testPhones.includes(phone)));
   if (!aiFirstForThisPhone) {
     const standalone = getExplicitIntentFallback(message, ctx);
     if (standalone) return standalone;
