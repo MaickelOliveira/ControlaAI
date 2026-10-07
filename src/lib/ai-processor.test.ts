@@ -982,6 +982,11 @@ describe("getMediaCapabilityResponse", () => {
     expect(result.response).toContain("Sim. Pode me enviar áudios");
   });
 
+  it("explains that it can find and send a verified public product photo", () => {
+    expect(getMediaCapabilityResponse("Você consegue buscar uma imagem do produto?", "pt-BR"))
+      .toContain("foto pública na página do produto");
+  });
+
   it("does not hijack unrelated messages", () => {
     expect(getMediaCapabilityResponse("Crie uma tarefa para amanhã")).toBeNull();
     expect(getMediaCapabilityResponse("Quanto gastei este mês?")).toBeNull();
