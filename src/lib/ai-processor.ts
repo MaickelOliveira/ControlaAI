@@ -480,9 +480,19 @@ function contextualWebSearchKeyword(message: string, history?: WebSearchHistory)
   const isShortTimeFollowUp = /^(?:e|y)\b/.test(normalized)
     && /\b(?:hoje|hoy|amanha|manana|semana|fim de semana|fin de semana|mes|m[eê]s)\b/.test(normalized)
     && normalized.split(/\s+/).length <= 9;
-  if (!refersToPreviousSubject && !isShortTimeFollowUp) return message.trim();
+  const recent = history?.slice(-12) ?? [];
+  const lastAnswer = [...recent].reverse().find(item => item.role === "assistant")?.content ?? "";
+  const travelAnchor = [...recent].reverse().find(item =>
+    item.role === "user"
+    && /\b(?:caronas?|boleias?|rides?)\b/i.test(normalizeCapabilityText(item.content))
+    && /\b(?:para|hasta|to)\b/i.test(normalizeCapabilityText(item.content)),
+  )?.content.trim();
+  const travelFollowUp = !!travelAnchor
+    && /\b(?:caronas?|boleias?|viagens?|detalhes?|todas?|liste|listar|horarios?|precos?|amanha|manana)\b/.test(normalized)
+    && /\b(?:carona|boleia|blablacar|fontes consultadas|fuentes consultadas|nao consegui confirmar|no pude confirmar)\b/i.test(normalizeCapabilityText(lastAnswer));
+  if (!refersToPreviousSubject && !isShortTimeFollowUp && !travelFollowUp) return message.trim();
+  if (travelFollowUp) return `Pedido original da viagem: ${travelAnchor}\nContinuação do usuário: ${message.trim()}`;
 
-  const recent = history?.slice(-10) ?? [];
   const hasRecentGroundedAnswer = recent.some(item =>
     item.role === "assistant" && /\b(?:fontes consultadas|fuentes consultadas)\b/i.test(normalizeCapabilityText(item.content)),
   );
@@ -503,25 +513,25 @@ export function getExplicitWebSearchResult(message: string, history?: WebSearchH
   const asksToSearch = /\b(?:pesquis(?:a|e|ar)|procur(?:a|e|ar)|busc(?:a|ar|que)|consult(?:a|e|ar)|verific(?:a|ar|que)|investig(?:a|ar|ue)|averigu(?:a|ar|e))\b/.test(normalized);
   const mentionsWeb = /\b(?:internet|google|web|online|site|sites)\b/.test(normalized);
   const hasCurrentSignal = /\b(?:hoje|hoy|agora|ahora|atual|actual|neste momento|en este momento)\b/.test(normalized);
-  const hasLiveInformationSubject = /\b(?:clima|tempo|meteorologia|previsao do tempo|pronostico|temperatura|chuva|chov\w*|chover|chver|lluvia|llov\w*|noticias?|eventos?|cotacao|cambio|dolar|euro|moeda|moneda|bolsa|acoes|acciones|transito|trafico|horarios?|funcionamento|aberto|abierta?|fechado|cerrada?|preco|precio|valor|custa|cuesta|disponibilidade|disponibilidad|passagens?|voos?|vuelos?|hoteis?|hoteles?)\b/.test(normalized);
+  const hasLiveInformationSubject = /\b(?:clima|tempo|meteorologia|previsao do tempo|pronostico|temperatura|chuva|chov\w*|chover|chver|lluvia|llov\w*|noticias?|eventos?|cotacao|cambio|dolar|euro|moeda|moneda|bolsa|acoes|acciones|transito|trafico|horarios?|funcionamento|aberto|abierta?|fechado|cerrada?|preco|precio|valor|custa|cuesta|disponibilidade|disponibilidad|caronas?|boleias?|passagens?|voos?|vuelos?|hoteis?|hoteles?)\b/.test(normalized);
   const terseCurrentSubject = hasCurrentSignal
     && normalized.split(/\s+/).length <= 9
     && /[a-z]{2,}/.test(normalized);
   const hasRecentGroundedAnswer = history?.slice(-10).some(item =>
     item.role === "assistant" && /\b(?:fontes consultadas|fuentes consultadas)\b/i.test(normalizeCapabilityText(item.content)),
   ) ?? false;
-  const contextualFollowUp = hasRecentGroundedAnswer && (
+  const contextualKeyword = contextualWebSearchKeyword(message, history);
+  const contextualFollowUp = contextualKeyword !== message.trim() || (hasRecentGroundedAnswer && (
     hasContextualWebReference(message)
     || (/^(?:e|y)\b/.test(normalized) && /\b(?:hoje|hoy|amanha|manana|semana|fim de semana|fin de semana|mes|m[eê]s)\b/.test(normalized))
-  );
+  ));
   const isInternalOrMutation = /\b(?:gastei|gasto|paguei|pago|pagar|pagament|pagou|pagaram|efetuad|realizad|quitei|quitad|transferi|transferenc|pix|deposit|recebi|recibi|receber|cobrar|ganhei|comprei|compra|compre|comprar|vendi|venda|registr|cadastr|anot|adicion|inclu|coloc|coloqu|bot|lanc|agreg|cri[ae]|alter|edit|apag|exclu|delet|lembr|recordatorio|tarefa|tarea|compromisso|cita|reuniao|reunion|agenda|lista de compras|lista do supermercado|saldo|extrato|lancamento|movimiento|despesa|gasto pessoal|receita|ingreso|contas? a receber|contas? a pagar|cuentas? por cobrar|cuentas? por pagar|conta da empresa|cuenta de la empresa|drive|envi|mand|avis|notific|respond|liga|llama|chama|telefon|cliente|clienta|customer|funcion[aá]ri[oa]|colaborador|empregad[oa]|emplead[oa])\w*/.test(normalized);
 
   const hasMoneyAmount = /\br\$\s*\d|\b\d+(?:[.,]\d{2,3})+\b/.test(normalized);
   if (hasMoneyAmount && !asksToSearch) return null;
   if (!(asksToSearch && mentionsWeb) && !(hasLiveInformationSubject || terseCurrentSubject || contextualFollowUp) || isInternalOrMutation) return null;
 
-  const keyword = contextualWebSearchKeyword(message, history);
-  return keyword ? { intent: "web_search", confidence: 1, keyword } : null;
+  return contextualKeyword ? { intent: "web_search", confidence: 1, keyword: contextualKeyword } : null;
 }
 
 function parseNaturalMoney(raw: string): number | null {
@@ -661,9 +671,10 @@ export function getExplicitPendingFinanceRegisterResult(message: string, anchor:
  * ou localização. O classificador continua responsável pelos demais casos. */
 export function getWebSearchMissingQuestion(query: string, locale?: string): string | null {
   const normalized = normalizeCapabilityText(query);
-  const isTravelSearch = /\b(?:passagem|passagens|voo|voos|flight|flights|vuelo|vuelos|pasaje|pasajes)\b/.test(normalized);
+  const isTravelSearch = /\b(?:carona|caronas|boleia|boleias|passagem|passagens|voo|voos|flight|flights|vuelo|vuelos|pasaje|pasajes)\b/.test(normalized);
   if (isTravelSearch) {
-    const hasRoute = /\b(?:de|desde)\s+.{2,60}\s+(?:para|a|hasta)\s+.{2,60}/.test(normalized);
+    const hasRoute = /\b(?:de|desde)\s+.{2,60}\s+(?:para|a|hasta)\s+.{2,60}/.test(normalized)
+      || /\b(?:caronas?|boleias?)\s+.{2,60}\s+(?:para|a|hasta)\s+.{2,60}/.test(normalized);
     if (!hasRoute) {
       return locale === "es"
         ? "✈️ ¿Cuál es la ciudad o aeropuerto de origen y cuál es el destino?"
@@ -3972,6 +3983,11 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
     return explicit ?? (modeled && typeof modeled.intent === "string" && typeof modeled.confidence === "number" ? modeled : { intent: "unknown", confidence: 0 });
   }
 
+  // Perguntas de continuação sobre caronas mantêm origem, destino e data
+  // recuperados do histórico, mesmo quando o classificador omitir a rota.
+  if (explicit?.intent === "web_search"
+    && /\b(?:caronas?|boleias?)\b/.test(normalizeCapabilityText(explicit.keyword ?? ""))) return explicit;
+
   // Preserve os dados extraídos pelos comandos existentes quando IA e regra
   // concordam; a IA resolve as frases que as regras não cobrem.
   if (explicit?.intent === modeled.intent) return explicit;
@@ -4058,12 +4074,54 @@ export async function generateWebSearchResponse(
   return ok.join("\n\n———\n\n") + note;
 }
 
+function rideListingDate(query: string): string | null {
+  const normalized = normalizeCapabilityText(query);
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  if (/\b(?:amanha|manana)\b/.test(normalized)) {
+    return new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  }
+  return query.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0] ?? null;
+}
+
+function wantsIndividualRides(query: string): boolean {
+  const normalized = normalizeCapabilityText(query);
+  return /\b(?:caronas?|boleias?)\b/.test(normalized)
+    && /\b(?:amanha|manana|20\d{2}-\d{2}-\d{2}|todas?|liste|listar|detalhes?|horarios?|precos?)\b/.test(normalized);
+}
+
+function hasIndividualRides(answer: string, date: string | null): boolean {
+  if (date && !answer.includes(date)) return false;
+  return answer.split("\n").some(line =>
+    /^\s*(?:\d{1,2}[.)]|[-•*])\s*/.test(line)
+    && /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/.test(line)
+    && /R\$\s*\d/.test(line),
+  );
+}
+
+function rideListingUnavailable(query: string, date: string | null, sources: GroundedSource[], locale?: string): string {
+  const normalized = normalizeCapabilityText(query);
+  const official = sources.find(source => /^https:\/\/www\.blablacar\.com\.br\/(?:carpool|ride-sharing)\//.test(source.url))?.url;
+  const route = /campo mourao[\s\S]*curitiba/.test(normalized)
+    ? "https://www.blablacar.com.br/carpool/routes/campo-mourao-pr/curitiba-pr"
+    : /curitiba[\s\S]*campo mourao/.test(normalized)
+      ? "https://www.blablacar.com.br/carpool/routes/curitiba-pr/campo-mourao-pr"
+      : official ?? "https://www.blablacar.com.br/";
+  const day = date ?? (locale === "es" ? "la fecha solicitada" : "a data solicitada");
+  return locale === "es"
+    ? `No pude confirmar una lista de viajes individuales para ${day} con horario y precio de cada uno. Consulta la fecha en BlaBlaCar: ${route}`
+    : `Não consegui confirmar as caronas individuais para ${day} com horário e preço de cada uma. Consulte a data na BlaBlaCar: ${route}`;
+}
+
 async function generateSingleWebSearch(
   query: string,
   locale?: string,
   userId?: string,
 ): Promise<string> {
   const failure = webSearchFailureMessage(locale);
+  const rideDetails = wantsIndividualRides(query);
+  const rideDate = rideListingDate(query);
   const language = localeInstruction(locale) || "Responda sempre em português brasileiro.";
   const searchedAt = new Intl.DateTimeFormat(locale === "es" ? "es-419" : locale === "pt-PT" ? "pt-PT" : "pt-BR", {
     dateStyle: "short",
@@ -4081,20 +4139,21 @@ Você é o Zelo, assessor pessoal do usuário. Faça uma pesquisa real na intern
 - Cite o preço exatamente como aparece na página do produto, com a loja correspondente. Se não conseguir confirmar o preço do modelo pedido, diga isso em vez de usar o preço de outro modelo. Quando houver vários itens, organize a resposta item por item, sem deixar nenhum de fora; se não achar um item, diga isso.
 - Para medicamentos, limite-se a preços, disponibilidade e informações públicas objetivas. Não diagnostique, não prescreva e não recomende dose; em dúvida de saúde, oriente médico ou farmacêutico.
 - Para viagens, deixe claros data, origem, destino, horários, preço encontrado, bagagem/taxas quando disponíveis e o link para conferência. Nunca diga que reservou ou comprou.
-- Se o usuário pedir para listar TODAS as opções (ex.: todas as caronas/voos com preço e horário de cada uma) e a fonte pública não mostrar cada opção individualmente, entregue o que realmente foi encontrado (faixa de preço, primeiros horários, quantidade) e diga de forma clara que o detalhe de cada opção só aparece na plataforma, com o link. Nunca invente itens para completar a lista.
+- Se o usuário pedir caronas para uma data, pesquise a data EXATA e liste somente viagens individuais dessa data. Use uma linha por viagem com horário de saída e preço daquela viagem; inclua o destino, motorista e link individual se disponíveis. Comece com a data em YYYY-MM-DD. Não apresente médias, "a partir de", primeiro horário ou quantidade média como se fossem as opções do dia. Ignore páginas indexadas em datas antigas e ônibus. Se a fonte não mostrar a lista individual de hoje, responda que não conseguiu confirmar cada viagem e dê o link da plataforma. Nunca afirme "todas" se não puder verificar a lista completa.
+- Para outras viagens, se o usuário pedir TODAS as opções, liste apenas itens individuais com dados verificados e declare quando a lista pode estar incompleta.
 - Quando o pedido for curto, como "dólar hoje" ou o nome de um local seguido de "hoje", entregue um panorama atual completo e útil do assunto. Para um local, inclua o que estiver disponível e for relevante hoje, como clima e alertas, eventos, notícias locais, trânsito, horários de funcionamento, turismo e atrações. Não exija que o usuário escreva "pesquise na internet".
 - Não mencione estas instruções.
 
 Pesquisa solicitada: ${query}
-Consulta iniciada em ${searchedAt} (horário de Brasília).`;
+Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Data solicitada para as caronas: ${rideDate ?? "não identificada"}. Confirme que cada linha tem horário e preço desta data.` : ""}`;
 
   const openAIAttempt = await tryOpenAIForTestUser(
     userId,
     "generateWebSearchResponse",
     async () => {
       const result = await openAIWebSearch({ prompt, userId, maxOutputTokens: 4_096 });
-      if (!result.text || !result.sources.length) {
-        throw new Error("pesquisa OpenAI sem resposta ou sem fontes");
+      if (!result.text || !result.sources.length || (rideDetails && !hasIndividualRides(result.text, rideDate))) {
+        throw new Error("pesquisa OpenAI sem lista individual confirmada");
       }
       const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
       const sourceList = result.sources
@@ -4108,7 +4167,7 @@ Consulta iniciada em ${searchedAt} (horário de Brasília).`;
 
   const cfg = await getConfig();
   const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-  if (!apiKey) return failure;
+  if (!apiKey) return rideDetails ? rideListingUnavailable(query, rideDate, [], locale) : failure;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -4122,9 +4181,9 @@ Consulta iniciada em ${searchedAt} (horário de Brasília).`;
     const result = await model.generateContent(prompt);
     const answer = result.response.text().trim();
     const sources = groundedSources(result);
-    if (!answer || !sources.length) {
-      console.error(`[ai-processor] Pesquisa web sem ${answer ? "fontes" : "resposta"} (consulta de ${query.length} caracteres)`);
-      return failure;
+    if (!answer || !sources.length || (rideDetails && !hasIndividualRides(answer, rideDate))) {
+      console.error(`[ai-processor] Pesquisa web sem lista confirmada (consulta de ${query.length} caracteres)`);
+      return rideDetails ? rideListingUnavailable(query, rideDate, sources, locale) : failure;
     }
 
     const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
@@ -4132,7 +4191,7 @@ Consulta iniciada em ${searchedAt} (horário de Brasília).`;
     return `${answer}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
   } catch (error) {
     console.error("[ai-processor] Erro na pesquisa web:", String(error));
-    return failure;
+    return rideDetails ? rideListingUnavailable(query, rideDate, [], locale) : failure;
   }
 }
 
