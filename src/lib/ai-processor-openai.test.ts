@@ -44,6 +44,7 @@ describe("AI provider routing", () => {
   beforeEach(() => {
     process.env.OPENAI_API_KEY = "openai-test-key";
     process.env.OPENAI_TEST_USER_IDS = "test-user";
+    process.env.AI_FIRST_INTENT_ENABLED = "canary";
     process.env.AI_FIRST_INTENT_TEST_PHONES = context.phone;
     googleGenerateContent.mockReset();
     googleGenerateContent.mockResolvedValue({
@@ -147,6 +148,20 @@ describe("AI provider routing", () => {
     await expect(processMessage("1 cadastrar conta Sicoob", { ...context, phone: "5544999887700" }))
       .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
     expect(googleGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("uses AI-first for other customers after the global rollout", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    delete process.env.AI_FIRST_INTENT_ENABLED;
+    googleGenerateContent.mockResolvedValueOnce({
+      response: { text: () => JSON.stringify({
+        intent: "account_create", confidence: 0.94, account: { name: "Sicoob", type: "bank" },
+      }) },
+    });
+
+    await expect(processMessage("1 cadastrar conta Sicoob", { ...context, phone: "5544999887700" }))
+      .resolves.toMatchObject({ intent: "account_create", account: { name: "Sicoob" } });
+    expect(googleGenerateContent).toHaveBeenCalledOnce();
   });
 
   it("can return to the previous routing without changing stored data", async () => {

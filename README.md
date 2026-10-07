@@ -15,6 +15,12 @@ Para validar eventos sem contaminar os dados reais, adicione temporariamente `ME
 
 O token da Conversions API é secreto: configure-o somente no servidor/EasyPanel e nunca use o prefixo `NEXT_PUBLIC_` nele.
 
+## Interpretação de mensagens no WhatsApp
+
+Após o deploy, a IA interpreta primeiro as mensagens de todos os usuários reais. Se não entender com confiança, as regras existentes continuam como reserva. Essa ordem é independente do provedor: o Gemini continua padrão e `OPENAI_TEST_USER_IDS` controla apenas quem usa OpenAI.
+
+No EasyPanel, `AI_FIRST_INTENT_ENABLED` pode ficar ausente ou ter o valor `all` para a liberação geral. Para voltar imediatamente à ordem anterior, configure `AI_FIRST_INTENT_ENABLED=false` e reinicie a aplicação. Para restringir novamente a números de teste, use `AI_FIRST_INTENT_ENABLED=canary` e `AI_FIRST_INTENT_TEST_PHONES` com os números completos separados por vírgula. A lista de telefones é ignorada no modo geral.
+
 ## Teste isolado com OpenAI
 
 O Gemini continua sendo o provedor padrão. A OpenAI só é chamada para os IDs de usuário explicitamente informados em `OPENAI_TEST_USER_IDS`; se a chamada falhar, o sistema tenta o Gemini automaticamente. Configure estas variáveis somente no servidor/EasyPanel:
