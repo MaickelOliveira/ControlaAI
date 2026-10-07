@@ -39,6 +39,7 @@ import { createMeetEvent } from "@/lib/google-meet";
 import { addMeetToGoogleCalendarEvent } from "@/lib/google-calendar";
 import { isConnected } from "@/lib/google-oauth";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
+import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
 import { getConfig } from "@/lib/whatsapp-config";
 import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
@@ -2756,6 +2757,26 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
+    const imageRequest = parsePublicImageRequest(messageText, recentHistory);
+    if (imageRequest) {
+      const found = await findPublicProductImage(imageRequest);
+      if (found.result) {
+        const { image, mimeType, title, pageUrl } = found.result;
+        const filename = mimeType === "image/png" ? "produto.png" : "produto.jpg";
+        const caption = localized(user.locale,
+          `📷 *${title}*\nFonte: ${pageUrl}`,
+          `📷 *${title}*\nFuente: ${pageUrl}`);
+        if (await wppSendFile(from, image, filename, mimeType, caption)) return;
+      }
+      await wppSend(from, found.pageUrl
+        ? localized(user.locale,
+          `Não consegui enviar a foto de *${imageRequest.subject}* agora. Você pode ver a imagem na página do produto: ${found.pageUrl}`,
+          `No pude enviar la foto de *${imageRequest.subject}* ahora. Puedes verla en la página del producto: ${found.pageUrl}`)
+        : localized(user.locale,
+          `Não encontrei uma foto verificável de *${imageRequest.subject}* para enviar. Diga o modelo e a cor/material, se souber, para eu tentar novamente.`,
+          `No encontré una foto verificable de *${imageRequest.subject}* para enviar. Dime el modelo y el color/material para intentarlo de nuevo.`));
+      return;
+    }
     const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
