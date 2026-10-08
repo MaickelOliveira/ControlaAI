@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FLOWS, hasMissingSlotFields, parseReminderDateAnswer, parseReminderTimeAnswer, slotDayOfMonth } from "./slot-filling";
+import { FLOWS, hasMissingSlotFields, isReminderRecipientCorrection, parseReminderDateAnswer, parseReminderTimeAnswer, slotDayOfMonth } from "./slot-filling";
 
 describe("reminder slot filling", () => {
   it("parses relative dates and time in Portuguese", () => {
@@ -28,6 +28,31 @@ describe("reminder slot filling", () => {
 
     expect(flow.missing(draft, ctx)).toEqual(["startDate", "startTime"]);
     expect(flow.slots.startDate.ask(draft, ctx)).toContain("¿Qué día y a qué hora");
+  });
+
+  it("requires the recipient before creating an unnamed other-person reminder", () => {
+    const flow = FLOWS.reminder_set!;
+    const ctx = {
+      user: { locale: "pt-BR" }, userId: "user-1", phone: "5544999999999", mode: "personal" as const,
+    } as Parameters<typeof flow.seed>[1];
+    const draft = flow.seed({
+      intent: "reminder_set", confidence: 1, reminder: {
+        message: "Não vou treinar", scheduledAt: "2026-10-08T10:00:00", recipientIsOther: true,
+      },
+    }, ctx);
+    expect(flow.missing(draft, ctx)).toEqual(["recipientName"]);
+    expect(flow.slots.recipientName.ask(draft, ctx)).toContain("Quem deve receber");
+    expect(flow.slots.recipientName.parse("não vou treinar", draft, ctx)).toEqual({ ok: false });
+    const parsed = flow.slots.recipientName.parse("é a Milena", draft, ctx);
+    expect(parsed).toEqual({ ok: true, value: { name: "Milena" } });
+    if (parsed.ok) flow.slots.recipientName.apply?.(parsed.value, draft, [], ctx);
+    expect(flow.missing(draft, ctx)).toEqual([]);
+  });
+
+  it("recognizes the correction without treating it as a change of reminder message", () => {
+    expect(isReminderRecipientCorrection("mais nao eu e uma pessoa")).toBe(true);
+    expect(isReminderRecipientCorrection("não é pra me avisar e sim avisar uma pessoa")).toBe(true);
+    expect(isReminderRecipientCorrection("não vou treinar")).toBe(false);
   });
 
   it("keeps incomplete low-confidence actions eligible for questions", () => {
