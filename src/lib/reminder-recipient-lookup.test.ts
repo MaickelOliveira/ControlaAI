@@ -24,10 +24,11 @@ const ctx = {
 
 function initialPending(): PendingSlotFill {
   return {
-    type: "slot_fill", userId: "user-1", intent: "reminder_set",
+    type: "slot_fill", phone: ctx.phone, userId: "user-1", intent: "reminder_set",
     draft: { recipientIsOther: true, message: "", repeat: "none" },
     missing: ["recipientName", "message", "startDate", "startTime"],
     asked: 0, mode: "personal", originalText: "criar lembrete pra uma pessoa",
+    expiresAt: new Date(Date.now() + 600_000).toISOString(),
   } as PendingSlotFill;
 }
 
