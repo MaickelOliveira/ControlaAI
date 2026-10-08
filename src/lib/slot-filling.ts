@@ -212,6 +212,13 @@ function joinBatchReplies(replies: string[], ctx: SlotCtx): string {
   return `${heading}\n\n${replies.map((reply, index) => `${index + 1}. ${reply}`).join("\n\n")}`;
 }
 
+/** Uma correção explícita do destinatário não é uma edição de texto/data. */
+export function isReminderRecipientCorrection(text: string): boolean {
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /\bnao\s+(?:e|era)\s+(?:pra|para)\s+me\s+avisar\b/.test(normalized)
+    || /\bnao\s+eu\s+e\s+(?:uma|outra)\s+pessoa\b/.test(normalized);
+}
+
 /** Reabre somente o destinatário de um lembrete recém-criado para corrigir um envio ao próprio usuário. */
 export async function beginReminderRecipientCorrection(reminder: Reminder, ctx: SlotCtx): Promise<string> {
   const draft: Draft = {
