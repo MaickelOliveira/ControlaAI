@@ -45,8 +45,9 @@ describe("reminder slot filling", () => {
     expect(flow.slots.recipientName.parse("não vou treinar", draft, ctx)).toEqual({ ok: false });
     const parsed = flow.slots.recipientName.parse("é a Milena", draft, ctx);
     expect(parsed).toEqual({ ok: true, value: { name: "Milena" } });
-    if (parsed.ok) flow.slots.recipientName.apply?.(parsed.value, draft, [], ctx);
-    expect(flow.missing(draft, ctx)).toEqual([]);
+    // Nome informado ainda precisa ser conferido no cadastro antes de avançar.
+    draft.recipientName = "Milena";
+    expect(flow.missing(draft, ctx)).toEqual(["recipientPhone"]);
   });
 
   it("recognizes the correction without treating it as a change of reminder message", () => {
