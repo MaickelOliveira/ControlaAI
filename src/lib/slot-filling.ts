@@ -391,7 +391,7 @@ export async function runSlotFillTurn(
   }
 
   queue.shift();
-  (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
+  await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
 
   if (queue.length === 0) {
     await clearPendingAction(ctx.phone);
