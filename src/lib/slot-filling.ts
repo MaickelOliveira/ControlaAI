@@ -14,15 +14,15 @@ import { createReminder, updateReminder, type Reminder } from "./reminders";
 import { appointmentReminderAt, formatReminderOffset } from "./appointment-reminders";
 import { todayStrBR, spToUTC } from "./date-br";
 import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchaseFinanceId, type GroceryPurchaseItem } from "./grocery";
-import { createEmployee, findEmployeeByName } from "./employees";
-import { createCustomer, findCustomerByName } from "./customers";
-import { createContact, findContactByName } from "./contacts";
+import { createEmployee, getEmployeesByUser } from "./employees";
+import { createCustomer, getCustomersByUser } from "./customers";
+import { createContact, getContactsByUser } from "./contacts";
 import { createVehicle, FUEL_TYPE_LABEL, type FuelType } from "./vehicles";
 import {
   replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyContactCreated, replyGoalCreated, replyReminderSet,
 } from "./bot-replies";
 import { addFinance } from "./finances";
-import { findPhoneByName, getPhonesForUser } from "./wpp-phone-links";
+import { getPhonesForUser } from "./wpp-phone-links";
 import { phoneVariants } from "./conversations";
 import { isAllDayAgendaText } from "./agenda-all-day";
 import { normalizePhoneInput } from "./phone";
@@ -89,12 +89,13 @@ export type SlotDef = {
   fallback?: (draft: Draft, ctx: SlotCtx) => unknown;
   /** grava no draft; pode inspecionar/alterar a fila restante. Default:
    *  grava direto em draft[key]. */
-  apply?: (value: unknown, draft: Draft, queue: string[], ctx: SlotCtx) => void;
+  apply?: (value: unknown, draft: Draft, queue: string[], ctx: SlotCtx) => void | Promise<void>;
 };
 
 export type FlowDef = {
   /** rascunho inicial a partir do que a IA já extraiu da mensagem original */
   seed: (ai: AIResult, ctx: SlotCtx) => Draft;
+  prepare?: (draft: Draft, ctx: SlotCtx) => Promise<void>;
   slots: Record<string, SlotDef>;
   /** quais slots ainda faltam, EM ORDEM, dado o estado atual do rascunho */
   missing: (draft: Draft, ctx: SlotCtx) => string[];
@@ -149,7 +150,7 @@ async function finalizeWithDefaults(flow: FlowDef, draft: Draft, queue: string[]
     const slot = flow.slots[key];
     if (!slot.fallback) return null;
     const value = slot.fallback(draft, ctx);
-    (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, [], ctx);
+    await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, [], ctx);
     usedLabels.push(slot.label);
   }
   const base = await flow.finalize(draft, ctx);
@@ -245,6 +246,7 @@ export async function beginBatchSlotFill(
   const flow = FLOWS[intent];
   if (!flow) throw new Error(`[slot-filling] fluxo não implementado para intent "${intent}"`);
   const drafts = items.slice(0, 30).map(item => flow.seed(item, ctx));
+  for (const draft of drafts) await flow.prepare?.(draft, ctx);
   const missing = drafts.map(draft => flow.missing(draft, ctx));
   const first = missing.findIndex(queue => queue.length > 0);
   if (first < 0) {
@@ -301,7 +303,7 @@ async function runBatchSlotFillTurn(
   }
 
   queue.shift();
-  (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
+  await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
   drafts[index] = draft;
   missing[index] = queue;
 
@@ -332,6 +334,7 @@ export async function beginSlotFill(
   const flow = FLOWS[intent];
   if (!flow) throw new Error(`[slot-filling] fluxo não implementado para intent "${intent}"`);
   const draft = flow.seed(ai, ctx);
+  await flow.prepare?.(draft, ctx);
   const queue = flow.missing(draft, ctx);
 
   if (queue.length === 0) {
@@ -388,7 +391,7 @@ export async function runSlotFillTurn(
   }
 
   queue.shift();
-  (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
+  await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
 
   if (queue.length === 0) {
     await clearPendingAction(ctx.phone);
@@ -618,6 +621,62 @@ export function parseReminderDateAnswer(text: string, today = todayStrBR()): { d
   return { date, ...(time ? { time } : {}) };
 }
 
+
+type ReminderRecipientType = "customer" | "employee" | "contact" | "other";
+type ReminderRecipientChoice = { name: string; phone?: string; type: ReminderRecipientType; id: string };
+
+function normalizeRecipientName(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function matchesRecipientName(name: string, query: string): boolean {
+  const candidate = normalizeRecipientName(name);
+  const term = normalizeRecipientName(query);
+  return !!term && (` ${candidate} `).includes(` ${term} `);
+}
+
+/** Procura em todos os cadastros ativos; nomes ambíguos exigem escolha. */
+async function resolveReminderRecipient(draft: Draft, ctx: SlotCtx): Promise<void> {
+  const name = String(draft.recipientName || "").trim();
+  if (!draft.recipientIsOther || !name || draft.recipientPhone) return;
+  const [customers, employees, contacts, links] = await Promise.all([
+    getCustomersByUser(ctx.userId, "active"),
+    getEmployeesByUser(ctx.userId, "active"),
+    getContactsByUser(ctx.userId, "active"),
+    getPhonesForUser(ctx.userId),
+  ]);
+  const matches: ReminderRecipientChoice[] = [
+    ...customers.map(person => ({ name: person.name, phone: person.phone, type: "customer" as const, id: person.id })),
+    ...employees.map(person => ({ name: person.name, phone: person.phone, type: "employee" as const, id: person.id })),
+    ...contacts.map(person => ({ name: person.name, phone: person.phone, type: "contact" as const, id: person.id })),
+    ...links.filter(link => link.name).map(link => ({ name: link.name!, phone: link.phone, type: "other" as const, id: link.phone })),
+  ].filter(person => matchesRecipientName(person.name, name));
+  const seen = new Set<string>();
+  const choices = matches.filter(person => {
+    const phone = person.phone?.replace(/\D/g, "");
+    const key = phone ? `phone:${phone}` : `${person.type}:${person.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  draft.recipientChoices = choices.length > 1 ? choices : [];
+  draft.recipientLookupStatus = choices.length ? "found" : "not_found";
+  if (choices.length === 1) {
+    draft.recipientName = choices[0].name;
+    if (choices[0].phone) {
+      draft.recipientPhone = choices[0].phone;
+      draft.recipientResolvedType = choices[0].type;
+    }
+  }
+}
+
+function nextReminderRecipientSlot(draft: Draft): string | undefined {
+  if (!draft.recipientIsOther || draft.recipientPhone) return;
+  if (!draft.recipientName) return "recipientName";
+  return (draft.recipientChoices as ReminderRecipientChoice[] | undefined)?.length
+    ? "recipientChoice" : "recipientPhone";
+}
+
 // ── Fluxos ──
 
 // Preenchido progressivamente por fase — apenas os intents já migrados para
@@ -640,9 +699,12 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       } satisfies Draft;
     },
 
+    prepare: resolveReminderRecipient,
+
     missing(draft) {
       const queue: string[] = [];
-      if (draft.recipientIsOther && !draft.recipientName && !draft.recipientPhone) queue.push("recipientName");
+      const recipientSlot = nextReminderRecipientSlot(draft);
+      if (recipientSlot) queue.push(recipientSlot);
       if (!draft.existingReminderId) {
         if (!draft.message) queue.push("message");
         if (!draft.startDate) queue.push("startDate");
@@ -668,11 +730,53 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         ask: (_draft, ctx) => ctx.user.locale === "es"
           ? "👤 ¿Quién debe recibir el aviso? Dime su nombre o número de WhatsApp."
           : "👤 Quem deve receber o aviso? Diga o nome ou o WhatsApp da pessoa.",
-        apply: (value, draft) => {
+        apply: async (value, draft, queue, ctx) => {
           const recipient = value as { name?: string; phone?: string };
-          if (recipient.name) draft.recipientName = recipient.name;
-          if (recipient.phone) draft.recipientPhone = recipient.phone;
+          draft.recipientName = recipient.name;
+          draft.recipientPhone = recipient.phone;
           draft.recipientIsOther = true;
+          draft.recipientResolvedType = undefined;
+          draft.recipientChoices = [];
+          draft.recipientLookupStatus = undefined;
+          await resolveReminderRecipient(draft, ctx);
+          const next = nextReminderRecipientSlot(draft);
+          if (next) queue.unshift(next);
+        },
+      },
+      recipientChoice: {
+        key: "recipientChoice",
+        label: "destinatário",
+        parse: (text, draft) => {
+          const choices = draft.recipientChoices as ReminderRecipientChoice[] | undefined;
+          if (!choices?.length) return { ok: false };
+          const index = Number(text.trim());
+          if (Number.isInteger(index) && index >= 1 && index <= choices.length) return { ok: true, value: choices[index - 1] };
+          const name = normalizeRecipientName(text);
+          const exact = choices.filter(person => normalizeRecipientName(person.name) === name);
+          return exact.length === 1 ? { ok: true, value: exact[0] } : { ok: false };
+        },
+        ask: (draft, ctx) => {
+          const choices = draft.recipientChoices as ReminderRecipientChoice[];
+          const labels: Record<ReminderRecipientType, [string, string]> = {
+            customer: ["cliente", "cliente"], employee: ["funcionário", "empleado"],
+            contact: ["contato", "contacto"], other: ["número vinculado", "número vinculado"],
+          };
+          const locale = ctx.user.locale === "es" ? 1 : 0;
+          const options = choices.map((person, index) => {
+            const suffix = person.phone ? ` •••${person.phone.replace(/\D/g, "").slice(-4)}` : "";
+            return `${index + 1}. ${person.name} — ${labels[person.type][locale]}${suffix}`;
+          }).join("\n");
+          return ctx.user.locale === "es"
+            ? `👤 Encontré más de una persona para *${draft.recipientName}*:\n${options}\n¿Cuál es? Responde con el número.`
+            : `👤 Encontrei mais de uma pessoa para *${draft.recipientName}*:\n${options}\nQual delas? Responda com o número.`;
+        },
+        apply: (value, draft, queue) => {
+          const person = value as ReminderRecipientChoice;
+          draft.recipientName = person.name;
+          draft.recipientPhone = person.phone;
+          draft.recipientResolvedType = person.type;
+          draft.recipientChoices = [];
+          if (!person.phone) queue.unshift("recipientPhone");
         },
       },
       message: {
@@ -726,9 +830,19 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
           if (digits.length < 8) return { ok: false };
           return { ok: true, value: normalizePhoneInput(text, ctx.user.locale) };
         },
-        ask: (draft, ctx) => ctx.user.locale === "es"
-          ? `📱 ¿Cuál es el número de WhatsApp de ${draft.recipientName || "esa persona"}, con código de país?`
-          : `📱 Qual é o WhatsApp de ${draft.recipientName || "essa pessoa"}, com DDD/DDI?`,
+        ask: (draft, ctx) => {
+          const name = draft.recipientName || (ctx.user.locale === "es" ? "esa persona" : "essa pessoa");
+          if (draft.recipientLookupStatus === "not_found") return ctx.user.locale === "es"
+            ? `No encontré a *${name}* en tus registros. 📱 ¿Cuál es su WhatsApp, con código de país?`
+            : `Não encontrei *${name}* nos seus cadastros. 📱 Qual é o WhatsApp dessa pessoa, com DDD/DDI?`;
+          return ctx.user.locale === "es"
+            ? `📱 ¿Cuál es el número de WhatsApp de ${name}, con código de país?`
+            : `📱 Qual é o WhatsApp de ${name}, com DDD/DDI?`;
+        },
+        apply: (value, draft) => {
+          draft.recipientPhone = value;
+          draft.recipientResolvedType ||= "other";
+        },
       },
     },
 
@@ -736,6 +850,18 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       let targetPhone = ctx.phone;
       let recipientType: "self" | "customer" | "employee" | "contact" | "other" = "self";
       let recipientName = draft.recipientName as string | undefined;
+      if (draft.recipientIsOther && recipientName && !draft.recipientPhone) {
+        await resolveReminderRecipient(draft, ctx);
+        recipientName = draft.recipientName as string;
+        const next = nextReminderRecipientSlot(draft);
+        if (next) {
+          await setPendingAction(ctx.phone, {
+            type: "slot_fill", userId: ctx.userId, intent: "reminder_set", draft,
+            missing: [next], asked: 0, mode: ctx.mode, originalText: String(draft.message || ""),
+          });
+          return askWithTtl(FLOWS.reminder_set!.slots[next], draft, ctx);
+        }
+      }
       const explicitPhoneRaw = String(draft.recipientPhone || "");
       const explicitPhone = explicitPhoneRaw.replace(/\D/g, "").length >= 8
         ? normalizePhoneInput(explicitPhoneRaw, ctx.user.locale)
@@ -751,29 +877,13 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
 
       if (explicitPhone) {
         targetPhone = explicitPhone;
-        recipientType = "other";
+        recipientType = (draft.recipientResolvedType as ReminderRecipientType | undefined) || "other";
       } else if (recipientName) {
-        const customer = await findCustomerByName(ctx.userId, recipientName);
-        const employee = await findEmployeeByName(ctx.userId, recipientName);
-        const contact = await findContactByName(ctx.userId, recipientName);
-        const linkedPhone = await findPhoneByName(ctx.userId, recipientName);
-        if (customer?.phone) {
-          targetPhone = customer.phone; recipientType = "customer"; recipientName = customer.name;
-        } else if (employee?.phone) {
-          targetPhone = employee.phone; recipientType = "employee"; recipientName = employee.name;
-        } else if (contact?.phone) {
-          targetPhone = contact.phone; recipientType = "contact"; recipientName = contact.name;
-        } else if (linkedPhone) {
-          targetPhone = linkedPhone; recipientType = "other";
-        } else {
-          await setPendingAction(ctx.phone, {
-            type: "slot_fill", userId: ctx.userId, intent: "reminder_set", draft,
-            missing: ["recipientPhone"], asked: 0, mode: ctx.mode, originalText: String(draft.message || ""),
-          });
-          return ctx.user.locale === "es"
-            ? `No encontré a *${recipientName}* con un teléfono registrado. ¿Cuál es su número de WhatsApp, con código de país?`
-            : `Não encontrei *${recipientName}* com telefone cadastrado. Qual é o WhatsApp dessa pessoa, com DDD/DDI?`;
-        }
+        await setPendingAction(ctx.phone, {
+          type: "slot_fill", userId: ctx.userId, intent: "reminder_set", draft,
+          missing: ["recipientPhone"], asked: 0, mode: ctx.mode, originalText: String(draft.message || ""),
+        });
+        return askWithTtl(FLOWS.reminder_set!.slots.recipientPhone, draft, ctx);
       } else {
         const incomingVariants = new Set(phoneVariants(ctx.phone));
         const requester = (await getPhonesForUser(ctx.userId)).find(link =>
