@@ -189,6 +189,7 @@ export type ReminderData = {
   mode?: "personal" | "business"; // detectado automaticamente
   recipientName?: string; // nome de quem deve RECEBER o lembrete, se não for pra quem está pedindo (ex: "Milena", "equipe", "cliente Carlos") — ausente = lembrete pra quem está mandando a mensagem
   recipientPhone?: string; // telefone explícito citado na mensagem pra essa pessoa (só dígitos) — permite lembrete pra alguém NÃO cadastrado como cliente/funcionário/número da família
+  recipientIsOther?: boolean; // pediu outra pessoa sem dar nome/número; perguntar antes de gravar
 };
 
 export type MeetData = {
@@ -1630,6 +1631,13 @@ export function getExplicitUnscheduledReminderResult(
   const normalized = normalizeCapabilityText(text);
   const hasConcreteSchedule = /\b(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo|hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|todo\s+dia|toda\s+semana|todo\s+mes|daqui\s+a\s+\d+|dentro\s+de\s+\d+)\b|\b(?:dia|el\s+dia)\s+\d{1,2}\b|\b\d{1,2}\s+de\s+(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|enero|febrero|marzo|mayo|junio|julio|septiembre|octubre|noviembre|diciembre)\b|\b(?:as|a\s+las)\s+\d{1,2}\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/.test(normalized);
 
+  // "avise uma pessoa pra mim" não contém assunto nem destinatário: colete ambos.
+  if (!hasConcreteSchedule
+    && /\b(?:avisar|avise|avisa|lembrar|lembre|lembra)\b/.test(normalized)
+    && /\b(?:uma|outra) pessoa(?: pra mim| para mim)?[.!?]*$/.test(normalized)) {
+    return { intent: "reminder_set", confidence: 1, reminder: { recipientIsOther: true } };
+  }
+
   const directPt = text.match(/^(?:(?:por\s+favor|favor)[, ]*)?(?:me\s+)?(?:lembra|lembre)(?:-me)?\s+(?:depois\s+)?(?:de\s+)?(.*)$/i);
   const directEs = text.match(/^(?:por\s+favor[, ]*)?(?:recu[eé]rdame|recordarme)\s+(?:m[aá]s\s+tarde\s+)?(?:que\s+|de\s+)?(.*)$/i);
   const direct = directPt ?? directEs;
@@ -2257,7 +2265,7 @@ INTENÇÕES POSSÍVEIS:
 - task_update: atualizar/concluir uma tarefa. Use "taskNumber" (posição na lista de "minhas tarefas") ou "title" (palavra-chave do título atual) pra identificar qual. Para editar dados, use somente os campos alterados: "newTitle", "newDueDate", "newPriority" ou "clearDueDate": true. Para mudar o andamento, use "newStatus".
 - task_delete: apagar/excluir uma tarefa ("apaga a tarefa 3", "remove a tarefa de ligar pro cliente", "deleta essa tarefa"). Use "taskNumber" ou "title" igual ao task_update.
 - task_query: listar tarefas
-- reminder_set: criar um ou VÁRIOS lembretes agendados. Para um só, use "reminder"; para dois ou mais, use "reminders" (array), um aviso por item. Pedido chamado de "tarefa" que traz horário explícito para avisar/confirmar também é reminder_set. Uma AÇÃO pessoal com horário ("ligar para X", "mandar mensagem pra Y", "pagar Z", "confirmar com W"), mesmo sem dizer "lembrete" ou "tarefa", também é reminder_set — só vira agenda_create quando é um compromisso com presença marcada (consulta, visita, evento). Se pedir para outra pessoa, inclua recipientName e, quando informado, recipientPhone só com dígitos.
+- reminder_set: criar um ou VÁRIOS lembretes agendados. Para um só, use "reminder"; para dois ou mais, use "reminders" (array), um aviso por item. Pedido chamado de "tarefa" que traz horário explícito para avisar/confirmar também é reminder_set. Uma AÇÃO pessoal com horário ("ligar para X", "mandar mensagem pra Y", "pagar Z", "confirmar com W"), mesmo sem dizer "lembrete" ou "tarefa", também é reminder_set — só vira agenda_create quando é um compromisso com presença marcada (consulta, visita, evento). Se pedir para outra pessoa, inclua recipientName e, quando informado, recipientPhone só com dígitos. Se disser "avise uma pessoa" ou "avise alguém" sem identificar quem, marque recipientIsOther: true; não use o telefone de quem pediu e pergunte quem receberá antes de salvar.
 - reminder_list: listar lembretes ativos ("meus lembretes", "quais lembretes eu tenho", "o que eu tenho agendado pra me avisar")
 - reminder_update: editar um lembrete existente — mensagem, data/hora ou repetição ("muda o lembrete do remédio pra 8h", "troca o lembrete da conta de luz pra todo dia 5"). Use "keyword" com o termo de busca e "reminder" com os novos valores (só os campos que mudaram).
 - reminder_delete: cancelar/apagar um lembrete ("cancela o lembrete do remédio", "apaga o lembrete da reunião", "não precisa mais me lembrar disso"). Use "keyword" com o termo de busca.
@@ -3954,6 +3962,20 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
 
 }
 
+/** Uma pessoa citada sem nome nunca vira um lembrete para quem enviou a mensagem. */
+export function preserveOtherReminderRecipient(message: string, result: AIResult | null): AIResult | null {
+  if (!result || result.intent !== "reminder_set") return result;
+  const normalized = normalizeCapabilityText(message);
+  if (!/\b(?:avisar|avise|avisa|lembrar|lembre|lembra)\b/.test(normalized)
+    || !/\b(?:uma|outra) pessoa\b|\balguem\b/.test(normalized)) return result;
+  return {
+    ...result,
+    ...(result.reminder ? { reminder: { ...result.reminder, recipientIsOther: true } } : {}),
+    ...(result.reminders ? { reminders: result.reminders.map(item => ({ ...item, recipientIsOther: true })) } : {}),
+    ...(!result.reminder && !result.reminders ? { reminder: { recipientIsOther: true } } : {}),
+  };
+}
+
 /** A IA interpreta primeiro para todos os usuários reais após o rollout.
  * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
@@ -3964,11 +3986,11 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   const aiFirstForThisPhone = !!ctx?.user?.id && rolloutMode !== "false"
     && (rolloutMode !== "canary" || (!!phone && testPhones.includes(phone)));
   if (!aiFirstForThisPhone) {
-    const standalone = getExplicitIntentFallback(message, ctx);
+    const standalone = preserveOtherReminderRecipient(message, getExplicitIntentFallback(message, ctx));
     if (standalone) return standalone;
   }
-  const modeled = await classifyMessageWithModel(message, ctx);
-  const explicit = getExplicitIntentFallback(message, ctx);
+  const modeled = preserveOtherReminderRecipient(message, await classifyMessageWithModel(message, ctx));
+  const explicit = preserveOtherReminderRecipient(message, getExplicitIntentFallback(message, ctx));
 
   // Uma frase sobre um total pode nomear um lançamento ou um número agregado.
   // Não converta a ambiguidade numa exclusão de dados sem identificar o alvo.

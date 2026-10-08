@@ -42,6 +42,7 @@ import {
   normalizeActionReminder,
   normalizeMeetingCreation,
   processMessage,
+  preserveOtherReminderRecipient,
   withExplicitFinanceDestinationMode,
   withExplicitFinanceAccount,
   withExplicitFinanceType,
@@ -324,6 +325,28 @@ describe("dated carpool fallback", () => {
   it("does not guess locations or dates for a different route", () => {
     expect(datedCarpoolSearchUrl("caronas de São Paulo para Santos", "2026-10-08")).toBeNull();
     expect(datedCarpoolSearchUrl("Campo Mourão para Curitiba", null)).toBeNull();
+  });
+});
+
+describe("reminder for another person", () => {
+  it("keeps an unnamed recipient throughout the assistant's first question", async () => {
+    const result = await processMessage("quero que você avise uma pessoa pra mim");
+    expect(result).toMatchObject({
+      intent: "reminder_set",
+      reminder: { recipientIsOther: true },
+    });
+    expect(result.reminder?.message).toBeUndefined();
+  });
+
+  it("preserves the recipient even if the classifier extracts the message and time but omits that flag", () => {
+    const result = preserveOtherReminderRecipient("avise uma pessoa que não vou treinar amanhã às 10", {
+      intent: "reminder_set", confidence: 0.9,
+      reminder: { message: "Não vou treinar", scheduledAt: "2026-10-08T10:00:00" },
+    });
+    expect(result?.reminder).toMatchObject({
+      message: "Não vou treinar",
+      recipientIsOther: true,
+    });
   });
 });
 

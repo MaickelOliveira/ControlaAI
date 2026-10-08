@@ -21,7 +21,7 @@ import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName
 import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { getContactsByUser, findContactByName, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
-import { beginBatchSlotFill, beginSlotFill, hasMissingSlotFields, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
+import { beginBatchSlotFill, beginSlotFill, beginReminderRecipientCorrection, hasMissingSlotFields, isReminderRecipientCorrection, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
   getMissingActionQuestion,
@@ -2688,6 +2688,25 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
       // Se for claramente outro comando, a pendência é abandonada e a
       // mensagem atual segue normalmente para o classificador.
+    }
+
+    // Corrige o destino do lembrete recém-criado sem mudar a mensagem/data nem
+    // criar um segundo aviso. O pedido "não é pra me avisar" nunca deve virar
+    // uma edição vazia que mantém o número do solicitante.
+    if (!pending && isReminderRecipientCorrection(messageText)) {
+      const recent = (await getRemindersByUser(user.id, mode))
+        .filter(item => item.recipientType === "self" && phoneMatches(item.phone, from)
+          && Date.now() - new Date(item.createdAt).getTime() <= 10 * 60_000)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      if (!recent.length) {
+        await wppSend(from, localized(user.locale,
+          "Não encontrei um lembrete recente enviado para você. Diga qual lembrete quer corrigir.",
+          "No encontré un recordatorio reciente enviado a ti. Dime cuál quieres corregir."));
+        return;
+      }
+      const reply = await beginReminderRecipientCorrection(recent[0], { user, userId: user.id, phone: from, mode });
+      await wppSend(from, reply);
+      return;
     }
 
     // ── Preenchimento de campos faltantes (slot filling genérico) ──
