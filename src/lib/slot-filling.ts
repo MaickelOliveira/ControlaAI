@@ -10,7 +10,7 @@ import {
 import { createRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
 import { createAppointment } from "./agenda";
-import { createReminder } from "./reminders";
+import { createReminder, updateReminder, type Reminder } from "./reminders";
 import { appointmentReminderAt, formatReminderOffset } from "./appointment-reminders";
 import { todayStrBR, spToUTC } from "./date-br";
 import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchaseFinanceId, type GroceryPurchaseItem } from "./grocery";
@@ -210,6 +210,21 @@ function joinBatchReplies(replies: string[], ctx: SlotCtx): string {
       ? `✅ Registei *${replies.length} itens*.`
       : `✅ Registrei *${replies.length} itens*.`;
   return `${heading}\n\n${replies.map((reply, index) => `${index + 1}. ${reply}`).join("\n\n")}`;
+}
+
+/** Reabre somente o destinatário de um lembrete recém-criado para corrigir um envio ao próprio usuário. */
+export async function beginReminderRecipientCorrection(reminder: Reminder, ctx: SlotCtx): Promise<string> {
+  const draft: Draft = {
+    existingReminderId: reminder.id,
+    message: reminder.message,
+    recipientIsOther: true,
+    mode: reminder.mode,
+  };
+  await setPendingAction(ctx.phone, {
+    type: "slot_fill", userId: ctx.userId, intent: "reminder_set", draft,
+    missing: ["recipientName"], asked: 0, mode: ctx.mode, originalText: reminder.message,
+  });
+  return askWithTtl(FLOWS.reminder_set!.slots.recipientName, draft, ctx);
 }
 
 /** Coleta os campos que faltam item por item e só depois grava o lote. */
@@ -614,18 +629,45 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         mode: reminder?.mode ?? ctx.mode,
         recipientName: reminder?.recipientName,
         recipientPhone: reminder?.recipientPhone?.replace(/\D/g, ""),
+        recipientIsOther: reminder?.recipientIsOther === true || !!reminder?.recipientName || !!reminder?.recipientPhone,
       } satisfies Draft;
     },
 
     missing(draft) {
       const queue: string[] = [];
-      if (!draft.message) queue.push("message");
-      if (!draft.startDate) queue.push("startDate");
-      if (!draft.startTime) queue.push("startTime");
+      if (draft.recipientIsOther && !draft.recipientName && !draft.recipientPhone) queue.push("recipientName");
+      if (!draft.existingReminderId) {
+        if (!draft.message) queue.push("message");
+        if (!draft.startDate) queue.push("startDate");
+        if (!draft.startTime) queue.push("startTime");
+      }
       return queue;
     },
 
     slots: {
+      recipientName: {
+        key: "recipientName",
+        label: "destinatário",
+        parse: (text, _draft, ctx) => {
+          const digits = text.replace(/\D/g, "");
+          if (digits.length >= 8 && digits.length <= 15) {
+            return { ok: true, value: { phone: normalizePhoneInput(text, ctx.user.locale) } };
+          }
+          const name = text.trim().replace(/^(?:(?:é|e|pra|para|o|a|minha|meu)\s+)+/i, "").trim().replace(/[.!?]+$/, "");
+          if (name.length < 2 || name.length > 70 || !/^[\p{L}][\p{L}\s'-]*$/u.test(name)
+            || /\b(?:vou|quero|avise|avisar|lembrete|amanh[ãa]|treinar|pessoa|algu[eé]m)\b/i.test(name)) return { ok: false };
+          return { ok: true, value: { name } };
+        },
+        ask: (_draft, ctx) => ctx.user.locale === "es"
+          ? "👤 ¿Quién debe recibir el aviso? Dime su nombre o número de WhatsApp."
+          : "👤 Quem deve receber o aviso? Diga o nome ou o WhatsApp da pessoa.",
+        apply: (value, draft) => {
+          const recipient = value as { name?: string; phone?: string };
+          if (recipient.name) draft.recipientName = recipient.name;
+          if (recipient.phone) draft.recipientPhone = recipient.phone;
+          draft.recipientIsOther = true;
+        },
+      },
       message: {
         key: "message",
         label: "conteúdo do lembrete",
@@ -692,6 +734,14 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         ? normalizePhoneInput(explicitPhoneRaw, ctx.user.locale)
         : "";
 
+      if (draft.recipientIsOther && !recipientName && !explicitPhone) {
+        await setPendingAction(ctx.phone, {
+          type: "slot_fill", userId: ctx.userId, intent: "reminder_set", draft,
+          missing: ["recipientName"], asked: 0, mode: ctx.mode, originalText: String(draft.message || ""),
+        });
+        return askWithTtl(FLOWS.reminder_set!.slots.recipientName, draft, ctx);
+      }
+
       if (explicitPhone) {
         targetPhone = explicitPhone;
         recipientType = "other";
@@ -725,6 +775,15 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         recipientName = requester?.name || requester?.relation;
       }
 
+      if (draft.existingReminderId) {
+        const updated = await updateReminder(String(draft.existingReminderId), ctx.userId, {
+          phone: targetPhone, recipientType, recipientName,
+        });
+        return updated
+          ? `✏️ Corrigi o destinatário. ${replyReminderSet(updated.message, updated.scheduledAt, updated.repeat, recipientName || "essa pessoa", ctx.user.locale)}`
+          : localized(ctx, "❌ Não consegui alterar o destinatário. O lembrete ficou como estava.", "❌ No pude cambiar el destinatario. El recordatorio sigue igual.");
+      }
+
       const scheduledAt = spToUTC(`${draft.startDate}T${draft.startTime}:00`);
       const repeat = (draft.repeat as "none" | "daily" | "weekly" | "monthly") || "none";
       const reminder = await createReminder({
@@ -737,7 +796,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         recipientType,
         recipientName,
       });
-      return replyReminderSet(reminder.message, reminder.scheduledAt, reminder.repeat, recipientType === "self" ? undefined : recipientName, ctx.user.locale);
+      return replyReminderSet(reminder.message, reminder.scheduledAt, reminder.repeat, recipientType === "self" ? undefined : recipientName || "essa pessoa", ctx.user.locale);
     },
 
     giveUp: (_draft, ctx) => ctx.user.locale === "es"
