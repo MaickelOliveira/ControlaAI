@@ -784,7 +784,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
 
       if (draft.existingReminderId) {
         const updated = await updateReminder(String(draft.existingReminderId), ctx.userId, {
-          phone: targetPhone, recipientType, recipientName,
+          phone: targetPhone, recipientType, recipientName: recipientName || "",
         });
         return updated
           ? `✏️ Corrigi o destinatário. ${replyReminderSet(updated.message, updated.scheduledAt, updated.repeat, recipientName || "essa pessoa", ctx.user.locale)}`
