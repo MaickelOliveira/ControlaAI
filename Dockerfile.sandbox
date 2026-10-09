@@ -5,6 +5,7 @@ RUN npm ci --ignore-scripts
 # Explicit allowlist: no production routes, database, cron or messaging code.
 COPY tsconfig.json postcss.config.mjs ./
 COPY sandbox-app ./sandbox-app
+COPY public/brand/zelo-wordmark.png ./sandbox-app/public/brand/zelo-wordmark.png
 COPY src/lib/polp-sandbox.ts src/lib/polp-reconciliation.ts src/lib/polp-date.ts ./src/lib/
 COPY src/app/admin/polp-sandbox/page.tsx ./src/app/admin/polp-sandbox/page.tsx
 RUN ./node_modules/.bin/next build sandbox-app --webpack
@@ -14,6 +15,7 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=80 HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/sandbox-app/.next/standalone ./
 COPY --from=build --chown=node:node /app/sandbox-app/.next/static ./sandbox-app/.next/static
+COPY --from=build --chown=node:node /app/sandbox-app/public ./sandbox-app/public
 USER node
 EXPOSE 80
 CMD ["node","sandbox-app/server.js"]

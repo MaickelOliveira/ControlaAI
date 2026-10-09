@@ -1,5 +1,33 @@
 # Open Finance da Polp: teste isolado
 
+## Prévia privada do painel do cliente
+
+A raiz do serviço separado mostra uma prévia navegável de Contas, Movimentações,
+Cartões/Faturas, Investimentos, Empréstimos/Financiamentos, Conexões e Conferência.
+Usa o mesmo código privado e sessão do sandbox; `/diagnostico` preserva o painel
+anterior. Não foi adicionado nenhum link, permissão ou rota no aplicativo publicado.
+
+Todos os dados são fictícios. A criação de conexão usa apenas a Polp sandbox e
+uma identidade fictícia fixa. A tela de autorização é uma simulação explicitamente
+identificada. Decisões de importar, ignorar e vincular vivem somente na memória
+da tela e reiniciam no reload. Um lançamento fictício da IA é gerado a partir
+de uma compra do teste para experimentar possíveis duplicados; nenhum dado real
+de usuário é consultado. Os demais detalhes recebidos de cartões, faturas,
+reservas, investimentos e crédito podem ser abertos individualmente.
+
+**Regra do produto: Open Finance exclusivo para o Brasil.** A prévia é brasileira.
+Na futura liberação, restringir tanto a interface quanto cada API à conta com
+país de operação Brasil confirmado, além da autorização por usuário. Não inferir
+país pelo idioma `locale`, prefixo do navegador ou IP. O modelo atual de usuário
+tem idioma, mas ainda não possui um campo explícito de país; essa identificação
+e os testes BR/fora-BR são requisitos antes de incorporar a função ao aplicativo.
+Nenhuma disponibilidade é prometida para Portugal ou países de língua espanhola.
+
+A IA ainda não consulta estes dados. A futura integração deverá consultar apenas
+dados autorizados do usuário solicitante, usar os dados sincronizados conforme
+a pergunta, informar pendências/data da posição e cobrir todos os produtos
+disponíveis, sem enviar indiscriminadamente o histórico completo a um modelo.
+
 ## Instalação privada independente
 
 Para testar sem publicar nada no Zelo atual, crie outro serviço no EasyPanel,
