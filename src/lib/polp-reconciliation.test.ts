@@ -3,7 +3,7 @@ import { reconcilePolpSnapshot } from "./polp-reconciliation";
 import type { PolpSnapshot } from "./polp-sandbox";
 
 const snapshot: PolpSnapshot = {
-  resources: [], accounts: [], cards: [], bills: [], loans: [], financings: [], investments: {}, investmentTransactions: {},
+  resources: [], accounts: [], cards: [], bills: [], loans: [], financings: [], investments: {}, investmentTransactions: {}, reservedBalances: {},
   accountTransactions: [
     { id: "bank-1", accountId: "a", transaction_name: "Pagamento fatura Nubank", transaction_date_time: "2026-10-05", credit_debit_type: "DEBITO", transaction_amount: { amount: "75.00", currency: "BRL" } },
     { id: "bank-2", accountId: "a", transaction_name: "Padaria Central", transaction_date_time: "2026-10-06", credit_debit_type: "DEBITO", transaction_amount: { amount: "25.00", currency: "BRL" } },
