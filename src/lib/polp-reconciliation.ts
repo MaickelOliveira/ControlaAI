@@ -66,7 +66,7 @@ export function reconcilePolpSnapshot(snapshot: PolpSnapshot, existing: Existing
     const sourceId = `card:${tx.cardId}:${tx.id}`;
     if (seen.has(sourceId)) continue;
     seen.add(sourceId);
-    const payment = tx.transaction_type === "PAGAMENTO_FATURA" || tx.transaction_type === "PAGAMENTO";
+    const payment = tx.transaction_type === "PAGAMENTO_FATURA";
     const credit = tx.credit_debit_type === "CREDITO";
     const amount = Number(tx.brazilian_amount?.amount);
     const found = !payment && !credit && Number.isFinite(amount)
