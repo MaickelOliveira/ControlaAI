@@ -12,6 +12,7 @@ const snapshot: PolpSnapshot = {
     { id: "card-1", cardId: "c", transaction_name: "Mercado Real", transaction_date_time: "2026-10-01", credit_debit_type: "DEBITO", brazilian_amount: { amount: "75.00", currency: "BRL" }, charge_identificator: 2, charge_number: 3 },
     { id: "card-2", cardId: "c", transaction_name: "Pagamento fatura", transaction_date_time: "2026-10-05", credit_debit_type: "CREDITO", transaction_type: "PAGAMENTO_FATURA", brazilian_amount: { amount: "75.00", currency: "BRL" } },
     { id: "card-3", cardId: "c", transaction_name: "Mercado Real", transaction_date_time: "2026-11-01", credit_debit_type: "DEBITO", brazilian_amount: { amount: "75.00", currency: "BRL" }, charge_identificator: 3, charge_number: 3 },
+    { id: "card-4", cardId: "c", transaction_name: "Farmácia", transaction_date_time: "2026-11-02", credit_debit_type: "DEBITO", transaction_type: "PAGAMENTO", brazilian_amount: { amount: "20.00", currency: "BRL" } },
   ],
 };
 
@@ -21,7 +22,7 @@ describe("conferência de lançamentos Open Finance", () => {
       { id: "ai", type: "expense", amount: 25, date: "2026-10-06", description: "Padaria Central", mode: "personal", source: "whatsapp" },
       { id: "pdf", type: "expense", amount: 75, date: "2026-10-20", description: "Mercado Real · Parcela 2/3 · compra em 01/10/2026", mode: "personal", source: "web" },
     ]);
-    expect(result.map(item => item.status)).toEqual(["payment_or_transfer", "review", "review", "payment_or_transfer", "new"]);
+    expect(result.map(item => item.status)).toEqual(["payment_or_transfer", "review", "review", "payment_or_transfer", "new", "new"]);
     expect(result[2].matchingFinanceIds).toEqual(["pdf"]);
     expect(result[4].matchingFinanceIds).toEqual([]);
   });
