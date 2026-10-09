@@ -14,7 +14,7 @@ describe("Polp sandbox only", () => {
     vi.stubEnv("POLP_SANDBOX_CLIENT_SECRET", "secret-test");
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockReset();
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
@@ -50,7 +50,7 @@ describe("Polp sandbox only", () => {
 
   it("rejects unconfigured secrets and invalid identifiers before networking", async () => {
     expect(() => requirePolpUuid("../consents")).toThrow("Identificador inválido");
-    await expect(listSandboxAccounts("../consents")).rejects.toThrow("Identificador inválido");
+    expect(() => listSandboxAccounts("../consents")).toThrow("Identificador inválido");
     vi.stubEnv("POLP_SANDBOX_CLIENT_SECRET", "");
     await expect(createSandboxConsent(CONSENT)).rejects.toThrow("Configure as chaves");
     expect(fetchMock).not.toHaveBeenCalled();
