@@ -187,7 +187,7 @@ export default function PolpSandboxPage() {
       {snapshot && <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Cartões e outros dados encontrados</h2>
         <p className="mt-2 text-sm text-slate-600">
-          {snapshot.cards.length} cartões · {snapshot.bills.length} faturas · {snapshot.loans.length} empréstimos · {snapshot.financings.length} financiamentos · {Object.values(snapshot.investments).reduce((sum, items) => sum + items.length, 0)} investimentos
+          {snapshot.cards.length} cartões · {snapshot.bills.length} faturas · {Object.values(snapshot.reservedBalances).reduce((sum, items) => sum + items.length, 0)} saldos reservados · {snapshot.loans.length} empréstimos · {snapshot.financings.length} financiamentos · {Object.values(snapshot.investments).reduce((sum, items) => sum + items.length, 0)} investimentos · {Object.values(snapshot.investmentTransactions).reduce((sum, items) => sum + items.length, 0)} movimentações de investimentos
         </p>
         <p className="mt-2 text-sm text-slate-600">{snapshot.resources.map(item => `${item.type}: ${item.status}`).join(" · ") || "Recursos em sincronização"}</p>
         {snapshot.cards.map(card => <div key={card.id} className="mt-3 rounded-xl bg-slate-50 p-3 text-sm">
