@@ -32,7 +32,7 @@ export default function PolpSandboxPage() {
   const [accounts, setAccounts] = useState<PolpAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState("");
   const [transactions, setTransactions] = useState<PolpTransaction[]>([]);
-  const [snapshot, setSnapshot] = useState<(PolpSnapshot & { reconciliation: Reconciliation[]; comparedWithZelo: boolean }) | null>(null);
+  const [snapshot, setSnapshot] = useState<(PolpSnapshot & { reconciliation: Reconciliation[]; comparedWithZelo: boolean; comparisonLabel?: string }) | null>(null);
   const [mode, setMode] = useState<"personal" | "business">("personal");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -196,7 +196,7 @@ export default function PolpSandboxPage() {
         </div>)}
         <h3 className="mt-5 font-semibold text-slate-900">Conferência de duplicados</h3>
         <p className="mt-1 text-sm text-slate-600">
-          {snapshot.comparedWithZelo ? "Comparado com os lançamentos do usuário de teste configurado no servidor." : "Configure POLP_SANDBOX_TEST_USER_ID para comparar com os lançamentos de um usuário de teste do Zelo."}
+          {snapshot.comparisonLabel || (snapshot.comparedWithZelo ? "Comparado com os lançamentos do usuário de teste configurado no servidor." : "Configure POLP_SANDBOX_TEST_USER_ID para comparar com os lançamentos de um usuário de teste do Zelo.")}
           {" "}Pagamentos de fatura não viram compras novamente. Coincidências pedem revisão.
         </p>
         <div className="mt-3 max-h-96 divide-y divide-slate-100 overflow-y-auto">

@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@source "../../src/app/admin/polp-sandbox/page.tsx";
+body { background: #f8fafc; color: #0f172a; font-family: Arial, Helvetica, sans-serif; }
+button, select, summary { cursor: pointer; }

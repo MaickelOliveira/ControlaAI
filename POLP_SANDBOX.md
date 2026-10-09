@@ -1,5 +1,44 @@
 # Open Finance da Polp: teste isolado
 
+## Instalação privada independente
+
+Para testar sem publicar nada no Zelo atual, crie outro serviço no EasyPanel,
+usando esta branch e `Dockerfile.sandbox`. O Dockerfile copia apenas o painel
+Polp e suas bibliotecas: não inclui banco de clientes, cron, WhatsApp, pagamentos
+ou rotas do aplicativo principal. Não copie volumes nem o ambiente de produção.
+Mantenha uma réplica (o limite de tentativas de login é local ao processo).
+
+Configure somente `POLP_SANDBOX_ENABLED=true`, `POLP_SANDBOX_CLIENT_ID`,
+`POLP_SANDBOX_CLIENT_SECRET`, `SANDBOX_APP_URL` (endereço HTTPS do novo serviço)
+e `SANDBOX_ACCESS_CODE` (32 bytes aleatórios em hexadecimal, privado).
+O endereço exige o código de acesso, não é indexável e não é vinculado no painel
+dos clientes. Sessões duram oito horas. Credenciais de produção no ambiente
+fazem o acesso falhar de propósito. Não altere o serviço `controlaai`, seus
+domínios, variáveis, branch ou implantação.
+
+A instalação independente não compara com dados reais nem persiste lançamentos.
+Não existe ainda conexão Open Finance no painel do cliente; autorização bancária,
+sincronização e importação definitiva continuam fora desta prova de conceito.
+Liberar para clientes exige validação posterior e autorização explícita do dono.
+
+Validação real em 09/10/2026: credenciais aceitas, consentimento fictício
+autorizado, 2 contas, 2 cartões, 100 transações de conta, 100 de cartão, 4 faturas,
+2 saldos reservados, 1 empréstimo, 1 financiamento, 9 investimentos e 27
+movimentações de investimento. Sem IDs repetidos nas duas listas de transações,
+sem gravação no Zelo. Isto não comprova a futura unicidade transacional de importação.
+
+Auditoria do lockfile em 09/10/2026: há alertas preexistentes em Next, Sharp,
+source-map-js e ExcelJS/uuid. Para **esta imagem isolada**, os caminhos críticos
+de geração de imagem `next/og` não existem; o otimizador de imagens fica
+desativado (`images.unoptimized`); não há ingestão de SVG ou source maps externos;
+ExcelJS não é importado nem incluído nas rotas. Não se usa Draft Mode, `use cache`
+ou conteúdo privado em SSG/ISR. Por isso as rotas afetadas não são alcançáveis
+neste serviço. Não é uma aprovação da segurança do aplicativo principal.
+Revisar os patches em 16/10/2026 ou antes de ampliar o teste/liberar clientes,
+o que acontecer primeiro. Nenhuma atualização de dependências de produção foi feita.
+
+## Painel do branch completo
+
 Este branch implementa somente leitura no sandbox. O Zelo mantém as contas manuais e a conta Dinheiro, mesmo para quem nunca conectar banco. A interface de teste é `/admin/polp-sandbox`, acessível só a administradores quando `POLP_SANDBOX_ENABLED=true`.
 
 Configure no servidor de teste, sem prefixo `NEXT_PUBLIC_`:
