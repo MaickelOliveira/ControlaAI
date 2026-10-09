@@ -5,7 +5,7 @@ RUN npm ci --ignore-scripts
 # Explicit allowlist: no production routes, database, cron or messaging code.
 COPY tsconfig.json postcss.config.mjs ./
 COPY sandbox-app ./sandbox-app
-COPY src/lib/polp-sandbox.ts src/lib/polp-reconciliation.ts ./src/lib/
+COPY src/lib/polp-sandbox.ts src/lib/polp-reconciliation.ts src/lib/polp-date.ts ./src/lib/
 COPY src/app/admin/polp-sandbox/page.tsx ./src/app/admin/polp-sandbox/page.tsx
 RUN ./node_modules/.bin/next build sandbox-app --webpack
 

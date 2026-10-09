@@ -5,6 +5,7 @@ import type {
   PolpAccount, PolpConsent, PolpInstitution, PolpPage, PolpSnapshot, PolpTransaction,
 } from "@/lib/polp-sandbox";
 import type { Reconciliation } from "@/lib/polp-reconciliation";
+import { formatPolpDate } from "@/lib/polp-date";
 
 const endpoint = "/api/admin/polp-sandbox";
 
@@ -204,7 +205,7 @@ export default function PolpSandboxPage() {
             ...snapshot.cardTransactions.map(item => ({ id: `card:${item.cardId}:${item.id}`, name: item.transaction_name, amount: item.brazilian_amount, date: item.transaction_date_time }))]
             .map(item => { const match = snapshot.reconciliation.find(row => row.sourceId === item.id);
               return <div key={item.id} className="flex flex-wrap justify-between gap-3 py-3 text-sm">
-                <span>{item.name} · {item.date?.slice(0, 10)} · {currency(item.amount)}</span>
+                <span>{item.name} · {formatPolpDate(item.date)} · {currency(item.amount)}</span>
                 <span className={match?.status === "review" ? "text-amber-700" : "text-slate-600"}>{match?.reason || "Conferir"}</span>
               </div>; })}
         </div>
@@ -221,7 +222,7 @@ export default function PolpSandboxPage() {
             <div key={item.id} className="flex justify-between gap-4 py-3 text-sm">
               <div>
                 <p className="font-medium text-slate-900">{item.transaction_name}</p>
-                <p className="text-xs text-slate-500">{new Date(item.transaction_date_time).toLocaleDateString("pt-BR")} · {item.category_ref || "Sem categoria"}</p>
+                <p className="text-xs text-slate-500">{formatPolpDate(item.transaction_date_time)} · {item.category_ref || "Sem categoria"}</p>
               </div>
               <span className={item.credit_debit_type === "CREDITO" ? "text-green-700" : "text-slate-900"}>
                 {item.credit_debit_type === "DEBITO" ? "−" : "+"}{currency(item.transaction_amount)}
