@@ -15,7 +15,7 @@ async function api<T>(query: string, options?: RequestInit): Promise<T> {
   return result as T;
 }
 
-function currency(value?: { amount: string; currency: string } | null) {
+function currency(value?: { amount: string | number; currency: string } | null) {
   if (!value) return "Saldo ainda não sincronizado";
   const number = Number(value.amount);
   return Number.isFinite(number)
