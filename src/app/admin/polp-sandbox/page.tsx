@@ -208,6 +208,10 @@ export default function PolpSandboxPage() {
                 <span className={match?.status === "review" ? "text-amber-700" : "text-slate-600"}>{match?.reason || "Conferir"}</span>
               </div>; })}
         </div>
+        <details className="mt-5 rounded-xl border border-slate-200 p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-slate-800">Ver todos os dados fictícios recebidos</summary>
+          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-slate-600">{JSON.stringify(snapshot, null, 2)}</pre>
+        </details>
       </section>}
 
       {selectedAccount && <section className="rounded-2xl border border-slate-200 bg-white p-5">
