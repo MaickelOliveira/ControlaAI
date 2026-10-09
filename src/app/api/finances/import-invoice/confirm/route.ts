@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { addFinances, deleteFinance, getBalance, type Finance } from "@/lib/finances";
+import { addFinances, deleteFinance, getBalance, getInvoiceDuplicateFlags, type Finance } from "@/lib/finances";
 import { deleteAccount, resolveOrCreateInvoiceAccount } from "@/lib/accounts";
 import { invoiceTransactionDescription, type InvoiceTransaction } from "@/lib/invoice-import";
 import { upsertImportedInstallmentSchedules } from "@/lib/recurring";
@@ -31,6 +31,14 @@ export async function POST(req: NextRequest) {
   );
 
   if (valid.length === 0) return NextResponse.json({ error: "Nenhum lançamento válido para importar" }, { status: 400 });
+
+  // A prévia pode ficar aberta enquanto a IA registra a mesma compra pelo
+  // WhatsApp. Confere novamente antes de criar conta/cartão ou qualquer gasto.
+  const duplicateFlags = await getInvoiceDuplicateFlags(session.sub, mode, valid);
+  if (duplicateFlags.some(Boolean)) return NextResponse.json({
+    error: "Alguns lançamentos desta fatura já existem. Atualize a prévia e revise antes de confirmar.",
+    duplicateIndexes: duplicateFlags.flatMap((duplicate, index) => duplicate ? [index] : []),
+  }, { status: 409 });
 
   const account = await resolveOrCreateInvoiceAccount(session.sub, mode, bankName, {
     closingDay,
