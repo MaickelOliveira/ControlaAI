@@ -21,7 +21,7 @@ export type PolpConsent = {
 export type PolpAmount = { amount: string | number; currency: string };
 export type PolpAccount = {
   id: string; consent_id: string; number: string; branch_code?: string | null;
-  type: string; balance?: { available_amount?: PolpAmount | null } | null;
+  type: string; balance?: { available_amount?: PolpAmount | null; has_reserved_balance?: boolean } | null;
 };
 export type PolpTransaction = {
   id: string; transaction_name: string; transaction_date_time: string;
@@ -39,6 +39,7 @@ export type PolpResource = { type: string; status: string; status_label?: string
 export type PolpRecord = { id: string; [key: string]: unknown };
 export type PolpSnapshot = {
   resources: PolpResource[]; accounts: PolpAccount[]; accountTransactions: Array<PolpTransaction & { accountId: string }>;
+  reservedBalances: Record<string, PolpRecord[]>;
   cards: PolpCard[]; cardTransactions: Array<PolpCardTransaction & { cardId: string }>;
   bills: PolpRecord[]; loans: PolpRecord[]; financings: PolpRecord[];
   investments: Record<string, PolpRecord[]>;
@@ -156,9 +157,12 @@ export async function getSandboxSnapshot(consentId: string): Promise<PolpSnapsho
   const accounts = await allPages<PolpAccount>(`/consents/${id}/accounts`);
   const cards = await allPages<PolpCard>(`/consents/${id}/credit-cards`);
   const accountTransactions: PolpSnapshot["accountTransactions"] = [];
+  const reservedBalances: Record<string, PolpRecord[]> = {};
   for (const account of accounts) {
-    const transactions = await allPages<PolpTransaction>(`/accounts/${requirePolpUuid(account.id)}/transactions`);
+    const accountId = requirePolpUuid(account.id);
+    const transactions = await allPages<PolpTransaction>(`/accounts/${accountId}/transactions`);
     accountTransactions.push(...transactions.map(item => ({ ...item, accountId: account.id })));
+    if (account.balance?.has_reserved_balance) reservedBalances[accountId] = await allPages<PolpRecord>(`/accounts/${accountId}/reserved-balances`);
   }
   const cardTransactions: PolpSnapshot["cardTransactions"] = [];
   const bills: PolpRecord[] = [];
@@ -179,5 +183,5 @@ export async function getSandboxSnapshot(consentId: string): Promise<PolpSnapsho
       investmentTransactions[`${type}:${investmentId}`] = await allPages<PolpRecord>(`/${type}/${investmentId}/transactions`);
     }
   }
-  return { resources, accounts, accountTransactions, cards, cardTransactions, bills, loans, financings, investments, investmentTransactions };
+  return { resources, accounts, accountTransactions, reservedBalances, cards, cardTransactions, bills, loans, financings, investments, investmentTransactions };
 }
