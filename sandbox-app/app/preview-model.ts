@@ -1,4 +1,4 @@
-import type { PolpSnapshot } from "@/lib/polp-sandbox";
+import type { PolpRecord, PolpSnapshot } from "@/lib/polp-sandbox";
 import { reconcilePolpSnapshot, type ExistingEntry, type Reconciliation } from "@/lib/polp-reconciliation";
 
 export type PreviewRow = Reconciliation & { id:string; name:string; date:string; amount:unknown; credit:boolean; origin:string; installment?:string };
@@ -24,6 +24,14 @@ export function recordValue(value:unknown, ...paths:string[]):unknown {
 
 export function text(value:unknown):string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "Não informado";
+}
+
+export function investmentMovement(record:PolpRecord) {
+  return {
+    name:text(recordValue(record,"transaction_type","type")),
+    date:text(recordValue(record,"transaction_date","transaction_date_time","transaction_conversion_date")),
+    amount:recordValue(record,"transaction_gross_value","transaction_value","transaction_amount"),
+  };
 }
 
 /** One clearly labelled fictitious AI record lets the owner try reconciliation.

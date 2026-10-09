@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { PolpRecord, PolpSnapshot } from "@/lib/polp-sandbox";
 import { formatPolpDate } from "@/lib/polp-date";
-import { money, recordValue, text } from "./preview-model";
+import { investmentMovement, money, recordValue, text } from "./preview-model";
 
 type Props = {snapshot:PolpSnapshot;onDetail:(title:string,record:PolpRecord)=>void};
 const investmentLabels:Record<string,string> = {"bank-fixed-incomes":"Renda fixa bancária","credit-fixed-incomes":"Renda fixa de crédito",funds:"Fundos","treasure-titles":"Tesouro Direto","variable-incomes":"Renda variável"};
@@ -37,7 +37,10 @@ export function InvestmentsView({snapshot,onDetail}:Props) {
       const title=text(recordValue(investment,"name","ticker","investment_type","treasure_title_type","product.name","product.ticker") || investmentLabels[type]);
       return <article key={investment.id} className="preview-account"><span className="preview-tag">{investmentLabels[type]}</span><h3>{title}</h3><p>Posição bruta informada</p><strong className="preview-account-balance">{money(recordValue(investment,"balance.gross_amount","balance.updated_amount"))}</strong><p>Posição líquida: {money(recordValue(investment,"balance.net_amount"))}</p><p>Data da posição: {formatPolpDate(text(recordValue(investment,"balance.reference_date_time","balance.reference_date")))}</p><p>{snapshot.investmentTransactions[`${type}:${investment.id}`]?.length || 0} movimentações</p><RecordButton title={title} record={investment} onDetail={onDetail}/></article>;
     })}</div>{!items.length && <p className="preview-empty">Nenhum produto desta categoria foi disponibilizado.</p>}</section>)}
-    <section className="preview-table-card"><div className="preview-section-heading"><h2>Movimentações dos investimentos</h2><span>{Object.values(snapshot.investmentTransactions).reduce((sum,items)=>sum+items.length,0)} registros</span></div><div className="preview-table-scroll preview-scroll-list"><table><thead><tr><th>Movimentação</th><th>Categoria</th><th>Data</th><th>Valor bruto</th><th>Detalhes</th></tr></thead><tbody>{Object.entries(snapshot.investmentTransactions).flatMap(([key,items])=>items.map(tx=><tr key={`${key}:${tx.id}`}><td><strong>{text(recordValue(tx,"transaction_type","type"))}</strong></td><td>{investmentLabels[key.split(":")[0]]}</td><td>{formatPolpDate(text(recordValue(tx,"transaction_date","transaction_date_time")))}</td><td>{money(recordValue(tx,"transaction_gross_value","transaction_amount"))}</td><td><RecordButton title="Movimentação do investimento" record={tx} onDetail={onDetail}/></td></tr>))}</tbody></table></div></section>
+    <section className="preview-table-card"><div className="preview-section-heading"><h2>Movimentações dos investimentos</h2><span>{Object.values(snapshot.investmentTransactions).reduce((sum,items)=>sum+items.length,0)} registros</span></div><div className="preview-table-scroll preview-scroll-list"><table><thead><tr><th>Movimentação</th><th>Categoria</th><th>Data</th><th>Valor informado</th><th>Detalhes</th></tr></thead><tbody>{Object.entries(snapshot.investmentTransactions).flatMap(([key,items])=>items.map(tx=>{
+      const movement=investmentMovement(tx);
+      return <tr key={`${key}:${tx.id}`}><td><strong>{movement.name}</strong></td><td>{investmentLabels[key.split(":")[0]]}</td><td>{formatPolpDate(movement.date)}</td><td>{money(movement.amount)}</td><td><RecordButton title="Movimentação do investimento" record={tx} onDetail={onDetail}/></td></tr>;
+    }))}</tbody></table></div></section>
   </>;
 }
 

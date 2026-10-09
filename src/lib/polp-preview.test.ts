@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPreviewAction, money, previewRows, recordValue } from "../../sandbox-app/app/preview-model";
+import { applyPreviewAction, investmentMovement, money, previewRows, recordValue } from "../../sandbox-app/app/preview-model";
 import type { PolpSnapshot } from "./polp-sandbox";
 
 const snapshot: PolpSnapshot = {
@@ -31,5 +31,9 @@ describe("private customer preview", () => {
     expect(money({amount:"not-a-number",currency:"BRL"})).toBe("Não informado");
     expect(money({amount:"120.50",currency:"USD"})).toContain("120,50");
     expect(recordValue({id:"investment",balance:{gross_amount:{amount:"120",currency:"BRL"}}},"balance.gross_amount")).toEqual({amount:"120",currency:"BRL"});
+  });
+  it("uses fund conversion dates and variable income transaction values", () => {
+    expect(investmentMovement({id:"fund",transaction_type:"APLICACAO",transaction_conversion_date:"2026-09-27",transaction_gross_value:{amount:"600",currency:"BRL"}})).toEqual({name:"APLICACAO",date:"2026-09-27",amount:{amount:"600",currency:"BRL"}});
+    expect(investmentMovement({id:"stock",transaction_type:"DIVIDENDOS",transaction_date:"2026-09-08",transaction_value:{amount:"159.41",currency:"BRL"}})).toEqual({name:"DIVIDENDOS",date:"2026-09-08",amount:{amount:"159.41",currency:"BRL"}});
   });
 });
