@@ -17,7 +17,8 @@ export default function OpenFinanceFinancial({mode,from,to}:{mode:"personal"|"bu
   },[mode,from,to]);
   async function more(){if(!data?.report.next)return;setBusy(true);setError("");try{const next=await loadFinancial(mode,from,to,data.report.next);if(next)setData({...next,report:{...next.report,movements:[...data.report.movements,...next.report.movements]}});}catch(e){setError(e instanceof Error?e.message:"Tente novamente.");}finally{setBusy(false);}}
   async function ask(){setBusy(true);setError("");try{const response=await fetch(`/api/open-finance/ask?mode=${mode}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question})});const result=await response.json();if(!response.ok)throw new Error(result.error||"Tente novamente.");setAnswer(result.answer);}catch(e){setError(e instanceof Error?e.message:"Tente novamente.");}finally{setBusy(false);}}
-  if(!data?.overview.connections.length)return null;
+  if(!data)return error?<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>:null;
+  if(!data.overview.connections.length)return null;
   return <section aria-label="Financeiro dos bancos conectados" className="space-y-4 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5">
     <div><h2 className="text-lg font-bold text-slate-900">Dados dos bancos conectados</h2><p className="text-sm text-slate-600">{bankDate(from)} a {bankDate(to)} · prévia privada</p></div>
     <p className="text-sm text-slate-600">{BANK_HISTORY_NOTICE} Estes valores ficam separados dos lançamentos manuais abaixo.</p>

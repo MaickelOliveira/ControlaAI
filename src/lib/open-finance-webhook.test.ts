@@ -21,3 +21,8 @@ it("parses the documented query string without accepting URLs, extra fields or i
   expect(parseBankWebhook({event:"accounts",resource:"consents",resource_id:id,query_parameters:"fromCreatedAt=2026-07-17T13:00:00.000000&toCreatedAt=2026-07-17T13:00:05.000000"}).window).toEqual({fromCreatedAt:"2026-07-17T13:00:00.000000",toCreatedAt:"2026-07-17T13:00:05.000000"});
   for(const query of ["cursor=secret","fromUpdatedAt=2026-10-10T00:00:00Z&toUpdatedAt=2026-10-09T00:00:00Z","fromCreatedAt=2026-02-30T00:00:00Z","fromCreatedAt=2026-10-09T00:00:00Z&fromCreatedAt=2026-10-09T01:00:00Z"])expect(()=>parseBankWebhook({event:"accounts",resource:"consents",resource_id:id,query_parameters:query})).toThrow();
 });
+it("rejects invalid hours and dates outside the supported history before requesting a bank page",()=>{
+  for(const value of ["1899-12-31T00:00:00Z","2026-10-09T24:00:00Z","2026-10-09T23:60:00Z","2026-10-09T23:59:60Z"]) {
+    expect(()=>parseBankWebhook({event:"accounts",resource:"consents",resource_id:id,query_parameters:new URLSearchParams({fromCreatedAt:value}).toString()})).toThrow();
+  }
+});

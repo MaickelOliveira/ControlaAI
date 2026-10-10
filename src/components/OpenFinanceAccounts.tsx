@@ -30,7 +30,7 @@ export default function OpenFinanceAccounts({ mode }: { mode: "personal" | "busi
       await load();
     }catch(e){setError(e instanceof Error?e.message:"Tente novamente.");}finally{setBusy("");}
   }
-  if(!data)return null;
+  if(!data)return error?<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>:null;
   return <section aria-label="Bancos conectados" className="space-y-4 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Bancos conectados</h2><p className="text-sm text-slate-600">Open Finance Brasil · prévia privada</p></div>
       {data.connectAvailable&&<button onClick={()=>setConnecting(true)} className="rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white">Conectar banco</button>}</div>

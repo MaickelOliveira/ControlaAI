@@ -10,8 +10,7 @@ export function verifyBankWebhook(raw: Uint8Array, signature: string | null, sec
   return timingSafeEqual(expected,Buffer.from(signature.slice(7),"hex"));
 }
 function timestamp(value: string): number {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})?$/.test(value)) throw new Error("INVALID_WINDOW");
-  sourceDate(value);
+  if (!/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,6})?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/.test(value) || !sourceDate(value)) throw new Error("INVALID_WINDOW");
   const parsed = Date.parse(/[Z]|[+-]\d{2}:\d{2}$/.test(value) ? value : `${value}Z`);
   if (!Number.isFinite(parsed)) throw new Error("INVALID_WINDOW");
   return parsed;
