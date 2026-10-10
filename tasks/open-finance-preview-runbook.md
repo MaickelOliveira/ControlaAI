@@ -45,7 +45,7 @@ Incremento PF/PJ revisado: 699 testes passaram e 15 legados foram ignorados; Typ
 
 Nenhum dado faltante vira zero. Débitos de conta não conciliados e compras de cartão são mostrados separadamente. Reconexão ainda não foi implementada; não simular recriação criando um consentimento novo nem reativar um consentimento revogado por simples alteração de status.
 
-A data de last_successful_sync_at também pode registrar a conclusão de verificação de consentimento sem dados financeiros. Interface e resposta usam “Última atualização concluída” para não afirmar importação antes da autorização. A mensagem de ausência de dados permanece visível.
+A data de last_successful_sync_at também pode registrar a conclusão de verificação de consentimento sem dados financeiros. Interface e resposta usam “Última atualização concluída” para não afirmar importação antes da autorização. A mensagem de ausência de dados permanece visível. Correção de texto 7b96604 implantada e observada na interface; retomada do mesmo pedido manteve link vivo. TypeScript, lint dos arquivos alterados, três testes de consultas e HTTP de isolamento passaram. Verificação feita em aba temporária para preservar a tela de autorização do titular.
 
 ## Auditoria de dependências em 09/10/2026
 
