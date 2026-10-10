@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
+import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
 
 type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
 type Balance = { income: number; expense: number; balance: number };
@@ -425,6 +426,7 @@ export default function FinancasPage() {
       </div>
 
       <FinanceFilterBar key={filters.search} categories={allCategories} value={filters} onChange={setFilters} />
+      {(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={`${mode}-${filters.from}-${filters.to}`} mode={mode} from={filters.from} to={filters.to}/>}
 
       {/* Saldo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
