@@ -3,7 +3,13 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import {useBankUpdates} from "@/components/useBankUpdates";
+import {financeOrigin,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
+import {bankMoney} from "@/lib/open-finance-display";
+import {bankDashboardAccounts} from "@/lib/bank-dashboard";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters, previousRange } from "@/components/FinanceFilterBar";
+
+const BankDashboard = dynamic(()=>import("@/components/BankDashboard"),{ssr:false});
 
 const BarChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.BarChartComponent),
@@ -26,7 +32,7 @@ const DailyFlowChartComponent = dynamic(
   { ssr: false, loading: () => <div className="h-[230px] animate-pulse rounded-2xl bg-slate-50" /> }
 );
 
-type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
+type Finance = LedgerEntry;
 type Goal = { id: string; title: string; targetAmount: number; currentAmount: number; category: string; status: string };
 
 type DashData = {
@@ -72,14 +78,7 @@ function buildBarData(finances: Finance[]) {
 }
 
 function buildPieData(finances: Finance[]) {
-  const map: Record<string, number> = {};
-  finances.filter(f => f.type === "expense" && f.status !== "pending").forEach(f => {
-    map[f.category] = (map[f.category] || 0) + f.amount;
-  });
-  return Object.entries(map)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 7)
-    .map(([name, value]) => ({ name, value }));
+  return ledgerExpenseGroups(finances,"category").sort((a,b)=>b.value-a.value);
 }
 
 // Agrupa por dia se o período for curto (<=45 dias), senão por mês — evita
@@ -201,10 +200,18 @@ export default function DashboardPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
-  const [finances, setFinances] = useState<Finance[]>([]);
+
   const [prevFinances, setPrevFinances] = useState<Finance[]>([]);
-  const [finances6mo, setFinances6mo] = useState<Finance[]>([]);
-  const [totalBalance, setTotalBalance] = useState({ income: 0, expense: 0, balance: 0 });
+  const [history,setHistory]=useState<{mode:string;finances:Finance[];error:string}>({mode:"",finances:[],error:""});
+  const finances6mo=useMemo(()=>history.mode===mode?history.finances:[],[history,mode]);
+  const ledgerLoader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
+    const response=await fetch(`/api/finances/ledger?${new URLSearchParams({mode,from:filters.from,to:filters.to})}`,{cache:"no-store",signal});
+    if(response.status===401)return null;
+    const body=await response.json();if(!response.ok)throw Error(body.error);return body;
+  },[mode,filters.from,filters.to]);
+  const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader);
+  const finances=useMemo(()=>(ledger?.finances??[]).filter(f=>f.included),[ledger]);
+  const totalBalance=ledger?.totalBalance??{income:0,expense:0,balance:0};
   const fetchSequence = useRef(0);
 
   // Carrega dados independentes de filtro: usuário, tarefas, categorias, metas
@@ -233,22 +240,19 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!mode) return;
     const { from, to } = sixMonthRange();
-    fetch(`/api/finances?mode=${mode}&from=${from}&to=${to}`).then(r => r.json()).then(d => {
-      setFinances6mo(d.finances || []);
-    }).catch(() => {});
+    const controller=new AbortController();
+    fetch(`/api/finances/ledger?mode=${mode}&from=${from}&to=${to}`,{signal:controller.signal,cache:"no-store"}).then(async r => {if(!r.ok)throw Error("HISTORY_UNAVAILABLE");return r.json();}).then(d => {
+      if(!controller.signal.aborted)setHistory({mode,finances:(d.finances || []).filter((f:Finance)=>f.included),error:""});
+    }).catch(() => {if(!controller.signal.aborted)setHistory({mode,finances:[],error:"Não foi possível carregar os seis meses. O gráfico não representa valores zerados."});});
+    return ()=>controller.abort();
   }, [mode]);
 
   const fetchFiltered = useCallback((m: string, f: FinanceFilters) => {
     const sequence = ++fetchSequence.current;
-    fetch(`/api/finances?mode=${m}&from=${f.from}&to=${f.to}`).then(r => r.json()).then(d => {
-      if (sequence !== fetchSequence.current) return;
-      setFinances(d.finances || []);
-      setTotalBalance(d.totalBalance || { income: 0, expense: 0, balance: 0 });
-    }).catch(() => {});
     const prev = previousRange(f.from, f.to);
-    fetch(`/api/finances?mode=${m}&from=${prev.from}&to=${prev.to}`).then(r => r.json()).then(d => {
+    fetch(`/api/finances/ledger?mode=${m}&from=${prev.from}&to=${prev.to}`).then(async r => {if(!r.ok)throw Error("PERIOD_UNAVAILABLE");return r.json();}).then(d => {
       if (sequence !== fetchSequence.current) return;
-      setPrevFinances(d.finances || []);
+      setPrevFinances((d.finances || []).filter((f:Finance)=>f.included));
     }).catch(() => {});
   }, []);
 
@@ -268,7 +272,8 @@ export default function DashboardPage() {
   const areaData = useMemo(() => buildAreaData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
   const flowData = useMemo(() => buildFlowData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
 
-  if (loading) return <DashboardLoading />;
+  if (loading||(!ledger&&!ledgerError)) return <DashboardLoading />;
+  if(!ledger&&ledgerError)return <div className="space-y-5"><h1 className="text-2xl font-bold text-slate-900">Dashboard</h1><FinanceFilterBar categories={categories} value={filters} onChange={setFilters}/><p role="alert" className="rounded-2xl bg-amber-50 p-5 text-sm text-amber-900">{ledgerError} Tente reduzir o período. Tentaremos atualizar novamente.</p></div>;
 
   if (!data) return null;
 
@@ -279,13 +284,16 @@ export default function DashboardPage() {
   const rangeDays = Math.max(1, Math.round((new Date(filters.to + "T12:00:00").getTime() - new Date(filters.from + "T12:00:00").getTime()) / 86_400_000) + 1);
   const savingsRate = activeBalance.income > 0 ? Math.round((activeBalance.balance / activeBalance.income) * 100) : 0;
   const averageDailyExpense = activeBalance.expense / rangeDays;
-  const topCategory = pieData[0];
+  const topCategory = pieData.find(g=>g.value>0);
+  const positiveExpenses=pieData.filter(g=>g.value>0),positiveExpenseTotal=positiveExpenses.reduce((sum,g)=>sum+g.value,0);
   const postedCount = filteredFinances.filter(f => f.status !== "pending").length;
   const rangeLabel = `${new Date(filters.from + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} — ${new Date(filters.to + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
+  const bankCash=ledger?.bank?bankDashboardAccounts(ledger.bank.overview).find(group=>group.currency==="BRL"&&group.missing<group.accounts.length):undefined;
+  const headlineBalance=bankCash?.total??totalBalance.balance;
 
   const kpis = [
-    { label: "Receitas", value: fmt(activeBalance.income), icon: "↗", color: "text-emerald-600", accent: "bg-emerald-500", trend: <TrendBadge pct={trendPct(activeBalance.income, prevBalance.income)} goodWhenUp /> },
-    { label: "Despesas", value: fmt(activeBalance.expense), icon: "↘", color: "text-rose-600", accent: "bg-rose-500", trend: <TrendBadge pct={trendPct(activeBalance.expense, prevBalance.expense)} goodWhenUp={false} /> },
+    { label: "Receitas", value: fmt(activeBalance.income), icon: "↗", color: "text-emerald-600", accent: "bg-emerald-500", trend: !ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.income, prevBalance.income)} goodWhenUp /> },
+    { label: "Despesas", value: fmt(activeBalance.expense), icon: "↘", color: "text-rose-600", accent: "bg-rose-500", trend: !ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.expense, prevBalance.expense)} goodWhenUp={false} /> },
     { label: "Taxa de economia", value: `${savingsRate}%`, icon: "◎", color: savingsRate >= 0 ? "text-blue-600" : "text-orange-600", accent: savingsRate >= 0 ? "bg-blue-500" : "bg-orange-500", sub: savingsRate >= 20 ? "Ótimo ritmo no período" : savingsRate >= 0 ? "Há espaço para melhorar" : "Despesas acima das receitas" },
     { label: "Tarefas pendentes", value: String(tasks.pendingCount), icon: tasks.overdueCount > 0 ? "!" : "✓", color: tasks.overdueCount > 0 ? "text-amber-600" : "text-violet-600", accent: tasks.overdueCount > 0 ? "bg-amber-500" : "bg-violet-500", sub: tasks.overdueCount > 0 ? `${tasks.overdueCount} atrasada${tasks.overdueCount > 1 ? "s" : ""}` : "Tudo dentro do prazo" },
   ];
@@ -304,14 +312,15 @@ export default function DashboardPage() {
               <span className="text-xs capitalize text-slate-400">{monthLabel}</span>
               {user.status === "trial" && <span className="rounded-full bg-amber-400 px-3 py-1 text-[11px] font-bold text-slate-950">Trial · {trialDays} dias</span>}
             </div>
-            <p className="text-sm text-slate-400">Olá, {user.name.split(" ")[0]}. Este é o seu resultado no período.</p>
+            <p className="text-sm text-slate-400">Olá, {user.name.split(" ")[0]}. Veja seus registros e seus bancos em um só lugar.</p>
             <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{fmt(totalBalance.balance)}</h1>
-              <span className={clsx("mb-1 rounded-full px-2.5 py-1 text-xs font-semibold", totalBalance.balance >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300")}>
-                {totalBalance.balance >= 0 ? "Saldo positivo" : "Atenção ao saldo"}
+              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{bankCash?bankMoney(bankCash.total,"BRL"):fmt(totalBalance.balance)}</h1>
+              <span className={clsx("mb-1 rounded-full px-2.5 py-1 text-xs font-semibold", Number(headlineBalance) >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300")}>
+                {bankCash?"Saldo bancário":Number(headlineBalance) >= 0 ? "Saldo positivo" : "Atenção ao saldo"}
               </span>
             </div>
-            <p className="mt-2 text-xs text-slate-500">Saldo acumulado de caixa · não muda com o filtro de período</p>
+            <p className="mt-2 text-xs text-slate-400">{bankCash?`Disponível nas contas em reais${bankCash.missing?" · soma parcial, há saldos não informados":""} · limite dos cartões separado`:"Saldo registrado na Zelo · acumulado dos lançamentos"}</p>
+            {bankCash&&<p className="mt-2 text-[11px] text-slate-400">Resultado do período: {fmt(activeBalance.balance)} · registros manuais acumulados: {fmt(totalBalance.balance)}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/dashboard/financas" className="rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-300">+ Movimentação</Link>
@@ -321,7 +330,8 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <FinanceFilterBar categories={categories} value={filters} onChange={setFilters} />
+      {ledgerError&&<p role="alert" className="rounded-xl bg-amber-50 p-4 text-xs text-amber-900">{ledgerError} Os valores exibidos podem estar desatualizados.</p>}
+      <FinanceFilterBar categories={[...new Set([...categories,...finances.map(f=>f.category)])]} value={filters} onChange={setFilters} />
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {kpis.map(k => (
@@ -353,6 +363,8 @@ export default function DashboardPage() {
         </div>
       </section>
 
+      {ledger?.bank&&<BankDashboard data={ledger.bank} entries={filteredFinances}/>}
+
       <section className="space-y-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">Análise financeira</p>
@@ -366,11 +378,12 @@ export default function DashboardPage() {
               <div><h3 className="font-semibold text-slate-800">Receitas, despesas e resultado</h3><p className="mt-0.5 text-xs text-slate-400">Comparativo dos últimos 6 meses</p></div>
               <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">6 meses</span>
             </div>
-            {barData.every(d => d.receitas === 0 && d.despesas === 0) ? <EmptyChart label="Sem histórico financeiro" /> : <BarChartComponent data={barData} />}
+            {history.mode!==mode?<EmptyChart label="Carregando os seis meses..."/>:history.error?<p role="alert" className="rounded-xl bg-amber-50 p-4 text-xs text-amber-900">{history.error}</p>:barData.every(d => d.receitas === 0 && d.despesas === 0) ? <EmptyChart label="Sem histórico financeiro" /> : <BarChartComponent data={barData} />}
           </article>
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-4">
-            <div className="mb-3"><h3 className="font-semibold text-slate-800">Participação das despesas</h3><p className="mt-0.5 text-xs text-slate-400">Quanto cada categoria representa</p></div>
-            {pieData.length === 0 ? <EmptyChart label="Sem despesas no período" /> : <PieChartComponent data={pieData} totalExpense={activeBalance.expense} />}
+            <div className="mb-3"><h3 className="font-semibold text-slate-800">Participação das despesas</h3><p className="mt-0.5 text-xs text-slate-400">Categorias com gasto líquido positivo</p></div>
+            {positiveExpenses.length === 0 ? <EmptyChart label="Sem despesas positivas no período" /> : <PieChartComponent data={positiveExpenses} totalExpense={positiveExpenseTotal} />}
+            {pieData.some(g=>g.value<0)&&<p className="mt-3 text-[11px] text-emerald-700">Categorias com estorno líquido aparecem com valor negativo no ranking; ficam fora desta participação.</p>}
           </article>
         </div>
 
@@ -409,8 +422,8 @@ export default function DashboardPage() {
 
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
             <PanelTitle title="Transações recentes" href="/dashboard/financas" />
-            {recentTransactions.filter(t => t.mode === user.activeMode).length === 0 ? <EmptyList label="Nenhuma transação ainda" /> : <div className="space-y-1">{recentTransactions.filter(t => t.mode === user.activeMode).slice(0, 5).map(t => (
-              <div key={t.id} className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-0"><span className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold", t.type === "income" ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600")}>{t.type === "income" ? "↗" : "↘"}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-700">{t.description}</p><p className="text-[10px] text-slate-400">{t.category}</p></div><span className={clsx("text-xs font-bold", t.type === "income" ? "text-emerald-600" : "text-rose-600")}>{t.type === "income" ? "+" : "-"}{fmt(t.amount)}</span></div>
+            {finances.filter(t => t.mode === user.activeMode&&t.status!=="pending").length === 0 ? <EmptyList label="Nenhuma transação ainda" /> : <div className="space-y-1">{finances.filter(t => t.mode === user.activeMode&&t.status!=="pending").slice(0, 5).map(t => (
+              <div key={t.id} className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-0"><span className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold", t.type === "income" ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600")}>{t.type === "income" ? "↗" : "↘"}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-700">{t.description}</p><p className="text-[10px] text-slate-400">{t.category} · {financeOrigin(t)}</p></div><span className={clsx("text-xs font-bold", t.type === "income" ? "text-emerald-600" : "text-rose-600")}>{t.type === "income" ? "+" : "-"}{fmt(t.amount)}</span></div>
             ))}</div>}
           </article>
 

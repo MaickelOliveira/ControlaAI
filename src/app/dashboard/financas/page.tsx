@@ -1,11 +1,14 @@
 "use client";
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
+import FinanceLedgerRows from "@/components/FinanceLedgerRows";
+import {useBankUpdates} from "@/components/useBankUpdates";
+import {ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 
-type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
+type Finance = LedgerEntry;
 type Balance = { income: number; expense: number; balance: number };
 type Recurring = {
   id: string;
@@ -64,12 +67,22 @@ const EMPTY_FORM: FormState = {
 
 export default function FinancasPage() {
   const [mode, setMode] = useState("");
-  const [finances, setFinances] = useState<Finance[]>([]);
-  const [totalBalance, setTotalBalance] = useState<Balance>({ income: 0, expense: 0, balance: 0 });
+
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
   const loadSequence = useRef(0);
+  const [visibleCount,setVisibleCount]=useState(50);
+  const loader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
+    if(!mode)return null;
+    const query=new URLSearchParams({mode,from:filters.from,to:filters.to});
+    const response=await fetch(`/api/finances/ledger?${query}`,{cache:"no-store",signal});
+    if(response.status===401)return null;
+    const body=await response.json();if(!response.ok)throw Error(body.error);return body;
+  },[mode,filters.from,filters.to]);
+  const {data:ledger,setData:setLedger,error:ledgerError}=useBankUpdates(loader,!!mode);
+  const finances=useMemo(()=>ledger?.finances??[],[ledger]);
+  const totalBalance:Balance=ledger?.totalBalance??{income:0,expense:0,balance:0};
 
   const [catsExpense, setCatsExpense] = useState<string[]>([]);
   const [catsIncome, setCatsIncome] = useState<string[]>([]);
@@ -172,17 +185,16 @@ export default function FinancasPage() {
     }).catch(() => {});
   }
 
-  function loadAll(m: string) {
+  function loadAll(m: string,refreshLedger=true) {
     const sequence = ++loadSequence.current;
     setLoading(true);
-    Promise.all([
-      fetch(`/api/finances?mode=${m}&from=${filters.from}&to=${filters.to}`).then(r => r.json()),
+    Promise.allSettled([
+      refreshLedger?fetch(`/api/finances/ledger?mode=${m}&from=${filters.from}&to=${filters.to}`,{cache:"no-store"}).then(async r => {const body=await r.json();if(!r.ok)throw Error(body.error);return body;}):Promise.resolve(null),
       fetch(`/api/recurring?mode=${m}&status=active`).then(r => r.json()),
     ]).then(([fd, rd]) => {
       if (sequence !== loadSequence.current) return;
-      setFinances(fd.finances || []);
-      setTotalBalance(fd.totalBalance || { income: 0, expense: 0, balance: 0 });
-      setRecs(Array.isArray(rd) ? rd : []);
+      if(fd.status==="fulfilled"&&fd.value)setLedger(fd.value);
+      if(rd.status==="fulfilled")setRecs(Array.isArray(rd.value) ? rd.value : []);
       setLoading(false);
     }).catch(() => { if (sequence === loadSequence.current) setLoading(false); });
   }
@@ -192,7 +204,7 @@ export default function FinancasPage() {
   useEffect(() => {
     if (!mode) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- inicia o carregamento quando período/modo muda
-    loadAll(mode);
+    loadAll(mode,false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, filters.from, filters.to]);
 
@@ -351,7 +363,7 @@ export default function FinancasPage() {
   const cats = form.type === "income" ? catsIncome : catsExpense;
   const editCats = editTarget?.type === "income" ? catsIncome : catsExpense;
   const editRecCats = editRec?.type === "income" ? catsIncome : catsExpense;
-  const allCategories = useMemo(() => [...new Set([...catsExpense, ...catsIncome])], [catsExpense, catsIncome]);
+  const allCategories = useMemo(() => [...new Set([...catsExpense, ...catsIncome,...finances.map(f=>f.category)])], [catsExpense, catsIncome,finances]);
 
   // Categoria/tipo/busca filtram client-side sobre o que já foi buscado
   // (período já veio filtrado do servidor) — cards, gráfico e extrato usam
@@ -379,15 +391,13 @@ export default function FinancasPage() {
   const postedFinances = filteredFinances.filter(f => f.status !== "pending");
   // Só os lançamentos que aparecem na tela têm checkbox — "selecionar tudo"
   // não pode marcar o que nem está visível (postedFinances é limitado a 50).
-  const selectableFinances = [...pendingFinances, ...postedFinances.slice(0, 50)];
+  const selectableFinances = [...pendingFinances, ...postedFinances.slice(0, visibleCount)].filter(f=>f.source!=="bank");
   const allSelected = selectableFinances.length > 0 && selectableFinances.every(f => selectedIds.has(f.id));
 
-  const incomeTotal = postedFinances.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
-  const expenseTotal = postedFinances.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
-  const periodBalance = { income: incomeTotal, expense: expenseTotal, balance: incomeTotal - expenseTotal };
+  const periodBalance = ledgerBalance(postedFinances);
 
   const catTotals: Record<string, number> = {};
-  postedFinances.filter(f => f.type === "expense").forEach(f => { catTotals[f.category] = (catTotals[f.category] || 0) + f.amount; });
+  postedFinances.filter(f => f.type === "expense"&&f.included).forEach(f => { catTotals[f.category] = (catTotals[f.category] || 0) + f.amount; });
   const topCats = Object.entries(catTotals).sort(([, a], [, b]) => b - a).slice(0, 5);
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
@@ -426,21 +436,26 @@ export default function FinancasPage() {
       </div>
 
       <FinanceFilterBar key={filters.search} categories={allCategories} value={filters} onChange={setFilters} />
-      {(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={`${mode}-${filters.from}-${filters.to}`} mode={mode} from={filters.from} to={filters.to}/>}
+      {ledgerError&&<p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{ledgerError} O extrato pode estar desatualizado.</p>}
+      {ledger?.bank&&<p className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>Conta, cartão, WhatsApp e plataforma no mesmo extrato · Pessoal e Empresa separados.</span><span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">Atualização automática</span></p>}
+      {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-800">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
+      {!!ledger?.bank?.report.missing_dates&&<p className="text-xs text-amber-800">Há {ledger.bank.report.missing_dates} movimento(s) sem data enviados pelo banco, fora deste período.</p>}
+      {postedFinances.some(f=>f.possibleDuplicate)&&<p className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-900">Há registros com mesmo valor e data em mais de uma origem. Estão identificados no extrato para conferência; os totais ainda podem conter repetições.</p>}
 
       {/* Saldo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-emerald-600 rounded-2xl p-5 shadow-sm">
           <p className="text-xs text-emerald-100 font-medium uppercase tracking-wide">Receitas</p>
-          <p className="text-2xl font-bold text-white mt-2">{fmt(periodBalance.income)}</p>
+          <p className="text-2xl font-bold text-white mt-2">{ledger?fmt(periodBalance.income):"—"}</p>
         </div>
         <div className="bg-red-500 rounded-2xl p-5 shadow-sm">
           <p className="text-xs text-red-100 font-medium uppercase tracking-wide">Despesas</p>
-          <p className="text-2xl font-bold text-white mt-2">{fmt(periodBalance.expense)}</p>
+          <p className="text-2xl font-bold text-white mt-2">{ledger?fmt(periodBalance.expense):"—"}</p>
         </div>
         <div className={clsx("rounded-2xl p-5 shadow-sm", totalBalance.balance >= 0 ? "bg-blue-600" : "bg-orange-500")}>
-          <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Saldo Total</p>
-          <p className="text-2xl font-bold text-white mt-2">{fmt(totalBalance.balance)}</p>
+          <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Saldo registrado na Zelo</p>
+          <p className="text-2xl font-bold text-white mt-2">{ledger?fmt(totalBalance.balance):"—"}</p>
+          <p className="mt-1 text-[10px] text-blue-100">Acumulado dos registros · saldo do banco em Contas</p>
         </div>
       </div>
 
@@ -462,7 +477,8 @@ export default function FinancasPage() {
           ) : (
             <div className="space-y-4">
               {topCats.map(([cat, val]) => {
-                const pctRaw = periodBalance.expense > 0 ? (val / periodBalance.expense * 100) : 0;
+                const maxCategory = Math.max(...topCats.map(([,value])=>Math.abs(value)));
+                const pctRaw = maxCategory > 0 ? (Math.abs(val) / maxCategory * 100) : 0;
                 const pct = Math.min(100, pctRaw).toFixed(0);
                 return (
                   <div key={cat}>
@@ -471,9 +487,9 @@ export default function FinancasPage() {
                       <span className="font-semibold text-slate-800">{fmt(val)}</span>
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full">
-                      <div className="h-2 bg-amber-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className={clsx("h-2 rounded-full transition-all",val<0?"bg-emerald-500":"bg-amber-500")} style={{ width: `${pct}%` }} />
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5 text-right">{pct}% do total</p>
+                    <p className="text-xs text-slate-400 mt-0.5 text-right">{val<0?"Estornos e ajustes líquidos":"Despesa líquida da categoria"}</p>
                   </div>
                 );
               })}
@@ -508,7 +524,7 @@ export default function FinancasPage() {
             </div>
           )}
           {loading ? <p className="text-slate-400 text-sm">Carregando...</p> :
-            (postedFinances.length === 0 && recs.length === 0 && pendingFinances.length === 0) ? (
+            (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0) ? (
               <div className="text-center py-16 text-slate-400">
                 <p className="text-4xl mb-3">💬</p>
                 <p className="font-medium text-slate-500">Nenhum registro ainda</p>
@@ -516,6 +532,7 @@ export default function FinancasPage() {
               </div>
             ) : (
               <div className="space-y-1 max-h-[480px] overflow-y-auto">
+                {!ledger&&<p className="px-3 py-3 text-xs text-amber-800">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
 
                 {/* Pendentes: recorrentes/parcelados */}
                 {sortedRecs.map(r => {
@@ -610,37 +627,16 @@ export default function FinancasPage() {
                   </div>
                 )}
 
-                {/* Lançamentos confirmados */}
-                {postedFinances.slice(0, 50).map(f => (
-                  <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {selectMode && (
-                        <input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => toggleSelected(f.id)}
-                          className="w-4 h-4 accent-slate-800 shrink-0" />
-                      )}
-                      <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
-                        {f.type === "income" ? "↑" : "↓"}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{visibleFinanceDescription(f.description)}</p>
-                        <p className="text-xs text-slate-400">{f.category} · {visibleFinanceDate(f)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-3">
-                      <span className={clsx("text-sm font-bold", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
-                        {f.type === "income" ? "+" : "-"}{fmt(f.amount)}
-                      </span>
-                      <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => openEdit(f)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition" title="Editar">✏️</button>
-                        <button onClick={() => setDeleteTarget(f)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Excluir">🗑️</button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {/* Lançamentos confirmados de todas as origens, em ordem de data */}
+                <FinanceLedgerRows entries={postedFinances.slice(0,visibleCount)} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
+                {postedFinances.length>visibleCount&&<button onClick={()=>setVisibleCount(n=>n+50)} className="w-full rounded-xl border border-slate-200 py-3 text-xs font-semibold text-slate-600">Ver mais lançamentos ({postedFinances.length-visibleCount})</button>}
+                {ledger?.bank&&<p className="px-3 pt-3 text-[11px] leading-5 text-slate-400">Resumo em reais. Pagamentos de fatura, transferências identificadas e investimentos aparecem no extrato sem alterar receitas/gastos. O histórico enviado pelo banco pode estar incompleto.</p>}
               </div>
             )}
         </div>
       </div>
+
+      {ledger?.bank&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank}/>}
 
       {/* ── Modal Adicionar (único + recorrente + parcelado) ── */}
       {showForm && (
