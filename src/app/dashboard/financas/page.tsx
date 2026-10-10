@@ -4,6 +4,7 @@ import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
+import BankCategoryDialog from "@/components/BankCategoryDialog";
 import FinanceLedgerRows from "@/components/FinanceLedgerRows";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import {ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
@@ -84,6 +85,7 @@ export default function FinancasPage() {
   const finances=useMemo(()=>ledger?.finances??[],[ledger]);
   const totalBalance:Balance=ledger?.totalBalance??{income:0,expense:0,balance:0};
 
+  const [bankCategoryTarget,setBankCategoryTarget]=useState<LedgerEntry|null>(null);
   const [catsExpense, setCatsExpense] = useState<string[]>([]);
   const [catsIncome, setCatsIncome] = useState<string[]>([]);
 
@@ -628,7 +630,7 @@ export default function FinancasPage() {
                 )}
 
                 {/* Lançamentos confirmados de todas as origens, em ordem de data */}
-                <FinanceLedgerRows entries={postedFinances.slice(0,visibleCount)} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
+                <FinanceLedgerRows entries={postedFinances.slice(0,visibleCount)} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} onCategory={setBankCategoryTarget} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
                 {postedFinances.length>visibleCount&&<button onClick={()=>setVisibleCount(n=>n+50)} className="w-full rounded-xl border border-slate-200 py-3 text-xs font-semibold text-slate-600">Ver mais lançamentos ({postedFinances.length-visibleCount})</button>}
                 {ledger?.bank&&<p className="px-3 pt-3 text-[11px] leading-5 text-slate-400">Resumo em reais. Pagamentos de fatura, transferências identificadas e investimentos aparecem no extrato sem alterar receitas/gastos. O histórico enviado pelo banco pode estar incompleto.</p>}
               </div>
@@ -637,6 +639,8 @@ export default function FinancasPage() {
       </div>
 
       {ledger?.bank&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank}/>}
+
+      {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onClose={()=>setBankCategoryTarget(null)} onSaved={()=>{setBankCategoryTarget(null);setBanner("✅ Categoria salva. Os gráficos usam sua escolha.");loadAll(mode);}}/>}
 
       {/* ── Modal Adicionar (único + recorrente + parcelado) ── */}
       {showForm && (
