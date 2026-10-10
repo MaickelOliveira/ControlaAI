@@ -30,3 +30,4 @@ export function matchesBank(bank: { name: string; organizationName?: string; par
 }
 export const BANK_CATEGORIES: Record<string, string> = { ACCOUNT: "Dados da conta", CREDIT_CARD_ACCOUNT: "Cartão de crédito", CREDIT_OPERATIONS: "Operações de Crédito", INVESTMENTS: "Dados de investimento" };
 export const BANK_STATUSES: Record<string, string> = { pending: "Aguardando autorização", active: "Autorizado", expired: "Expirado", revoking: "Cancelamento em andamento", revoked: "Cancelado", error: "Não autorizado" };
+export type BankAuthorization = { authorizationUrl: string | null; authorizationPending?: boolean; authorizationHost?: string; authorizationExpired?: boolean };

@@ -15,7 +15,7 @@ beforeEach(() => {
   m.scope.mockResolvedValue({ userId: id, mode: "personal", environment: "production" });
   m.banks.mockResolvedValue([{ id, name: "Bank", status: "OPERATIONAL", type: "PERSONAL" }]);
   m.create.mockResolvedValue({ id, status: "AWAITING_AUTHORIZATION", products: ["ACCOUNT"], url_to_authenticate: "https://authorize.example/oauth" });
-  m.rpc.mockResolvedValue({ id });
+  m.rpc.mockResolvedValue({ id, status: "pending" });
 });
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
 describe("real bank connection", () => {
@@ -33,4 +33,27 @@ describe("real bank connection", () => {
     const result = await response.json();
     expect(result).toEqual({ id, authorizationUrl: "https://authorize.example/oauth" });
   });
+});
+
+it("holds an unverified private authorization link without disclosing its path or token",async()=>{
+  vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","true");
+  vi.stubEnv("OPEN_FINANCE_AUTH_HOSTS","");
+  m.create.mockResolvedValue({id,status:"AWAITING_AUTHORIZATION",products:["ACCOUNT"],url_to_authenticate:"https://new-authorization.example/private-path?token=private-token"});
+  const response=await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
+  expect(response.status).toBe(201);
+  expect(await response.json()).toEqual({id,authorizationUrl:null,authorizationPending:true,authorizationHost:"new-authorization.example"});
+});
+it("does not turn an unexpected configured host into automatic approval",async()=>{
+  vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","true");
+  m.create.mockResolvedValue({id,status:"AWAITING_AUTHORIZATION",products:["ACCOUNT"],url_to_authenticate:"https://unexpected.example/private?token=secret"});
+  const response=await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
+  expect(response.status).toBe(503);
+  expect(JSON.stringify(await response.json())).not.toContain("secret");
+});
+
+it("does not return an authorization link after cancellation wins during creation",async()=>{
+  m.rpc.mockResolvedValueOnce({id,status:"pending"}).mockResolvedValueOnce({id,status:"revoking"});
+  const response=await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
+  expect(response.status).toBe(201);
+  expect(await response.json()).toEqual({id,authorizationUrl:null});
 });

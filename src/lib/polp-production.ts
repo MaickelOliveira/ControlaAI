@@ -1,4 +1,5 @@
 import "server-only";
+import { isIP } from "node:net";
 import { readBankBody } from "./open-finance-body";
 export const OPEN_FINANCE_PRODUCTS = ["ACCOUNT", "CREDIT_CARD_ACCOUNT", "CREDIT_OPERATIONS", "INVESTMENTS"] as const;
 export type PolpObject = Record<string, unknown>;
@@ -16,11 +17,17 @@ export function polpObject(value: unknown): PolpObject {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_RESPONSE");
   return value as PolpObject;
 }
-export function requireAuthUrl(value: unknown): string {
+export function parseBankAuthUrl(value: unknown): URL {
   if (typeof value !== "string" || value.length > 4096) throw new Error("INVALID_AUTH_URL");
-  const url = new URL(value);
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error("INVALID_AUTH_URL"); }
+  if (url.protocol !== "https:" || url.username || url.password || url.port || isIP(url.hostname) || !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(url.hostname)) throw new Error("INVALID_AUTH_URL");
+  return url;
+}
+export function requireAuthUrl(value: unknown): string {
+  const url = parseBankAuthUrl(value);
   const hosts = (process.env.OPEN_FINANCE_AUTH_HOSTS || "").split(",").map(h => h.trim().toLowerCase()).filter(Boolean);
-  if (url.protocol !== "https:" || url.username || url.password || url.port || !hosts.includes(url.hostname)) throw new Error("INVALID_AUTH_URL");
+  if (!hosts.includes(url.hostname)) throw new Error("INVALID_AUTH_URL");
   return url.href;
 }
 export async function polpProductionRequest(path: string, method: "GET" | "POST" | "DELETE" = "GET", body?: PolpObject): Promise<PolpObject> {

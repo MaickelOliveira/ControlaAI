@@ -14,3 +14,13 @@ it("cannot create a bank consent before persistence and an active worker are con
 it("fails closed before any bank or storage call if configuration is incomplete",async()=>{
   vi.stubEnv("OPEN_FINANCE_APP_ORIGIN","");expect(await isBankConnectReady(scope)).toBe(false);expect(rpc).not.toHaveBeenCalled();
 });
+
+it("prepares only a private preview request before the authorization host is verified",async()=>{
+  vi.stubEnv("OPEN_FINANCE_AUTH_HOSTS","");
+  vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","false");
+  expect(await isBankConnectReady(scope)).toBe(false);
+  vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","true");
+  expect(await isBankConnectReady(scope)).toBe(true);
+  vi.stubEnv("POLP_WEBHOOK_SIGNING_SECRET","");
+  expect(await isBankConnectReady(scope)).toBe(false);
+});

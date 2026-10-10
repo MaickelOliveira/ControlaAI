@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { openFinanceRequestScope, openFinanceRpc, OF_HEADERS } from "@/lib/open-finance-http";
 import { getBankInstitutions } from "@/lib/open-finance-institutions";
-import { createProductionConsent, polpObject, polpUuid, requireAuthUrl, validateBankDocuments } from "@/lib/polp-production";
+import { createProductionConsent, polpObject, polpUuid, validateBankDocuments } from "@/lib/polp-production";
+import { getConsentAuthorization } from "@/lib/open-finance-consent";
 import { isBankConnectReady } from "@/lib/open-finance-ready";
 import { enqueueConsentCheck } from "@/lib/open-finance-sync";
 import { readBankBody } from "@/lib/open-finance-body";
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
       institution_name: bank.name, status: consent.status, products: consent.products,
     } }));
     await enqueueConsentCheck(scope,polpUuid(stored.id));
-    return NextResponse.json({ id: stored.id, authorizationUrl: consent.url_to_authenticate ? requireAuthUrl(consent.url_to_authenticate) : null }, { status: 201, headers: OF_HEADERS });
+    const current = polpObject(await openFinanceRpc(scope, "zelo_of_connection", { p_id: stored.id }));
+    const authorization = current.status === "pending" && consent.status === "AWAITING_AUTHORIZATION" ? getConsentAuthorization(consent) : { authorizationUrl: null };
+    return NextResponse.json({ id: stored.id, ...authorization }, { status: 201, headers: OF_HEADERS });
   } catch (error) {
     const invalid = error instanceof Error && /^(INVALID_(INPUT|TERMS|DOCUMENT|ID|INSTITUTION))$/.test(error.message);
     return NextResponse.json({ error: invalid ? "Confira o banco, os documentos e o aceite para continuar." : "Não foi possível iniciar a conexão. Tente novamente em instantes." }, { status: invalid ? 400 : 503, headers: OF_HEADERS });
