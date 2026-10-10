@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { fetchDashboardMe } from "@/lib/dashboard-me-client";
+import { fetchDashboardMe,rememberPreviewDashboardMode } from "@/lib/dashboard-me-client";
+import OpenFinanceAccounts from "@/components/OpenFinanceAccounts";
 
 type Account = {
   id: string;
@@ -29,6 +30,8 @@ export default function ContasPage() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [name, setName] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [previewOnly,setPreviewOnly]=useState(false);
+  const [previewBusinessEnabled,setPreviewBusinessEnabled]=useState(false);
 
   async function load(selectedMode: "personal" | "business") {
     setLoading(true);
@@ -47,6 +50,8 @@ export default function ContasPage() {
 
   useEffect(() => {
     fetchDashboardMe().then(data => {
+      setPreviewOnly(data.user?.previewOnly===true);
+      setPreviewBusinessEnabled(data.user?.previewBusinessEnabled===true);
       const selectedMode = data.user?.activeMode === "business" ? "business" : "personal";
       setMode(selectedMode);
       void load(selectedMode);
@@ -55,6 +60,16 @@ export default function ContasPage() {
       setLoading(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function changeMode(value:"personal"|"business") {
+    if(previewOnly){
+      if(value==="business"&&!previewBusinessEnabled)return;
+      if(rememberPreviewDashboardMode(value))window.location.reload();
+      else setError("Não foi possível guardar o modo desta prévia. Tente novamente.");
+      return;
+    }
+    setMode(value);void load(value);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -76,12 +91,13 @@ export default function ContasPage() {
 
   return <div className="space-y-5">
     <div className="flex items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-slate-900">🏦 {es ? "Cuentas" : "Contas"}</h1><p className="text-sm text-slate-500 mt-1">{es ? "Organiza tus movimientos en cuentas manuales. La conexión con bancos está en implementación y pronto estará disponible para todos." : "Organize seus lançamentos em contas manuais. A conexão com bancos está em implementação e em breve vai estar disponível para todos."}</p></div>
+      <div><h1 className="text-2xl font-bold text-slate-900">🏦 {es ? "Cuentas" : "Contas"}</h1><p className="text-sm text-slate-500 mt-1">{es ? "Organiza tus movimientos en cuentas." : "Organize seus lançamentos por conta."}</p></div>
       <button onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold">+ {es ? "Nueva cuenta" : "Nova conta"}</button>
     </div>
 
-    <div className="flex gap-2">{(["personal", "business"] as const).map(value => <button key={value} onClick={() => { setMode(value); void load(value); }} className={`px-4 py-2 rounded-xl text-sm font-medium border ${mode === value ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-600"}`}>{value === "personal" ? (es ? "Personal" : "Pessoal") : "Empresa"}</button>)}</div>
+    <div className="flex gap-2">{(["personal", "business"] as const).map(value => <button key={value} disabled={previewOnly&&value==="business"&&!previewBusinessEnabled} onClick={() => changeMode(value)} className={`px-4 py-2 rounded-xl text-sm font-medium border disabled:opacity-50 ${mode === value ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-600"}`}>{value === "personal" ? (es ? "Personal" : "Pessoal") : "Empresa"}</button>)}</div>
     {error && <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600">{error}</div>}
+    <OpenFinanceAccounts key={mode} mode={mode}/>
     {loading ? <div className="py-16 text-center text-slate-400">{es ? "Cargando..." : "Carregando..."}</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{accounts.map(account => <div key={account.id} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
       <div className="flex justify-between gap-2"><div><div className="font-semibold text-slate-800">{account.currentInvoice || account.type === "credit_card" ? "💳" : "👛"} {account.name}</div><div className="text-xs text-slate-400 mt-1">{account.currentInvoice || account.type === "credit_card" ? (es ? "Tarjeta/factura" : "Cartão/fatura") : (es ? "Cuenta manual" : "Conta manual")}</div></div>{account.isDefault && <span className="text-xs text-amber-700 bg-amber-100 h-fit px-2 py-1 rounded-full">⭐ {es ? "Predeterminada" : "Padrão"}</span>}</div>
       {account.currentInvoice && <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3">
@@ -102,7 +118,7 @@ export default function ContasPage() {
     {showForm && <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center p-4"><form onSubmit={submit} className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
       <h2 className="font-bold text-lg mb-4">{editing ? (es ? "Editar cuenta" : "Editar conta") : (es ? "Nueva cuenta" : "Nova conta")}</h2>
       <input autoFocus required maxLength={60} value={name} onChange={event => setName(event.target.value)} placeholder={es ? "Ej.: Efectivo, Nubank, Caja" : "Ex.: Dinheiro, Nubank, Caixa"} className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200" />
-      <p className="text-xs text-slate-400 mt-2">{es ? "Conexión con el banco: en implementación, pronto disponible para todos." : "Conexão com o banco: em implementação, em breve disponível para todos."}</p>
+      <p className="text-xs text-slate-400 mt-2">{es ? "Esta cuenta organiza los movimientos registrados por ti." : "Esta conta organiza os lançamentos registrados por você."}</p>
       <div className="flex gap-3 mt-5"><button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm">Cancelar</button><button type="submit" className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold">{es ? "Guardar" : "Salvar"}</button></div>
     </form></div>}
   </div>;

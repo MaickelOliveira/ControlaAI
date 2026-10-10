@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/sandbox-app/.next/
 /out/
 
 # production

@@ -25,6 +25,10 @@ async function getRole(token?: string): Promise<string | null> {
 }
 
 export async function proxy(req: NextRequest) {
+  if(process.env.OPEN_FINANCE_PREVIEW_ONLY==="true") {
+    const {openFinancePreviewProxy}=await import("./lib/open-finance-preview-proxy");
+    return openFinancePreviewProxy(req);
+  }
   const { pathname } = req.nextUrl;
 
   // Lê os dois cookies independentemente
@@ -80,5 +84,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/es", "/pt", "/admin/:path*", "/dashboard/:path*", "/es/dashboard/:path*", "/pt/dashboard/:path*", "/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"],
+  matcher: ["/((?!_next/static|_next/image|brand/|og-zelo.png|favicon.ico).*)"],
 };

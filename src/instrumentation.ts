@@ -1,4 +1,6 @@
 export async function register() {
+  // The isolated bank preview must never start production reminders or maintenance.
+  if(process.env.OPEN_FINANCE_PREVIEW_ONLY==="true")return;
   if (process.env.NEXT_RUNTIME === "edge") return;
 
   // Avisos ao cliente continuam verificados em TODO tick de um minuto.

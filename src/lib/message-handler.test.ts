@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("server-only",()=>({}));
 import { accountSelectionMessage, appointmentPatchFromAi, buildFirstUseGuideMessages, documentAccountHintFromCaption, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, shouldTryItemizedInvoice, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
 import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
