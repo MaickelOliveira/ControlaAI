@@ -18,10 +18,20 @@ it("categorizes clear descriptions when provider enrichment is absent",()=>{
  expect(entry({description:"Pix enviado - Facebook Serviços Online"}).category).toBe("Marketing");
  expect(entry({description:"Compra Supermercado Exemplo"}).category).toBe("Alimentação");
 });
-it("does not invent the reason for a Pix to a person or a payment intermediary",()=>{
- expect(entry({}).category).toBe("A categorizar");
- expect(entry({description:"Pix - Mercado Pago"}).category).toBe("A categorizar");
- expect(entry({description:"Pix recebido - pessoa",direction:"credit",kind:"credits"}).category).toBe("A categorizar");
+it("defaults ambiguous Pix and payment intermediaries to Outros without inventing their purpose",()=>{
+ for(const extra of [{},{description:"Pix - Mercado Pago"},{description:"Pix recebido - pessoa",direction:"credit",kind:"credits" as const}]){
+  const result=entry(extra);
+  expect(result.category).toBe("Outros");expect(result.categorySource).toBe("default");
+ }
+});
+it("keeps missing or unsupported bank categories categorized, including card refunds",()=>{
+ for(const extra of [{description:"",source_category:null},{description:"Movimentação",source_category:"UNSUPPORTED"},{resource_type:"card",direction:"credit",kind:"credits" as const}]){
+  expect(entry(extra).category).toBe("Outros");
+ }
+});
+it("combines default bank categories with existing Outros entries in the expense chart",()=>{
+ const entries=createFinanceLedger([{id:"manual",type:"expense",amount:5,category:"Outros",description:"Diversos",date:"2026-10-10",mode:"business",source:"whatsapp"}], [movement],"business");
+ expect(ledgerExpenseGroups(entries,"category")).toEqual([{name:"Outros",value:35}]);
 });
 it("uses incoming categories and treats card refunds as expenses",()=>{
  expect(entry({source_category:"INCOME_SALARY",direction:"credit",kind:"credits"}).category).toBe("Salário");
