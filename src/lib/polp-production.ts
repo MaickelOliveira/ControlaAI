@@ -1,4 +1,5 @@
 import "server-only";
+import { readBankBody } from "./open-finance-body";
 export const OPEN_FINANCE_PRODUCTS = ["ACCOUNT", "CREDIT_CARD_ACCOUNT", "CREDIT_OPERATIONS", "INVESTMENTS"] as const;
 export type PolpObject = Record<string, unknown>;
 export type PolpPage = { data: PolpObject[]; nextCursor: string | null };
@@ -37,8 +38,7 @@ export async function polpProductionRequest(path: string, method: "GET" | "POST"
     });
   } catch { throw new Error("POLP_UNAVAILABLE"); }
   if (!response.ok) throw new Error(`POLP_HTTP_${response.status}`);
-  const raw = await response.text();
-  if (raw.length > 2_000_000) throw new Error("RESPONSE_TOO_LARGE");
+  const raw = (await readBankBody(response,2_000_000)).toString("utf8");
   try { return polpObject(JSON.parse(raw)); } catch { throw new Error("INVALID_RESPONSE"); }
 }
 export async function polpProductionPage(path: string, cursor: string | null, window?: Record<string, string>): Promise<PolpPage> {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionWithUser } from "@/lib/auth";
 import { getOpenFinanceAccess } from "@/lib/open-finance-access";
 import { getSupabase } from "@/lib/supabase";
+import { isBankConnectReady } from "@/lib/open-finance-ready";
 
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
       p_user: scope.userId, p_environment: scope.environment, p_mode: scope.mode,
     });
     if (error || !data) throw new Error("STORAGE_UNAVAILABLE");
-    const connectAvailable = process.env.OPEN_FINANCE_CONNECT_ENABLED === "true" && !!process.env.OPEN_FINANCE_AUTH_HOSTS && !!process.env.POLP_WEBHOOK_SIGNING_SECRET;
+    const connectAvailable = await isBankConnectReady(scope);
     return NextResponse.json({ ...data, contactEmail: auth.user.email, connectAvailable }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Não foi possível consultar os bancos. Tente novamente." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });

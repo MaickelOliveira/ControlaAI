@@ -2,15 +2,17 @@ import { NextResponse } from "next/server";
 import { openFinanceRequestScope, openFinanceRpc, OF_HEADERS } from "@/lib/open-finance-http";
 import { getBankInstitutions } from "@/lib/open-finance-institutions";
 import { createProductionConsent, polpObject, polpUuid, requireAuthUrl, validateBankDocuments } from "@/lib/polp-production";
+import { isBankConnectReady } from "@/lib/open-finance-ready";
+import { enqueueConsentCheck } from "@/lib/open-finance-sync";
+import { readBankBody } from "@/lib/open-finance-body";
 export async function POST(request: Request) {
   const scope = await openFinanceRequestScope(request, true);
   if (scope instanceof Response) return scope;
-  if (process.env.OPEN_FINANCE_CONNECT_ENABLED !== "true") return NextResponse.json({ error: "A conexão ainda não está disponível." }, { status: 503, headers: OF_HEADERS });
+  if (!await isBankConnectReady(scope)) return NextResponse.json({ error: "A conexão ainda não está disponível." }, { status: 503, headers: OF_HEADERS });
   try {
     if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("INVALID_INPUT");
-    const raw = await request.text();
-    if (raw.length > 4096) throw new Error("INVALID_INPUT");
-    const input = polpObject(JSON.parse(raw));
+    let input;
+    try { input=polpObject(JSON.parse((await readBankBody(request,4096)).toString("utf8"))); } catch { throw new Error("INVALID_INPUT"); }
     if (input.acceptedTerms !== true || input.journeyVersion !== "celcoin-2026-10") throw new Error("INVALID_TERMS");
     const institutionId = polpUuid(input.institutionId);
     const documents = validateBankDocuments(input.cpf, input.cnpj, scope.mode);
@@ -22,6 +24,7 @@ export async function POST(request: Request) {
       id: consent.id, cliente_user_id: scope.userId, institution_id: institutionId,
       institution_name: bank.name, status: consent.status, products: consent.products,
     } }));
+    await enqueueConsentCheck(scope,polpUuid(stored.id));
     return NextResponse.json({ id: stored.id, authorizationUrl: consent.url_to_authenticate ? requireAuthUrl(consent.url_to_authenticate) : null }, { status: 201, headers: OF_HEADERS });
   } catch (error) {
     const invalid = error instanceof Error && /^(INVALID_(INPUT|TERMS|DOCUMENT|ID|INSTITUTION))$/.test(error.message);

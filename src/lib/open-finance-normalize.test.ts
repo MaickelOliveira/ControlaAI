@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-import { normalizeResource, normalizeMovements, normalizeLimits, normalizeBills } from "./open-finance-normalize";
+import { normalizeResource, normalizeMovements, normalizeLimits, normalizeBills, normalizeReserves } from "./open-finance-normalize";
 const amount = (amount: string, currency = "BRL") => ({ amount, currency });
 describe("real provider normalization", () => {
+  it("preserves each reserve currency using the stable reservation ID", () => {
+    const id="550e8400-e29b-41d4-a716-446655440000";
+    const rows=normalizeReserves("account",[{id:14,account_id:"account",reserved_identification:id,reserved_name:"Viagem",available_amount:[amount("100"),amount("20","USD")]}]);
+    expect(rows).toMatchObject([{external_id:`${id}.BRL`,parent_external_id:"account",available_amount:"100",currency:"BRL"},{external_id:`${id}.USD`,available_amount:"20",currency:"USD"}]);
+    expect(()=>normalizeReserves("other",[{account_id:"account"}])).toThrow("RESOURCE_MISMATCH");
+    expect(()=>normalizeReserves("account",[{account_id:"account",reserved_identification:id,available_amount:[amount("100"),amount("20")]}])).toThrow("DUPLICATE_CURRENCY");
+  });
   it("preserves unknown balances and maps investment positions by their documented dates", () => {
     const account = normalizeResource("accounts", { id: "account", consent_id: "consent", balance: null });
     expect(account.available_amount).toBeNull();
@@ -10,6 +17,7 @@ describe("real provider normalization", () => {
     expect(fund).toMatchObject({ gross_amount: "1500.12", net_amount: "1480", valuation_date: "2026-10-08" });
     const stock = normalizeResource("variable-incomes", { id: "stock", consent_id: "consent", balance: { gross_amount: amount("100"), reference_date: "2026-10-09" } });
     expect(stock.net_amount).toBeNull();
+    expect(normalizeResource("accounts", {id:"account",updated_at:"2026-10-09T10:00:00Z",balance:{available_amount:amount("50"),updated_at:"2026-10-08T10:00:00Z"}}).source_updated_at).toBe("2026-10-08T10:00:00Z");
   });
   it("retains independent card limit lines and never derives unknown credit", () => {
     const limits = normalizeLimits({ id: "card", limits: [{ identification_number: "1234", consolidation_type: "CONSOLIDADO", credit_line_limit_type: "TOTAL", line_name: "CREDITO_A_VISTA", limit_amount: amount("5000"), used_amount: amount("5300"), available_amount: null }] });

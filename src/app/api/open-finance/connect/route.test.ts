@@ -3,6 +3,8 @@ vi.mock("server-only", () => ({}));
 const m = vi.hoisted(() => ({ scope: vi.fn(), rpc: vi.fn(), banks: vi.fn(), create: vi.fn() }));
 vi.mock("@/lib/open-finance-http", () => ({ openFinanceRequestScope: m.scope, openFinanceRpc: m.rpc, OF_HEADERS: { "Cache-Control": "private, no-store" } }));
 vi.mock("@/lib/open-finance-institutions", () => ({ getBankInstitutions: m.banks }));
+vi.mock("@/lib/open-finance-ready", () => ({ isBankConnectReady:vi.fn(async()=>true) }));
+vi.mock("@/lib/open-finance-sync", () => ({ enqueueConsentCheck:vi.fn(async()=>{}) }));
 vi.mock("@/lib/polp-production", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/polp-production")>(), createProductionConsent: m.create }));
 import { POST } from "./route";
 const id = "550e8400-e29b-41d4-a716-446655440000";
@@ -13,7 +15,7 @@ beforeEach(() => {
   m.scope.mockResolvedValue({ userId: id, mode: "personal", environment: "production" });
   m.banks.mockResolvedValue([{ id, name: "Bank", status: "OPERATIONAL", type: "PERSONAL" }]);
   m.create.mockResolvedValue({ id, status: "AWAITING_AUTHORIZATION", products: ["ACCOUNT"], url_to_authenticate: "https://authorize.example/oauth" });
-  m.rpc.mockResolvedValue({ id: "connection" });
+  m.rpc.mockResolvedValue({ id });
 });
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
 describe("real bank connection", () => {
@@ -29,6 +31,6 @@ describe("real bank connection", () => {
     expect(m.create).toHaveBeenCalledWith(id, id, { cpf: "52998224725" });
     expect(JSON.stringify(m.rpc.mock.calls)).not.toContain("52998224725");
     const result = await response.json();
-    expect(result).toEqual({ id: "connection", authorizationUrl: "https://authorize.example/oauth" });
+    expect(result).toEqual({ id, authorizationUrl: "https://authorize.example/oauth" });
   });
 });

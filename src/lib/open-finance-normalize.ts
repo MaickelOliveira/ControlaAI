@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { polpExternalId, polpObject, type PolpObject } from "./polp-production";
+import { polpExternalId, polpObject, polpUuid, type PolpObject } from "./polp-production";
 export const INVESTMENT_FAMILIES = ["bank-fixed-incomes","credit-fixed-incomes","funds","treasure-titles","variable-incomes"] as const;
 export const RESOURCE_FAMILIES = ["accounts","credit-cards","loans","financings",...INVESTMENT_FAMILIES] as const;
 export type ResourceFamily = typeof RESOURCE_FAMILIES[number];
@@ -34,7 +34,7 @@ export function normalizeResource(family: ResourceFamily, row: PolpObject): Polp
     name: sourceText(row.name ?? row.product_name ?? row.ticker ?? row.type ?? family,250), subtype: family,
     card_network: sourceText(row.credit_card_network,100), identification_last4: last4 && /^\d{4}$/.test(last4) ? last4 : null,
     currency: currencyOf(available,gross,net), available_amount: available.amount, gross_amount: gross.amount, net_amount: net.amount,
-    valuation_date: sourceDate(balance.reference_date ?? balance.reference_date_time), source_updated_at: sourceText(row.updated_at,40) };
+    valuation_date: sourceDate(balance.reference_date ?? balance.reference_date_time), source_updated_at: sourceText(balance.updated_at ?? balance.update_date_time ?? balance.reference_date_time ?? balance.reference_date ?? row.updated_at,40) };
 }
 export function normalizeLimits(card: PolpObject): PolpObject[] {
   if (card.limits == null) return [];
@@ -73,4 +73,18 @@ export function normalizeCredit(family: "loans" | "financings", row: PolpObject)
   const makeMoney=(value:unknown)=>money(value==null?null:{amount:value,currency:row.currency});
   const contract=makeMoney(row.contract_amount), outstanding=makeMoney(payments.contract_outstanding_balance), next=makeMoney(family==="loans"?row.next_instalment_amount:null);
   return { resource_external_id:polpExternalId(row.id),resource_type:family==="loans"?"loan":"financing",currency:currencyOf(contract,outstanding,next),contract_amount:contract.amount,outstanding_amount:outstanding.amount,next_installment_amount:next.amount,paid_installments:Number.isInteger(schedule.paid_instalments)?schedule.paid_instalments:null,remaining_installments:Number.isInteger(schedule.contract_remaining_number)?schedule.contract_remaining_number:null,due_date:sourceDate(row.due_date),source_updated_at:sourceText(row.updated_at,40) };
+}
+export function normalizeReserves(accountId: string, rows: PolpObject[]): PolpObject[] {
+  return rows.flatMap(row=>{
+    if (row.account_id!==accountId) throw new Error("RESOURCE_MISMATCH");
+    const id=polpUuid(row.reserved_identification);
+    if (!Array.isArray(row.available_amount) || row.available_amount.length>20) throw new Error("INVALID_RESERVE");
+    const currencies=new Set<string>();
+    return row.available_amount.map(value=>{
+      const balance=money(value);
+      if (!balance.currency || currencies.has(balance.currency)) throw new Error("DUPLICATE_CURRENCY");
+      currencies.add(balance.currency);
+      return {external_id:`${id}.${balance.currency}`,parent_external_id:accountId,resource_type:"reserve",name:sourceText(row.reserved_name ?? "Reserva da conta",250),subtype:"reserved-balances",currency:balance.currency,available_amount:balance.amount,source_updated_at:sourceText(row.updated_at,40)};
+    });
+  });
 }

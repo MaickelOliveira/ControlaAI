@@ -4,19 +4,22 @@ import OpenFinanceResources from "./OpenFinanceResources";
 import OpenFinanceConnect, { OpenFinancePurposes } from "./OpenFinanceConnect";
 import { BANK_CATEGORIES, BANK_STATUSES, bankDate, type BankOverview } from "@/lib/open-finance-display";
 
+async function fetchBankOverview(mode:"personal"|"business",signal?:AbortSignal):Promise<BankOverview|null> {
+  const response=await fetch(`/api/open-finance?mode=${mode}`,{cache:"no-store",signal});
+  if(response.status===401||response.status===404)return null;
+  if(!response.ok)throw new Error("Não foi possível atualizar seus bancos.");
+  return response.json();
+}
 export default function OpenFinanceAccounts({ mode }: { mode: "personal" | "business" }) {
   const [data,setData]=useState<BankOverview|null>(null), [error,setError]=useState(""), [connecting,setConnecting]=useState(false), [busy,setBusy]=useState("");
   async function load(signal?:AbortSignal) {
-    const response=await fetch(`/api/open-finance?mode=${mode}`,{cache:"no-store",signal});
-    if (response.status===401 || response.status===404) {setData(null);return;}
-    if (!response.ok) throw new Error("Não foi possível atualizar seus bancos.");
-    setData(await response.json());
+    setData(await fetchBankOverview(mode,signal));
   }
   useEffect(()=>{
     const controller=new AbortController();
-    void load(controller.signal).catch(e=>{if(e.name!=="AbortError")setError(e.message);});
+    void fetchBankOverview(mode,controller.signal).then(setData).catch(e=>{if(e.name!=="AbortError")setError(e.message);});
     return ()=>controller.abort();
-  },[mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  },[mode]);
   async function action(id:string, name:"refresh"|"revoke") {
     if(name==="revoke"&&!confirm("Cancelar o compartilhamento? O banco deixará de enviar novos dados. O histórico recebido permanecerá na Zelo."))return;
     setBusy(id);setError("");
