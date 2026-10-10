@@ -11,7 +11,7 @@
 - [x] Commit 43b0c51 implantado; titular realizou aceite e preparou pedido Inter PF, observado pendente e sem dados financeiros recebidos.
 - [x] Host exato Inter confirmado por certificado TLS EV com validação padrão e salvo na configuração privada; autorização ainda pendente.
 - [x] Incremento PF/PJ separado por plataforma implementado, com 699 testes aprovados e revisão independente sem achados obrigatórios; sem alteração do plano/mode de produção.
-- [ ] Incremento PF/PJ implantado, catálogo/heartbeat/conexão disponíveis em ambos os modos e retomada do pedido Inter verificada.
+- [x] Incremento 2e3fe8a implantado; catálogo de 210 registros, heartbeat recente PF/PJ e botão Conectar banco nos dois modos verificados. Refresh retomou o link vivo do mesmo pedido Inter PF; autorização ainda pessoal.
 - [ ] Entrega real do webhook comprovada.
 - [ ] Banco real autorizado e importação, painel e consultas comprovados.
 - [ ] Reconexão segura implementada e cancelamento real verificado.
