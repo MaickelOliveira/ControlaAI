@@ -4,9 +4,9 @@ import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {useBankUpdates} from "@/components/useBankUpdates";
-import {financeOrigin,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
-import {bankMoney} from "@/lib/open-finance-display";
-import {bankDashboardAccounts} from "@/lib/bank-dashboard";
+import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
+import {bankDate} from "@/lib/open-finance-display";
+import DashboardBalanceSummary from "@/components/DashboardBalanceSummary";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters, previousRange } from "@/components/FinanceFilterBar";
 
 const BankDashboard = dynamic(()=>import("@/components/BankDashboard"),{ssr:false});
@@ -134,13 +134,6 @@ function applyClientFilters(finances: Finance[], f: FinanceFilters): Finance[] {
   });
 }
 
-function sumIncomeExpense(finances: Finance[]) {
-  const posted = finances.filter(f => f.status !== "pending");
-  const income = posted.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
-  const expense = posted.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
-  return { income, expense, balance: income - expense };
-}
-
 /** % de variação vs período anterior. null quando não dá pra comparar
  *  (base zero) — nesse caso a UI simplesmente omite o indicador. */
 function trendPct(current: number, previous: number): number | null {
@@ -211,7 +204,6 @@ export default function DashboardPage() {
   },[mode,filters.from,filters.to]);
   const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader);
   const finances=useMemo(()=>(ledger?.finances??[]).filter(f=>f.included),[ledger]);
-  const totalBalance=ledger?.totalBalance??{income:0,expense:0,balance:0};
   const fetchSequence = useRef(0);
 
   // Carrega dados independentes de filtro: usuário, tarefas, categorias, metas
@@ -264,8 +256,8 @@ export default function DashboardPage() {
   const filteredFinances = useMemo(() => applyClientFilters(finances, filters), [finances, filters]);
   const filteredPrevFinances = useMemo(() => applyClientFilters(prevFinances, filters), [prevFinances, filters]);
 
-  const activeBalance = useMemo(() => sumIncomeExpense(filteredFinances), [filteredFinances]);
-  const prevBalance = useMemo(() => sumIncomeExpense(filteredPrevFinances), [filteredPrevFinances]);
+  const activeBalance = useMemo(() => ledgerBalance(filteredFinances), [filteredFinances]);
+  const prevBalance = useMemo(() => ledgerBalance(filteredPrevFinances), [filteredPrevFinances]);
 
   const barData = useMemo(() => buildBarData(finances6mo), [finances6mo]);
   const pieData = useMemo(() => buildPieData(filteredFinances), [filteredFinances]);
@@ -288,9 +280,6 @@ export default function DashboardPage() {
   const positiveExpenses=pieData.filter(g=>g.value>0),positiveExpenseTotal=positiveExpenses.reduce((sum,g)=>sum+g.value,0);
   const postedCount = filteredFinances.filter(f => f.status !== "pending").length;
   const rangeLabel = `${new Date(filters.from + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} — ${new Date(filters.to + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
-  const bankCash=ledger?.bank?bankDashboardAccounts(ledger.bank.overview).find(group=>group.currency==="BRL"&&group.missing<group.accounts.length):undefined;
-  const headlineBalance=bankCash?.total??totalBalance.balance;
-
   const kpis = [
     { label: "Receitas", value: fmt(activeBalance.income), icon: "↗", color: "text-emerald-600", accent: "bg-emerald-500", trend: !ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.income, prevBalance.income)} goodWhenUp /> },
     { label: "Despesas", value: fmt(activeBalance.expense), icon: "↘", color: "text-rose-600", accent: "bg-rose-500", trend: !ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.expense, prevBalance.expense)} goodWhenUp={false} /> },
@@ -313,14 +302,7 @@ export default function DashboardPage() {
               {user.status === "trial" && <span className="rounded-full bg-amber-400 px-3 py-1 text-[11px] font-bold text-slate-950">Trial · {trialDays} dias</span>}
             </div>
             <p className="text-sm text-slate-400">Olá, {user.name.split(" ")[0]}. Veja seus registros e seus bancos em um só lugar.</p>
-            <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{bankCash?bankMoney(bankCash.total,"BRL"):fmt(totalBalance.balance)}</h1>
-              <span className={clsx("mb-1 rounded-full px-2.5 py-1 text-xs font-semibold", Number(headlineBalance) >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300")}>
-                {bankCash?"Saldo bancário":Number(headlineBalance) >= 0 ? "Saldo positivo" : "Atenção ao saldo"}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-slate-400">{bankCash?`Disponível nas contas em reais${bankCash.missing?" · soma parcial, há saldos não informados":""} · limite dos cartões separado`:"Saldo registrado na Zelo · acumulado dos lançamentos"}</p>
-            {bankCash&&<p className="mt-2 text-[11px] text-slate-400">Resultado do período: {fmt(activeBalance.balance)} · registros manuais acumulados: {fmt(totalBalance.balance)}</p>}
+            <DashboardBalanceSummary balance={activeBalance}/>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/dashboard/financas" className="rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-300">+ Movimentação</Link>
@@ -363,13 +345,12 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {ledger?.bank&&<BankDashboard data={ledger.bank} entries={filteredFinances}/>}
-
-      <section className="space-y-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">Análise financeira</p>
-          <h2 className="mt-1 text-xl font-bold text-slate-900">Entenda seu dinheiro de vários ângulos</h2>
-          <p className="mt-1 text-sm text-slate-400">Os gráficos abaixo acompanham os filtros selecionados, exceto o histórico de seis meses.</p>
+      <section aria-label="Visão financeira integrada" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">Seu financeiro</p>
+          <h2 className="mt-1 text-xl font-bold text-slate-900">Tudo em uma só visão</h2>
+          <p className="mt-1 text-xs text-slate-500">Todas as origens nos mesmos gráficos e indicadores. Histórico fixo de seis meses; saldos das contas e crédito mostram a posição recebida do banco.</p></div>
+          {!!ledger?.bank?.overview.connections.length&&<Link href="/dashboard/contas" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Gerenciar contas →</Link>}
         </div>
 
         <div className="grid gap-5 lg:grid-cols-12">
@@ -385,26 +366,24 @@ export default function DashboardPage() {
             {positiveExpenses.length === 0 ? <EmptyChart label="Sem despesas positivas no período" /> : <PieChartComponent data={positiveExpenses} totalExpense={positiveExpenseTotal} />}
             {pieData.some(g=>g.value<0)&&<p className="mt-3 text-[11px] text-emerald-700">Categorias com estorno líquido aparecem com valor negativo no ranking; ficam fora desta participação.</p>}
           </article>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-12">
+          <BankDashboard data={ledger?.bank??null} entries={filteredFinances}/>
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-7">
-            <div className="mb-4"><h3 className="font-semibold text-slate-800">Evolução do saldo</h3><p className="mt-0.5 text-xs text-slate-400">Acumulado ao longo do período</p></div>
+            <div className="mb-4"><h3 className="font-semibold text-slate-800">Evolução do resultado</h3><p className="mt-0.5 text-xs text-slate-400">Acumulado ao longo do período</p></div>
             {areaData.length === 0 ? <EmptyChart label="Sem movimentações no período" /> : <AreaChartComponent data={areaData} />}
           </article>
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-5">
             <div className="mb-3"><h3 className="font-semibold text-slate-800">Ranking de categorias</h3><p className="mt-0.5 text-xs text-slate-400">Onde você mais concentrou gastos</p></div>
             {pieData.length === 0 ? <EmptyChart label="Sem categorias para comparar" /> : <CategoryBarChartComponent data={pieData} />}
           </article>
-        </div>
-
-        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-12">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
             <div><h3 className="font-semibold text-slate-800">Ritmo das movimentações</h3><p className="mt-0.5 text-xs text-slate-400">Picos de entradas e saídas no período selecionado</p></div>
             <span className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">{rangeLabel}</span>
           </div>
           {flowData.length === 0 ? <EmptyChart label="Sem fluxo para visualizar" /> : <DailyFlowChartComponent data={flowData} />}
-        </article>
+          </article>
+        </div>
+        {ledger?.bank&&<p className="text-[11px] text-slate-500">Atualização automática · última importação concluída em {bankDate(ledger.bank.report.last_successful_sync_at)} · histórico bancário pode estar incompleto{ledger.bank.report.sync_pending?" · há dados sendo atualizados":""}</p>}
       </section>
 
       <section className="space-y-4">
