@@ -4,7 +4,7 @@ import { openFinanceRpc } from "./open-finance-http";
 import { parseBankAuthUrl, polpObject, polpProductionRequest, polpUuid, requireAuthUrl, type PolpObject } from "./polp-production";
 import type { BankAuthorization } from "./open-finance-display";
 
-/** Withhold every unverified URL, including its tokens, during private initial setup. */
+/** Withhold every unverified URL, including its tokens, in the private preview. */
 export function getConsentAuthorization(consent: PolpObject): BankAuthorization {
   if (!consent.url_to_authenticate) return { authorizationUrl: null };
   const url = parseBankAuthUrl(consent.url_to_authenticate);
@@ -13,10 +13,14 @@ export function getConsentAuthorization(consent: PolpObject): BankAuthorization 
     if (!Number.isFinite(expires)) throw new Error("INVALID_AUTH_URL");
     if (expires <= Date.now()) return { authorizationUrl: null, authorizationExpired: true };
   }
-  if (process.env.OPEN_FINANCE_PREVIEW_ONLY === "true" && !process.env.OPEN_FINANCE_AUTH_HOSTS?.trim()) {
-    return { authorizationUrl: null, authorizationPending: true, authorizationHost: url.hostname };
+  try {
+    return { authorizationUrl: requireAuthUrl(url.href) };
+  } catch {
+    if (process.env.OPEN_FINANCE_PREVIEW_ONLY === "true") {
+      return { authorizationUrl: null, authorizationPending: true, authorizationHost: url.hostname };
+    }
+    throw new Error("INVALID_AUTH_URL");
   }
-  return { authorizationUrl: requireAuthUrl(url.href) };
 }
 
 /** A browser return proves no authorization. Only the provider can confirm it. */

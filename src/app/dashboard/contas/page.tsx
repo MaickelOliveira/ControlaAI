@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { fetchDashboardMe } from "@/lib/dashboard-me-client";
+import { fetchDashboardMe,rememberPreviewDashboardMode } from "@/lib/dashboard-me-client";
 import OpenFinanceAccounts from "@/components/OpenFinanceAccounts";
 
 type Account = {
@@ -30,6 +30,8 @@ export default function ContasPage() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [name, setName] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [previewOnly,setPreviewOnly]=useState(false);
+  const [previewBusinessEnabled,setPreviewBusinessEnabled]=useState(false);
 
   async function load(selectedMode: "personal" | "business") {
     setLoading(true);
@@ -48,6 +50,8 @@ export default function ContasPage() {
 
   useEffect(() => {
     fetchDashboardMe().then(data => {
+      setPreviewOnly(data.user?.previewOnly===true);
+      setPreviewBusinessEnabled(data.user?.previewBusinessEnabled===true);
       const selectedMode = data.user?.activeMode === "business" ? "business" : "personal";
       setMode(selectedMode);
       void load(selectedMode);
@@ -56,6 +60,16 @@ export default function ContasPage() {
       setLoading(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function changeMode(value:"personal"|"business") {
+    if(previewOnly){
+      if(value==="business"&&!previewBusinessEnabled)return;
+      if(rememberPreviewDashboardMode(value))window.location.reload();
+      else setError("Não foi possível guardar o modo desta prévia. Tente novamente.");
+      return;
+    }
+    setMode(value);void load(value);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -81,7 +95,7 @@ export default function ContasPage() {
       <button onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold">+ {es ? "Nueva cuenta" : "Nova conta"}</button>
     </div>
 
-    <div className="flex gap-2">{(["personal", "business"] as const).map(value => <button key={value} onClick={() => { setMode(value); void load(value); }} className={`px-4 py-2 rounded-xl text-sm font-medium border ${mode === value ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-600"}`}>{value === "personal" ? (es ? "Personal" : "Pessoal") : "Empresa"}</button>)}</div>
+    <div className="flex gap-2">{(["personal", "business"] as const).map(value => <button key={value} disabled={previewOnly&&value==="business"&&!previewBusinessEnabled} onClick={() => changeMode(value)} className={`px-4 py-2 rounded-xl text-sm font-medium border disabled:opacity-50 ${mode === value ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-600"}`}>{value === "personal" ? (es ? "Personal" : "Pessoal") : "Empresa"}</button>)}</div>
     {error && <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600">{error}</div>}
     <OpenFinanceAccounts key={mode} mode={mode}/>
     {loading ? <div className="py-16 text-center text-slate-400">{es ? "Cargando..." : "Carregando..."}</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{accounts.map(account => <div key={account.id} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">

@@ -35,7 +35,7 @@ export default function OpenFinanceAccounts({ mode }: { mode: "personal" | "busi
   }
   if(!data)return error?<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>:null;
   return <section aria-label="Bancos conectados" className="space-y-4 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Bancos conectados</h2><p className="text-sm text-slate-600">Open Finance Brasil · prévia privada</p></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Bancos conectados</h2><p className="text-sm text-slate-600">Open Finance Brasil · {mode==="personal"?"Pessoa física (PF)":"Pessoa jurídica (PJ)"} · prévia privada</p></div>
       {data.connectAvailable&&<button onClick={()=>setConnecting(true)} className="rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white">Conectar banco</button>}</div>
     {!data.connectAvailable&&<p role="status" className="text-sm text-slate-700">A conexão bancária aguarda a conclusão da configuração desta prévia.</p>}
     {error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}

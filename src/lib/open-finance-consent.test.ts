@@ -14,6 +14,13 @@ it("does not query a cancelled or foreign connection", async () => {
   await expect(refreshProductionConsent(scope,id)).rejects.toThrow("CONSENT_CANCELLED");
   expect(m.request).not.toHaveBeenCalled();
 });
+it("does not fall back to PF when a connection is absent in PJ storage",async()=>{
+  const businessScope={...scope,mode:"business" as const};
+  m.rpc.mockRejectedValueOnce(new Error("OF_CONNECTION_NOT_FOUND"));
+  await expect(refreshProductionConsent(businessScope,id)).rejects.toThrow("OF_CONNECTION_NOT_FOUND");
+  expect(m.rpc).toHaveBeenCalledWith(businessScope,"zelo_of_connection",{p_id:id});
+  expect(m.request).not.toHaveBeenCalled();
+});
 it("rejects a different provider client before changing status", async () => {
   m.request.mockResolvedValue({ data: { id, institution_id: id, cliente_user_id: "other", status: "AUTHORISED" } });
   await expect(refreshProductionConsent(scope,id)).rejects.toThrow("CONSENT_IDENTITY_MISMATCH");
@@ -26,7 +33,8 @@ it("returns the current revoked status when cancellation races with refresh", as
 });
 
 afterEach(()=>vi.unstubAllEnvs());
-it("recovers a live validated authorization link only while locally pending",async()=>{
+it.each(["true","false"])("recovers a validated pending link with private preview %s",async preview=>{
+  vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY",preview);
   vi.stubEnv("OPEN_FINANCE_AUTH_HOSTS","authorize.example");
   m.request.mockResolvedValue({data:{id,institution_id:id,cliente_user_id:id,status:"AWAITING_AUTHORIZATION",url_to_authenticate:"https://authorize.example/oauth?state=opaque",url_to_authenticate_expires_at:new Date(Date.now()+60000).toISOString()}});
   expect(await refreshProductionConsent(scope,id)).toMatchObject({id,status:"pending",authorizationUrl:"https://authorize.example/oauth?state=opaque"});

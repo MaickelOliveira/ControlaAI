@@ -5,6 +5,15 @@ import type { User } from "./users";
 export type OpenFinanceScope = { userId: string; mode: "personal" | "business"; environment: "production" };
 type Identity = Pick<User, "id" | "email" | "plan" | "activeMode">;
 
+/** Private owner testing does not upgrade the production plan or active mode. */
+export function canUseOpenFinanceBusiness(user: Pick<User, "email" | "plan">): boolean {
+  if (user.plan === "business") return true;
+  const owner = process.env.OPEN_FINANCE_OWNER_EMAIL?.trim().toLowerCase();
+  return process.env.OPEN_FINANCE_PREVIEW_ONLY === "true"
+    && process.env.OPEN_FINANCE_PREVIEW_BUSINESS_ENABLED === "true"
+    && !!owner && user.email.trim().toLowerCase() === owner;
+}
+
 /** Email comes from the current database user, never the JWT or request body.
  * Public rollout requires a separate reviewed gate; this flag stays owner-only. */
 export async function getOpenFinanceAccess(user: Identity, requestedMode?: string | null): Promise<OpenFinanceScope | null> {
@@ -14,7 +23,7 @@ export async function getOpenFinanceAccess(user: Identity, requestedMode?: strin
   if (!process.env.POLP_PRODUCTION_CLIENT_ID || !process.env.POLP_PRODUCTION_CLIENT_SECRET) return null;
   const mode = requestedMode ?? user.activeMode;
   if (mode !== "personal" && mode !== "business") return null;
-  if (mode === "business" && user.plan !== "business") return null;
+  if (mode === "business" && !canUseOpenFinanceBusiness(user)) return null;
   try {
     const { data, error } = await getSupabase().rpc("zelo_of_access", { p_user: user.id });
     if (error || !data || data.enabled !== true || data.country_code !== "BR" || !data.country_verified_at) return null;

@@ -8,8 +8,11 @@
 - [x] Login do proprietário e interface real com sua sessão verificados; área Bancos conectados exibida.
 - [x] Webhook Celcoin/HMAC registrado pelo titular e configurado; assinatura válida e ausência de assinatura verificadas no endpoint da prévia.
 - [x] Credenciais Polp em produção retornaram 200; worker com heartbeat recente confirmado.
-- [x] Commit 43b0c51 implantado; botão Conectar banco e introdução disponíveis na sessão do proprietário. Aceite e primeiro pedido aguardam o titular.
-- [ ] Host da jornada verificado de forma independente e entrega real do webhook comprovada.
+- [x] Commit 43b0c51 implantado; titular realizou aceite e preparou pedido Inter PF, observado pendente e sem dados financeiros recebidos.
+- [x] Host exato Inter confirmado por certificado TLS EV com validação padrão e salvo na configuração privada; autorização ainda pendente.
+- [x] Incremento PF/PJ separado por plataforma implementado, com 699 testes aprovados e revisão independente sem achados obrigatórios; sem alteração do plano/mode de produção.
+- [ ] Incremento PF/PJ implantado, catálogo/heartbeat/conexão disponíveis em ambos os modos e retomada do pedido Inter verificada.
+- [ ] Entrega real do webhook comprovada.
 - [ ] Banco real autorizado e importação, painel e consultas comprovados.
 - [ ] Reconexão segura implementada e cancelamento real verificado.
 - [ ] Critérios finais abaixo atendidos integralmente e liberação pública autorizada. As caixas abaixo representam entrega completa, incluindo validação real, e não apenas código local.

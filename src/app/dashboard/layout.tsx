@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
-import { fetchDashboardMe } from "@/lib/dashboard-me-client";
+import { fetchDashboardMe,rememberPreviewDashboardMode } from "@/lib/dashboard-me-client";
 import SupportWidget from "@/components/SupportWidget";
 
 const Icons = {
@@ -140,7 +140,7 @@ const CONFIG_NAV = [
   { href: "/dashboard/configuracoes", label: "Configurações", icon: Icons.settings },
 ];
 
-type User = { name: string; plan: string; status: string; activeMode: string; trialEndsAt: string;previewOnly?:boolean };
+type User = { name: string; plan: string; status: string; activeMode: string; trialEndsAt: string;previewOnly?:boolean;previewBusinessEnabled?:boolean };
 
 function SidebarContent({
   user,
@@ -190,7 +190,7 @@ function SidebarContent({
               </p>
             </div>
           </div>
-          <button onClick={toggleMode} disabled={modeChanging||user?.previewOnly}
+          <button onClick={toggleMode} disabled={modeChanging||user?.previewOnly&&!user.previewBusinessEnabled}
             className="w-full rounded-xl p-2.5 flex items-center gap-2.5 transition border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left">
             <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm shrink-0">
               {isPersonal ? Icons.person : Icons.building}
@@ -259,9 +259,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   async function toggleMode() {
-    if (!user || modeChanging || user.previewOnly) return;
+    if (!user || modeChanging) return;
     setModeChanging(true);
     const newMode = user.activeMode === "personal" ? "business" : "personal";
+    if(user.previewOnly){
+      if(user.previewBusinessEnabled&&rememberPreviewDashboardMode(newMode))window.location.reload();
+      else setModeChanging(false);
+      return;
+    }
     await fetch("/api/admin/user-mode", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: newMode }) });
     setUser(u => u ? { ...u, activeMode: newMode } : u);
     setModeChanging(false);

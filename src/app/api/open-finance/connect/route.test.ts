@@ -43,8 +43,15 @@ it("holds an unverified private authorization link without disclosing its path o
   expect(response.status).toBe(201);
   expect(await response.json()).toEqual({id,authorizationUrl:null,authorizationPending:true,authorizationHost:"new-authorization.example"});
 });
-it("does not turn an unexpected configured host into automatic approval",async()=>{
+it("holds a new private bank host even when another host is already approved",async()=>{
   vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","true");
+  m.create.mockResolvedValue({id,status:"AWAITING_AUTHORIZATION",products:["ACCOUNT"],url_to_authenticate:"https://unexpected.example/private?token=secret"});
+  const response=await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
+  expect(response.status).toBe(201);
+  expect(await response.json()).toEqual({id,authorizationUrl:null,authorizationPending:true,authorizationHost:"unexpected.example"});
+});
+it("refuses an unapproved host outside the private preview without exposing its token",async()=>{
+  vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","false");
   m.create.mockResolvedValue({id,status:"AWAITING_AUTHORIZATION",products:["ACCOUNT"],url_to_authenticate:"https://unexpected.example/private?token=secret"});
   const response=await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
   expect(response.status).toBe(503);
@@ -56,4 +63,19 @@ it("does not return an authorization link after cancellation wins during creatio
   const response=await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
   expect(response.status).toBe(201);
   expect(await response.json()).toEqual({id,authorizationUrl:null});
+});
+it.each(["personal","business"] as const)("refuses an institution belonging only to the other platform in %s mode",async mode=>{
+  m.scope.mockResolvedValue({userId:id,mode,environment:"production"});
+  m.banks.mockResolvedValue([{id,status:"OPERATIONAL",type:mode==="personal"?"BUSINESS":"PERSONAL"}]);
+  const r=await POST(request({institutionId:id,cpf:"52998224725",...(mode==="business"?{cnpj:"11222333000181"}:{}),acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
+  expect(r.status).toBe(400);expect(m.create).not.toHaveBeenCalled();
+});
+it("requires the company documents for PJ and keeps them out of storage",async()=>{
+  m.scope.mockResolvedValue({userId:id,mode:"business",environment:"production"});
+  m.banks.mockResolvedValue([{id,status:"OPERATIONAL",type:"BUSINESS"}]);
+  const input={institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"};
+  expect((await POST(request(input))).status).toBe(400);expect(m.create).not.toHaveBeenCalled();
+  expect((await POST(request({...input,cnpj:"11222333000181"}))).status).toBe(201);
+  expect(m.create).toHaveBeenCalledWith(id,id,{cpf:"52998224725",cnpj:"11222333000181"});
+  expect(JSON.stringify(m.rpc.mock.calls)).not.toContain("11222333000181");
 });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionWithUser } from "@/lib/auth";
+import { canUseOpenFinanceBusiness } from "@/lib/open-finance-access";
 
 /** Versão enxuta de /api/dashboard, só com os campos que a sidebar (layout)
  *  precisa pra exibir nome/modo/trial — evita que toda troca de rota do
@@ -11,6 +12,6 @@ export async function GET() {
   const { user } = auth;
 
   return NextResponse.json({
-    user: { name: user.name, plan: user.plan, status: user.status, activeMode: process.env.OPEN_FINANCE_PREVIEW_ONLY==="true"?(process.env.OPEN_FINANCE_PREVIEW_MODE==="business"&&user.plan==="business"?"business":"personal"):user.activeMode, trialEndsAt: user.trialEndsAt, ...(process.env.OPEN_FINANCE_PREVIEW_ONLY==="true"?{previewOnly:true}:{}) },
+    user: { name: user.name, plan: user.plan, status: user.status, activeMode: process.env.OPEN_FINANCE_PREVIEW_ONLY==="true"?(process.env.OPEN_FINANCE_PREVIEW_MODE==="business"&&canUseOpenFinanceBusiness(user)?"business":"personal"):user.activeMode, trialEndsAt: user.trialEndsAt, ...(process.env.OPEN_FINANCE_PREVIEW_ONLY==="true"?{previewOnly:true,previewBusinessEnabled:canUseOpenFinanceBusiness(user)}:{}) },
   });
 }

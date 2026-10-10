@@ -42,4 +42,31 @@ describe("private Open Finance access", () => {
     expect(() => requireOpenFinanceOrigin(new Request("https://zelo.example/api/open-finance", { method: "POST" }))).toThrow();
     expect(() => requireOpenFinanceOrigin(new Request("https://zelo.example/api/open-finance", { method: "POST", headers: { origin: "https://zelo.example" } }))).not.toThrow();
   });
+  it("allows the verified owner's business preview only with its explicit private flag", async () => {
+    configured();
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY", "true");
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_BUSINESS_ENABLED", "true");
+    rpc.mockResolvedValue({ data: { enabled: true, country_code: "BR", country_verified_at: "2026-10-09T12:00:00Z" } });
+    expect(await getOpenFinanceAccess(owner, "business")).toEqual({ userId: owner.id, mode: "business", environment: "production" });
+    expect(await getOpenFinanceAccess({ ...owner, email: "another@example.com" }, "business")).toBeNull();
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY", "false");
+    expect(await getOpenFinanceAccess(owner, "business")).toBeNull();
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY", "true");
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_BUSINESS_ENABLED", "");
+    expect(await getOpenFinanceAccess(owner, "business")).toBeNull();
+  });
+  it("does not bypass Brazilian eligibility for the business preview", async () => {
+    configured();
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY", "true");
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_BUSINESS_ENABLED", "true");
+    rpc.mockResolvedValue({ data: { enabled: true, country_code: "PT", country_verified_at: "2026-10-09T12:00:00Z" } });
+    expect(await getOpenFinanceAccess(owner, "business")).toBeNull();
+  });
+  it("preserves business plan access without the private preview exception", async () => {
+    configured();
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY", "false");
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_BUSINESS_ENABLED", "");
+    rpc.mockResolvedValue({ data: { enabled: true, country_code: "BR", country_verified_at: "2026-10-09T12:00:00Z" } });
+    expect(await getOpenFinanceAccess({ ...owner, plan: "business" }, "business")).toEqual({ userId: owner.id, mode: "business", environment: "production" });
+  });
 });
