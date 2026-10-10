@@ -20,3 +20,11 @@ it("validates mode and period before reading data",async()=>{
 it("does not report zero bank spending when an authorized bank read fails",async()=>{
  m.access.mockResolvedValue({userId:"owner",mode:"business",environment:"production"});m.bank.mockRejectedValue(Error("PRIVATE_ERROR"));const response=await GET(new Request(url));expect(response.status).toBe(503);expect(await response.text()).not.toContain("PRIVATE_ERROR");
 });
+it("preserves long manual periods for clients without bank access",async()=>{
+ expect((await GET(new Request(url.replace("2026-10-01","2020-01-01")))).status).toBe(200);
+ m.access.mockResolvedValue({userId:"owner",mode:"business",environment:"production"});
+ expect((await GET(new Request(url.replace("2026-10-01","2020-01-01")))).status).toBe(400);expect(m.bank).not.toHaveBeenCalled();
+});
+it("does not hide bank data behind manual-only success during an owner access outage",async()=>{
+ m.access.mockRejectedValue(Error("OF_ACCESS_UNAVAILABLE"));expect((await GET(new Request(url))).status).toBe(503);expect(m.records).not.toHaveBeenCalled();
+});

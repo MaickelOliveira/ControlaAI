@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {createFinanceLedger,ledgerBalance} from "./finance-ledger";
+import {createFinanceLedger,ledgerBalance,ledgerExpenseGroups} from "./finance-ledger";
 import type {BankMovement} from "./open-finance-report";
 const manual={id:"manual",type:"expense",amount:25,category:"Alimentação",description:"Almoço",date:"2026-10-02",mode:"business",source:"whatsapp" as const};
 const bank:BankMovement={id:"bank",resource_name:"Conta",institution_name:"Banco teste",resource_type:"account",date:"2026-10-03",description:"Pix enviado",amount:"40.10",currency:"BRL",direction:"debit",classification:"unknown",kind:"account_debits",bill_month:null,installment_number:null,installment_count:null};
@@ -25,4 +25,9 @@ it("signals possible duplicates without deleting same-day purchases or matching 
 it("does not invent direction or round an unsafe amount into a usable chart value",()=>{
  const entries=createFinanceLedger([], [{...bank,amount:"9999999999999999.12"},{...bank,id:"direction",direction:"unknown"}],"personal");
  expect(entries.every(e=>!e.included)).toBe(true);expect(ledgerBalance(entries).balance).toBe(0);
+});
+it("keeps refund-only and mixed negative groups visible in signed expense charts",()=>{
+ const entries=createFinanceLedger([manual],[{...bank,resource_type:"card",direction:"credit",kind:"credits",amount:"10.05"}],"business");
+ expect(ledgerExpenseGroups(entries,"origin")).toEqual(expect.arrayContaining([{name:"WhatsApp",value:25},{name:"Cartões",value:-10.05}]));
+ expect(ledgerExpenseGroups(entries,"category").reduce((sum,g)=>sum+Math.round(g.value*100),0)).toBe(1495);
 });

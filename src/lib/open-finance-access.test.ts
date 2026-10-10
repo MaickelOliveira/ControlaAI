@@ -39,6 +39,11 @@ describe("private Open Finance access", () => {
     rpc.mockResolvedValueOnce({ error: { message: "private details" } });
     expect(await getOpenFinanceAccess(owner)).toBeNull();
   });
+  it("distinguishes owner storage outages when a complete ledger is required",async()=>{
+    configured();rpc.mockResolvedValue({error:{message:"private details"}});
+    await expect(getOpenFinanceAccess(owner,"personal",{throwOnStorageError:true})).rejects.toThrow("OF_ACCESS_UNAVAILABLE");
+    expect(await getOpenFinanceAccess({...owner,email:"another@example.com"},"personal",{throwOnStorageError:true})).toBeNull();
+  });
   it("returns only the authenticated user scope and refuses unauthorized business mode", async () => {
     configured();
     rpc.mockResolvedValue({ data: { enabled: true, country_code: "BR", country_verified_at: "2026-10-09T12:00:00Z" } });
