@@ -33,6 +33,8 @@ import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring,
 import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
+import { answerBankQuestion, savedBankSpending } from "@/lib/open-finance-question";
+import { canReadBanksFromPhone } from "@/lib/open-finance-phone";
 import { createAppointment, getUpcomingAppointments, getAppointmentsInRange, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
 import { formatReminderOffset, isAgendaReminderTarget, isStandaloneAppointmentReminderRequest, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
 import { createMeetEvent } from "@/lib/google-meet";
@@ -2774,6 +2776,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       return;
     }
 
+    // Owner-gated bank reads use saved data; pending actions keep their precedence.
+    if (canReadBanksFromPhone(user.phone, from) && /bancos?|cart(?:ão|ões|ao|oes)|limite|investimento|fatura|open finance/i.test(messageText)) {
+      const bankAnswer = await answerBankQuestion(user, mode, messageText, todayStrBR());
+      if (bankAnswer) { await wppSend(from, bankAnswer); return; }
+    }
+
     // ── Processa com IA ──
     // A mensagem atual já foi gravada em addMessage() acima (linha ~179),
     // então o histórico já vem com ela como último item — removemos antes
@@ -3871,7 +3879,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         const personal = await getBalanceInRange(user.id, "personal", pFrom, pTo);
         const business = await getBalanceInRange(user.id, "business", pFrom, pTo);
-        await wppSend(from, replyBalance(personal, business, undefined, periodLabel, user.locale));
+        const bankSummary = canReadBanksFromPhone(user.phone, from) && ai.intent === "finance_query" && ai.financeType !== "income"
+          ? await savedBankSpending(user, queryMode, pFrom, pTo) : null;
+        await wppSend(from, replyBalance(personal, business, undefined, periodLabel, user.locale) + (bankSummary ? `\n\n${bankSummary}` : ""));
         break;
       }
 
