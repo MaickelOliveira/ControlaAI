@@ -12,8 +12,9 @@ it("shows one period balance from bank, card, WhatsApp and platform activity",()
     {id:"platform",type:"income",amount:200,category:"Serviços",description:"Serviço",date:"2026-10-10",mode:"business",source:"web"},
   ],[movement,{...movement,id:"card",resource_type:"card",kind:"card_purchases",direction:"debit",amount:"80.20"}],"business");
   const html=renderToStaticMarkup(React.createElement(DashboardBalanceSummary,{balance:ledgerBalance(entries)}));
-  expect(html).toContain("Saldo do período");
+  expect(html).toContain("Resultado do período");
   expect(html.replace(/\s/g," ")).toContain("R$ 1.100,00");
+  expect(html.replace(/\s/g," ")).toContain("Suas entradas superaram suas saídas em R$ 1.100,00 neste período.");
   expect(html).toContain("Conta, cartão, WhatsApp e plataforma");
   expect(html).not.toContain("Saldo bancário");
   expect(html).not.toContain("registros manuais acumulados");
@@ -23,5 +24,5 @@ it("identifies an outflow surplus as a negative result without inventing availab
   const html=renderToStaticMarkup(React.createElement(DashboardBalanceSummary,{balance:{income:100,expense:150.10,balance:-50.10}}));
   expect(html.replace(/\s/g," ")).toContain("-R$ 50,10");
   expect(html).toContain("Saídas acima das entradas");
-  expect(html).toContain("Entradas menos saídas no período selecionado");
+  expect(html.replace(/\s/g," ")).toContain("Suas saídas superaram suas entradas em R$ 50,10 neste período.");
 });
