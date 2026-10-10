@@ -1,6 +1,6 @@
 import type {BankMovement} from "./open-finance-report";
 
-export type BankCategory={name:string;source:"user"|"provider"|"description"|"unclassified"|"excluded"};
+export type BankCategory={name:string;source:"user"|"provider"|"description"|"default"|"excluded"};
 // Polp Celcoin taxonomy: https://polp.com.br/docs/celcoin/categories
 const expenseFamilies:Record<string,string>={FOOD_AND_DRINK:"Alimentação",TRANSPORTATION:"Transporte",MEDICAL:"Saúde",ENTERTAINMENT:"Lazer",TRAVEL:"Lazer",HOME_IMPROVEMENT:"Moradia",RENT_AND_UTILITIES:"Moradia",GENERAL_SERVICES:"Serviços",PERSONAL_CARE:"Serviços",BANK_FEES:"Serviços",GENERAL_MERCHANDISE:"Outros",GOVERNMENT_AND_NON_PROFIT:"Outros"};
 const specific:Record<string,string>={GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES:"Vestuário",GENERAL_MERCHANDISE_ELECTRONICS:"Tecnologia",GENERAL_SERVICES_EDUCATION:"Educação",GENERAL_SERVICES_AUTOMOTIVE:"Transporte",GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT:"Impostos"};
@@ -27,5 +27,5 @@ export function bankCategory(movement:BankMovement):BankCategory {
   const name=income?
     /\b(?:salario|folha de pagamento)\b/.test(description)?"Salário":/\b(?:reembolso|restituicao)\b/.test(description)?"Reembolso":undefined:
     expenseDescriptions.find(([pattern])=>pattern.test(description))?.[1];
-  return name?{name,source:"description"}:{name:"A categorizar",source:"unclassified"};
+  return name?{name,source:"description"}:{name:"Outros",source:"default"};
 }
