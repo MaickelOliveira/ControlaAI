@@ -9,6 +9,7 @@ try {
   await db.exec(await sql('./open_finance_fixtures.sql'));
   await db.exec(await sql('../migrations/20261009193000_open_finance_storage.sql'));
   await db.exec(await sql('../migrations/20261009213000_open_finance_server_access.sql'));
+  await db.exec(await sql('../migrations/20261009220000_open_finance_consents.sql'));
   const owner = '00000000-0000-4000-8000-000000000001';
   const other = '00000000-0000-4000-8000-000000000002';
   await db.exec(`insert into open_finance.user_access(user_id,country_code,country_verified_at,enabled) values ('${owner}','BR',now(),true),('${other}','BR',now(),false)`);
@@ -16,6 +17,9 @@ try {
     await db.exec(`set role ${role}`);
     await assert.rejects(db.query('select public.zelo_of_access($1)', [owner]), /permission denied/);
     await assert.rejects(db.query("select public.zelo_of_overview($1,'production','personal')", [owner]), /permission denied/);
+    await assert.rejects(db.query("select public.zelo_of_save_consent($1,'personal','{}')", [owner]), /permission denied/);
+    await assert.rejects(db.query("select public.zelo_of_connection($1,'personal',$1)", [owner]), /permission denied/);
+    await assert.rejects(db.query("select public.zelo_of_set_status($1,'personal',$1,'active',null)", [owner]), /permission denied/);
     await db.exec('reset role');
   }
   await db.exec('set role service_role');
@@ -25,5 +29,23 @@ try {
   await assert.rejects(db.query("select public.zelo_of_overview($1,'production','personal')", [other]), /OF_ACCESS_DENIED/);
   await assert.rejects(db.query("select public.zelo_of_overview($1,'production','invalid')", [owner]), /OF_SCOPE_INVALID/);
   await assert.rejects(db.query('select * from open_finance.resources'), /permission denied/);
+  await db.exec('reset role');
+  await db.exec(`update open_finance.user_access set enabled=true where user_id='${other}'`);
+  await db.exec('set role service_role');
+  const consent = { id: '10000000-0000-4000-8000-000000000001', institution_id: '20000000-0000-4000-8000-000000000001', institution_name: 'Test Bank', cliente_user_id: owner, status: 'AWAITING_AUTHORIZATION', products: ['ACCOUNT','CREDIT_CARD_ACCOUNT','CREDIT_OPERATIONS','INVESTMENTS'] };
+  const saved = (await db.query("select public.zelo_of_save_consent($1,'personal',$2::jsonb) as result", [owner, JSON.stringify(consent)])).rows[0].result;
+  assert.equal(saved.status, 'pending');
+  assert.equal((await db.query("select public.zelo_of_save_consent($1,'personal',$2::jsonb) as result", [owner, JSON.stringify(consent)])).rows[0].result.id, saved.id);
+  await assert.rejects(db.query("select public.zelo_of_save_consent($1,'personal',$2::jsonb)", [other, JSON.stringify({ ...consent, cliente_user_id: other })]), /OF_CONSENT_ALREADY_CLAIMED/);
+  await assert.rejects(db.query("select public.zelo_of_connection($1,'personal',$2)", [other, saved.id]), /OF_CONNECTION_NOT_FOUND/);
+  await assert.rejects(db.query("select public.zelo_of_connection($1,'business',$2)", [owner, saved.id]), /OF_CONNECTION_NOT_FOUND/);
+  await db.query("select public.zelo_of_set_status($1,'personal',$2,'revoking',null)", [owner, saved.id]);
+  await db.query("select public.zelo_of_set_status($1,'personal',$2,'active','AUTHORISED')", [owner, saved.id]);
+  assert.equal((await db.query("select public.zelo_of_connection($1,'personal',$2) as result", [owner, saved.id])).rows[0].result.status, 'revoking');
+  await db.query("select public.zelo_of_set_status($1,'personal',$2,'revoked',null)", [owner, saved.id]);
+  await db.query("select public.zelo_of_set_status($1,'personal',$2,'active','AUTHORISED')", [owner, saved.id]);
+  assert.equal((await db.query("select public.zelo_of_connection($1,'personal',$2) as result", [owner, saved.id])).rows[0].result.status, 'revoked');
+  await assert.rejects(db.query("select public.zelo_of_save_consent($1,'personal',$2::jsonb)", [owner, JSON.stringify(consent)]), /OF_CONSENT_ALREADY_CLAIMED/);
   console.log('Server RPC access passed: browser roles denied, eligibility enforced, private tables inaccessible');
+  console.log('Consent isolation and idempotency passed; late updates cannot reactivate revocation');
 } finally { await db.close(); }

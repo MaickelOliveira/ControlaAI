@@ -14,7 +14,8 @@ export async function GET(request: Request) {
       p_user: scope.userId, p_environment: scope.environment, p_mode: scope.mode,
     });
     if (error || !data) throw new Error("STORAGE_UNAVAILABLE");
-    return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } });
+    const connectAvailable = process.env.OPEN_FINANCE_CONNECT_ENABLED === "true" && !!process.env.OPEN_FINANCE_AUTH_HOSTS && !!process.env.POLP_WEBHOOK_SIGNING_SECRET;
+    return NextResponse.json({ ...data, contactEmail: auth.user.email, connectAvailable }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Não foi possível consultar os bancos. Tente novamente." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
   }
