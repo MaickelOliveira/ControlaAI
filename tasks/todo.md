@@ -8,6 +8,7 @@
 - [x] Login do proprietário e interface real com sua sessão verificados; área Bancos conectados exibida.
 - [x] Webhook Celcoin/HMAC registrado pelo titular e configurado; assinatura válida e ausência de assinatura verificadas no endpoint da prévia.
 - [x] Credenciais Polp em produção retornaram 200; worker com heartbeat recente confirmado.
+- [x] Commit 43b0c51 implantado; botão Conectar banco e introdução disponíveis na sessão do proprietário. Aceite e primeiro pedido aguardam o titular.
 - [ ] Host da jornada verificado de forma independente e entrega real do webhook comprovada.
 - [ ] Banco real autorizado e importação, painel e consultas comprovados.
 - [ ] Reconexão segura implementada e cancelamento real verificado.
