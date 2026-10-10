@@ -1,0 +1,24 @@
+FROM node:24-alpine AS base
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# Prevent static pages from embedding tracking in the isolated build.
+ENV OPEN_FINANCE_PREVIEW_ONLY=true
+RUN npm run build
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production PORT=80 HOSTNAME=0.0.0.0 OPEN_FINANCE_PREVIEW_ONLY=true
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/start-open-finance-preview.mjs ./scripts/start-open-finance-preview.mjs
+USER nextjs
+EXPOSE 80
+CMD ["node","scripts/start-open-finance-preview.mjs"]

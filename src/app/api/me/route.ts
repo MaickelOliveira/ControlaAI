@@ -11,6 +11,6 @@ export async function GET() {
   const { user } = auth;
 
   return NextResponse.json({
-    user: { name: user.name, plan: user.plan, status: user.status, activeMode: user.activeMode, trialEndsAt: user.trialEndsAt },
+    user: { name: user.name, plan: user.plan, status: user.status, activeMode: process.env.OPEN_FINANCE_PREVIEW_ONLY==="true"?(process.env.OPEN_FINANCE_PREVIEW_MODE==="business"&&user.plan==="business"?"business":"personal"):user.activeMode, trialEndsAt: user.trialEndsAt, ...(process.env.OPEN_FINANCE_PREVIEW_ONLY==="true"?{previewOnly:true}:{}) },
   });
 }

@@ -140,7 +140,7 @@ const CONFIG_NAV = [
   { href: "/dashboard/configuracoes", label: "Configurações", icon: Icons.settings },
 ];
 
-type User = { name: string; plan: string; status: string; activeMode: string; trialEndsAt: string };
+type User = { name: string; plan: string; status: string; activeMode: string; trialEndsAt: string;previewOnly?:boolean };
 
 function SidebarContent({
   user,
@@ -164,7 +164,7 @@ function SidebarContent({
     ...BASE_NAV,
     ...(user?.activeMode === "business" ? BUSINESS_NAV : PERSONAL_NAV),
     ...CONFIG_NAV,
-  ];
+  ].filter(item=>!user?.previewOnly||["/dashboard/contas","/dashboard/financas"].includes(item.href));
 
   return (
     <>
@@ -190,7 +190,7 @@ function SidebarContent({
               </p>
             </div>
           </div>
-          <button onClick={toggleMode} disabled={modeChanging}
+          <button onClick={toggleMode} disabled={modeChanging||user?.previewOnly}
             className="w-full rounded-xl p-2.5 flex items-center gap-2.5 transition border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left">
             <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm shrink-0">
               {isPersonal ? Icons.person : Icons.building}
@@ -259,7 +259,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   async function toggleMode() {
-    if (!user || modeChanging) return;
+    if (!user || modeChanging || user.previewOnly) return;
     setModeChanging(true);
     const newMode = user.activeMode === "personal" ? "business" : "personal";
     await fetch("/api/admin/user-mode", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: newMode }) });
@@ -314,12 +314,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Page content */}
         <div className="flex-1 overflow-auto">
           <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-7">
+            {user?.previewOnly&&<p className="mb-5 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">Prévia privada do Open Finance. Seus lançamentos atuais ficam disponíveis para consulta; alterações nesta instalação se limitam aos bancos conectados.</p>}
             {children}
           </main>
         </div>
       </div>
 
-      {user && <SupportWidget />}
+      {user && !user.previewOnly && <SupportWidget />}
     </div>
   );
 }

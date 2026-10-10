@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR">
       <body className={inter.className}>
         {children}
-        <MetaTracking />
+        {process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"&&<MetaTracking />}
       </body>
     </html>
   );

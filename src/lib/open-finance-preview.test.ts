@@ -1,0 +1,32 @@
+import {expect,it,vi,beforeEach,afterEach} from "vitest";
+vi.mock("server-only",()=>({}));
+vi.mock("./auth",()=>({verifyToken:vi.fn()}));
+vi.mock("./users",()=>({getUserById:vi.fn(),hasAccess:vi.fn(()=>true)}));
+import {verifyToken} from "./auth";
+import {getUserById} from "./users";
+import {previewRoutePolicy,previewSessionOwner} from "./open-finance-preview";
+beforeEach(()=>{vi.clearAllMocks();vi.stubEnv("OPEN_FINANCE_OWNER_EMAIL","owner@example.test");});afterEach(()=>vi.unstubAllEnvs());
+it("only permits the selected bank preview and read-only legacy endpoints",()=>{
+  expect(previewRoutePolicy("/dashboard/contas","GET")).toBe("owner");
+  expect(previewRoutePolicy("/api/admin/accounts","GET")).toBe("owner");
+  expect(previewRoutePolicy("/api/admin/accounts","POST")).toBe("deny");
+  expect(previewRoutePolicy("/api/finances/a","DELETE")).toBe("deny");
+  expect(previewRoutePolicy("/api/cron/reminders","GET")).toBe("deny");
+  expect(previewRoutePolicy("/api/webhook/whatsapp","POST")).toBe("deny");
+  expect(previewRoutePolicy("/api/register","POST")).toBe("deny");
+  expect(previewRoutePolicy("/dashboard/contas","POST")).toBe("deny");
+  expect(previewRoutePolicy("/api/open-finance/unknown","POST")).toBe("deny");
+  expect(previewRoutePolicy("/api/open-finance/report","GET")).toBe("owner");
+  expect(previewRoutePolicy("/api/webhook/open-finance","POST")).toBe("signed");
+});
+it("uses the current DB owner, ignores the JWT email, rejects admins and old passwords",async()=>{
+  vi.mocked(verifyToken).mockResolvedValue({sub:"u",role:"client",email:"owner@example.test",iat:100,name:"",plan:"personal"});
+  vi.mocked(getUserById).mockResolvedValue({id:"u",email:"another@example.test"} as never);
+  expect(await previewSessionOwner("token")).toBeNull();
+  vi.mocked(getUserById).mockResolvedValue({id:"u",email:"owner@example.test",passwordChangedAt:new Date(101000).toISOString()}as never);
+  expect(await previewSessionOwner("token")).toBeNull();
+  vi.mocked(getUserById).mockResolvedValue({id:"u",email:"owner@example.test"}as never);
+  expect((await previewSessionOwner("token"))?.id).toBe("u");
+  vi.mocked(verifyToken).mockResolvedValue({sub:"u",role:"admin",email:"owner@example.test",name:"",plan:"personal"});
+  expect(await previewSessionOwner("token")).toBeNull();
+});
