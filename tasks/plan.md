@@ -3,10 +3,13 @@
 ## Objetivo
 Preparar a integração real e validar com o proprietário antes da liberação pública prevista para 10/10/2026 pela manhã. A data pretendida não substitui os critérios de funcionamento. Usar as abas Contas e Financeiro atuais; investimentos ficam em Contas. Sem outro item de navegação. Produção permanece no estado atual até a revisão concreta da implantação.
 
-## Estado confirmado
-- Prévia independente: funcional, mas fictícia, sem persistência ou IA real.
-- Supabase Zelo Brasil: oito tabelas privadas vazias, RLS forçado, acesso da aplicação bloqueado.
-- Polp: assinatura Starter ativa, pagamento confirmado; proprietário informou aprovação para produção.
+## Estado confirmado em 09/10/2026
+- Demonstração antiga permanece separada em `lp/zelo-polp-sandbox`.
+- Aplicação real preparada em `lp/zelo-open-finance-preview`, branch `feature/polp-sandbox-poc`, Dockerfile próprio. Rotas legadas de escrita, tarefas de fundo e rastreamento ficam bloqueados nessa instalação.
+- Supabase Zelo Brasil: migrações de armazenamento, operações de servidor, consentimentos, fila durável e relatórios aplicadas. Nove tabelas privadas com RLS forçado; navegador sem permissão nas funções e servidor sem acesso direto às tabelas.
+- Somente a conta do proprietário foi habilitada após autorização explícita e confirmação de Brasil. Flags do serviço continuam desativadas até configurar e verificar a integração.
+- Credenciais existentes do Supabase e Polp configuradas diretamente pelo EasyPanel HTTPS. O proprietário inseriu as novas chaves privadas de login e worker. Build remoto concluído; tela real de login acessível e verificação HTTP dos bloqueios aprovada. Login do titular e conexão bancária ainda pendentes.
+- Polp: assinatura Starter ativa, pagamento confirmado; proprietário informou aprovação para produção. Conformidade aceita pelo titular e confirmada no painel.
 - Autenticação Zelo: sessão própria, não Supabase Auth. Perfil não possui país explícito.
 - Conta do proprietário informada pelo usuário nesta conversa; identificá-la no servidor, sem colocar identificadores pessoais no código.
 
@@ -30,11 +33,14 @@ Preparar a integração real e validar com o proprietário antes da liberação 
 6. Validação completa, revisão independente e implantação da prévia para o proprietário; autorização bancária real feita pelo titular.
 
 ## Bloqueios externos e verificação final
-- Mudanças de permissões no Supabase e configuração de credenciais exigem revisão do resultado concreto antes de executar pela interface.
+- Permissões privadas e destino das credenciais aprovados pelo proprietário; aplicar mudanças futuras apenas dentro desse escopo.
 - Titular realiza aceite dos termos e autorização bancária. Não aceitar em nome dele.
 - Conta Starter pode ignorar redirectUrl por consentimento; confirmar URL de retorno global, sem prometer recurso Pro/Ultra.
 - Verificar exigências cadastrais e homologação da jornada no provedor.
 - Liberação pública somente com autorização real testada, atualização/revogação comprovadas, país/permissões validados e todas as etapas implementadas.
+- Ainda pendentes: webhook assinado configurado e verificado, host exato da jornada de autorização, conexão bancária real, importação e consultas no painel, reconexão segura e validação de revogação. A instalação da prévia não equivale à liberação pública.
+- Verificação local mais recente: 675 testes passaram, 15 legados ignorados; TypeScript, lint (três avisos legados) e build com isolamento passaram; revisão independente sem achados obrigatórios no ajuste final.
+- Auditoria de dependências: sete alertas, sem críticos. Cinco altos estão na cadeia de glob do ESLint (entrada de código/fichários do repositório, sem exposição a clientes nesta prévia); dois moderados vêm de UUID/ExcelJS. Remediação forçada sugere regressões de versão e não foi aplicada. Reavaliar em 10/10/2026 antes de qualquer liberação pública; ver runbook.
 
 ## Fontes
 - https://polp.com.br/docs/celcoin/consents/create
