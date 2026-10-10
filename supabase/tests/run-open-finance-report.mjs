@@ -11,6 +11,7 @@ try {
     const times={storage:'193000',server_access:'213000',consents:'220000',sync_queue:'230000',report:'234000'};
     try{await db.exec(await sql(`../migrations/20261009${times[name]}_open_finance_${name}.sql`));}catch(e){if(e.code!=='ENOENT')throw e;}
   }
+  await db.exec(await sql('../migrations/20261010185000_open_finance_categories.sql'));
   await db.exec(`insert into open_finance.user_access(user_id,country_code,country_verified_at,enabled) values('${owner}','BR',now(),true),('${other}','BR',now(),true)`);
   const source={id:'10000000-0000-4000-8000-000000000001',institution_id:'20000000-0000-4000-8000-000000000001',institution_name:'Test Bank',cliente_user_id:owner,status:'AUTHORISED',products:['ACCOUNT','CREDIT_CARD_ACCOUNT']};
   await db.exec('set role service_role');
@@ -47,7 +48,35 @@ try {
   await assert.rejects(rpc('zelo_of_report',[owner,'personal','2025-01-01','2026-09-30',null]),/OF_PERIOD_INVALID/);
   const overview=await rpc('zelo_of_overview',[owner,'production','personal']);
   assert.equal(overview.resources[0].available_amount,'9999999999999999.12345678','snapshot DTO retains precision');
+  await db.exec('reset role');
+  const debit=(await db.query(`select id from open_finance.movements where external_id='debit'`)).rows[0].id;
+  await db.exec('set role service_role');
+  assert.equal(await rpc('zelo_of_set_movement_category',[owner,'personal',debit,'Fornecedor especial']),true);
+  assert.equal(await rpc('zelo_of_set_movement_category',[other,'personal',debit,'Outros']),false,'cannot categorize another owner');
+  assert.equal(await rpc('zelo_of_set_movement_category',[owner,'business',debit,'Outros']),false,'cannot categorize another mode');
+  await assert.rejects(rpc('zelo_of_set_movement_category',[owner,'personal',debit,' ']),/OF_CATEGORY_INVALID/);
+  await assert.rejects(rpc('zelo_of_set_movement_category',[owner,'personal',debit,'x'.repeat(101)]),/OF_CATEGORY_INVALID/);
+  // Finish the existing catalogue job, then exercise the real transaction upsert.
+  await db.exec('reset role');
+  await db.query(`update open_finance.resources set subtype='accounts' where id=$1`,[account]);
+  await db.exec('set role service_role');
+  const catalogue=await rpc('zelo_of_claim',[owner,'personal']);
+  await rpc('zelo_of_commit_page',[owner,'personal',catalogue.id,catalogue.lease_token,'{}',null,'[]']);
+  await rpc('zelo_of_enqueue',[owner,'personal',connection.id,JSON.stringify({kind:'transactions',family:'accounts',external_resource_id:'account-1',window:{}})]);
+  await db.exec('reset role');
+  await db.query(`update open_finance.user_access set next_sync_claim_at=now()-interval '1 second' where user_id=$1`,[owner]);
+  await db.exec('set role service_role');
+  const job=await rpc('zelo_of_claim',[owner,'personal']);
+  await rpc('zelo_of_commit_page',[owner,'personal',job.id,job.lease_token,JSON.stringify({movements:[{resource_external_id:'account-1',resource_type:'account',external_id:'debit',description:'Updated source description',transaction_date:'2026-09-10',currency:'BRL',amount:'200',classification:'unknown',direction:'debit',source_category:'FOOD_AND_DRINK_GROCERIES',user_category:'Ignored source choice'}]}),null,'[]']);
+  const updated=await rpc('zelo_of_report',[owner,'personal','2026-09-01','2026-09-30',null]);
+  const updatedNext=updated.next?await rpc('zelo_of_report',[owner,'personal','2026-09-01','2026-09-30',updated.next]):{movements:[]};
+  const chosen=[...updated.movements,...updatedNext.movements].find(m=>m.id===debit);
+  assert.equal(chosen.user_category,'Fornecedor especial','source upsert preserves user category');
+  assert.equal(chosen.source_category,'FOOD_AND_DRINK_GROCERIES','browser receives provider category');
+  assert.equal(chosen.description,'Updated source description');
+  assert.equal(await rpc('zelo_of_set_movement_category',[owner,'personal',debit,null]),true,'can restore automatic category');
   await db.exec('reset role;set role authenticated');
+  await assert.rejects(rpc('zelo_of_set_movement_category',[owner,'personal',debit,'Outros']),/permission denied/);
   await assert.rejects(rpc('zelo_of_report',[owner,'personal','2026-09-01','2026-09-30',null]),/permission denied/);
   console.log('Bank report passed: exact currencies, classification, pagination, missing history and owner isolation');
 }catch(e){console.error(e.message);if(e.where)console.error(e.where);process.exitCode=1;}finally{await db.close();}

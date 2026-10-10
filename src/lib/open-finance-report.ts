@@ -1,6 +1,6 @@
 import type { BankOverview } from "./open-finance-display";
 export type BankTotal = {kind:"card_purchases"|"account_debits"|"credits"|"excluded"|"other";currency:string|null;amount:string|null;count:number;missing_amounts:number};
-export type BankMovement = {id:string;resource_name:string;institution_name:string;resource_type:string;date:string;description:string;amount:string|null;currency:string|null;direction:string;classification:string;kind:BankTotal["kind"];bill_month:string|null;installment_number:number|null;installment_count:number|null};
+export type BankMovement = {id:string;resource_name:string;institution_name:string;resource_type:string;date:string;description:string;amount:string|null;currency:string|null;direction:string;classification:string;kind:BankTotal["kind"];source_category?:string|null;user_category?:string|null;bill_month:string|null;installment_number:number|null;installment_count:number|null};
 export type BankReport = {from:string;to:string;history_complete:false;totals:BankTotal[];movements:BankMovement[];next:string|null;missing_dates:number;sync_pending:boolean;last_successful_sync_at:string|null};
 export type BankFinancialData = {report:BankReport;overview:BankOverview};
 export const BANK_TOTAL_LABELS:Record<BankTotal["kind"],string>={card_purchases:"Compras nos cartões",account_debits:"Débitos das contas a conferir",credits:"Créditos recebidos",excluded:"Transferências, pagamentos de fatura e investimentos",other:"Outras movimentações a conferir"};
