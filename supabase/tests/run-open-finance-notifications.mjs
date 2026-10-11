@@ -76,5 +76,8 @@ try{
   await db.exec('reset role');await db.exec(`update open_finance.connections set status='revoked' where id='${c.id}'`);await db.exec('set role service_role');
   assert.equal((await rpc('zelo_of_agenda',[a,'personal',today,today,true])).items.length,0,'revoked connections stop notices');
   assert.equal((await db.query('select count(*)::int as n from public.finances')).rows[0].n,1,'schedules never create expenses');
+  await db.exec('reset role');await db.exec(await sql('../rollbacks/20261011030000_open_finance_notifications.sql'));await db.exec('set role service_role');
+  assert.equal(await rpc('zelo_of_prepare_schedules',[null]),0,'rollback pauses maintenance without dropping data');
+  await db.exec('reset role');assert.equal((await db.query("select count(*)::int as n from open_finance.sync_jobs where kind in ('recurrings','installments','bill-transactions') and status in ('pending','running')")).rows[0].n,0);assert.equal((await db.query('select count(*)::int as n from open_finance.notice_deliveries')).rows[0].n,2,'delivery receipts survive rollback');
   console.log('Notifications: complete snapshots, holder/mode/phone isolation, uncertain sends, revocation and no synthetic expenses passed');
 }catch(error){console.error(error.message,error.detail??'',error.hint??'',error.position??'',error.internalPosition??'',error.internalQuery??'',error.where??''); if(error.position) console.error(error.query?.slice(Number(error.position)-180,Number(error.position)+180));process.exitCode=1;}finally{await db.close();}
