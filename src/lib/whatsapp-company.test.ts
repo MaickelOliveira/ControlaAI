@@ -46,3 +46,13 @@ it("leaves a paused conversation and a disabled feature untouched", async () => 
 it("does not guess similar company names", () => {
   expect(companyChoice("Empresa", companies)).toBeUndefined(); expect(companyChoice("2", companies)).toBe("b"); expect(companyChoice("empresa a", companies)).toBe("a");
 });
+it("discards a held business request after the participant becomes personal-only",async()=>{
+ m.links.mockResolvedValue([{phone:"5511",access:"personal"}]);
+ m.pending.mockResolvedValue({type:"company_selection",userId:"owner",resume:{text:"paguei fornecedor 500"}});
+ m.require.mockResolvedValue(companies[0]);const next=vi.fn();
+ await withWhatsAppCompany({from:"5511",text:"gastei 20 na farmácia"},next);
+ expect(m.clear).toHaveBeenCalledWith("5511");
+ expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({mode:"personal"}));
+ expect(next).toHaveBeenCalledExactlyOnceWith({from:"5511",text:"gastei 20 na farmácia"});
+ expect(m.workspace).not.toHaveBeenCalled();
+});

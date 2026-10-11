@@ -51,7 +51,7 @@ import { isConnected } from "@/lib/google-oauth";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
 import { getConfig } from "@/lib/whatsapp-config";
-import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants,messageForAiContext } from "@/lib/conversations";
+import { addMessage, getAiPaused, getAiHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants,messageForAiContext } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
 import { localeForWhatsAppPhone, normalizePhoneInput } from "@/lib/phone";
 import {
@@ -2820,7 +2820,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // então o histórico já vem com ela como último item — removemos antes
     // de passar pro classificador pra não duplicar com "Mensagem do
     // usuário" no prompt.
-    const recentHistory = (await getHistory(from))
+    const recentHistory = (await getAiHistory(from))
       .slice(-16, -1)
       .map(messageForAiContext);
     if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
