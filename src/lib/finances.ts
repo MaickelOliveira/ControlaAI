@@ -100,6 +100,7 @@ export type Finance = {
   // postado automaticamente, só via confirmação manual (finance_confirm_pending).
   autoPost?: boolean;
   registeredBy?: string; // número de WhatsApp de quem registrou (para contas com vários números vinculados)
+  registeredByName?: string; // nome resolvido para exibição; não é um campo enviado ao banco
   accountId?: string; // conta bancária/cartão associada (src/lib/accounts.ts) — ausente em lançamentos antigos ou quem não cadastrou conta
   cardInvoiceId?: string; // só quando accountId aponta pra um cartão — a fatura do ciclo em que a despesa caiu
   /** Funcionário ao qual este pagamento/gasto pertence. O vínculo é opcional:
@@ -181,7 +182,7 @@ function financeInsertRow(data: Omit<Finance, "id" | "createdAt">): Record<strin
     category: data.category, description: data.description, date: data.date,
     mode: data.mode, source: data.source, pending: data.status === "pending",
     auto_post: data.autoPost !== false,
-    registered_by: data.registeredBy,
+    registered_by: data.registeredBy ?? (data.source === "web" ? data.userId : undefined),
     account_id: data.accountId ?? null, card_invoice_id: data.cardInvoiceId ?? null,
   };
   // Compatibilidade durante a implantação da migração: lançamentos comuns

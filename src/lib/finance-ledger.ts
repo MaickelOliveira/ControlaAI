@@ -2,7 +2,7 @@ import type {BankMovement} from "./open-finance-report";
 import type {BankFinancialData} from "./open-finance-report";
 import {bankCategory,type BankCategory} from "./bank-category";
 export type FinanceLedgerData={finances:LedgerEntry[];balance:{income:number;expense:number;balance:number};totalBalance:{income:number;expense:number;balance:number};bank:BankFinancialData|null};
-export type RecordedFinance = {id:string;type:string;amount:number;category:string;description:string;date:string;mode:string;source?:"whatsapp"|"web";status?:string;createdAt?:string};
+export type RecordedFinance = {id:string;type:string;amount:number;category:string;description:string;date:string;mode:string;source?:"whatsapp"|"web";status?:string;createdAt?:string;registeredByName?:string};
 export type LedgerEntry = Omit<RecordedFinance,"source"> & {source:"whatsapp"|"web"|"bank";included:boolean;possibleDuplicate:boolean;bank?:BankMovement;categorySource?:BankCategory["source"]};
 export function ledgerAmount(value:string|null):number|null {
   if(value===null||! /^-?\d{1,16}(\.\d{1,8})?$/.test(value))return null;

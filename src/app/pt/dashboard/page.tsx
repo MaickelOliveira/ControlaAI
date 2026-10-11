@@ -1,4 +1,5 @@
 "use client";
+import FinanceAuthor from "@/components/FinanceAuthor";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import dynamic from "next/dynamic";
@@ -35,7 +36,7 @@ type DashData = {
   personal: { balance: { income: number; expense: number; balance: number } };
   business: { balance: { income: number; expense: number; balance: number } };
   tasks: { pendingCount: number; overdueCount: number; recent: Array<{ id: string; title: string; priority: string; dueDate?: string }> };
-  recentTransactions: Array<{ id: string; type: string; amount: number; category: string; description: string; date: string; mode: string }>;
+  recentTransactions: Array<{ registeredByName?:string; id: string; type: string; amount: number; category: string; description: string; date: string; mode: string }>;
 };
 
 function fmt(v: number) { return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR" }); }
@@ -397,7 +398,7 @@ export default function DashboardPagePt() {
           <article className="rounded-2xl border border-line/80 bg-surface p-5 shadow-sm">
             <PanelTitle title="Transações recentes" href="/pt/dashboard/financas" />
             {recentTransactions.filter(t => t.mode === user.activeMode).length === 0 ? <EmptyList label="Nenhuma transação ainda" /> : <div className="space-y-1">{recentTransactions.filter(t => t.mode === user.activeMode).slice(0, 5).map(t => (
-              <div key={t.id} className="flex items-center gap-3 border-b border-line py-2.5 last:border-0"><span className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold", t.type === "income" ? "bg-emerald-soft text-emerald-ink" : "bg-rose-soft text-rose-ink")}>{t.type === "income" ? "↗" : "↘"}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-ink">{t.description}</p><p className="text-[10px] text-subtle">{t.category}</p></div><span className={clsx("text-xs font-bold", t.type === "income" ? "text-emerald-ink" : "text-rose-ink")}>{t.type === "income" ? "+" : "-"}{fmt(t.amount)}</span></div>
+              <div key={t.id} className="flex items-center gap-3 border-b border-line py-2.5 last:border-0"><span className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold", t.type === "income" ? "bg-emerald-soft text-emerald-ink" : "bg-rose-soft text-rose-ink")}>{t.type === "income" ? "↗" : "↘"}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-ink">{t.description}</p><p className="text-[10px] text-subtle">{t.category}</p><FinanceAuthor name={t.registeredByName}/></div><span className={clsx("text-xs font-bold", t.type === "income" ? "text-emerald-ink" : "text-rose-ink")}>{t.type === "income" ? "+" : "-"}{fmt(t.amount)}</span></div>
             ))}</div>}
           </article>
 
