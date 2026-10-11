@@ -147,6 +147,14 @@
 .z-dashboard-header {display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:center;padding:4px 0 0;}
 .z-dashboard-greeting h1 {font-size:28px;font-weight:650;letter-spacing:-.055em;line-height:1.17;margin:6px 0 8px;}
 .z-dashboard-greeting p {font-size:12px;color:var(--z-muted);line-height:1.65;}
+.z-dashboard-greeting .z-client-greeting {font-size:20px;color:var(--z-ink);line-height:1.35;margin-bottom:10px;}
+.z-client-greeting strong {font-size:26px;font-weight:700;letter-spacing:-.04em;overflow-wrap:anywhere;}
+.z-finance-author {display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:6px;color:var(--z-muted);font-size:10px;line-height:1.5;overflow-wrap:anywhere;}
+.z-finance-author svg {width:13px;height:13px;flex-shrink:0;}
+.z-finance-author strong {color:var(--z-ink);font-weight:600;font-size:inherit;}
+.z-mobile-mode-badge {margin-left:auto;display:inline-flex;align-items:center;gap:8px;flex-shrink:0;padding:9px 12px;border:1px solid var(--z-line);border-radius:14px;background:var(--z-surface-muted);color:var(--z-ink);font-size:13px;font-weight:700;line-height:1;}
+.z-mobile-mode-badge svg {width:20px;height:20px;stroke-width:2;}
+.z-mobile-mode-badge[data-mode=business] {background:#f3c35824;border-color:#cfa14170;color:var(--z-ink);}
 .z-dashboard-controls {min-width:0;}
 .z-dashboard-controls .z-topbar {padding:0;gap:12px;flex-wrap:nowrap;margin-bottom:17px;}
 .z-dashboard-controls .z-topbar-label {display:none;}
