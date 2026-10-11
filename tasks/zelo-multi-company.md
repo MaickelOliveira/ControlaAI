@@ -22,8 +22,16 @@ Ordem: modelo/migração e provas de isolamento → repositórios e APIs → sel
 Manter recursos incompletos ocultos até todas as rotas estarem isoladas. Migração aditiva, sem apagar histórico. Não editar credenciais nem publicar informações pessoais. Testar dois titulares, duas empresas do mesmo titular e modo pessoal com dados distintos; CRUD, chamadas por ID, gráficos e mensagens concorrentes.
 
 ## Fila
-- [ ] Implementar modelo empresarial e isolamento em todas as funções.
-- [ ] Seletor compartilhado e gestão das empresas.
-- [ ] Empresa ativa por participante no WhatsApp e continuidade segura.
-- [ ] Open Finance e avisos por empresa.
+- [x] Implementar modelo empresarial e isolamento em todas as funções.
+- [x] Seletor compartilhado e gestão das empresas.
+- [x] Empresa ativa por participante no WhatsApp e continuidade segura.
+- [x] Open Finance e avisos por empresa.
 - [ ] Revisão, migração, implantação e verificação.
+
+## Evidências antes da publicação
+- 920 testes passaram, 15 foram ignorados; TypeScript, compilação de 141 páginas e lint sem erros (duas advertências anteriores). Nova proteção de origem também passou nos testes focados.
+- SQL executado em Postgres isolado com duas empresas, dois titulares, papel sem superuser, RLS de usuários/telefones, bancário, notificações e rollback com recusa de descarte de histórico.
+- Aplicação Next em modo produção testada com credenciais e dados fictícios: troca, leituras/escritas, tentativa por ID de outra empresa bloqueada, validação do titular e headers reais do transporte.
+- Interface no Chrome a 390 px: seletor em Dashboard/Tarefas, troca de empresas, cadastro com registros vazios, sem rolagem horizontal.
+- Revisão independente aprovou isolamento, IA, cron, políticas bancárias e origem atrás do proxy.
+- Preflight de produção: 33 usuários, 762 lançamentos, 3 vínculos bancários; nenhuma fatura órfã ou vínculo cruzado de contas/arquivos encontrado. Ainda não migrado/ativado neste registro.
