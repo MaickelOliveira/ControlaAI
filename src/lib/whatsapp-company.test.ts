@@ -1,0 +1,48 @@
+import { beforeEach, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+const m = vi.hoisted(() => ({ user: vi.fn(), owner: vi.fn(), links: vi.fn(), workspace: vi.fn(), list: vi.fn(), require: vi.fn(), create: vi.fn(), pending: vi.fn(), savePending: vi.fn(), clear: vi.fn(), send: vi.fn(), scope: vi.fn(), paused: vi.fn(), enabled: vi.fn() }));
+vi.mock("./users", () => ({ getUserById: m.user, hasAccess: () => true }));
+vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: m.owner, getPhonesForUser: m.links, setPhoneWorkspace: m.workspace }));
+vi.mock("./companies", () => ({ multiCompanyEnabled: m.enabled, getCompanies: m.list, requireCompany: m.require, createCompany: m.create }));
+vi.mock("./conversations", () => ({ addMessage: vi.fn(), getAiPaused: m.paused, phoneVariants: (phone: string) => [phone] }));
+vi.mock("./pending-actions", () => ({ getPendingAction: m.pending, setPendingAction: m.savePending, clearPendingAction: m.clear }));
+vi.mock("./rate-limit", () => ({ checkRateLimit: async () => true }));
+vi.mock("./whatsapp", () => ({ sendText: m.send }));
+vi.mock("./company-context", () => ({ runWithCompanyContext: (callback: () => Promise<void>) => callback(), setCompanyContext: m.scope, currentCompanyContext: () => undefined }));
+import { companyChoice, withWhatsAppCompany } from "./whatsapp-company";
+const companies = [{ id: "a", name: "Empresa A", isDefault: true }, { id: "b", name: "Empresa B", isDefault: false }];
+beforeEach(() => {
+  vi.clearAllMocks(); m.enabled.mockReturnValue(true); m.owner.mockResolvedValue("owner"); m.user.mockResolvedValue({ id: "owner", activeMode: "business", locale: "pt-BR" });
+  m.links.mockResolvedValue([{ phone: "5511", userId: "owner", access: "both" }]); m.list.mockResolvedValue(companies); m.pending.mockResolvedValue(null); m.paused.mockResolvedValue(false);
+  m.require.mockImplementation(async (_owner, id) => companies.find(company => company.id === id));
+});
+it("asks before using an ambiguous company and resumes a held request after selection", async () => {
+  const next = vi.fn(); await withWhatsAppCompany({ from: "5511", text: "gastei 50 em farmácia" }, next);
+  expect(next).not.toHaveBeenCalled(); expect(m.savePending).toHaveBeenCalledWith("5511", expect.objectContaining({ type: "company_selection", resume: expect.objectContaining({ text: "gastei 50 em farmácia" }) }));
+  m.pending.mockResolvedValue({ type: "company_selection", userId: "owner", resume: { text: "gastei 50 em farmácia" } });
+  await withWhatsAppCompany({ from: "5511", text: "2" }, next);
+  expect(m.workspace).toHaveBeenCalledWith("owner", "5511", "b", "business"); expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({ companyId: "b" }));
+  expect(next).toHaveBeenCalledWith(expect.objectContaining({ text: "gastei 50 em farmácia" }));
+});
+it("switches only the sending participant and cancels the old pending action", async () => {
+  m.links.mockResolvedValue([{ phone: "5511", access: "both", activeCompanyId: "a" }, { phone: "5522", access: "both", activeCompanyId: "a" }]);
+  const next = vi.fn(); await withWhatsAppCompany({ from: "5511", text: "usar empresa Empresa B" }, next);
+  expect(m.workspace).toHaveBeenCalledExactlyOnceWith("owner", "5511", "b", "business"); expect(m.clear).toHaveBeenCalledWith("5511"); expect(next).not.toHaveBeenCalled();
+});
+it("never exposes businesses to a personal-only participant", async () => {
+  m.links.mockResolvedValue([{ phone: "5511", access: "personal" }]); await withWhatsAppCompany({ from: "5511", text: "listar empresas" }, vi.fn());
+  expect(m.list).not.toHaveBeenCalled(); expect(m.send).toHaveBeenCalledWith("5511", expect.stringContaining("somente ao modo pessoal"));
+});
+it("does not execute a pending action from another company", async () => {
+  m.links.mockResolvedValue([{ phone: "5511", access: "both", activeCompanyId: "b", activeWorkspaceMode: "business" }]);
+  m.pending.mockResolvedValue({ type: "recurring_confirmation", userId: "owner", companyId: "a" }); const next = vi.fn();
+  await withWhatsAppCompany({ from: "5511", text: "sim" }, next); expect(m.clear).toHaveBeenCalledWith("5511"); expect(next).not.toHaveBeenCalled();
+});
+it("leaves a paused conversation and a disabled feature untouched", async () => {
+  const next = vi.fn(); m.paused.mockResolvedValue(true); await withWhatsAppCompany({ from: "5511", text: "usar empresa Empresa B" }, next);
+  expect(m.workspace).not.toHaveBeenCalled(); expect(next).toHaveBeenCalledOnce();
+  m.enabled.mockReturnValue(false); await withWhatsAppCompany({ from: "5511", text: "gastei 50" }, next); expect(m.list).not.toHaveBeenCalled();
+});
+it("does not guess similar company names", () => {
+  expect(companyChoice("Empresa", companies)).toBeUndefined(); expect(companyChoice("2", companies)).toBe("b"); expect(companyChoice("empresa a", companies)).toBe("a");
+});

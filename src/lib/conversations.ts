@@ -1,4 +1,4 @@
-import { getSupabase } from "./supabase";
+import { getSupabase,resolveCompanyDatabaseScope } from "./supabase";
 import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string; privateFinancial?: boolean };
@@ -7,7 +7,7 @@ export function messageForAiContext(message:ChatMessage):{role:"user"|"assistant
 }
 
 export type LastFinanceBatchItem = { id: string; description: string; amount: number; type: "income" | "expense" };
-type LastFinanceBatch = { items: LastFinanceBatchItem[]; mode: "personal" | "business"; ts: number };
+type LastFinanceBatch = { items: LastFinanceBatchItem[]; mode: "personal" | "business"; ts: number;companyId?:string };
 
 type Conversation = {
   messages: ChatMessage[];
@@ -177,7 +177,8 @@ export async function setLastFinanceBatch(phone: string, items: LastFinanceBatch
   const found = await findConversation(phone);
   const key = found?.key ?? phone;
   const conv: Conversation = found?.conv ?? { messages: [], lastActivity: 0 };
-  conv.lastFinanceBatch = { items, mode, ts: Date.now() };
+  const scope=await resolveCompanyDatabaseScope();
+  conv.lastFinanceBatch = { items, mode, ts: Date.now(),...(scope?{companyId:scope.companyId}:{}) };
   await saveConversation(key, conv);
 }
 
@@ -185,6 +186,8 @@ export async function getLastFinanceBatch(phone: string): Promise<LastFinanceBat
   const found = await findConversation(phone);
   const batch = found?.conv.lastFinanceBatch;
   if (!batch || Date.now() - batch.ts > LAST_FINANCE_BATCH_TTL_MS) return null;
+  const scope=await resolveCompanyDatabaseScope();
+  if(scope&&batch.mode==="business"&&batch.companyId!==scope.companyId)return null;
   return batch;
 }
 

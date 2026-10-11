@@ -2,6 +2,8 @@ import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, 
 import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
 import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
 import {initialLinkIdentity,isAccountHolderRelation,nextLinkRelation} from "./wpp-link-identity";
+import {withWhatsAppCompany,contextualCompanyUser,switchPhoneCompanyMode} from "./whatsapp-company";
+import {multiCompanyEnabled} from "./companies";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
@@ -121,7 +123,8 @@ export function replyWppLinkStep(
 
 async function getUserByWppPhone(phone: string) {
   const userId = await getUserIdByPhone(phone);
-  return userId ? getUserById(userId) : null;
+  const user=userId?await getUserById(userId):null;
+  return user?contextualCompanyUser(user):null;
 }
 
 function cap(s: string): string {
@@ -971,7 +974,7 @@ export type IncomingMessage = {
 };
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
-  return runWithVirtualAgentReply(msg.from,()=>handleMessageWithAgent(msg));
+  return runWithVirtualAgentReply(msg.from,()=>withWhatsAppCompany(msg,handleMessageWithAgent));
 }
 
 async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
@@ -5206,7 +5209,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           break;
         }
         const newMode = ai.mode || (mode === "personal" ? "business" : "personal");
-        await updateUser(user.id, { activeMode: newMode });
+        if(multiCompanyEnabled())await switchPhoneCompanyMode(user.id,from,newMode);
+        else await updateUser(user.id, { activeMode: newMode });
         await wppSend(from, replyModeSwitch(newMode, user.locale));
         break;
       }
