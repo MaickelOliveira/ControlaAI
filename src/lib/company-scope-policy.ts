@@ -42,7 +42,7 @@ export function scopeCompanyRequest(input:URL,options:RequestInit,scope:CompanyS
    if(method==="POST"){
     row.user_id=scope.userId;
     // Invoice scope is also checked against the parent account by its trigger.
-    row.company_id=mode==="business"?scope.companyId:null;
+    row.company_id=table==="card_invoices"?null:mode==="business"?scope.companyId:null;
     if(COMPANY_SHARED_TABLES.has(table))row.workspace_legacy=false;
    }else if(COMPANY_MODE_TABLES.has(table)&&row.mode!==undefined){
     if(row.mode!=="business"&&row.mode!=="personal")throw Error("COMPANY_MODE_INVALID");

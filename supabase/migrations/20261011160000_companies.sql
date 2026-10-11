@@ -65,7 +65,9 @@ declare payload jsonb:=to_jsonb(new);parent_company uuid;parent_owner uuid;paren
  selected_company uuid:=nullif(headers->>'x-zelo-company','')::uuid;
  selected_owner uuid:=nullif(headers->>'x-zelo-owner','')::uuid;
 begin
- if tg_op='UPDATE' and (new.id<>old.id or new.user_id is distinct from old.user_id or new.company_id is distinct from old.company_id) then raise exception 'COMPANY_REASSIGNMENT_DENIED';end if;
+ if tg_op='UPDATE' and tg_table_name=any(array['finances','tasks','reminders','goals','vehicles']) and payload->>'mode'='personal' and to_jsonb(old)->>'mode'='business' then
+  new.company_id:=null;
+ end if;
  if tg_table_name='card_invoices' then
   select user_id,company_id into parent_owner,parent_company from public.accounts where id=new.account_id;
   if not found then raise exception 'COMPANY_PARENT_NOT_FOUND';end if;
@@ -93,6 +95,16 @@ begin
    if parent_owner is null or parent_owner<>new.user_id or parent_company is distinct from new.company_id then raise exception 'COMPANY_PARENT_MISMATCH';end if;
   end if;
  end loop;
+ if tg_op='UPDATE' then
+  if new.id<>old.id or new.user_id is distinct from old.user_id then raise exception 'COMPANY_REASSIGNMENT_DENIED';end if;
+  if new.company_id is distinct from old.company_id then
+   -- Keep the existing explicit personal/business correction for leaf records.
+   -- Moving records between two companies is never an implicit edit.
+   if tg_table_name<>all(array['finances','tasks','reminders','goals','vehicles'])
+      or coalesce(to_jsonb(old)->>'mode','')=coalesce(to_jsonb(new)->>'mode','')
+      or (new.company_id is not null and old.company_id is not null) then raise exception 'COMPANY_REASSIGNMENT_DENIED';end if;
+  end if;
+ end if;
  if selected_owner is not null and new.user_id<>selected_owner then raise exception 'COMPANY_OWNER_MISMATCH';end if;
  if selected_company is not null then
   if not exists(select 1 from public.companies where id=selected_company and user_id=new.user_id) then raise exception 'COMPANY_OWNER_MISMATCH';end if;

@@ -38,6 +38,13 @@ try{
  await db.query('insert into drive_files(user_id,company_id,workspace_legacy,folder_id,original_name,stored_name,mime_type,size)values($1,null,false,$2,$3,$3,$4,10)',[a,folder,'personal.txt','text/plain']);
  assert.equal((await db.query('select count(*)::int as total from drive_files where company_id=$1',[ca])).rows[0].total,2);
  await db.query("select set_config('request.headers','{}',false)");
+ const personalBank=(await db.query('insert into accounts(user_id,mode,name,type)values($1,$2,$3,$4)returning id',[a,'personal','Pessoal','bank'])).rows[0].id;
+ const personalInvoice=(await db.query('insert into card_invoices(account_id,period_start,period_end,due_date)values($1,current_date,current_date,current_date)returning id',[personalBank])).rows[0].id;
+ await assert.rejects(db.query('update card_invoices set account_id=$1 where id=$2',[bank,personalInvoice]),/COMPANY_REASSIGNMENT_DENIED/);
+ await db.query("update finances set mode='personal' where user_id=$1",[a]);
+ assert.equal((await db.query('select company_id from finances where user_id=$1',[a])).rows[0].company_id,null);
+ await db.query("update finances set mode='business' where user_id=$1",[a]);
+ assert.equal((await db.query('select company_id from finances where user_id=$1',[a])).rows[0].company_id,ca);
  await db.exec('set role anon');await assert.rejects(db.query('select * from companies'),/permission denied/);await db.exec('reset role');
  console.log('Companies: preserved history, empty new workspace, ownership, employee/payment and invoice/account isolation, per-company defaults and denied browser table access passed.');
 }catch(error){console.error(error.message,error.where??"");process.exitCode=1;}finally{await db.close();}

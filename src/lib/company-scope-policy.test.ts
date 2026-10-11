@@ -37,3 +37,8 @@ it("does not overwrite an existing OR filter or allow foreign user filters",()=>
 it("rejects merge-duplicate inserts rather than reassign another company's ID",()=>{
  expect(()=>scopeCompanyRequest(new URL("https://db.test/rest/v1/employees"),{method:"POST",headers:{Prefer:"resolution=merge-duplicates"},body:JSON.stringify({id:"foreign",name:"test"})},scope)).toThrow("COMPANY_UPSERT_DENIED");
 });
+it("lets the database inherit an invoice's company from its authorized parent account",()=>{
+ const result=scopeCompanyRequest(new URL("https://db.test/rest/v1/card_invoices"),{method:"POST",body:JSON.stringify({account_id:"personal-account"})},scope);
+ expect(JSON.parse(result.init.body as string).company_id).toBeNull();
+ expect(new Headers(result.init.headers).get("x-zelo-company")).toBe(scope.companyId);
+});
