@@ -1,3 +1,4 @@
+import {saveWorkspaceCategories} from "./workspace-categories";
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
 import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
@@ -5259,8 +5260,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const added = categoryNames.filter(name => ![...defaults, ...existing].some(c => c.toLocaleLowerCase() === name.toLocaleLowerCase()));
           if (added.length) {
             const updated = [...existing, ...added];
-            if (type === "expense") await updateUser(user.id, { customCategoriesExpense: updated });
-            else await updateUser(user.id, { customCategoriesIncome: updated });
+            if (type === "expense") await saveWorkspaceCategories(user.id, { customCategoriesExpense: updated });
+            else await saveWorkspaceCategories(user.id, { customCategoriesIncome: updated });
           }
           const label = user.locale === "es" ? (type === "expense" ? "gastos" : "ingresos") : (type === "expense" ? "despesas" : "receitas");
           summaries.push(`${label}: ${added.length ? added.join(", ") : user.locale === "es" ? "ninguna nueva" : "nenhuma nova"}`);

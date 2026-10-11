@@ -1,13 +1,15 @@
+import {saveWorkspaceCategories,workspaceCategoryUser} from "@/lib/workspace-categories";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getUserById, updateUser } from "@/lib/users";
+import { getUserById } from "@/lib/users";
 import { CATEGORIES_EXPENSE as DEFAULT_EXPENSE, CATEGORIES_INCOME as DEFAULT_INCOME } from "@/lib/finances";
 
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const user = await getUserById(session.sub);
+  const owner = await getUserById(session.sub);
+  const user=owner?await workspaceCategoryUser(owner):null;
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   return NextResponse.json({
@@ -24,7 +26,8 @@ export async function POST(req: NextRequest) {
   if (!type || !name || !name.trim()) return NextResponse.json({ error: "type e name obrigatórios" }, { status: 400 });
   if (type !== "expense" && type !== "income") return NextResponse.json({ error: "type inválido" }, { status: 400 });
 
-  const user = await getUserById(session.sub);
+  const owner = await getUserById(session.sub);
+  const user=owner?await workspaceCategoryUser(owner):null;
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   const trimmed = name.trim();
@@ -39,9 +42,9 @@ export async function POST(req: NextRequest) {
 
   const updated = [...existing, trimmed];
   if (type === "expense") {
-    await updateUser(session.sub, { customCategoriesExpense: updated });
+    await saveWorkspaceCategories(session.sub, { customCategoriesExpense: updated });
   } else {
-    await updateUser(session.sub, { customCategoriesIncome: updated });
+    await saveWorkspaceCategories(session.sub, { customCategoriesIncome: updated });
   }
 
   return NextResponse.json({ ok: true, name: trimmed });
@@ -54,7 +57,8 @@ export async function DELETE(req: NextRequest) {
   const { type, name } = await req.json();
   if (!type || !name) return NextResponse.json({ error: "type e name obrigatórios" }, { status: 400 });
 
-  const user = await getUserById(session.sub);
+  const owner = await getUserById(session.sub);
+  const user=owner?await workspaceCategoryUser(owner):null;
   if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
   const existing = type === "expense"
@@ -63,9 +67,9 @@ export async function DELETE(req: NextRequest) {
   const filtered = existing.filter(c => c !== name);
 
   if (type === "expense") {
-    await updateUser(session.sub, { customCategoriesExpense: filtered });
+    await saveWorkspaceCategories(session.sub, { customCategoriesExpense: filtered });
   } else {
-    await updateUser(session.sub, { customCategoriesIncome: filtered });
+    await saveWorkspaceCategories(session.sub, { customCategoriesIncome: filtered });
   }
 
   return NextResponse.json({ ok: true });
