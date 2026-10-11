@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  serverExternalPackages: ["node-forge"],
+  outputFileTracingIncludes: { "/api/nfse/certificate": ["./scripts/nfse-certificate.cjs", "./node_modules/node-forge/**/*"] },
   poweredByHeader: false,
   async headers() {
     return [{

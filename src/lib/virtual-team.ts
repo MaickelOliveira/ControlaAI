@@ -1,4 +1,5 @@
 export const VIRTUAL_TEAM = {
+  nfse:{name:"Otto",gender:"m",role:"notas fiscais",es:"notas fiscales"},
   finance:{name:"Rita",gender:"f",role:"finanças",es:"finanzas"},
   agenda:{name:"Lucas",gender:"m",role:"agenda",es:"agenda"},
   task:{name:"Theo",gender:"m",role:"tarefas",es:"tareas"},

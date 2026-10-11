@@ -420,7 +420,14 @@ export type PendingAccountCreateConfirm = {
 };
 
 export type PendingCompanySelection={type:"company_selection";phone:string;userId:string;expiresAt:string;resume?:{text:string;fileBase64?:string;fileMimeType?:string;fileName?:string;isFileMessage?:boolean;contactName?:string}};
-export type PendingAction = (PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection) & {companyId?:string};
+export type PendingFiscalDraft = {
+ type: "nfse_draft"; phone: string; userId: string; expiresAt: string;
+ stage: "service" | "new_service" | "recipient" | "document" | "amount" | "competence";
+ serviceId?: string; newService?: Record<string, string | number>; newField?: string;
+ recipientName?: string; recipientDocument?: string; amount?: number;
+};
+
+export type PendingAction = (PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft) & {companyId?:string};
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -458,7 +465,8 @@ type PendingActionInput = (
   | Omit<PendingAccountDefaultConfirm, "phone" | "expiresAt">
   | Omit<PendingClearHistory, "phone" | "expiresAt">
   | Omit<PendingSlotCorrection, "phone" | "expiresAt">
-  | Omit<PendingCompanySelection,"phone"|"expiresAt">) & {companyId?:string};
+  | Omit<PendingCompanySelection,"phone"|"expiresAt">
+  | Omit<PendingFiscalDraft,"phone"|"expiresAt">) & {companyId?:string};
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   recurring_confirmation: TTL_RECURRING_MS,
@@ -469,6 +477,7 @@ const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   slot_fill: TTL_SLOT_FILL_MS,
   action_continuation: TTL_SLOT_FILL_MS,
   slot_correction: TTL_SLOT_CORRECTION_MS,
+  nfse_draft: TTL_SLOT_FILL_MS,
 };
 
 export async function setPendingAction(phone: string, action: PendingActionInput): Promise<void> {

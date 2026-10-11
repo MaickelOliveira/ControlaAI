@@ -7,6 +7,7 @@ import {withWhatsAppCompany,contextualCompanyUser,switchPhoneCompanyMode} from "
 import {multiCompanyEnabled} from "./companies";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
+import {handleFiscalWhatsApp} from "@/lib/nfse-whatsapp";
 import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "@/lib/open-finance-whatsapp";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
@@ -1457,6 +1458,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
     // ── Verifica ação pendente (ex: seleção de veículo) ──
     const pending = await getPendingAction(from);
+    if(pending?.type==="nfse_draft"||(!pending&&/\b(nota fiscal|notas fiscais|nfs[ -]?e)\b/i.test(messageText))){setVirtualAgentIntent("nfse_draft");if(await handleFiscalWhatsApp(user,mode,from,messageText,pending))return;}
     if(pending?.userId===user.id)setVirtualAgent(agentForPendingAction(pending));
     let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
     let accountSelectionResume: AIResult | null = null;
