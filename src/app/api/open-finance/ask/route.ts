@@ -3,12 +3,17 @@ import {getSessionWithUser} from "@/lib/auth";
 import {openFinanceRequestScope,OF_HEADERS} from "@/lib/open-finance-http";
 import {readBankBody} from "@/lib/open-finance-body";
 import {answerBankQuestion} from "@/lib/open-finance-question";
+import {prepareBankBill} from "@/lib/open-finance-bills";
 import {todayStrBR} from "@/lib/date-br";
 export async function POST(request:Request) {
   const scope=await openFinanceRequestScope(request,true);if(scope instanceof Response)return scope;
   const auth=await getSessionWithUser();if(!auth)return NextResponse.json({error:"Não autorizado"},{status:401,headers:OF_HEADERS});
   let question;
   try{question=JSON.parse((await readBankBody(request,2048)).toString("utf8")).question;if(typeof question!=="string"||!question.trim()||question.length>500)throw new Error();}catch{return NextResponse.json({error:"Escreva uma pergunta de até 500 caracteres."},{status:400,headers:OF_HEADERS});}
+  try{
+    const bill=await prepareBankBill(auth.user,scope.mode,question,todayStrBR(),false);
+    if(bill)return NextResponse.json({answer:bill.text,...(bill.billId?{downloadUrl:`/api/open-finance/bills/${bill.billId}?mode=${scope.mode}`}:{})},{headers:OF_HEADERS});
+  }catch{return NextResponse.json({error:"Não consegui consultar a fatura agora. Tente novamente em Contas."},{status:503,headers:OF_HEADERS});}
   const answer=await answerBankQuestion(auth.user,scope.mode,question,todayStrBR());
   return NextResponse.json({answer:answer??"Posso consultar gastos de contas, cartões, WhatsApp e plataforma neste mês ou no mês passado, além de saldos bancários, limites, investimentos e faturas. Para um banco específico, veja os dados em Contas. Outras perguntas financeiras continuam disponíveis na conversa habitual da Zelo."},{headers:OF_HEADERS});
 }
