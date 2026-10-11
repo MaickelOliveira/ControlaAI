@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getSessionWithUser } from "@/lib/auth";
 import { COMPANY_COOKIE, createCompany, getCompanies, multiCompanyEnabled, requireCompany } from "@/lib/companies";
 import { companyCookieValue, selectedCompanyId } from "@/lib/company-selection";
+import {isSameOrigin} from "@/lib/request-origin";
 
 const headers = { "Cache-Control": "private, no-store" };
 async function authorized() {
@@ -10,8 +11,7 @@ async function authorized() {
   return auth?.session.role === "client" ? auth : null;
 }
 function validOrigin(request: Request): boolean {
-  return request.headers.get("origin") === new URL(request.url).origin
-    && request.headers.get("sec-fetch-site") !== "cross-site";
+  return isSameOrigin(request,process.env.OPEN_FINANCE_APP_ORIGIN||process.env.NEXT_PUBLIC_APP_URL);
 }
 async function selectCompany(userId: string, companyId: string) {
   (await cookies()).set(COMPANY_COOKIE, companyCookieValue(userId, companyId), {

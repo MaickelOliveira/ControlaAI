@@ -37,6 +37,14 @@ $$;
 revoke all on function open_finance.selected_company(uuid,text),open_finance.company_visible(uuid,text,uuid) from public,anon,authenticated,service_role;
 grant execute on function open_finance.selected_company(uuid,text),open_finance.company_visible(uuid,text,uuid) to zelo_of_workspace;
 
+-- Production enables RLS on these owner records without client policies.
+-- The NOLOGIN RPC role may read only its verified holder (legacy server calls
+-- without workspace headers retain the existing require_access checks).
+create policy zelo_workspace_owner on public.users for select to zelo_of_workspace
+ using(open_finance.company_visible(id,'personal',null));
+create policy zelo_workspace_phones on public.wpp_phone_links for select to zelo_of_workspace
+ using(open_finance.company_visible(user_id,'personal',null));
+
 do $$declare t text;begin
  foreach t in array array['connections','resources','card_limits','bills','movements','credit_details','sync_state','sync_jobs','card_schedules','notice_deliveries'] loop
   execute format('alter table open_finance.%I add column company_id uuid, add constraint %I foreign key(company_id,user_id) references public.companies(id,user_id)',t,t||'_company_owner_fk');

@@ -24,6 +24,8 @@ do $$declare t text;begin
 end;$$;
 drop policy zelo_workspace_access on open_finance.user_access;
 drop policy zelo_workspace_health on open_finance.worker_health;
+drop policy zelo_workspace_owner on public.users;
+drop policy zelo_workspace_phones on public.wpp_phone_links;
 drop function open_finance.company_guard();
 drop function open_finance.company_visible(uuid,text,uuid);
 drop function open_finance.selected_company(uuid,text);

@@ -1,4 +1,5 @@
 import "server-only";
+import {isSameOrigin} from "./request-origin";
 import { getSupabase } from "./supabase";
 import type { User } from "./users";
 import {multiCompanyEnabled,requireCompany} from "./companies";
@@ -56,9 +57,7 @@ export async function getOpenFinanceAccess(user: OpenFinanceIdentity, requestedM
 }
 
 export function requireOpenFinanceOrigin(request: Request): void {
-  const origin = request.headers.get("origin");
-  const expected = process.env.OPEN_FINANCE_APP_ORIGIN || new URL(request.url).origin;
-  if (!origin || origin !== expected || request.headers.get("sec-fetch-site") === "cross-site") {
+  if (!isSameOrigin(request,process.env.OPEN_FINANCE_APP_ORIGIN)) {
     throw new Error("INVALID_ORIGIN");
   }
 }

@@ -22,6 +22,7 @@ try{
  for(const row of (await db.query("select p.oid::regprocedure::text signature from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','open_finance')")).rows)await db.exec(`alter function ${row.signature} owner to workspace_migrator`);
  await db.exec('set role workspace_migrator');await db.exec(await sql('../migrations/20261011160000_companies.sql'));await db.exec(await sql('../migrations/20261011170000_open_finance_companies.sql'));await owner();
 
+ await db.exec('alter table public.users enable row level security;alter table public.wpp_phone_links enable row level security;');
  const ca=(await db.query('select id from companies where user_id=$1 and is_default',[a])).rows[0].id;
  const cb=(await db.query('select id from companies where user_id=$1 and is_default',[b])).rows[0].id;
  const c2=(await db.query("insert into companies(user_id,name) values($1,'Company Two') returning id",[a])).rows[0].id;

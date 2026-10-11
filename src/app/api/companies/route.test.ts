@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), cookieGet: vi.fn(), cookieSet: vi.fn(), list: vi.fn(), create: vi.fn(), require: vi.fn(), enabled: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getSessionWithUser: mocks.auth }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: mocks.cookieGet, set: mocks.cookieSet }) }));
@@ -11,6 +11,13 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ id, name: "Empresa nova" }); mocks.require.mockResolvedValue({ id, name: "Empresa A" });
 });
 const request = (method: string, body: unknown, origin = "https://zelo.test") => new Request("https://zelo.test/api/companies", { method, headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+afterEach(()=>vi.unstubAllEnvs());
+it("uses the configured public origin behind a proxy and ignores forged forwarding",async()=>{
+ vi.stubEnv("OPEN_FINANCE_APP_ORIGIN","https://zelo.test");
+ const proxied=(origin:string)=>new Request("http://localhost:3000/api/companies",{method:"PATCH",headers:{origin,"x-forwarded-host":"attacker.test","content-type":"application/json"},body:JSON.stringify({companyId:id})});
+ expect((await PATCH(proxied("https://zelo.test"))).status).toBe(200);
+ expect((await PATCH(proxied("https://attacker.test"))).status).toBe(403);
+});
 it("never exposes companies to a guest or administrator session", async () => {
   for (const auth of [null, { session: { role: "admin" }, user: { id: owner } }]) {
     mocks.auth.mockResolvedValue(auth); expect((await GET()).status).toBe(401);
