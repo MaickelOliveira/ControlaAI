@@ -21,10 +21,12 @@ export async function runBankDueNotices():Promise<number>{
       const target=polpObject(raw),userId=polpUuid(target.userId),mode=target.mode;
       if(mode!=="personal"&&mode!=="business"||typeof target.phone!=="string"||!/^\d{8,20}$/.test(target.phone)||typeof target.itemKey!=="string"||!/^(bill|recurring):[a-f0-9-]{36}$/.test(target.itemKey))throw Error("OF_NOTICE_INVALID");
       const phone=target.phone,itemKey=target.itemKey;
+      if(process.env.MULTI_COMPANY_ENABLED==="true"&&target.companyId===undefined)throw Error("OF_COMPANY_SCOPE_MISSING");
+      const companyId=target.companyId===null?null:target.companyId===undefined?undefined:polpUuid(target.companyId);
       const allowed=async()=>{
         const user=await getUserById(userId);
         if(!user||!hasAccess(user))return null;
-        const currentScope=await getOpenFinanceAccess(user,mode,{throwOnStorageError:true});
+        const currentScope=await getOpenFinanceAccess(user,mode,{throwOnStorageError:true,companyId});
         const access=await getPhoneAccess(userId,phone);
         return currentScope&&(access==="both"||access===mode)?{user,scope:currentScope}:null;
       };
@@ -36,7 +38,7 @@ export async function runBankDueNotices():Promise<number>{
       const item=collectBankAgenda(agenda.items,{from:today,to:today,forNotification:true}).find(i=>`${i.kind}:${i.id}`===itemKey);
       const fresh=await allowed();
       if(!fresh||!item){await openFinanceRpc(scope,"zelo_of_notice_finish",{p_receipt:receipt,p_status:"skipped"});continue;}
-      const text=`Hoje na Zelo · ${mode==="business"?"Empresa":"Pessoal"}${formatBankAgenda([item],agenda.incomplete)}`;
+      const text=`Hoje na Zelo · ${mode==="business"?scope.companyName??"Empresa":"Pessoal"}${formatBankAgenda([item],agenda.incomplete)}`;
       const dispatch=buildReminderTemplateDispatch({message:text,recipientType:"self",mode,locale:fresh.user.locale});
       const accepted=await sendReminderTemplate(phone,dispatch.templateName,text,dispatch.params,fresh.user.locale,{privateFinancial:true});
       await openFinanceRpc(scope,"zelo_of_notice_finish",{p_receipt:receipt,p_status:accepted?"sent":"uncertain"});

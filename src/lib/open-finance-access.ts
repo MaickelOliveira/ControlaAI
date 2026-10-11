@@ -1,8 +1,11 @@
 import "server-only";
+import {isSameOrigin} from "./request-origin";
 import { getSupabase } from "./supabase";
 import type { User } from "./users";
+import {multiCompanyEnabled,requireCompany} from "./companies";
+import {companyScopeFor} from "./company-context";
 
-export type OpenFinanceScope = { userId: string; mode: "personal" | "business"; environment: "production" };
+export type OpenFinanceScope = { userId: string; mode: "personal" | "business"; environment: "production"; companyId?:string; companyName?:string };
 export type OpenFinanceIdentity = Pick<User, "id" | "email" | "plan" | "activeMode"> & Partial<Pick<User,"status">>;
 
 export function isPublicOpenFinanceEnabled():boolean {
@@ -29,7 +32,7 @@ export function canUseOpenFinanceBusiness(user: Pick<User, "email" | "plan">): b
 
 /** Identity comes from the current database user, never the JWT or request body.
  * Public availability still requires each holder's recorded Brazilian eligibility. */
-export async function getOpenFinanceAccess(user: OpenFinanceIdentity, requestedMode?: string | null, options:{throwOnStorageError?:boolean}={}): Promise<OpenFinanceScope | null> {
+export async function getOpenFinanceAccess(user: OpenFinanceIdentity, requestedMode?: string | null, options:{throwOnStorageError?:boolean;companyId?:string|null}={}): Promise<OpenFinanceScope | null> {
   if (process.env.OPEN_FINANCE_ENABLED !== "true") return null;
   const ownerEmail = process.env.OPEN_FINANCE_OWNER_EMAIL?.trim().toLowerCase();
   const owner=!!ownerEmail && user.email.trim().toLowerCase()===ownerEmail;
@@ -42,14 +45,19 @@ export async function getOpenFinanceAccess(user: OpenFinanceIdentity, requestedM
     const { data, error } = await getSupabase().rpc("zelo_of_access", { p_user: user.id });
     if(error)throw Error("OF_ACCESS_UNAVAILABLE");
     if (!data || data.enabled !== true || data.country_code !== "BR" || !data.country_verified_at) return null;
+    if(multiCompanyEnabled()){
+      // Worker/webhook targets come from the database; web and WhatsApp use their verified context.
+      const context=options.companyId===undefined?await companyScopeFor(user.id):undefined;
+      if(mode==="business"&&context?.allowBusiness===false)return null;
+      const company=await requireCompany(user.id,options.companyId??context?.companyId);
+      return {userId:user.id,mode,environment:"production",companyId:company.id,companyName:company.name};
+    }
     return { userId: user.id, mode, environment: "production" };
   } catch { if(options.throwOnStorageError)throw Error("OF_ACCESS_UNAVAILABLE");return null; }
 }
 
 export function requireOpenFinanceOrigin(request: Request): void {
-  const origin = request.headers.get("origin");
-  const expected = process.env.OPEN_FINANCE_APP_ORIGIN || new URL(request.url).origin;
-  if (!origin || origin !== expected || request.headers.get("sec-fetch-site") === "cross-site") {
+  if (!isSameOrigin(request,process.env.OPEN_FINANCE_APP_ORIGIN)) {
     throw new Error("INVALID_ORIGIN");
   }
 }

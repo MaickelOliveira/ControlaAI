@@ -4,17 +4,18 @@ import { getUsers, isTrialExpired, createUser, getUserByEmail, updateUser, getMa
 import { getAllPhoneLinks } from "@/lib/wpp-phone-links";
 import { getFinancesSummaryByAllUsers } from "@/lib/finances";
 import { getTasksCountsByAllUsers } from "@/lib/tasks";
+import {runWithTrustedCompanyJob} from "@/lib/company-context";
 
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const [users, financesSummary, tasksCounts, phoneLinksByUser] = await Promise.all([
+  const [users, financesSummary, tasksCounts, phoneLinksByUser] = await runWithTrustedCompanyJob(()=>Promise.all([
     getUsers(),
     getFinancesSummaryByAllUsers(),
     getTasksCountsByAllUsers(),
     getAllPhoneLinks(),
-  ]);
+  ]));
   const now = new Date();
 
   const clientes = users.map(u => {

@@ -8,6 +8,8 @@ export type AppointmentRepeat = "none" | "daily" | "weekly" | "monthly" | "yearl
 export type AppointmentStatus = "scheduled" | "done" | "cancelled";
 
 export type Appointment = {
+  companyId?: string;
+  workspaceLegacy?: boolean;
   id: string;
   userId: string;
   title: string;
@@ -33,6 +35,8 @@ export type Appointment = {
 };
 
 type Row = {
+  company_id?: string | null;
+  workspace_legacy?: boolean;
   id: string; user_id: string; title: string; description: string | null; location: string | null;
   start_at: string; end_at: string | null; all_day: boolean; repeat: AppointmentRepeat;
   status: AppointmentStatus; source: "whatsapp" | "web"; created_at: string;
@@ -61,7 +65,7 @@ function decodeCalendarEventId(value: string | null): { eventId?: string; calend
 function fromRow(r: Row): Appointment {
   const calendar = decodeCalendarEventId(r.calendar_event_id);
   return {
-    id: r.id, userId: r.user_id, title: r.title, description: r.description ?? undefined,
+    id: r.id, userId: r.user_id, companyId:r.company_id??undefined, workspaceLegacy:r.workspace_legacy, title: r.title, description: r.description ?? undefined,
     location: r.location ?? undefined, startAt: r.start_at, endAt: r.end_at ?? undefined,
     allDay: r.all_day, repeat: r.repeat, status: r.status, source: r.source, createdAt: r.created_at,
     meetLink: r.meet_link ?? undefined, calendarEventId: calendar.eventId,

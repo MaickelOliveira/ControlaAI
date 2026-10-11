@@ -1,0 +1,82 @@
+import {readFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href);const db=new PGlite();
+const sql=p=>readFile(new URL(p,import.meta.url),'utf8');
+const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
+const rpc=async(name,args=[])=>(await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) value`,args)).rows[0].value;
+const service=()=>db.exec('set role service_role'),owner=()=>db.exec('reset role');
+const headers=(user,company)=>db.query("select set_config('request.headers',$1,false)",[JSON.stringify(user?{'x-zelo-owner':user,'x-zelo-company':company}:{})]);
+const consent=(user,n,mode='business')=>rpc('zelo_of_save_consent',[user,mode,JSON.stringify({id:`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`,cliente_user_id:user,institution_id:'20000000-0000-4000-8000-000000000001',institution_name:'Test Bank',status:'AUTHORISED',products:['ACCOUNT','CREDIT_CARD_ACCOUNT','INVESTMENTS','CREDIT_OPERATIONS']})]);
+try{
+ await db.exec('create role anon;create role authenticated;create role service_role bypassrls;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);');
+ await db.exec((await sql('../schema.sql')).replace('create extension if not exists "pgcrypto";',''));
+ await db.query("insert into users(id,phone,name,email,password_hash,plan,status,trial_ends_at) values($1,'5511988881111','A','a@example.test','x','business','active',now()+interval '7 days'),($2,'5511988882222','B','b@example.test','x','business','active',now()+interval '7 days')",[a,b]);
+ for(const file of ['20261009193000_open_finance_storage','20261009213000_open_finance_server_access','20261009220000_open_finance_consents','20261009230000_open_finance_sync_queue','20261009234000_open_finance_report','20261010185000_open_finance_categories','20261010230000_open_finance_public','20261011030000_open_finance_notifications','20261011090000_open_finance_connection_management','20261011093000_open_finance_subscription_retirement','20261011110000_open_finance_archive_history'])await db.exec(await sql('../migrations/'+file+'.sql'));
+ await service();await rpc('zelo_of_enable_brazil',[a,'business','BR',true]);await rpc('zelo_of_enable_brazil',[b,'business','BR',true]);const old=await consent(a,1);
+ await owner();
+ // Managed Supabase's postgres is not necessarily a superuser. Prove ALTER OWNER
+ // and the global maintenance -> scoped enqueue chain without that privilege.
+ await db.exec('create role workspace_migrator nologin nosuperuser createrole bypassrls;alter schema public owner to workspace_migrator;alter schema open_finance owner to workspace_migrator;');
+ for(const row of (await db.query("select n.nspname,c.relname,c.relkind from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','open_finance') and c.relkind in ('r','v')")).rows)await db.exec(`alter ${row.relkind==='v'?'view':'table'} ${row.nspname}.${row.relname} owner to workspace_migrator`);
+ for(const row of (await db.query("select p.oid::regprocedure::text signature from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','open_finance')")).rows)await db.exec(`alter function ${row.signature} owner to workspace_migrator`);
+ await db.exec('set role workspace_migrator');await db.exec(await sql('../migrations/20261011160000_companies.sql'));await db.exec(await sql('../migrations/20261011170000_open_finance_companies.sql'));await owner();
+
+ await db.exec('alter table public.users enable row level security;alter table public.wpp_phone_links enable row level security;');
+ const ca=(await db.query('select id from companies where user_id=$1 and is_default',[a])).rows[0].id;
+ const cb=(await db.query('select id from companies where user_id=$1 and is_default',[b])).rows[0].id;
+ const c2=(await db.query("insert into companies(user_id,name) values($1,'Company Two') returning id",[a])).rows[0].id;
+ await service();assert.equal((await rpc('zelo_of_overview',[a,'production','business'])).connections[0].id,old.id,'legacy no-header calls see default only');
+ await headers(a,c2);assert.equal((await rpc('zelo_of_overview',[a,'production','business'])).connections.length,0);
+ const fresh=await consent(a,2);assert.equal((await rpc('zelo_of_connection',[a,'business',fresh.id])).company_id,c2);
+ await assert.rejects(rpc('zelo_of_connection',[a,'business',old.id]),/OF_CONNECTION_NOT_FOUND/);
+ await assert.rejects(consent(a,1),/row-level security|OF_CONSENT_ALREADY_CLAIMED/);
+ await assert.rejects(rpc('zelo_of_connection',[b,'business',fresh.id]),/OF_ACCESS_DENIED/);
+ await headers(a,cb);await assert.rejects(rpc('zelo_of_overview',[a,'production','business']),/OF_COMPANY_ACCESS_DENIED/);
+ await db.query("select set_config('request.headers',$1,false)",[JSON.stringify({'x-zelo-owner':a})]);await assert.rejects(rpc('zelo_of_overview',[a,'production','business']),/OF_COMPANY_HEADERS_INVALID/);
+ await headers(a,c2);
+ const enqueue=spec=>rpc('zelo_of_enqueue',[a,'business',fresh.id,JSON.stringify(spec)]);
+ await enqueue({kind:'catalog',family:'accounts',external_resource_id:'10000000-0000-4000-8000-000000000002'});
+ const job=await rpc('zelo_of_claim',[a,'business']);assert.equal(job.company_id,c2);
+ await rpc('zelo_of_commit_page',[a,'business',job.id,job.lease_token,JSON.stringify({resources:[{external_id:'company-two-bank',resource_type:'account',name:'Second bank',subtype:'accounts',currency:'BRL',available_amount:'123.45'}]}),null,'[]']);
+ const overview=await rpc('zelo_of_overview',[a,'production','business']);assert.equal(overview.resources.length,1);assert.equal(overview.resources[0].available_amount,'123.45000000');
+ await enqueue({kind:'transactions',family:'accounts',external_resource_id:'company-two-bank'});
+ await owner();await db.query('update open_finance.user_access set next_sync_claim_at=null where user_id=$1',[a]);await service();
+ const next=await rpc('zelo_of_claim',[a,'business']);
+ await rpc('zelo_of_commit_page',[a,'business',next.id,next.lease_token,JSON.stringify({movements:[{resource_external_id:'company-two-bank',resource_type:'account',external_id:'expense-two',description:'Pharmacy',transaction_date:'2026-10-11',amount:'50',currency:'BRL',direction:'debit',classification:'purchase'}]}),null,'[]']);
+ const report=await rpc('zelo_of_report',[a,'business','2026-10-01','2026-10-31',null]);assert.equal(report.movements.length,1);
+ await rpc('zelo_of_set_movement_category',[a,'business',report.movements[0].id,'Saúde']);
+ await headers(a,ca);assert.equal((await rpc('zelo_of_report',[a,'business','2026-10-01','2026-10-31',null])).movements.length,0);
+ await headers(a,c2);
+ const today=(await db.query("select (now() at time zone 'America/Sao_Paulo')::date::text d")).rows[0].d;
+ const runJob=async(spec,rows)=>{await enqueue(spec);await owner();await db.query('update open_finance.user_access set next_sync_claim_at=null where user_id=$1',[a]);await service();const lease=await rpc('zelo_of_claim',[a,'business']);assert.equal(lease.company_id,c2);await rpc('zelo_of_commit_page',[a,'business',lease.id,lease.lease_token,JSON.stringify(rows),null,'[]']);};
+ await runJob({kind:'catalog',family:'credit-cards',external_resource_id:'10000000-0000-4000-8000-000000000002'},{resources:[{external_id:'card-two',resource_type:'card',name:'Second card',subtype:'credit-cards'}],limits:[{resource_external_id:'card-two',line_key:'shared',currency:'BRL',total_amount:'1500',used_amount:'100',available_amount:'1400'}]});
+ await runJob({kind:'bills',family:'credit-cards',external_resource_id:'card-two'},{bills:[{resource_external_id:'card-two',external_id:'bill-two',currency:'BRL',total_amount:'100',due_date:today,status:'unknown'}]});
+ await runJob({kind:'recurrings',family:'credit-cards',external_resource_id:'card-two'},{schedules:[{source_key:'a'.repeat(64),kind:'recurring',description:'Streaming',amount:'40',currency:'BRL',original_currency:'BRL',due_date:today,period_months:1,observed_transactions:['tx-1','tx-2','tx-3'],regularity_score:0.95}]});
+ const cardOverview=await rpc('zelo_of_overview',[a,'production','business']);assert.equal(cardOverview.limits.length,1);assert.equal(cardOverview.bills.length,1);
+ const bill=cardOverview.bills[0];assert.equal((await rpc('zelo_of_bill',[a,'business',bill.id,null])).bill.resource_name,'Second card');
+ assert.equal((await rpc('zelo_of_agenda',[a,'business',today,today,true])).items.length,2);
+ await owner();await db.query("insert into wpp_phone_links(user_id,phone,name,access)values($1,'5511988883333','Juliana','business')",[a]);await service();
+ const targets=await rpc('zelo_of_notice_targets',[null]);assert.equal(targets.length,2);assert.ok(targets.every(t=>t.companyId===c2));
+ await headers(a,ca);assert.equal((await rpc('zelo_of_agenda',[a,'business',today,today,true])).items.length,0);await assert.rejects(rpc('zelo_of_bill',[a,'business',bill.id,null]),/OF_BILL_NOT_FOUND/);
+ await headers(a,c2);const receipt=await rpc('zelo_of_notice_claim',[a,'business',targets[0].itemKey,targets[0].phone,null]);assert.ok(receipt);await rpc('zelo_of_notice_finish',[a,'business',receipt,'sent']);
+ const original=JSON.stringify({'x-zelo-owner':a,'x-zelo-company':ca});await headers(a,ca);assert.equal(await rpc('zelo_of_prepare_schedules',[null]),1,'global maintenance enqueues missing company-two installments through verified per-item headers');assert.equal((await db.query("select current_setting('request.headers') h")).rows[0].h,original,'maintenance restores caller headers');
+ await headers(a,c2);await rpc('zelo_of_capabilities',[a,'business']);await owner();await db.query('update open_finance.user_access set next_sync_claim_at=null where user_id=$1',[a]);await service();assert.equal((await rpc('zelo_of_worker_scope',['business',null])).companyId,c2);
+ await headers(b,cb);const other=await consent(b,3);assert.ok(other.id);await headers(a,c2);assert.equal((await rpc('zelo_of_overview',[a,'production','business'])).connections.length,1);
+ await headers();const target=await rpc('zelo_of_event_target',['company-two-bank','accounts']);assert.equal(target.companyId,c2);
+ await owner();await db.query("update open_finance.resources set source_updated_at=now() where external_id='company-two-bank'");
+ await assert.rejects(db.query('update open_finance.connections set company_id=$1 where id=$2',[ca,fresh.id]),/OF_COMPANY_REASSIGNMENT_DENIED/);
+ await db.exec('set role anon');await assert.rejects(rpc('zelo_of_connection',[a,'business',fresh.id]),/permission denied/);await owner();
+ await headers();await db.exec('set role workspace_migrator');await assert.rejects(db.exec(await sql('../rollbacks/20261011170000_open_finance_companies.sql')),/OF_WORKSPACE_HISTORY_REQUIRES_FORWARD_FIX/);await db.exec('rollback');await owner();
+ console.log('Bank companies: real scoped role, legacy history, two companies, other holder, malformed headers, consent collision, catalog/transactions sync, report/category and webhook target passed.');
+}catch(error){console.error(error.message,error.where??'');process.exitCode=1;}finally{await db.close();}
+
+const down=new PGlite();try{
+ await down.exec('create role anon;create role authenticated;create role service_role bypassrls;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);');
+ await down.exec((await sql('../schema.sql')).replace('create extension if not exists "pgcrypto";',''));
+ for(const file of ['20261009193000_open_finance_storage','20261009213000_open_finance_server_access','20261009220000_open_finance_consents','20261009230000_open_finance_sync_queue','20261009234000_open_finance_report','20261010185000_open_finance_categories','20261010230000_open_finance_public','20261011030000_open_finance_notifications','20261011090000_open_finance_connection_management','20261011093000_open_finance_subscription_retirement','20261011110000_open_finance_archive_history','20261011160000_companies','20261011170000_open_finance_companies'])await down.exec(await sql('../migrations/'+file+'.sql'));
+ await down.exec(await sql('../rollbacks/20261011170000_open_finance_companies.sql'));await down.exec(await sql('../rollbacks/20261011160000_companies.sql'));
+ assert.equal((await down.query("select count(*)::int n from pg_roles where rolname='zelo_of_workspace'")).rows[0].n,0);
+ assert.equal((await down.query("select to_regclass('public.companies') value")).rows[0].value,null);
+ console.log('Safe rollback passed; rollback with another company bank history was refused.');
+}catch(error){console.error(error.message,error.where??'');process.exitCode=1;}finally{await down.close();}

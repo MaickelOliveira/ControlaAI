@@ -10,12 +10,14 @@ export type WppPhoneLink = {
   relation?: string;
   access: WppPhoneAccess;
   linkedAt: string;
+  activeCompanyId?:string;
+  activeWorkspaceMode?:"personal"|"business";
 };
 
-type Row = { phone: string; user_id: string; name: string | null; relation: string | null; access: WppPhoneAccess; linked_at: string };
+type Row = { phone: string; user_id: string; name: string | null; relation: string | null; access: WppPhoneAccess; linked_at: string; active_company_id?:string|null;active_workspace_mode?:"personal"|"business"|null };
 
 function fromRow(r: Row): WppPhoneLink {
-  return { phone: r.phone, userId: r.user_id, name: r.name ?? undefined, relation: r.relation ?? undefined, access: r.access, linkedAt: r.linked_at };
+  return { phone: r.phone, userId: r.user_id, name: r.name ?? undefined, relation: r.relation ?? undefined, access: r.access, linkedAt: r.linked_at,activeCompanyId:r.active_company_id??undefined,activeWorkspaceMode:r.active_workspace_mode??undefined };
 }
 
 export async function getPhonesForUser(userId: string): Promise<WppPhoneLink[]> {
@@ -94,6 +96,10 @@ export async function setPhoneRelation(userId: string, phone: string, relation: 
 
 export async function setPhoneAccess(userId: string, phone: string, access: WppPhoneAccess): Promise<void> {
   await getSupabase().from("wpp_phone_links").update({ access }).eq("phone", phone).eq("user_id", userId);
+}
+export async function setPhoneWorkspace(userId:string,phone:string,companyId:string,mode:"personal"|"business"):Promise<void> {
+ const {error}=await getSupabase().from("wpp_phone_links").update({active_company_id:companyId,active_workspace_mode:mode}).eq("user_id",userId).eq("phone",phone);
+ if(error)throw Error("COMPANY_PHONE_SELECTION_FAILED");
 }
 
 function normalizeName(name: string): string {

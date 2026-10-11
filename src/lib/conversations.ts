@@ -1,13 +1,13 @@
-import { getSupabase } from "./supabase";
+import { getSupabase,resolveCompanyDatabaseScope } from "./supabase";
 import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 
-export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string; privateFinancial?: boolean };
+export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string; privateFinancial?: boolean; companyId?: string; workspaceMode?: "personal" | "business"; workspaceUserId?: string };
 export function messageForAiContext(message:ChatMessage):{role:"user"|"assistant";content:string}{
   return {role:message.role,content:message.privateFinancial?"[A Zelo respondeu uma consulta financeira usando o extrato privado; os valores foram omitidos deste contexto.]":message.type==="audio"&&!message.content?"[Áudio]":message.content};
 }
 
 export type LastFinanceBatchItem = { id: string; description: string; amount: number; type: "income" | "expense" };
-type LastFinanceBatch = { items: LastFinanceBatchItem[]; mode: "personal" | "business"; ts: number };
+type LastFinanceBatch = { items: LastFinanceBatchItem[]; mode: "personal" | "business"; ts: number;companyId?:string;workspaceUserId?:string };
 
 type Conversation = {
   messages: ChatMessage[];
@@ -121,6 +121,17 @@ export async function getHistory(phone: string): Promise<ChatMessage[]> {
   return found.conv.messages;
 }
 
+/** Inbox retains the complete conversation; the AI only sees the current workspace. */
+export async function getAiHistory(phone: string): Promise<ChatMessage[]> {
+  const history = await getHistory(phone);
+  if (process.env.MULTI_COMPANY_ENABLED !== "true") return history;
+  const { currentCompanyContext } = await import("./company-context");
+  const scope = currentCompanyContext();
+  if (!scope) throw Error("COMPANY_CONTEXT_MISSING");
+  return history.filter(message => message.workspaceUserId === scope.userId && message.workspaceMode === scope.mode &&
+    (scope.mode === "personal" || message.companyId === scope.companyId));
+}
+
 /** Consulta a última mensagem RECEBIDA para decidir entre texto livre e
  * template aprovado em disparos proativos da API oficial. */
 export async function hasOpenCustomerServiceWindow(phone: string, now = Date.now()): Promise<boolean> {
@@ -177,7 +188,8 @@ export async function setLastFinanceBatch(phone: string, items: LastFinanceBatch
   const found = await findConversation(phone);
   const key = found?.key ?? phone;
   const conv: Conversation = found?.conv ?? { messages: [], lastActivity: 0 };
-  conv.lastFinanceBatch = { items, mode, ts: Date.now() };
+  const scope=await resolveCompanyDatabaseScope();
+  conv.lastFinanceBatch = { items, mode, ts: Date.now(),...(scope?{companyId:scope.companyId,workspaceUserId:scope.userId}:{}) };
   await saveConversation(key, conv);
 }
 
@@ -185,6 +197,9 @@ export async function getLastFinanceBatch(phone: string): Promise<LastFinanceBat
   const found = await findConversation(phone);
   const batch = found?.conv.lastFinanceBatch;
   if (!batch || Date.now() - batch.ts > LAST_FINANCE_BATCH_TTL_MS) return null;
+  const scope=await resolveCompanyDatabaseScope();
+  if(scope&&(batch.workspaceUserId!==scope.userId||batch.mode!==scope.mode))return null;
+  if(scope&&batch.mode==="business"&&batch.companyId!==scope.companyId)return null;
   return batch;
 }
 
@@ -210,11 +225,17 @@ export async function addMessage(phone: string, msg: ChatMessage, opts?: { conta
   const found = await findConversation(phone);
   const key = found?.key ?? phone;
   const conv: Conversation = found?.conv ?? { messages: [], lastActivity: 0 };
+  if (process.env.MULTI_COMPANY_ENABLED === "true") {
+    const { currentCompanyContext } = await import("./company-context");
+    const scope = currentCompanyContext();
+    // Selection and support messages have no financial workspace yet.
+    msg = { ...msg, companyId: scope?.companyId, workspaceMode: scope?.mode, workspaceUserId: scope?.userId };
+  }
 
   // Deduplicação: ignora mensagem idêntica com mesmo role em janela de 10s
   const DEDUP_MS = 10_000;
   const lastMsg = conv.messages[conv.messages.length - 1];
-  if (lastMsg && lastMsg.role === msg.role && lastMsg.content === msg.content && Math.abs(msg.ts - lastMsg.ts) < DEDUP_MS) {
+  if (lastMsg && lastMsg.role === msg.role && lastMsg.content === msg.content && lastMsg.workspaceUserId === msg.workspaceUserId && lastMsg.companyId === msg.companyId && lastMsg.workspaceMode === msg.workspaceMode && Math.abs(msg.ts - lastMsg.ts) < DEDUP_MS) {
     return;
   }
 

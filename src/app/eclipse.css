@@ -222,6 +222,20 @@
 .z-bank-type-card .z-bank-product-details {background:var(--z-surface-muted);color:var(--z-ink);}
 
 .z-header-preferences {display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.z-company-selector {position:relative;min-width:0;}
+.z-company-trigger {display:flex;align-items:center;gap:8px;border:1px solid var(--z-line);border-radius:12px;background:var(--z-surface);padding:10px 12px;color:var(--z-ink);font-size:12px;font-weight:600;max-width:200px;}
+.z-company-trigger>span:first-of-type {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.z-company-menu {position:absolute;right:0;top:calc(100% + 9px);width:300px;max-width:calc(100vw - 28px);z-index:70;background:var(--z-surface);border:1px solid var(--z-line);border-radius:18px;padding:16px;box-shadow:0 16px 45px #0002;}
+.z-company-menu>p {font-size:11px;color:var(--z-subtle);margin-bottom:10px;}
+.z-company-options {max-height:240px;overflow:auto;}
+.z-company-options button {display:flex;width:100%;gap:12px;justify-content:space-between;text-align:left;padding:11px 10px;border-radius:9px;font-size:13px;}
+.z-company-options button[aria-pressed=true] {background:var(--z-amber-soft);font-weight:600;}
+.z-company-add {font-size:12px;padding:12px 10px;color:var(--z-ink);font-weight:600;border-top:1px solid var(--z-line);width:100%;text-align:left;margin-top:8px;}
+.z-company-menu form {display:grid;gap:9px;margin-top:12px;font-size:12px;}
+.z-company-menu input {background:var(--z-surface-muted);border:1px solid var(--z-line);border-radius:9px;padding:10px;min-width:0;}
+.z-company-menu small {color:var(--z-subtle);font-size:11px;}
+.z-company-menu .z-company-error {color:#d33;margin:10px 0 0;}
+@media(max-width:767px) {.z-header-preferences {flex-wrap:wrap;}.z-company-selector {flex-basis:100%;}.z-company-trigger {width:100%;max-width:none;justify-content:space-between;}.z-company-menu {width:100%;}}
 .z-mode-control {position:relative;}
 .z-mode-error {position:absolute;top:calc(100% + 8px);left:0;z-index:40;width:260px;max-width:calc(100vw - 40px);padding:12px;border:1px solid var(--z-line);border-radius:14px;background:var(--color-red-soft);color:var(--color-red-ink);font-size:12px;box-shadow:var(--z-shadow);}
 .z-header-preferences .z-mode-selector button {font-size:11px;padding:8px 11px;}

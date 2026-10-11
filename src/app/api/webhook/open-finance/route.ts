@@ -25,7 +25,8 @@ export async function POST(request:Request) {
       if(target.status==="revoked"||target.status==="revoking")return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
       const user=await getUserById(polpUuid(target.userId));
       if(!user)throw Error("OF_USER_UNAVAILABLE");
-      const scope=await getOpenFinanceAccess(user,String(target.mode),{throwOnStorageError:true});
+      if(process.env.MULTI_COMPANY_ENABLED==="true"&&target.companyId===undefined)throw Error("OF_COMPANY_SCOPE_MISSING");
+      const scope=await getOpenFinanceAccess(user,String(target.mode),{throwOnStorageError:true,companyId:target.companyId===null?null:target.companyId===undefined?undefined:polpUuid(target.companyId)});
       if(!scope)return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
       await openFinanceRpc(scope,"zelo_of_enqueue",{p_connection:polpUuid(target.id),p_job:job});
       return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});

@@ -1,3 +1,4 @@
+import {workspaceCategoryUser} from "@/lib/workspace-categories";
 import {NextResponse} from "next/server";
 import {getSessionWithUser} from "@/lib/auth";
 import {getOpenFinanceAccess,requireOpenFinanceOrigin} from "@/lib/open-finance-access";
@@ -14,7 +15,8 @@ export async function PATCH(request:Request){
   try{
     const body=JSON.parse((await readBankBody(request,4096)).toString("utf8"));
     movementId=body.movementId;category=body.category;
-    const categories=[...CATEGORIES_EXPENSE,...CATEGORIES_INCOME,...auth.user.customCategoriesExpense??[],...auth.user.customCategoriesIncome??[]];
+    const user=await workspaceCategoryUser(auth.user);
+    const categories=[...CATEGORIES_EXPENSE,...CATEGORIES_INCOME,...user.customCategoriesExpense??[],...user.customCategoriesIncome??[]];
     if(typeof movementId!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(movementId)||category!==null&&(typeof category!=="string"||category.length>100||!categories.includes(category)))throw Error("INVALID_CATEGORY");
   }catch{return NextResponse.json({error:"Escolha uma categoria válida."},{status:400,headers:OF_HEADERS});}
   try{

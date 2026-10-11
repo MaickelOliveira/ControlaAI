@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only",()=>({}));
+vi.mock("@/lib/company-notices",()=>({companyNoticeDescription:async(_user:string,_company:string|undefined,message:string)=>message}));
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({

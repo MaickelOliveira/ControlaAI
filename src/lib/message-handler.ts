@@ -1,7 +1,10 @@
+import {saveWorkspaceCategories} from "./workspace-categories";
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
 import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
 import {initialLinkIdentity,isAccountHolderRelation,nextLinkRelation} from "./wpp-link-identity";
+import {withWhatsAppCompany,contextualCompanyUser,switchPhoneCompanyMode} from "./whatsapp-company";
+import {multiCompanyEnabled} from "./companies";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
@@ -48,7 +51,7 @@ import { isConnected } from "@/lib/google-oauth";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
 import { getConfig } from "@/lib/whatsapp-config";
-import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants,messageForAiContext } from "@/lib/conversations";
+import { addMessage, getAiPaused, getAiHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants,messageForAiContext } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
 import { localeForWhatsAppPhone, normalizePhoneInput } from "@/lib/phone";
 import {
@@ -121,7 +124,8 @@ export function replyWppLinkStep(
 
 async function getUserByWppPhone(phone: string) {
   const userId = await getUserIdByPhone(phone);
-  return userId ? getUserById(userId) : null;
+  const user=userId?await getUserById(userId):null;
+  return user?contextualCompanyUser(user):null;
 }
 
 function cap(s: string): string {
@@ -971,7 +975,7 @@ export type IncomingMessage = {
 };
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
-  return runWithVirtualAgentReply(msg.from,()=>handleMessageWithAgent(msg));
+  return runWithVirtualAgentReply(msg.from,()=>withWhatsAppCompany(msg,handleMessageWithAgent));
 }
 
 async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
@@ -2816,7 +2820,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // então o histórico já vem com ela como último item — removemos antes
     // de passar pro classificador pra não duplicar com "Mensagem do
     // usuário" no prompt.
-    const recentHistory = (await getHistory(from))
+    const recentHistory = (await getAiHistory(from))
       .slice(-16, -1)
       .map(messageForAiContext);
     if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
@@ -5206,7 +5210,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           break;
         }
         const newMode = ai.mode || (mode === "personal" ? "business" : "personal");
-        await updateUser(user.id, { activeMode: newMode });
+        if(multiCompanyEnabled())await switchPhoneCompanyMode(user.id,from,newMode);
+        else await updateUser(user.id, { activeMode: newMode });
         await wppSend(from, replyModeSwitch(newMode, user.locale));
         break;
       }
@@ -5255,8 +5260,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const added = categoryNames.filter(name => ![...defaults, ...existing].some(c => c.toLocaleLowerCase() === name.toLocaleLowerCase()));
           if (added.length) {
             const updated = [...existing, ...added];
-            if (type === "expense") await updateUser(user.id, { customCategoriesExpense: updated });
-            else await updateUser(user.id, { customCategoriesIncome: updated });
+            if (type === "expense") await saveWorkspaceCategories(user.id, { customCategoriesExpense: updated });
+            else await saveWorkspaceCategories(user.id, { customCategoriesIncome: updated });
           }
           const label = user.locale === "es" ? (type === "expense" ? "gastos" : "ingresos") : (type === "expense" ? "despesas" : "receitas");
           summaries.push(`${label}: ${added.length ? added.join(", ") : user.locale === "es" ? "ninguna nueva" : "nenhuma nova"}`);

@@ -1,8 +1,15 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
+  const {companyNoticeDescription,companyAppointmentPhones}=await import("./lib/company-notices");
+  let runJob:<T>(callback:()=>Promise<T>)=>Promise<T>=callback=>callback();
+  if(process.env.MULTI_COMPANY_ENABLED==="true"){
+    const [{configureCompanyDatabaseScope},{resolveCompanyContext,runWithTrustedCompanyJob}]=await Promise.all([import("./lib/supabase"),import("./lib/company-context")]);
+    configureCompanyDatabaseScope(resolveCompanyContext);
+    runJob=runWithTrustedCompanyJob;
+  }
   if(process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"){
     const {startOpenFinanceWorker}=await import("./lib/open-finance-worker");
-    startOpenFinanceWorker();
+    await runJob(async()=>startOpenFinanceWorker());
   }
 
   // Avisos ao cliente continuam verificados em TODO tick de um minuto.
@@ -80,7 +87,7 @@ export async function register() {
           }
           const locale = owner.locale;
           const dispatch = buildReminderTemplateDispatch({
-            message: r.message,
+            message: await companyNoticeDescription(r.userId,r.companyId,r.message),
             recipientType: r.recipientType,
             mode: r.mode,
             ownerName: owner.name,
@@ -139,9 +146,10 @@ export async function register() {
               const user = await getUserById(rec.userId);
               if (!user || !usersModule.hasAccess(user)) continue;
               const phones = (await getPhonesForUser(user.id)).filter(link=>link.access===rec.mode||link.access==="both").map(link=>link.phone);
-              const msg = buildRecurringNotification(rec, user.locale);
+              const description=await companyNoticeDescription(rec.userId,rec.companyId,rec.description);
+              const msg = buildRecurringNotification({...rec,description}, user.locale);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
-              const params = { descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
+              const params = { descricao: description, valor: formatCurrency(rec.amount), data: dueDateStr };
               for (const phone of phones) {
                 const freshUser=await getUserById(rec.userId);
                 const access=await phoneLinksModule.getPhoneAccess(rec.userId,phone);
@@ -153,6 +161,7 @@ export async function register() {
                     type: "recurring_confirmation",
                     userId: rec.userId,
                     recurringId: rec.id,
+                    companyId: rec.companyId,
                     dueDate: rec.nextDueDate,
                     description: rec.description,
                     amount: rec.amount,
@@ -188,9 +197,10 @@ export async function register() {
             try {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
-              const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
-              const msg = replyAppointmentReminder(apt, "2 horas", aptUser.locale);
-              const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
+              const phones = companyAppointmentPhones(apt,await getPhonesForUser(aptUser.id));
+              const title = await companyNoticeDescription(apt.userId,apt.companyId,apt.title);
+              const msg = replyAppointmentReminder({...apt,title}, "2 horas", aptUser.locale);
+              const params = { compromisso: title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;
               for (const phone of phones) {
                 const ok = await sendReminderTemplate(phone, "lembrete_compromisso", msg, params, aptUser.locale);
@@ -231,9 +241,10 @@ export async function register() {
             try {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
-              const phones = (await getPhonesForUser(aptUser.id)).map(link => link.phone);
-              const msg = replyAppointmentReminder(apt, "15 minutos", aptUser.locale);
-              const params = { compromisso: apt.title, horario: formatTimeBR(apt.startAt) };
+              const phones = companyAppointmentPhones(apt,await getPhonesForUser(aptUser.id));
+              const title = await companyNoticeDescription(apt.userId,apt.companyId,apt.title);
+              const msg = replyAppointmentReminder({...apt,title}, "15 minutos", aptUser.locale);
+              const params = { compromisso: title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;
               for (const phone of phones) {
                 const ok = await sendReminderTemplate(phone, "lembrete_compromisso15", msg, params, aptUser.locale);
@@ -256,7 +267,7 @@ export async function register() {
   };
 
   setTimeout(() => {
-    tick();
-    setInterval(tick, 60_000);
+    void runJob(tick);
+    setInterval(()=>void runJob(tick), 60_000);
   }, 15_000);
 }
