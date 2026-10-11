@@ -19,6 +19,14 @@ export async function createCompany(userId:string,name:string,document?:string):
  const {data,error}=await getSupabase().from("companies").insert({user_id:userId,name:normalized,document:cleaned||null}).select("*").single();
  if(error||!data)throw Error("COMPANY_CREATE_FAILED");return fromRow(data as CompanyRow);
 }
+export async function renameCompany(userId:string,companyId:string,name:string):Promise<Company>{
+ const normalized=name.trim();
+ if(!normalized||normalized.length>100)throw Error("COMPANY_INVALID");
+ const {data,error}=await getSupabase().from("companies").update({name:normalized}).eq("id",companyId).eq("user_id",userId).select("*").maybeSingle();
+ if(error)throw Error("COMPANY_UPDATE_FAILED");
+ if(!data)throw Error("COMPANY_NOT_FOUND");
+ return fromRow(data as CompanyRow);
+}
 export async function updateCompanyCategories(userId:string,companyId:string,patch:{customCategoriesExpense?:string[];customCategoriesIncome?:string[]}):Promise<void>{
  const row:Record<string,string[]>={};if(patch.customCategoriesExpense)row.custom_categories_expense=patch.customCategoriesExpense;if(patch.customCategoriesIncome)row.custom_categories_income=patch.customCategoriesIncome;
  const {error}=await getSupabase().from("companies").update(row).eq("id",companyId).eq("user_id",userId);if(error)throw Error("COMPANY_UPDATE_FAILED");
