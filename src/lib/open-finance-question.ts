@@ -4,8 +4,10 @@ import {openFinanceRpc} from "./open-finance-http";
 import {bankDate,bankMoney,type BankOverview} from "./open-finance-display";
 import {bankPeriod,type BankReport} from "./open-finance-report";
 import type {User} from "./users";
-type Identity=Pick<User,"id"|"email"|"plan"|"activeMode">;
-type BankQuestion={kind:"spending"|"limits"|"balances"|"investments"|"bills";from:string;to:string};
+import {readUnifiedFinances} from "./unified-finances";
+import {summarizeFinanceQuery,financeCoverageNotice} from "./finance-query";
+type Identity=Pick<User,"id"|"email"|"plan"|"activeMode">&Partial<Pick<User,"status">>;
+type BankQuestion={kind:"spending"|"limits"|"balances"|"investments"|"bills";from:string;to:string;source?:"card"|"account"};
 const normalize=(value:string)=>value.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
 const safeName=(value:string)=>value.replace(/[\r\n*`_~<>]/g," ").slice(0,200);
 function monthPeriod(today:string,previous:boolean){const [year,month]=today.split("-").map(Number),start=new Date(Date.UTC(year,month-1-(previous?1:0),1)),end=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+1,0));return {from:start.toISOString().slice(0,10),to:end.toISOString().slice(0,10)};}
@@ -22,7 +24,7 @@ export function parseBankQuestion(question:string,today:string):BankQuestion|nul
   else if(/^(?:quais (?:sao )?(?:as )?(?:minhas )?faturas|(?:me )?mostre (?:as )?(?:minhas )?faturas)[?!.]*$/.test(text))kind="bills";
   else if(/^(?:qual (?:e )?(?:o )?(?:meu )?saldo (?:nos bancos|nas contas bancarias)|(?:me )?mostre (?:os )?saldos (?:dos bancos|das contas bancarias))[?!.]*$/.test(text))kind="balances";
   else return null;
-  return {kind,...monthPeriod(today,/mes (passado|anterior)/.test(text))};
+  return {kind,...monthPeriod(today,/mes (passado|anterior)/.test(text)),...(kind==="spending"&&/cartoes/.test(text)?{source:"card" as const}:kind==="spending"&&/bancos/.test(text)?{source:"account" as const}:{})};
 }
 async function spending(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<string> {
   const report=await openFinanceRpc(scope,"zelo_of_report",{p_from:period.from,p_to:period.to,p_after:null}) as BankReport;
@@ -39,9 +41,12 @@ export async function answerBankQuestion(user:Identity,mode:"personal"|"business
   const parsed=parseBankQuestion(question,today);if(!parsed)return null;
   const scope=await getOpenFinanceAccess(user,mode);if(!scope)return null;
   try{
+    if(parsed.kind==="spending"){
+      const {entries,bank}=await readUnifiedFinances(user,mode,parsed.from,parsed.to);
+      return summarizeFinanceQuery(entries,{from:parsed.from,to:parsed.to,type:"expense",source:parsed.source},mode)+financeCoverageNotice(bank,entries);
+    }
     const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment})as BankOverview;
     if(!overview.connections.length)return "Nenhum banco conectado neste modo. A conexão fica na aba Contas.";
-    if(parsed.kind==="spending")return await spending(scope,parsed);
     const resources=overview.resources;
     const name=(id:string)=>{const r=resources.find(r=>r.id===id);return safeName(`${overview.connections.find(c=>c.id===r?.connection_id)?.institution_name||"Banco"} · ${r?.name||"Recurso"}`);};
     let lines:string[]=[];

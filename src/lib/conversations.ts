@@ -1,7 +1,10 @@
 import { getSupabase } from "./supabase";
 import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 
-export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string };
+export type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string; privateFinancial?: boolean };
+export function messageForAiContext(message:ChatMessage):{role:"user"|"assistant";content:string}{
+  return {role:message.role,content:message.privateFinancial?"[A Zelo respondeu uma consulta financeira usando o extrato privado; os valores foram omitidos deste contexto.]":message.type==="audio"&&!message.content?"[Áudio]":message.content};
+}
 
 export type LastFinanceBatchItem = { id: string; description: string; amount: number; type: "income" | "expense" };
 type LastFinanceBatch = { items: LastFinanceBatchItem[]; mode: "personal" | "business"; ts: number };

@@ -3,7 +3,17 @@ import { getSupabase } from "./supabase";
 import type { User } from "./users";
 
 export type OpenFinanceScope = { userId: string; mode: "personal" | "business"; environment: "production" };
-type Identity = Pick<User, "id" | "email" | "plan" | "activeMode">;
+export type OpenFinanceIdentity = Pick<User, "id" | "email" | "plan" | "activeMode"> & Partial<Pick<User,"status">>;
+
+export function isPublicOpenFinanceEnabled():boolean {
+  return process.env.OPEN_FINANCE_ENABLED==="true" && process.env.OPEN_FINANCE_PUBLIC_ENABLED==="true" && process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true";
+}
+
+export function canEnrollOpenFinance(user:OpenFinanceIdentity,mode:string|null|undefined):boolean {
+  return isPublicOpenFinanceEnabled() && user.status==="active"
+    && !!process.env.POLP_PRODUCTION_CLIENT_ID && !!process.env.POLP_PRODUCTION_CLIENT_SECRET
+    && (mode==="personal" || (mode==="business" && canUseOpenFinanceBusiness(user)));
+}
 
 /** Private owner testing does not upgrade the production plan or active mode. */
 export function canUseOpenFinanceBusiness(user: Pick<User, "email" | "plan">): boolean {
@@ -17,12 +27,13 @@ export function canUseOpenFinanceBusiness(user: Pick<User, "email" | "plan">): b
     && !!owner && user.email.trim().toLowerCase() === owner;
 }
 
-/** Email comes from the current database user, never the JWT or request body.
- * Public rollout requires a separate reviewed gate; this flag stays owner-only. */
-export async function getOpenFinanceAccess(user: Identity, requestedMode?: string | null, options:{throwOnStorageError?:boolean}={}): Promise<OpenFinanceScope | null> {
+/** Identity comes from the current database user, never the JWT or request body.
+ * Public availability still requires each holder's recorded Brazilian eligibility. */
+export async function getOpenFinanceAccess(user: OpenFinanceIdentity, requestedMode?: string | null, options:{throwOnStorageError?:boolean}={}): Promise<OpenFinanceScope | null> {
   if (process.env.OPEN_FINANCE_ENABLED !== "true") return null;
   const ownerEmail = process.env.OPEN_FINANCE_OWNER_EMAIL?.trim().toLowerCase();
-  if (!ownerEmail || user.email.trim().toLowerCase() !== ownerEmail) return null;
+  const owner=!!ownerEmail && user.email.trim().toLowerCase()===ownerEmail;
+  if(isPublicOpenFinanceEnabled() ? user.status!=="active" : !owner)return null;
   if (!process.env.POLP_PRODUCTION_CLIENT_ID || !process.env.POLP_PRODUCTION_CLIENT_SECRET) return null;
   const mode = requestedMode ?? user.activeMode;
   if (mode !== "personal" && mode !== "business") return null;

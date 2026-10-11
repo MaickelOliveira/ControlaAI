@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionWithUser } from "@/lib/auth";
-import { getOpenFinanceAccess } from "@/lib/open-finance-access";
+import { getOpenFinanceAccess,canEnrollOpenFinance } from "@/lib/open-finance-access";
 import { getSupabase } from "@/lib/supabase";
 import { isBankConnectReady } from "@/lib/open-finance-ready";
 
@@ -8,9 +8,17 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const auth = await getSessionWithUser();
   if (!auth || auth.session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const scope = await getOpenFinanceAccess(auth.user, new URL(request.url).searchParams.get("mode"));
-  if (!scope) return NextResponse.json({ error: "Não disponível" }, { status: 404 });
   try {
+    const mode=new URL(request.url).searchParams.get("mode")??auth.user.activeMode;
+    const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
+    if(!scope){
+      if(canEnrollOpenFinance(auth.user,mode)){
+        const {data,error}=await getSupabase().rpc("zelo_of_access",{p_user:auth.user.id});
+        if(error)throw Error("STORAGE_UNAVAILABLE");
+        if(!data)return NextResponse.json({eligibilityRequired:true,connections:[],resources:[],limits:[],bills:[],credit:[],sync:[]},{headers:{"Cache-Control":"private, no-store"}});
+      }
+      return NextResponse.json({error:"Não disponível"},{status:404,headers:{"Cache-Control":"private, no-store"}});
+    }
     const { data, error } = await getSupabase().rpc("zelo_of_overview", {
       p_user: scope.userId, p_environment: scope.environment, p_mode: scope.mode,
     });

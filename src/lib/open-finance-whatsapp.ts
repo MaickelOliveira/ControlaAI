@@ -1,0 +1,54 @@
+import "server-only";
+import type {User} from "./users";
+import type {AIResult} from "./ai-processor";
+import {getOpenFinanceAccess,canEnrollOpenFinance,type OpenFinanceIdentity} from "./open-finance-access";
+import {readUnifiedFinances} from "./unified-finances";
+import {summarizeFinanceQuery,financeCoverageNotice,type FinanceQuery} from "./finance-query";
+import {answerBankQuestion,parseBankQuestion} from "./open-finance-question";
+import {expandMerchantAliases,getPendingFinances} from "./finances";
+import {getRecurringByUser} from "./recurring";
+import {collectUpcomingFinanceItems} from "./upcoming-finances";
+import {bankDate,bankMoney} from "./open-finance-display";
+const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
+
+export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"business",phoneAccess:string,message:string,today:string):Promise<string|null>{
+  if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true")return null;
+  const text=normalize(message),requested=/\b(empresa|empresarial|pj)\b/.test(text)?"business":/\b(pessoal|pf)\b/.test(text)?"personal":mode;
+  if(phoneAccess!=="both"&&requested!==mode)return /banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(/\bopen\s*(finance|banking)\b/.test(text)||(/\b(conectar|conecto|sincronizar|vincular)\b/.test(text)&&/\b(banco|bancos|bancaria|bancarias)\b/.test(text))){
+    if(!canEnrollOpenFinance(user,requested)&&!await getOpenFinanceAccess(user,requested))return null;
+    return "O Open Finance está disponível para contas bancárias do Brasil. Na Zelo, abra Contas → Conectar banco no modo Pessoal (PF) ou Empresa (PJ). Você autoriza diretamente no banco; a Zelo não pede sua senha. Depois, as consultas usam os dados recebidos e salvos na Zelo.";
+  }
+  const question=message.replace(/\b(?:da empresa|empresarial|pessoal|pf|pj)\b/gi,"").replace(/\s+/g," ").trim();
+  const parsed=parseBankQuestion(question,today);
+  if(!parsed||parsed.kind==="spending")return null;
+  return answerBankQuestion(user,requested,question,today);
+}
+
+/** The model supplies filters only. Financial rows and totals never enter its prompt. */
+export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:"personal"|"business",phoneAccess:string,ai:AIResult,defaultPeriod:[string,string],message=""):Promise<string|null>{
+  if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true"||!["finance_query","balance_query","finance_detail","finance_analysis"].includes(ai.intent))return null;
+  const requested=ai.mode??mode;
+  if(requested!=="personal"&&requested!=="business")return null;
+  if(phoneAccess!=="both"&&requested!==mode)return "Este número não tem acesso a esse modo da Zelo.";
+  if(ai.personName)return null;
+  try{
+    const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
+    if(!scope)return null;
+    const from=ai.period?.from??defaultPeriod[0],to=ai.period?.to??defaultPeriod[1];
+    const {entries,bank}=await readUnifiedFinances(user,requested,from,to);
+    if(!bank?.overview.connections.length)return null;
+    if(ai.account)return "Para consultar uma conta específica, use o filtro em Finanças. Posso informar aqui o total de todos os bancos conectados neste modo ou o gasto por categoria e estabelecimento.";
+    const text=normalize(message);
+    const source:FinanceQuery["source"]=/\b(cartao|cartoes)\b/.test(text)?"card":/\b(contas bancarias|bancos conectados)\b/.test(text)?"account":undefined;
+    const query:FinanceQuery={from,to,type:ai.intent==="balance_query"?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail"};
+    let answer=summarizeFinanceQuery(entries,query,requested)+financeCoverageNotice(bank,entries);
+    if(ai.intent==="finance_detail"&&!query.source){
+      const [pending,recurring]=await Promise.all([getPendingFinances(user.id,requested),getRecurringByUser(user.id,requested,"active")]);
+      const categoryMatches=(e:{category:string})=>!query.category||normalize(e.category)===normalize(query.category);
+      const upcoming=collectUpcomingFinanceItems(pending.filter(categoryMatches),recurring.filter(categoryMatches),{from,to,mode:requested,includeUndated:true}).filter(e=>e.type===query.type&&(!query.keywords?.length||query.keywords.some(k=>normalize(e.description).includes(normalize(k)))));
+      if(upcoming.length)answer+=`\n\nValores ainda a ${query.type==="income"?"receber":"pagar"} (fora do total realizado):\n${upcoming.slice(0,20).map(e=>`${bankDate(e.dueDate)} · ${e.description.replace(/[\r\n*`_~<>]/g," ").slice(0,160)} · ${bankMoney(e.amount,"BRL")}`).join("\n")}${upcoming.length>20?"\nConsulte as demais pendências em Finanças.":""}`;
+    }
+    return answer;
+  }catch{return "Não consegui consultar o extrato completo agora. Tente novamente em Finanças; não vou apresentar um total parcial como se fosse completo.";}
+}

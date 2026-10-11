@@ -3,9 +3,24 @@ vi.mock("server-only", () => ({}));
 const m = vi.hoisted(() => ({ rpc: vi.fn(), request: vi.fn() }));
 vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
 vi.mock("./polp-production", async original => ({ ...await original<typeof import("./polp-production")>(), polpProductionRequest: m.request }));
-import { refreshProductionConsent } from "./open-finance-consent";
+import { refreshProductionConsent,recreateProductionConsent,getConsentAuthorization } from "./open-finance-consent";
 const id = "550e8400-e29b-41d4-a716-446655440000";
 const scope = { userId: id, mode: "personal" as const, environment: "production" as const };
+it("renews only the own pending consent with its existing products",async()=>{
+  vi.stubEnv("OPEN_FINANCE_AUTH_HOSTS","authorize.example");
+  m.rpc.mockResolvedValue({status:"pending",external_consent_id:id,institution_id:id,scopes:["ACCOUNT"]});
+  m.request.mockResolvedValue({data:{id,institution_id:id,cliente_user_id:id,status:"AWAITING_AUTHORIZATION",products:["ACCOUNT"],url_to_authenticate:"https://authorize.example/fresh"}});
+  expect(await recreateProductionConsent(scope,id)).toMatchObject({id,status:"pending",authorizationUrl:"https://authorize.example/fresh"});
+  expect(m.request).toHaveBeenCalledWith(`/consents/${id}/recreate`,"POST",{products:["ACCOUNT"]});
+  m.rpc.mockResolvedValueOnce({status:"revoked"});m.request.mockClear();
+  await expect(recreateProductionConsent(scope,id)).rejects.toThrow("CONSENT_CANCELLED");expect(m.request).not.toHaveBeenCalled();
+});
+it("releases only provider-returned secure links through the explicit public gate",()=>{
+  vi.stubEnv("OPEN_FINANCE_ENABLED","true");vi.stubEnv("OPEN_FINANCE_PUBLIC_ENABLED","true");vi.stubEnv("OPEN_FINANCE_PROVIDER_AUTH_URLS_ENABLED","true");vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","false");
+  expect(getConsentAuthorization({url_to_authenticate:"https://bank-auth.example/fresh"})).toEqual({authorizationUrl:"https://bank-auth.example/fresh"});
+  for(const url of ["http://bank-auth.example/","https://localhost/","https://127.0.0.1/","https://user:password@bank-auth.example/"])expect(()=>getConsentAuthorization({url_to_authenticate:url})).toThrow("INVALID_AUTH_URL");
+  vi.stubEnv("OPEN_FINANCE_PROVIDER_AUTH_URLS_ENABLED","false");expect(()=>getConsentAuthorization({url_to_authenticate:"https://bank-auth.example/fresh"})).toThrow("INVALID_AUTH_URL");
+});
 beforeEach(() => { vi.resetAllMocks(); m.rpc.mockResolvedValue({ status: "pending", external_consent_id: id, institution_id: id }); m.request.mockResolvedValue({ data: { id, institution_id: id, cliente_user_id: id, status: "AUTHORISED" } }); });
 it("does not query a cancelled or foreign connection", async () => {
   m.rpc.mockRejectedValueOnce(new Error("OF_CONNECTION_NOT_FOUND"));

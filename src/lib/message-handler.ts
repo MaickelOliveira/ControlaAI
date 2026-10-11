@@ -1,6 +1,7 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
+import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "@/lib/open-finance-whatsapp";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
@@ -41,7 +42,7 @@ import { isConnected } from "@/lib/google-oauth";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
 import { getConfig } from "@/lib/whatsapp-config";
-import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants } from "@/lib/conversations";
+import { addMessage, getAiPaused, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants,messageForAiContext } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
 import { localeForWhatsAppPhone, normalizePhoneInput } from "@/lib/phone";
 import {
@@ -202,8 +203,8 @@ export function listNumberLabel(zeroBasedIndex: number): string {
 /** No fluxo conversacional, falha de envio não pode parecer sucesso. A
  * facade retorna false quando o provedor rejeita a mensagem; transformar
  * isso em erro aciona o fallback do handler e deixa um log rastreável. */
-async function wppSend(to: string, message: string): Promise<void> {
-  const sent = await sendWhatsAppText(to, message);
+async function wppSend(to: string, message: string, privateFinancial=false): Promise<void> {
+  const sent = await sendWhatsAppText(to, message,privateFinancial?{privateFinancial:true}:undefined);
   if (!sent) throw new Error(`[message-handler] WhatsApp recusou resposta para ${to.slice(-4)}`);
 }
 
@@ -252,14 +253,14 @@ export function buildFirstUseGuideMessages(locale?: string): string[] {
 }
 
 /** Mantém respostas dentro do limite prático do WhatsApp sem omitir dados. */
-async function wppSendLong(to: string, message: string, maxLength = 3500): Promise<void> {
+async function wppSendLong(to: string, message: string, maxLength = 3500,privateFinancial=false): Promise<void> {
   const chunks = splitWhatsAppMessage(message, maxLength);
   // Valida a resposta INTEIRA antes do primeiro envio. Uma saída repetitiva
   // do modelo não pode virar dezenas de mensagens no telefone do cliente.
   if (chunks.length > 8 || /([^\s])\1{64,}/u.test(message)) {
     throw new Error("[message-handler] resposta longa ou repetitiva bloqueada");
   }
-  for (const chunk of chunks) await wppSend(to, chunk);
+  for (const chunk of chunks) await wppSend(to, chunk,privateFinancial);
 }
 
 export type ImageAction = "save" | "search" | "describe" | "register";
@@ -2781,7 +2782,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // usuário" no prompt.
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
-      .map(h => ({ role: h.role, content: h.type === "audio" && !h.content ? "[Áudio]" : h.content }));
+      .map(messageForAiContext);
+    const bankReply=await answerBankWhatsAppMessage(user,mode,phoneAccess,messageText,todayStrBR());
+    if(bankReply){await wppSendLong(from,bankReply,3500,true);return;}
     const imageRequest = parsePublicImageRequest(messageText, recentHistory);
     if (imageRequest) {
       const found = await findPublicProductImage(imageRequest);
@@ -2932,6 +2935,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       await wppSend(from, replyLowConfidence(ai.intent, details, messageText, user.locale));
       return;
     }
+
+    const connectedReply=await answerConnectedFinanceQuery(user,mode,phoneAccess,ai,monthBounds(year,month),messageText);
+    if(connectedReply){await wppSendLong(from,connectedReply,3500,true);return;}
 
     switch (ai.intent) {
 

@@ -9,7 +9,7 @@ const user={id:"owner",email:"owner@example.test",plan:"personal",activeMode:"pe
 describe("bank questions from saved data",()=>{
   beforeEach(()=>vi.clearAllMocks());
   it("recognizes last month's card query without treating registrations as questions",()=>{
-    expect(parseBankQuestion("Quanto gastei nos cartões mês passado?","2026-10-09")).toEqual({kind:"spending",from:"2026-09-01",to:"2026-09-30"});
+    expect(parseBankQuestion("Quanto gastei nos cartões mês passado?","2026-10-09")).toEqual({kind:"spending",from:"2026-09-01",to:"2026-09-30",source:"card"});
     expect(parseBankQuestion("Registra 50 no cartão","2026-10-09")).toBeNull();
     expect(parseBankQuestion("Quanto gastei com iFood nos cartões?","2026-10-09")).toBeNull();
     expect(parseBankQuestion("Qual o saldo da empresa?","2026-10-09")).toBeNull();

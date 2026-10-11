@@ -117,10 +117,10 @@ export function localizedTemplateParams(base: WhatsAppTemplateBase, params: Reco
   }));
 }
 
-export async function sendText(to: string, message: string): Promise<boolean> {
+export async function sendText(to: string, message: string, options?:{privateFinancial?:boolean}): Promise<boolean> {
   const provider = (await getConfig()).provider;
   const ok = provider === "waba" ? await waba.sendText(to, message) : await evolution.sendText(to, message);
-  if (ok) await addMessage(to, { role: "assistant", content: message, ts: Date.now() });
+  if (ok) await addMessage(to, { role: "assistant", content: message, ts: Date.now(), ...(options?.privateFinancial?{privateFinancial:true}:{}) });
   return ok;
 }
 
