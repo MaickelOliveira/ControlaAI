@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import {getUserById} from "@/lib/users";
+import {getPhonesForUser} from "@/lib/wpp-phone-links";
+import {identifyFinanceAuthors} from "@/lib/finance-attribution";
 import { addFinance, calculateFinanceBalance, getAllTimeBalance, getFinancesByUser, getFinancesInRange, getBalance } from "@/lib/finances";
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+    const [owner,participants]=await Promise.all([getUserById(session.sub),getPhonesForUser(session.sub)]);
+    const withAuthors=<T extends {source?:string;registeredBy?:string}>(items:T[])=>owner?identifyFinanceAuthors(items,owner,participants):items;
 
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get("mode") as "personal" | "business" | undefined;
@@ -22,7 +28,7 @@ export async function GET(req: NextRequest) {
         getAllTimeBalance(session.sub, selectedMode),
       ]);
       const finances = periodFinances.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      return NextResponse.json({ finances, balance: calculateFinanceBalance(finances), totalBalance });
+      return NextResponse.json({ finances:withAuthors(finances), balance: calculateFinanceBalance(finances), totalBalance });
     }
 
     // Sem período — comportamento padrão (mês atual), mantido pra quem não filtra.
@@ -32,7 +38,7 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const balance = await getBalance(session.sub, mode || "personal", now.getFullYear(), now.getMonth() + 1);
 
-    return NextResponse.json({ finances, balance, totalBalance: calculateFinanceBalance(finances) });
+    return NextResponse.json({ finances:withAuthors(finances), balance, totalBalance: calculateFinanceBalance(finances) });
   } catch {
     const emptyBalance = { income: 0, expense: 0, balance: 0 };
     return NextResponse.json({ finances: [], balance: emptyBalance, totalBalance: emptyBalance });

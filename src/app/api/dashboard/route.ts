@@ -4,6 +4,7 @@ import { getMaxWppPhones } from "@/lib/users";
 import { getPhonesForUser } from "@/lib/wpp-phone-links";
 import { getFinancesByUser, isPostedFinance, type Finance, type FinanceMode } from "@/lib/finances";
 import { getTasksByUser } from "@/lib/tasks";
+import {identifyFinanceAuthors} from "@/lib/finance-attribution";
 
 export async function GET() {
   const auth = await getSessionWithUser();
@@ -72,6 +73,6 @@ export async function GET() {
     personal: { balance: personalBalance, dailyTotals: personalDailyTotals, expenseCategories: personalExpCategories },
     business: { balance: businessBalance, dailyTotals: businessDailyTotals, expenseCategories: businessExpCategories },
     tasks: { pendingCount: pendingTasks.length, overdueCount: overdueTasks.length, recent: pendingTasks.slice(0, 5) },
-    recentTransactions,
+    recentTransactions:identifyFinanceAuthors(recentTransactions,user,phoneLinks),
   });
 }

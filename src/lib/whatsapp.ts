@@ -2,6 +2,7 @@ import { getConfig } from "@/lib/whatsapp-config";
 import * as evolution from "@/lib/evolution";
 import * as waba from "@/lib/waba";
 import { addMessage, hasOpenCustomerServiceWindow } from "@/lib/conversations";
+import {decorateVirtualAgentReply} from "./virtual-agent-replies";
 
 /** Facade agnóstica de provider — dezenas de call-sites no bot (switch de
  *  intenções em message-handler.ts) usam só sendText/sendFile e não
@@ -118,6 +119,7 @@ export function localizedTemplateParams(base: WhatsAppTemplateBase, params: Reco
 }
 
 export async function sendText(to: string, message: string, options?:{privateFinancial?:boolean}): Promise<boolean> {
+  message=decorateVirtualAgentReply(to,message);
   const provider = (await getConfig()).provider;
   const ok = provider === "waba" ? await waba.sendText(to, message) : await evolution.sendText(to, message);
   if (ok) await addMessage(to, { role: "assistant", content: message, ts: Date.now(), ...(options?.privateFinancial?{privateFinancial:true}:{}) });
@@ -251,6 +253,7 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
 }
 
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string,options?:{privateFinancial?:boolean}): Promise<boolean> {
+  caption=decorateVirtualAgentReply(to,caption??"")||undefined;
   const provider = (await getConfig()).provider;
   const ok = provider === "waba"
     ? await waba.sendFile(to, fileBuffer, filename, mimeType, caption)

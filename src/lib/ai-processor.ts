@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
+import {virtualAgentPrompt} from "./virtual-agent-replies";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } from "./finances";
@@ -2194,6 +2195,7 @@ function buildVolatileContext(ctx?: AiContext): string {
 
   return `Hoje é: ${new Date(hoje + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} (${hoje}) — Agora são: ${agora.slice(11,16)} (horário de Brasília/São Paulo).${localeLine}
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
+${virtualAgentPrompt()}
 
 Calendário dos próximos dias (use para resolver dias da semana sem errar):
 ${nextDays.join("\n")}
@@ -4354,6 +4356,7 @@ export async function generateFallbackResponse(
     : "(sem mensagens anteriores)";
 
   const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Tom caloroso, direto e seguro, como alguém de confiança que cuida da vida financeira/organização da pessoa.
+${virtualAgentPrompt()}
 
 O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Sua única tarefa aqui é responder de um jeito humano e específico ao que ela disse, para entender o que ela precisa — nunca confirme que algo foi feito/registrado/agendado, porque NADA foi executado ainda.${localeInstruction(locale) ? `\n${localeInstruction(locale)}` : ""}
 
@@ -4425,6 +4428,7 @@ export async function generateAnalysisResponse(
 
   const localeNote = localeInstruction(locale);
   const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Fale como alguém de confiança que cuida das finanças da pessoa: tom caloroso, direto e seguro, sem exagerar em formalidade nem em entusiasmo artificial (nada de "🎉 incrível!" — prefira uma segurança tranquila, tipo "aqui está o que encontrei" ou "reparei que...").${localeNote ? `\n${localeNote}` : ""}
+${virtualAgentPrompt()}
 Responda à pergunta do usuário de forma PERSONALIZADA com base nos dados REAIS dele.
 Use negrito com *asterisco* (formato WhatsApp) e listas com • quando ajudar a organizar; emojis com moderação, só onde fizer sentido.
 Máximo 250 palavras.

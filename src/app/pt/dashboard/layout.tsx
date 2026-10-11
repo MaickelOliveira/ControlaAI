@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import WorkspaceHeader from "@/components/WorkspaceHeader";
+import UiIcon from "@/components/UiIcon";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
@@ -281,8 +282,9 @@ export default function DashboardLayoutPt({ children }: { children: React.ReactN
           </button>
           <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="z-wordmark z-wordmark-dark" /><Image src="/brand/zelo-wordmark-light.png" alt="" width={640} height={293} className="z-wordmark z-wordmark-light"/>
           {user && (
-            <span className="ml-auto text-xs text-muted truncate max-w-[120px]">
-              {isPersonal ? "👤 Pessoal" : "🏢 Empresa"}
+            <span className="z-mobile-mode-badge" data-mode={isPersonal ? "personal" : "business"}>
+              <UiIcon name={isPersonal ? "person" : "business"}/>
+              {isPersonal ? "Pessoal" : "Empresa"}
             </span>
           )}
         </div>

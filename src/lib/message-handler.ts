@@ -1,4 +1,7 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
+import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
+import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
+import {initialLinkIdentity,isAccountHolderRelation,nextLinkRelation} from "./wpp-link-identity";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
@@ -100,17 +103,20 @@ export function replyWppLinkStep(
     : "\n\n⏱️ Responda esta etapa em até *5 minutos* para não perder a vinculação.";
   if (step === "name") {
     return (locale === "es"
-      ? "✅ ¡Código confirmado!\n\nAntes de vincular el número, necesito saber quién lo va a usar.\n\n¿Cómo puedo llamarte?"
-      : "✅ Código confirmado!\n\nAntes de vincular, preciso saber quem vai usar esse número.\n\nComo posso te chamar?") + expiry;
+      ? "¿Cuál es el nombre de la persona que usará este número? Así identificaré sus movimientos correctamente."
+      : "Qual é o nome da pessoa que vai usar este número? Assim identifico os lançamentos dela corretamente.") + expiry;
   }
   if (step === "relation") {
+    if(!name)return (locale==="es"
+      ? "✅ ¡Código confirmado! ¿Este número es tuyo o de otra persona de la cuenta? Responde *titular* o la relación, como esposa, esposo, hijo o socio. Para el titular usaré el nombre registrado en Zelo."
+      : "✅ Código confirmado! Este número é seu ou de outra pessoa da conta? Responda *titular* ou o vínculo, como esposa, marido, filho ou sócio. Para o titular, vou usar o nome cadastrado na Zelo.") + expiry;
     return (locale === "es"
       ? `¡Mucho gusto, ${name}! 👋\n\n¿Cuál es tu relación con la cuenta? _(ej.: esposa, esposo, hijo, socio, tía...)_`
       : `Prazer, ${name}! 👋\n\nQual seu vínculo com a conta? _(ex: esposa, marido, filho, sócio, tia...)_`) + expiry;
   }
   return (locale === "es"
     ? "De acuerdo. ¿A qué modo puedes acceder?\n\n1️⃣ Solo personal\n2️⃣ Solo empresarial\n3️⃣ Los dos\n\nResponde con el número o la palabra."
-    : "Certo. E qual modo você pode acessar?\n\n1️⃣ Só pessoal\n2️⃣ Só empresarial\n3️⃣ Os dois\n\nResponda o número ou a palavra.") + expiry;
+    : `${name?`Nome cadastrado: *${name}*.\n\n`:""}Certo. E qual modo você pode acessar?\n\n1️⃣ Só pessoal\n2️⃣ Só empresarial\n3️⃣ Os dois\n\nResponda o número ou a palavra.`) + expiry;
 }
 
 async function getUserByWppPhone(phone: string) {
@@ -257,6 +263,7 @@ export function buildFirstUseGuideMessages(locale?: string): string[] {
 
 /** Mantém respostas dentro do limite prático do WhatsApp sem omitir dados. */
 async function wppSendLong(to: string, message: string, maxLength = 3500,privateFinancial=false): Promise<void> {
+  message=decorateVirtualAgentReply(to,message);
   const chunks = splitWhatsAppMessage(message, maxLength);
   // Valida a resposta INTEIRA antes do primeiro envio. Uma saída repetitiva
   // do modelo não pode virar dezenas de mensagens no telefone do cliente.
@@ -376,6 +383,7 @@ async function registerFinanceDocumentFromMedia(options: {
   const { from, buffer, mimeType, caption, user } = options;
   const financeData = await extractFinanceFromDocument(buffer, mimeType, caption, user.id);
   if (!financeData) return false;
+  setVirtualAgentIntent("finance_register");
 
   const mode = financeData.mode || user.activeMode;
   const description = financialDocumentDescription(financeData);
@@ -510,6 +518,7 @@ async function prepareFinancialTransactionListImport(options: {
   const { from, buffer, mimeType, caption, originalName, user } = options;
   const extraction = await extractFinancialTransactionsFromDocument(buffer, mimeType, caption, user.id);
   if (!extraction) return false;
+  setVirtualAgentIntent("finance_import");
 
   if (!extraction.complete || extraction.transactions.length !== extraction.sourceTransactionCount) {
     await clearPendingAction(from);
@@ -962,6 +971,10 @@ export type IncomingMessage = {
 };
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
+  return runWithVirtualAgentReply(msg.from,()=>handleMessageWithAgent(msg));
+}
+
+async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
   const from = msg.from;
   let responseLocale: string | undefined;
   try {
@@ -988,6 +1001,9 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const fileUser = await getUserByWppPhone(from);
       if (fileUser && hasAccess(fileUser)) {
         responseLocale = fileUser.locale;
+        const filePerson=(await getPhonesForUser(fileUser.id)).find(person=>phoneMatches(person.phone,from));
+        if(filePerson)setVirtualAgentIdentity(isAccountHolderRelation(filePerson.relation)?fileUser.name:(filePerson.name||""),fileUser.locale);
+        setVirtualAgentIntent("drive_save");
         const buffer = msg.fileBuffer!;
         const mimeType = msg.fileMimeType || "application/octet-stream";
         const defaultExt = mimeType.includes("pdf") ? ".pdf" : mimeType.includes("image") ? ".jpg" : mimeType.includes("csv") ? ".csv" : mimeType.includes("spreadsheet") ? ".xlsx" : "";
@@ -1042,6 +1058,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           try {
             const invoice = await extractInvoiceTransactions(buffer, mimeType, caption, fileUser.id, originalName);
             if (invoice && invoice.transactions.length > 0) {
+              setVirtualAgentIntent("finance_import");
               const fMode = fileUser.activeMode;
               const invoiceAccountHint = documentAccountHintFromCaption(caption) || invoice.bankName;
               const reconciledTotal = invoice.transactions.reduce((sum, item) => sum + item.amount, 0);
@@ -1132,6 +1149,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
             // fatura falhar nela, volta ao menu de imagem em vez de afirmar
             // incorretamente que era uma fatura quebrada.
             if (explicitInvoiceRequest || !mimeType.includes("image")) {
+              setVirtualAgentIntent("finance_import");
               await clearPendingAction(from);
               await wppSend(from, localized(fileUser.locale,
                 "⚠️ *Não consegui separar as compras com segurança.*\n\n*Nada foi lançado.* Reenvie o PDF, a foto ou a planilha original. Se o erro continuar, aguarde alguns minutos e tente de novo.",
@@ -1150,6 +1168,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           try {
             const receipt = await extractGroceryReceiptItems(buffer, mimeType, caption, fileUser.id);
             if (receipt) {
+              setVirtualAgentIntent("grocery_purchase");
               const gMode = fileUser.activeMode;
               const isDup = await isLikelyDuplicateExpense(fileUser.id, gMode, receipt.total, receipt.date);
               if (isDup) {
@@ -1217,6 +1236,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           // Legenda de pagamento/registro e a leitura não achou os dados: avisa
           // em vez de guardar no Drive e devolver a legenda solta pra IA perguntar.
           if (requestedImageAction === "register" && mimeType.includes("image")) {
+            setVirtualAgentIntent("finance_register");
             await wppSend(from, localized(fileUser.locale,
               "❓ Não consegui identificar os dados do pagamento nessa imagem. Envie uma foto mais nítida, mostrando valor e data.",
               "❓ No pude identificar los datos del pago en esta imagen. Envía una foto más nítida que muestre el importe y la fecha."));
@@ -1225,6 +1245,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
 
         // Sem dados financeiros ou com pedido de salvar → salva no Drive
+        setVirtualAgentIntent("drive_save");
         try {
           const folders = await getFolders(fileUser.id);
           const folderNames = folders.filter(f => f.parentId === null).map(f => f.name);
@@ -1260,8 +1281,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     if (!messageText) return;
 
     // ── Verifica se é um código de vinculação (4 dígitos) ──
-    // Não vincula na hora — primeiro coleta nome, vínculo com a conta e o
-    // modo que a pessoa pode acessar (awaiting_wpp_link_info), só então
+    // Não vincula na hora — identifica a pessoa e confirma o modo permitido,
+    // usando o nome da plataforma para o titular. Só então
     // chama linkPhone. Precisa ficar ANTES de identificar o usuário pelo
     // telefone (abaixo), porque o número ainda não está vinculado aqui.
     const codeMatch = messageText.trim().match(/^(\d{4})$/);
@@ -1286,8 +1307,10 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           return;
         }
         await updateUser(codeUser.id, { wppVerifyCode: undefined, wppVerifyExpires: undefined });
-        await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: codeUser.id, step: "name" });
-        await wppSend(from, replyWppLinkStep("name", codeUser.locale));
+        const identity=initialLinkIdentity(codeUser.name,linkedCount);
+        if(identity.name)setVirtualAgentIdentity(identity.name,codeUser.locale);
+        await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: codeUser.id, ...identity });
+        await wppSend(from, replyWppLinkStep(identity.step, codeUser.locale,identity.name));
         return;
       }
     }
@@ -1305,14 +1328,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const isSpanish = linkOwner?.locale === "es";
       if (linkPending.step === "name") {
         const name = cap(messageText.trim().slice(0, 40)) || (isSpanish ? "Sin nombre" : "Sem nome");
-        await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "relation", name });
-        await wppSend(from, replyWppLinkStep("relation", linkOwner?.locale, name));
+        const step=linkPending.relation?"access":"relation";
+        setVirtualAgentIdentity(name,linkOwner.locale);
+        await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step, name,relation:linkPending.relation });
+        await wppSend(from, replyWppLinkStep(step, linkOwner?.locale, name));
         return;
       }
       if (linkPending.step === "relation") {
-        const relation = cap(messageText.trim().slice(0, 30)) || (isSpanish ? "Otro" : "Outro");
-        await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, step: "access", name: linkPending.name, relation });
-        await wppSend(from, replyWppLinkStep("access", linkOwner?.locale));
+        const identity=nextLinkRelation(linkPending,linkOwner.name,messageText);
+        if(identity.name)setVirtualAgentIdentity(identity.name,linkOwner.locale);
+        await setPendingAction(from, { type: "awaiting_wpp_link_info", userId: linkPending.userId, ...identity });
+        await wppSend(from, replyWppLinkStep(identity.step, linkOwner?.locale,identity.name));
         return;
       }
       if (linkPending.step === "access") {
@@ -1325,6 +1351,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         await clearPendingAction(from);
         const linkName = linkPending.name || (isSpanish ? "Sin nombre" : "Sem nome");
+        setVirtualAgentIdentity(linkName,linkOwner.locale);
         const linkRelation = linkPending.relation || (isSpanish ? "Otro" : "Outro");
         const linkResult = await linkPhone(linkPending.userId, from);
         if (linkResult === "already_linked_elsewhere") {
@@ -1372,6 +1399,8 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // compartilhado de sempre.
     const phoneAccess = await getPhoneAccess(user.id, from);
     if(!phoneAccess){await wppSend(from,replyPhoneNotLinked(from));return;}
+    const speaker=(await getPhonesForUser(user.id)).find(person=>phoneMatches(person.phone,from));
+    if(speaker)setVirtualAgentIdentity(isAccountHolderRelation(speaker.relation)?user.name:(speaker.name||""),user.locale);
     const mode: "personal" | "business" = phoneAccess === "both" ? user.activeMode : phoneAccess;
     const now = nowBR(); // horário de Brasília/São Paulo
     const year = now.getFullYear();
@@ -1382,6 +1411,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     if (nameCmdMatch) {
       const name = cap(nameCmdMatch[1].trim());
       await setPhoneName(user.id, from, name);
+      setVirtualAgentIdentity(name,user.locale);
       await wppSend(from, replyWppNameSaved(name, user.locale));
       return;
     }
@@ -1416,13 +1446,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const code = await generateWppVerifyCode(user.id);
       const botNumber = (await getConfig()).wppBotNumber;
       await wppSend(from, user.locale === "es"
-        ? `📲 *Código de vinculación:* ${code}\n\nPídele a la persona que guarde${botNumber ? ` el número *${botNumber}*` : " este número de Zelo"} y envíe este código por aquí. Zelo le preguntará su nombre, relación y el modo (personal/empresarial/los dos) al que puede acceder.\n\n⏱ Válido durante 10 minutos.`
-        : `📲 *Código de vinculação:* ${code}\n\nPeça para a pessoa salvar${botNumber ? ` o número *${botNumber}*` : " este número do Zelo"} e mandar esse código por aqui — o bot vai perguntar o nome dela, o vínculo e o modo (pessoal/empresa/os dois) que ela pode acessar.\n\n⏱ Válido por 10 minutos.`);
+        ? `📲 *Código de vinculación:* ${code}\n\nPídele a la persona que guarde${botNumber ? ` el número *${botNumber}*` : " este número de Zelo"} y envíe este código por aquí. Zelo identificará su relación y el modo (personal/empresarial/los dos). El titular usa el nombre de la plataforma; otra persona informa su propio nombre.\n\n⏱ Válido durante 10 minutos.`
+        : `📲 *Código de vinculação:* ${code}\n\nPeça para a pessoa salvar${botNumber ? ` o número *${botNumber}*` : " este número do Zelo"} e mandar esse código por aqui — o bot identifica o vínculo e o modo (pessoal/empresa/os dois). O titular usa o nome da plataforma; outra pessoa informa o próprio nome.\n\n⏱ Válido por 10 minutos.`);
       return;
     }
 
     // ── Verifica ação pendente (ex: seleção de veículo) ──
     const pending = await getPendingAction(from);
+    if(pending?.userId===user.id)setVirtualAgent(agentForPendingAction(pending));
     let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
     let accountSelectionResume: AIResult | null = null;
     let employeeSelectionResume: AIResult | null = null;
@@ -1758,6 +1789,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         return;
       }
       if (imageAction === "register") {
+        setVirtualAgentIntent("finance_register");
         try {
           if (await prepareFinancialTransactionListImport({
             from,
@@ -2787,9 +2819,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(messageForAiContext);
+    if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
+    setVirtualAgentIntent("finance_query");
     if(await sendRequestedBankBill(user,mode,from,messageText,todayStrBR()))return;
     const bankReply=await answerBankWhatsAppMessage(user,mode,phoneAccess,messageText,todayStrBR());
     if(bankReply){await wppSendLong(from,bankReply,3500,true);return;}
+    setVirtualAgentIntent("help");
     const imageRequest = parsePublicImageRequest(messageText, recentHistory);
     if (imageRequest) {
       const found = await findPublicProductImage(imageRequest);
@@ -2814,6 +2849,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const ai = actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi;
+    setVirtualAgentIntent(ai.intent);
 
     // Reconhece também a forma natural "no Nubank"/"en Caja", sem exigir
     // que a pessoa diga a palavra conta. Os nomes vêm das próprias contas do

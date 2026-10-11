@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   addMessage: vi.fn(),
   sendText: vi.fn(),
   sendTemplate: vi.fn(),
+  sendFile: vi.fn(),
 }));
 
 vi.mock("@/lib/whatsapp-config", () => ({
@@ -19,13 +20,15 @@ vi.mock("@/lib/conversations", () => ({
 vi.mock("@/lib/waba", () => ({
   sendText: mocks.sendText,
   sendTemplate: mocks.sendTemplate,
+  sendFile: mocks.sendFile,
 }));
 
 vi.mock("@/lib/evolution", () => ({
   sendText: vi.fn(),
 }));
 
-import { sendReminderTemplate, sendWelcomeTemplate,sendText } from "./whatsapp";
+import {runWithVirtualAgentReply,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
+import { sendReminderTemplate, sendWelcomeTemplate,sendText,sendFile } from "./whatsapp";
 
 describe("proactive WABA dispatch", () => {
   it("redacts financial notices sent through an approved template from future AI prompts",async()=>{
@@ -104,4 +107,29 @@ describe("proactive WABA dispatch", () => {
     expect(mocks.sendText).toHaveBeenCalledOnce();
     expect(mocks.sendTemplate).not.toHaveBeenCalled();
   });
+});
+
+it("sends a personalized agent receipt and preserves private financial redaction",async()=>{
+ mocks.sendText.mockResolvedValue(true);
+ const receipt="✅ Gasto registrado\nR$ 50,00 · Saúde · Farmácia";
+ await runWithVirtualAgentReply("5511988881111",async()=>{
+  setVirtualAgentIdentity("Juliana Silva","pt-BR");setVirtualAgentIntent("finance_add");
+  await sendText("5511988881111",receipt,{privateFinancial:true});
+ });
+ expect(mocks.sendText).toHaveBeenLastCalledWith("5511988881111",expect.stringContaining("*Juliana*"));
+ expect(mocks.addMessage).toHaveBeenLastCalledWith("5511988881111",expect.objectContaining({privateFinancial:true,content:expect.stringContaining(receipt)}));
+ expect(mocks.sendText.mock.lastCall?.[1]).toContain("*Rita*");
+});
+
+it("decorates bank file captions only for the identified recipient and keeps private redaction",async()=>{
+ mocks.sendFile.mockResolvedValue(true);const buffer=Buffer.from("fixture");
+ await runWithVirtualAgentReply("5511988881111",async()=>{
+  setVirtualAgentIdentity("Juliana","pt-BR");setVirtualAgentIntent("finance_query");
+  await sendFile("5511977772222",buffer,"other.pdf","application/pdf","Convite");
+  await sendFile("5511988881111",buffer,"fatura.pdf","application/pdf","Fatura do cartão",{privateFinancial:true});
+ });
+ expect(mocks.sendFile.mock.calls[0][4]).toBe("Convite");
+ expect(mocks.sendFile.mock.lastCall?.[4]).toContain("*Rita*");
+ expect(mocks.sendFile.mock.lastCall?.[4]).toContain("Fatura do cartão");
+ expect(mocks.addMessage).toHaveBeenLastCalledWith("5511988881111",expect.objectContaining({privateFinancial:true,content:expect.stringContaining("*Juliana*")}));
 });

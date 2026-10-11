@@ -1,11 +1,12 @@
 "use client";
+import FinanceAuthor from "@/components/FinanceAuthor";
 import PageTitle from "@/components/PageTitle";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/es/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
-type Finance = { id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
+type Finance = { registeredByName?:string; id: string; type: string; amount: number; category: string; description: string; date: string; mode: string; status?: string };
 type Balance = { income: number; expense: number; balance: number };
 type Recurring = {
   id: string;
@@ -624,6 +625,7 @@ export default function FinancasPageEs() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-ink truncate">{visibleFinanceDescription(f.description)}</p>
                         <p className="text-xs text-subtle">{f.category} · {visibleFinanceDate(f)}</p>
+                        <FinanceAuthor name={f.registeredByName}/>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-3">
