@@ -63,7 +63,10 @@
 .z-workspace {flex:1;min-width:0;display:flex;flex-direction:column;background:color-mix(in srgb,var(--z-surface-muted) 70%,var(--z-surface));border:1px solid var(--z-line);border-radius:0 26px 26px 0;overflow:hidden;}
 .z-sidebar-brand {padding:26px 22px 14px;text-align:left;}
 .z-wordmark {width:116px;height:auto;}
-[data-theme="dark"] .z-wordmark {background:#fff;border-radius:12px;padding:7px 9px;box-sizing:content-box;}
+.z-wordmark-on-dark {display:none;}
+[data-theme="dark"] .z-wordmark-primary {display:none;}
+[data-theme="dark"] .z-wordmark-on-dark {display:block;}
+.z-sidebar-brand p {width:116px;font-size:14px;line-height:1.35;letter-spacing:-.02em;white-space:nowrap;text-align:center;}
 .z-nav {padding:10px 13px;}
 .z-nav a {border:1px solid transparent;font-size:12px;min-height:41px;gap:12px;padding:10px 13px;}
 .z-nav a[aria-current=page] {background:var(--z-amber-soft);border-color:transparent;color:var(--z-ink);box-shadow:none;}
