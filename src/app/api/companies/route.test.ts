@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), cookieGet: vi.fn(), cookieSet: vi.fn(), list: vi.fn(), create: vi.fn(), require: vi.fn(), enabled: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), cookieGet: vi.fn(), cookieSet: vi.fn(), list: vi.fn(), create: vi.fn(), require: vi.fn(), enabled: vi.fn(), rename: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getSessionWithUser: mocks.auth }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: mocks.cookieGet, set: mocks.cookieSet }) }));
-vi.mock("@/lib/companies", () => ({ COMPANY_COOKIE: "zelo_company", multiCompanyEnabled: mocks.enabled, getCompanies: mocks.list, createCompany: mocks.create, requireCompany: mocks.require }));
-import { GET, PATCH, POST } from "./route";
+vi.mock("@/lib/companies", () => ({ COMPANY_COOKIE: "zelo_company", multiCompanyEnabled: mocks.enabled, getCompanies: mocks.list, createCompany: mocks.create, requireCompany: mocks.require, renameCompany: mocks.rename }));
+import { GET, PATCH, POST, PUT } from "./route";
 const owner = "10000000-0000-4000-8000-000000000001", id = "20000000-0000-4000-8000-000000000001";
 beforeEach(() => {
   vi.clearAllMocks(); mocks.enabled.mockReturnValue(true); mocks.auth.mockResolvedValue({ session: { role: "client" }, user: { id: owner } });
@@ -47,4 +47,20 @@ it("does not leak selection from a different account and fails visibly when stor
   expect((await (await GET()).json()).activeCompanyId).toBe(id);
   mocks.list.mockRejectedValue(Error("private DB detail"));
   const result = await GET(); expect(result.status).toBe(503); expect(await result.text()).not.toContain("private DB detail");
+});
+
+it("renames only the requested owner company and preserves the current selection", async () => {
+  mocks.rename.mockResolvedValue({ id, name: "Novo nome" });
+  const response = await PUT(request("PUT", { companyId: id, name: "Novo nome", userId: "forged" }));
+  expect(response.status).toBe(200);
+  expect(mocks.rename).toHaveBeenCalledWith(owner, id, "Novo nome");
+  expect(mocks.cookieSet).not.toHaveBeenCalled();
+});
+it("rejects foreign companies, blank names and cross-site rename requests", async () => {
+  mocks.rename.mockRejectedValue(Error("COMPANY_NOT_FOUND"));
+  expect((await PUT(request("PUT", { companyId: "foreign", name: "Mesmo nome" }))).status).toBe(404);
+  expect((await PUT(request("PUT", { companyId: id, name: " " }))).status).toBe(400);
+  expect((await PUT(request("PUT", { companyId: id, name: "A".repeat(101) }))).status).toBe(400);
+  expect((await PUT(request("PUT", { companyId: id, name: "Nome" }, "https://attacker.test"))).status).toBe(403);
+  expect(mocks.rename).toHaveBeenCalledTimes(1);
 });
