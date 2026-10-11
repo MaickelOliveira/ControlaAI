@@ -2,7 +2,7 @@ import {beforeEach,expect,it,vi} from "vitest";
 const m=vi.hoisted(()=>({auth:vi.fn(),access:vi.fn(),records:vi.fn(),balance:vi.fn(),bank:vi.fn()}));
 vi.mock("@/lib/auth",()=>({getSessionWithUser:m.auth}));
 vi.mock("@/lib/open-finance-access",()=>({getOpenFinanceAccess:m.access}));
-vi.mock("@/lib/finances",()=>({getFinancesInRange:m.records,getAllTimeBalance:m.balance}));
+vi.mock("@/lib/finances",async original=>({...await original<typeof import("@/lib/finances")>(),getFinancesInRangeStrict:m.records}));
 vi.mock("@/lib/finance-ledger-storage",()=>({readBankLedger:m.bank}));
 import {GET} from "./route";
 const url="https://zelo.test/api/finances/ledger?mode=business&from=2026-10-01&to=2026-10-31";
@@ -27,4 +27,8 @@ it("preserves long manual periods for clients without bank access",async()=>{
 });
 it("does not hide bank data behind manual-only success during an owner access outage",async()=>{
  m.access.mockRejectedValue(Error("OF_ACCESS_UNAVAILABLE"));expect((await GET(new Request(url))).status).toBe(503);expect(m.records).not.toHaveBeenCalled();
+});
+it("does not present a bank-only total if manual history cannot be read completely",async()=>{
+ m.access.mockResolvedValue({userId:"owner",mode:"business",environment:"production"});m.bank.mockResolvedValue({report:{movements:[]}});m.records.mockRejectedValue(Error("FINANCE_READ_UNAVAILABLE"));
+ expect((await GET(new Request(url))).status).toBe(503);
 });

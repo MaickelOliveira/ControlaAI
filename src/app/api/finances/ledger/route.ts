@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {getSessionWithUser} from "@/lib/auth";
-import {getFinancesInRange,getAllTimeBalance} from "@/lib/finances";
+import {getFinancesInRangeStrict,calculateFinanceBalance} from "@/lib/finances";
 import {getOpenFinanceAccess} from "@/lib/open-finance-access";
 import {bankPeriod} from "@/lib/open-finance-report";
 import {readBankLedger} from "@/lib/finance-ledger-storage";
@@ -19,7 +19,8 @@ export async function GET(request:Request){
   try{
     const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
     if(scope){try{bankPeriod(period.from,period.to);}catch{return NextResponse.json({error:"Para incluir os bancos, escolha um período de até 366 dias."},{status:400,headers});}}
-    const [records,totalBalance,bank]=await Promise.all([getFinancesInRange(auth.user.id,mode,period.from,period.to),getAllTimeBalance(auth.user.id,mode),scope?readBankLedger(scope,period):null]);
+    const [records,allRecords,bank]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode,period.from,period.to),getFinancesInRangeStrict(auth.user.id,mode),scope?readBankLedger(scope,period):null]);
+    const totalBalance=calculateFinanceBalance(allRecords);
     const finances=createFinanceLedger(records.map(({id,type,amount,category,description,date,mode,source,status,createdAt})=>({id,type,amount,category,description,date,mode,source,status,createdAt})),bank?.report.movements??[],mode);
     return NextResponse.json({finances,balance:ledgerBalance(finances),totalBalance,bank},{headers});
   }catch{

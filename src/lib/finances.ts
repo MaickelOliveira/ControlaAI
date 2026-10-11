@@ -238,6 +238,23 @@ export async function getFinancesInRange(userId: string, mode?: FinanceMode, fro
   return load(userId, { mode, from, to });
 }
 
+/** Complete reads for unified totals: a missing page must never become zero. */
+export async function getFinancesInRangeStrict(userId:string,mode:FinanceMode,from?:string,to?:string):Promise<Finance[]> {
+  const rows:Row[]=[],seen=new Set<string>();
+  let total:number|undefined;
+  for(let page=0;page<50;page++){
+    let query=getSupabase().from("finances").select("*",{count:"exact"}).eq("user_id",userId).eq("mode",mode);
+    if(from)query=query.gte("date",from);if(to)query=query.lte("date",to);
+    const {data,error,count}=await query.order("date",{ascending:true}).order("id",{ascending:true}).range(rows.length,rows.length+199);
+    if(error||!Array.isArray(data)||count===null||!Number.isSafeInteger(count)||count<0||count>10000)throw Error("FINANCE_READ_UNAVAILABLE");
+    if(total!==undefined&&total!==count)throw Error("FINANCE_READ_CHANGED");total=count;
+    for(const row of data as Row[]){if(seen.has(row.id))throw Error("FINANCE_READ_DUPLICATE");seen.add(row.id);rows.push(row);}
+    if(rows.length===total)return rows.map(fromRow);
+    if(!data.length||rows.length>total)throw Error("FINANCE_READ_INCOMPLETE");
+  }
+  throw Error("FINANCE_READ_LIMIT");
+}
+
 export async function getBalance(userId: string, mode: FinanceMode, year?: number, month?: number, registeredBy?: string): Promise<FinanceBalance> {
   let items = await getFinancesByUser(userId, mode, registeredBy);
   if (year !== undefined && month !== undefined) {

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getOpenFinanceOwner } from "@/lib/open-finance-owner";
-import { getOpenFinanceAccess } from "@/lib/open-finance-access";
+import { getOpenFinanceAccess,isPublicOpenFinanceEnabled } from "@/lib/open-finance-access";
+import {getUserById} from "@/lib/users";
+import {getSupabase} from "@/lib/supabase";
 import { openFinanceRpc, OF_HEADERS } from "@/lib/open-finance-http";
 import { parseBankWebhook, verifyBankWebhook } from "@/lib/open-finance-webhook";
-import { polpObject } from "@/lib/polp-production";
+import { polpObject,polpUuid } from "@/lib/polp-production";
 import { readBankBody } from "@/lib/open-finance-body";
 
 export async function POST(request:Request) {
@@ -16,6 +18,18 @@ export async function POST(request:Request) {
   let job;
   try{job=parseBankWebhook(JSON.parse(raw.toString("utf8")));}catch{return NextResponse.json({error:"Evento inválido"},{status:400,headers:OF_HEADERS});}
   try {
+    if(isPublicOpenFinanceEnabled()){
+      const {data,error}=await getSupabase().rpc("zelo_of_event_target",{p_reference:job.external_resource_id,p_family:job.kind==="catalog"||job.kind==="consent"?"consents":job.family});
+      if(error||!data)throw Error("OF_TARGET_PENDING");
+      const target=polpObject(data);
+      if(target.status==="revoked"||target.status==="revoking")return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
+      const user=await getUserById(polpUuid(target.userId));
+      if(!user)throw Error("OF_USER_UNAVAILABLE");
+      const scope=await getOpenFinanceAccess(user,String(target.mode),{throwOnStorageError:true});
+      if(!scope)return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
+      await openFinanceRpc(scope,"zelo_of_enqueue",{p_connection:polpUuid(target.id),p_job:job});
+      return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
+    }
     const owner=await getOpenFinanceOwner();
     if(!owner)throw new Error("OF_OWNER_UNAVAILABLE");
     const scope=await getOpenFinanceAccess(owner,"personal");

@@ -10,5 +10,5 @@ export async function POST(request:Request) {
   let question;
   try{question=JSON.parse((await readBankBody(request,2048)).toString("utf8")).question;if(typeof question!=="string"||!question.trim()||question.length>500)throw new Error();}catch{return NextResponse.json({error:"Escreva uma pergunta de até 500 caracteres."},{status:400,headers:OF_HEADERS});}
   const answer=await answerBankQuestion(auth.user,scope.mode,question,todayStrBR());
-  return NextResponse.json({answer:answer??"Na prévia posso consultar saldos bancários, limites, investimentos, faturas e compras de todos os cartões neste mês ou no mês passado. Para um banco específico, veja os dados em Contas. Outras perguntas financeiras continuam disponíveis na conversa habitual da Zelo."},{headers:OF_HEADERS});
+  return NextResponse.json({answer:answer??"Posso consultar gastos de contas, cartões, WhatsApp e plataforma neste mês ou no mês passado, além de saldos bancários, limites, investimentos e faturas. Para um banco específico, veja os dados em Contas. Outras perguntas financeiras continuam disponíveis na conversa habitual da Zelo."},{headers:OF_HEADERS});
 }

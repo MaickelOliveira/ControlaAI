@@ -13,6 +13,21 @@ function configured() {
 }
 afterEach(() => { vi.unstubAllEnvs(); rpc.mockReset(); });
 describe("private Open Finance access", () => {
+  it("allows every enabled Brazilian client only after the public rollout gate",async()=>{
+    configured();
+    const client={...owner,id:"00000000-0000-4000-8000-000000000002",email:"client@example.test",status:"active" as const,plan:"business" as const};
+    rpc.mockResolvedValue({data:{enabled:true,country_code:"BR",country_verified_at:"2026-10-10T12:00:00Z"}});
+    expect(await getOpenFinanceAccess(client,"business")).toBeNull();
+    vi.stubEnv("OPEN_FINANCE_PUBLIC_ENABLED","true");
+    expect(await getOpenFinanceAccess(client,"personal")).toEqual({userId:client.id,mode:"personal",environment:"production"});
+    expect(await getOpenFinanceAccess(client,"business")).toEqual({userId:client.id,mode:"business",environment:"production"});
+    expect(await getOpenFinanceAccess({...client,status:"inactive"},"personal")).toBeNull();
+    expect(await getOpenFinanceAccess({...client,plan:"personal"},"business")).toBeNull();
+    rpc.mockResolvedValue({data:{enabled:true,country_code:"PT",country_verified_at:"2026-10-10T12:00:00Z"}});
+    expect(await getOpenFinanceAccess(client,"personal")).toBeNull();
+    vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","true");
+    expect(await getOpenFinanceAccess(client,"personal")).toBeNull();
+  });
   it("allows only the Brazilian owner to evaluate PJ in the complete official app",async()=>{
     configured();vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","false");vi.stubEnv("OPEN_FINANCE_OWNER_BUSINESS_ENABLED","true");
     rpc.mockResolvedValue({data:{enabled:true,country_code:"BR",country_verified_at:"2026-10-09T12:00:00Z"}});

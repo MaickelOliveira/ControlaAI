@@ -3,7 +3,13 @@ import {
   CUSTOMER_SERVICE_WINDOW_MS,
   isCustomerServiceWindowOpen,
   phoneVariants,
+  messageForAiContext,
 } from "./conversations";
+it("keeps bank values and descriptions out of later model context",()=>{
+  const message={role:"assistant" as const,content:"Private merchant · R$ 123,45",ts:0,privateFinancial:true};
+  expect(messageForAiContext(message).content).not.toContain("123,45");expect(messageForAiContext(message).content).not.toContain("Private merchant");
+  expect(messageForAiContext({...message,privateFinancial:false}).content).toBe(message.content);
+});
 
 describe("phoneVariants", () => {
   it.each([

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), access: vi.fn(), rpc: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getSessionWithUser: mocks.auth }));
-vi.mock("@/lib/open-finance-access", () => ({ getOpenFinanceAccess: mocks.access }));
+vi.mock("@/lib/open-finance-access", () => ({ getOpenFinanceAccess: mocks.access,canEnrollOpenFinance:()=>false,isPublicOpenFinanceEnabled:()=>false }));
 vi.mock("@/lib/supabase", () => ({ getSupabase: () => ({ rpc: mocks.rpc }) }));
 import { GET } from "./route";
 afterEach(() => vi.clearAllMocks());

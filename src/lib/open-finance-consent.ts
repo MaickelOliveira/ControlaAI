@@ -3,6 +3,7 @@ import type { OpenFinanceScope } from "./open-finance-access";
 import { openFinanceRpc } from "./open-finance-http";
 import { parseBankAuthUrl, polpObject, polpProductionRequest, polpUuid, requireAuthUrl, type PolpObject } from "./polp-production";
 import type { BankAuthorization } from "./open-finance-display";
+import {isPublicOpenFinanceEnabled} from "./open-finance-access";
 
 /** Withhold every unverified URL, including its tokens, in the private preview. */
 export function getConsentAuthorization(consent: PolpObject): BankAuthorization {
@@ -13,6 +14,9 @@ export function getConsentAuthorization(consent: PolpObject): BankAuthorization 
     if (!Number.isFinite(expires)) throw new Error("INVALID_AUTH_URL");
     if (expires <= Date.now()) return { authorizationUrl: null, authorizationExpired: true };
   }
+  // This object comes exclusively from the authenticated fixed-host provider
+  // request after consent identity checks. Client-supplied URLs never reach here.
+  if(isPublicOpenFinanceEnabled()&&process.env.OPEN_FINANCE_PROVIDER_AUTH_URLS_ENABLED==="true")return {authorizationUrl:url.href};
   try {
     return { authorizationUrl: requireAuthUrl(url.href) };
   } catch {
@@ -21,6 +25,20 @@ export function getConsentAuthorization(consent: PolpObject): BankAuthorization 
     }
     throw new Error("INVALID_AUTH_URL");
   }
+}
+
+/** A new authorization ticket for the same holder, institution and products. */
+export async function recreateProductionConsent(scope:OpenFinanceScope,id:string){
+  const connection=polpObject(await openFinanceRpc(scope,"zelo_of_connection",{p_id:polpUuid(id)}));
+  if(connection.status==="revoked"||connection.status==="revoking")throw Error("CONSENT_CANCELLED");
+  if(!["pending","expired","error"].includes(String(connection.status)))throw Error("CONSENT_ALREADY_ACTIVE");
+  if(!Array.isArray(connection.scopes)||!connection.scopes.length)throw Error("INVALID_CONSENT_PRODUCTS");
+  const consent=polpObject((await polpProductionRequest(`/consents/${polpUuid(connection.external_consent_id)}/recreate`,"POST",{products:connection.scopes})).data);
+  if(consent.id!==connection.external_consent_id||consent.cliente_user_id!==scope.userId||consent.institution_id!==connection.institution_id)throw Error("CONSENT_IDENTITY_MISMATCH");
+  if(consent.status!=="AWAITING_AUTHORIZATION"||!Array.isArray(consent.products)||consent.products.length!==connection.scopes.length||consent.products.some(p=>!(connection.scopes as unknown[]).includes(p)))throw Error("INVALID_CONSENT_PRODUCTS");
+  await openFinanceRpc(scope,"zelo_of_set_status",{p_id:id,p_status:"pending",p_provider_status:consent.status});
+  const current=polpObject(await openFinanceRpc(scope,"zelo_of_connection",{p_id:id}));
+  return {id,status:String(current.status),...(current.status==="pending"?getConsentAuthorization(consent):{authorizationUrl:null})};
 }
 
 /** A browser return proves no authorization. Only the provider can confirm it. */
