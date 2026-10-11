@@ -1,8 +1,14 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
+  let runJob:<T>(callback:()=>Promise<T>)=>Promise<T>=callback=>callback();
+  if(process.env.MULTI_COMPANY_ENABLED==="true"){
+    const [{configureCompanyDatabaseScope},{resolveCompanyContext,runWithTrustedCompanyJob}]=await Promise.all([import("./lib/supabase"),import("./lib/company-context")]);
+    configureCompanyDatabaseScope(resolveCompanyContext);
+    runJob=runWithTrustedCompanyJob;
+  }
   if(process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"){
     const {startOpenFinanceWorker}=await import("./lib/open-finance-worker");
-    startOpenFinanceWorker();
+    await runJob(async()=>startOpenFinanceWorker());
   }
 
   // Avisos ao cliente continuam verificados em TODO tick de um minuto.
@@ -256,7 +262,7 @@ export async function register() {
   };
 
   setTimeout(() => {
-    tick();
-    setInterval(tick, 60_000);
+    void runJob(tick);
+    setInterval(()=>void runJob(tick), 60_000);
   }, 15_000);
 }

@@ -4,6 +4,7 @@ import { getDueReminders, markReminderSent, markReminderFailed, markReminderSkip
 import { buildReminderTemplateDispatch, sendReminderTemplate } from "@/lib/whatsapp";
 import { acquireCronLock, releaseCronLock } from "@/lib/cron-lock";
 import { getUserById, hasAccess } from "@/lib/users";
+import {runWithTrustedCompanyJob} from "@/lib/company-context";
 
 // Sem CRON_SECRET configurado, o endpoint fica bloqueado — nada de segredo
 // padrão previsível, e o POST (que ficava sem checagem nenhuma) agora exige
@@ -23,12 +24,12 @@ function isAuthorized(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  return runCron();
+  return runWithTrustedCompanyJob(runCron);
 }
 
 export async function POST(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  return runCron();
+  return runWithTrustedCompanyJob(runCron);
 }
 
 async function runCron() {
