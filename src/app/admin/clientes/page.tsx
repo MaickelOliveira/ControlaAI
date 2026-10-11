@@ -24,6 +24,17 @@ export default function ClientesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+
+  async function removeCliente(c:Cliente) {
+    if(!confirm(`Excluir ${c.name}?`))return;
+    setActionError("");
+    try {
+      const response=await fetch(`/api/admin/clientes/${c.id}`,{method:"DELETE"});
+      if(!response.ok){const result=await response.json();setActionError(result.error||"Não foi possível excluir o cliente.");return;}
+      load();
+    }catch{setActionError("Não foi possível excluir o cliente. Tente novamente.");}
+  }
 
   function load() {
     fetch("/api/admin/clientes").then(r => r.json()).then(d => {
@@ -58,6 +69,7 @@ export default function ClientesPage() {
 
   return (
     <div className="space-y-5 max-w-6xl">
+      {actionError&&<p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{actionError}</p>}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Clientes ({clientes.length})</h1>
@@ -173,7 +185,7 @@ export default function ClientesPage() {
                           </button>
                         )}
                         <span className="text-xs border border-purple-200 text-purple-600 rounded-lg px-2.5 py-1">📱 Ilimitados</span>
-                        <button onClick={async () => { if (!confirm(`Excluir ${c.name}?`)) return; await fetch(`/api/admin/clientes/${c.id}`, { method: "DELETE" }); load(); }}
+                        <button onClick={()=>void removeCliente(c)}
                           className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-2.5 py-1 transition">
                           Excluir
                         </button>

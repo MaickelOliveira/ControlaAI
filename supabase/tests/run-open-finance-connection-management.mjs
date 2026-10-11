@@ -1,0 +1,53 @@
+import {readFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href);
+const db=new PGlite();
+const sql=p=>readFile(new URL(p,import.meta.url),'utf8');
+const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
+const rpc=async(name,args)=>(await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) as value`,args)).rows[0].value;
+try{
+  await db.exec(await sql('./open_finance_fixtures.sql'));
+  await db.exec("alter table public.users add column status text default 'active'; alter table public.users add column plan text default 'business'; alter table public.users add column email text; create table public.wpp_phone_links(phone text primary key,user_id uuid,access text)");
+  for(const name of ['20261009193000_open_finance_storage','20261009213000_open_finance_server_access','20261009220000_open_finance_consents','20261009230000_open_finance_sync_queue','20261009234000_open_finance_report','20261010230000_open_finance_public','20261011030000_open_finance_notifications','20261011090000_open_finance_connection_management'])await db.exec(await sql('../migrations/'+name+'.sql'));
+  for(const role of ['anon','authenticated']){
+    await db.exec('set role '+role);
+    await assert.rejects(rpc('zelo_of_begin_removal',[a,'personal',a]),/permission denied/);
+    await assert.rejects(rpc('zelo_of_connection_visibility',[a,'personal',a,true]),/permission denied/);
+    await db.exec('reset role');
+  }
+  await db.exec('set role service_role');
+  await rpc('zelo_of_enable_brazil',[a,'personal','BR',true]);await rpc('zelo_of_enable_brazil',[b,'personal','BR',true]);
+  const save=(n,status)=>rpc('zelo_of_save_consent',[a,'personal',JSON.stringify({id:`10000000-0000-4000-8000-00000000000${n}`,cliente_user_id:a,institution_id:'20000000-0000-4000-8000-000000000001',institution_name:'Test bank',status,products:['ACCOUNT']})]);
+  const pending=await save(1,'AWAITING_AUTHORIZATION'),active=await save(2,'AUTHORISED'),imported=await save(3,'AWAITING_AUTHORIZATION');
+  await db.exec('reset role');
+  await db.query("insert into open_finance.resources(connection_id,user_id,environment,mode,resource_type,external_id,name) values($1,$2,'production','personal','account','test-account','Test account')",[imported.id,a]);
+  await db.exec('set role service_role');
+  await assert.rejects(rpc('zelo_of_begin_removal',[b,'personal',pending.id]),/OF_CONNECTION_NOT_FOUND/);
+  await assert.rejects(rpc('zelo_of_begin_removal',[a,'business',pending.id]),/OF_CONNECTION_NOT_FOUND/);
+  await assert.rejects(rpc('zelo_of_begin_removal',[a,'personal',active.id]),/OF_CONNECTION_ACTIVE/);
+  await assert.rejects(rpc('zelo_of_begin_removal',[a,'personal',imported.id]),/OF_ATTEMPT_HAS_DATA/);
+  assert.equal((await rpc('zelo_of_begin_removal',[a,'personal',pending.id])).status,'revoking');
+  await rpc('zelo_of_set_status',[a,'personal',pending.id,'active','AUTHORISED']);
+  assert.equal((await rpc('zelo_of_connection',[a,'personal',pending.id])).status,'revoking','late authorization cannot revive a removal');
+  await assert.rejects(rpc('zelo_of_enqueue',[a,'personal',pending.id,JSON.stringify({kind:'consent',family:'consents',external_resource_id:'10000000-0000-4000-8000-000000000001',window:{}})]),/OF_CONSENT_INACTIVE/);
+  await assert.rejects(rpc('zelo_of_connection_visibility',[a,'personal',pending.id,true]),/OF_REMOVAL_NOT_CONFIRMED/);
+  await rpc('zelo_of_set_status',[a,'personal',pending.id,'revoked','REVOKED']);
+  await rpc('zelo_of_connection_visibility',[a,'personal',pending.id,true]);
+  let overview=await rpc('zelo_of_overview',[a,'production','personal']);
+  const archived=overview.connections.find(c=>c.id===pending.id);assert.ok(archived.archived_at);assert.equal(archived.has_imported_data,false);assert.equal(archived.status,'revoked');
+  assert.equal(overview.connections.find(c=>c.id===imported.id).has_imported_data,true);
+  assert.ok(!overview.connections[0].archived_at,'visible records take priority over history');
+  await rpc('zelo_of_connection_visibility',[a,'personal',pending.id,true]);
+  assert.equal((await rpc('zelo_of_connection',[a,'personal',pending.id])).archived_at,archived.archived_at,'repeat removal keeps its original archive date');
+  await rpc('zelo_of_connection_visibility',[a,'personal',pending.id,false]);
+  overview=await rpc('zelo_of_overview',[a,'production','personal']);
+  assert.equal(overview.connections.find(c=>c.id===pending.id).archived_at,null);assert.equal(overview.connections.find(c=>c.id===pending.id).status,'revoked','restore changes visibility only');
+  await rpc('zelo_of_set_status',[a,'personal',imported.id,'revoking',null]);await rpc('zelo_of_set_status',[a,'personal',imported.id,'revoked','REVOKED']);
+  await assert.rejects(rpc('zelo_of_connection_visibility',[a,'personal',imported.id,true]),/OF_REMOVAL_NOT_CONFIRMED/);
+  await db.exec('reset role');
+  assert.equal((await db.query('select count(*)::int as n from open_finance.connections')).rows[0].n,3);
+  assert.equal((await db.query('select count(*)::int as n from open_finance.resources')).rows[0].n,1);
+  assert.equal((await db.query('select count(*)::int as n from public.finances')).rows[0].n,1);
+  console.log('Connection management: holder/mode isolation, late authorization, archive/restore and preserved financial history passed');
+}finally{await db.close();}

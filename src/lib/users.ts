@@ -180,7 +180,8 @@ export async function deactivateUser(id: string): Promise<User | null> {
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  await getSupabase().from("users").delete().eq("id", id);
+  const {error}=await getSupabase().from("users").delete().eq("id", id);
+  if(error)throw Error(error.message.includes("OF_CLIENT_HISTORY_PROTECTED")?"OF_CLIENT_HISTORY_PROTECTED":"USER_DELETE_FAILED");
 }
 
 export async function createUserByPhone(phone: string, name: string, plan: UserPlan = "personal"): Promise<User> {

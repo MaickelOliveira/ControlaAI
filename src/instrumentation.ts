@@ -1,6 +1,6 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
-  if(process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PUBLIC_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"){
+  if(process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"){
     const {startOpenFinanceWorker}=await import("./lib/open-finance-worker");
     startOpenFinanceWorker();
   }
