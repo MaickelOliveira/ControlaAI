@@ -130,6 +130,7 @@ const BASE_NAV = [
   { href: "/pt/dashboard/agenda", label: "Agenda", icon: Icons.calendar },
 ];
 const BUSINESS_NAV = [
+  { href: "/pt/dashboard/notas-fiscais", label: "Notas fiscais", icon: <UiIcon name="document"/> },
   { href: "/pt/dashboard/funcionarios", label: "Funcionários", icon: Icons.users },
   { href: "/pt/dashboard/clientes", label: "Clientes", icon: Icons.card },
 ];

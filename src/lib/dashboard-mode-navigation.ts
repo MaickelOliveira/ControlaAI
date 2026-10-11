@@ -1,5 +1,5 @@
 const onlyPersonal = ["supermercado", "contatos"];
-const onlyBusiness = ["funcionarios", "clientes"];
+const onlyBusiness = ["funcionarios", "clientes", "notas-fiscais"];
 
 export function isDashboardPageAvailable(page: string, mode: "personal" | "business") {
   return !(mode === "business" ? onlyPersonal : onlyBusiness).includes(page);

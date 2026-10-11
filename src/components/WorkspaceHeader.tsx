@@ -10,7 +10,7 @@ import {isDashboardPageAvailable} from "@/lib/dashboard-mode-navigation";
 const pages=[
   ["","Dashboard","Dashboard"],["financas","Finanças","Finanzas"],["contas","Contas","Cuentas"],["tarefas","Tarefas","Tareas"],
   ["metas","Metas","Metas"],["veiculos","Veículos","Vehículos"],["lembretes","Lembretes","Recordatorios"],["drive","Drive","Drive"],
-  ["agenda","Agenda","Agenda"],["funcionarios","Funcionários","Empleados"],["clientes","Clientes","Clientes"],
+  ["agenda","Agenda","Agenda"],["notas-fiscais","Notas fiscais","Notas fiscales"],["funcionarios","Funcionários","Empleados"],["clientes","Clientes","Clientes"],
   ["supermercado","Supermercado","Supermercado"],["contatos","Contatos","Contactos"],["recorrentes","Recorrentes","Recurrentes"],["configuracoes","Configurações","Configuración"],
 ];
 const adminPages=[["","Visão geral"],["clientes","Clientes"],["faturamento","Faturamento"],["whatsapp","WhatsApp"],["inbox","Inbox"],["configuracoes","Configurações"]];
@@ -18,7 +18,7 @@ export default function WorkspaceHeader({name,mode,admin=false}:{name?:string;mo
   const pathname=usePathname(),es=pathname.startsWith("/es/"),prefix=admin?"/admin":pathname.startsWith("/es/")?"/es/dashboard":pathname.startsWith("/pt/")?"/pt/dashboard":"/dashboard";
   const [open,setOpen]=useState(false),[query,setQuery]=useState("");
   const root=useRef<HTMLDivElement>(null),input=useRef<HTMLInputElement>(null);
-  const available=(admin?adminPages:pages.filter(([path])=>isDashboardPageAvailable(path,mode==="business"?"business":"personal"))).map(p=>({href:prefix+(p[0]?`/${p[0]}`:""),label:es?(p[2]??p[1]):p[1]}));
+  const available=(admin?adminPages:pages.filter(([path])=>(!es||path!=="notas-fiscais")&&isDashboardPageAvailable(path,mode==="business"?"business":"personal"))).map(p=>({href:prefix+(p[0]?`/${p[0]}`:""),label:es?(p[2]??p[1]):p[1]}));
   const current=available.find(p=>p.href===pathname)?.label??(admin?"Admin":"Zelo");
   useEffect(()=>{
     function key(event:KeyboardEvent){if((event.ctrlKey||event.metaKey)&&event.key==="k"){event.preventDefault();setOpen(v=>!v);}if(event.key==="Escape")setOpen(false);}

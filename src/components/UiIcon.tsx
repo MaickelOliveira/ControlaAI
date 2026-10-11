@@ -1,5 +1,6 @@
 import type {CSSProperties} from "react";
 const paths={
+  document:"M6 3h8l4 4v14H6V3Zm8 0v5h4M9 12h6m-6 4h6",
   person:"M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21v-3a8 8 0 0 1 16 0v3",
   business:"M4 21V3h12v18M16 9h4v12M8 7h4m-4 4h4m-4 4h4M9 21v-3h2v3M2 21h20",
   home:"m3 10 9-7 9 7M5 9v12h5v-6h4v6h5V9",
