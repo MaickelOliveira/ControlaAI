@@ -2,7 +2,7 @@ import "server-only";
 import {AsyncLocalStorage} from "node:async_hooks";
 import {cookies} from "next/headers";
 import {getAdminSession,getSessionWithUser} from "./auth";
-import {COMPANY_COOKIE,multiCompanyEnabled,requireCompany} from "./companies";
+import {COMPANY_COOKIE,multiCompanyEnabled,companyContextData} from "./companies";
 import type {CompanyScope} from "./company-scope-policy";
 import {selectedCompanyId} from "./company-selection";
 export type CompanyDatabaseScope = CompanyScope | { trusted: true };
@@ -22,8 +22,8 @@ export async function resolveCompanyContext():Promise<CompanyDatabaseScope|undef
  if(!jar.get("ca_session")){const admin=await getAdminSession();if(admin?.role==="admin")return {trusted:true};}
  if(!jar.get("ca_session"))throw Error("COMPANY_ACCESS_DENIED");
  const auth=await getSessionWithUser();if(!auth||auth.session.role!=="client")throw Error("COMPANY_ACCESS_DENIED");
- const company=await requireCompany(auth.user.id,selectedCompanyId(auth.user.id,jar.get(COMPANY_COOKIE)?.value));
- return {userId:auth.user.id,companyId:company.id,mode:auth.user.activeMode,companyName:company.name,customCategoriesExpense:company.customCategoriesExpense,customCategoriesIncome:company.customCategoriesIncome};
+ const {company,archivedCompanyIds}=await companyContextData(auth.user.id,selectedCompanyId(auth.user.id,jar.get(COMPANY_COOKIE)?.value),auth.user.activeMode);
+ return {userId:auth.user.id,companyId:company.id,mode:auth.user.activeMode,allowBusiness:!company.archivedAt,archivedCompanyIds,companyName:company.name,customCategoriesExpense:company.customCategoriesExpense,customCategoriesIncome:company.customCategoriesIncome};
 }
 export async function companyScopeFor(userId:string):Promise<CompanyScope|undefined>{
  const current=await resolveCompanyContext();if(!current||"trusted" in current)return undefined;if(current.userId!==userId)throw Error("COMPANY_OWNER_MISMATCH");return current;

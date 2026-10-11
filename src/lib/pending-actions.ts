@@ -427,7 +427,7 @@ export type PendingFiscalDraft = {
  recipientName?: string; recipientDocument?: string; amount?: number;
 };
 
-export type PendingAction = (PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft) & {companyId?:string};
+export type PendingAction = (PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft) & {companyId?:string;workspaceMode?:"personal"|"business"};
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -466,7 +466,7 @@ type PendingActionInput = (
   | Omit<PendingClearHistory, "phone" | "expiresAt">
   | Omit<PendingSlotCorrection, "phone" | "expiresAt">
   | Omit<PendingCompanySelection,"phone"|"expiresAt">
-  | Omit<PendingFiscalDraft,"phone"|"expiresAt">) & {companyId?:string};
+  | Omit<PendingFiscalDraft,"phone"|"expiresAt">) & {companyId?:string;workspaceMode?:"personal"|"business"};
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
   recurring_confirmation: TTL_RECURRING_MS,
@@ -485,7 +485,7 @@ export async function setPendingAction(phone: string, action: PendingActionInput
   const ttl = TTL_BY_TYPE[action.type] ?? TTL_MS;
   const scope=action.type==="company_selection"||action.type==="awaiting_wpp_link_info"?undefined:await resolveCompanyDatabaseScope();
   if(scope&&scope.userId!==action.userId)throw Error("COMPANY_OWNER_MISMATCH");
-  const full = { ...action, ...(scope?{companyId:scope.companyId}:{}), phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
+  const full = { ...action, ...(scope?{companyId:scope.companyId,workspaceMode:scope.mode}:{}), phone, expiresAt: new Date(now + ttl).toISOString() } as PendingAction;
   const { error } = await getSupabase().from("pending_actions").upsert({ phone, data: full, updated_at: new Date().toISOString() });
   if (error) throw new Error(`[pending-actions] falha ao gravar: ${error.message}`);
 }

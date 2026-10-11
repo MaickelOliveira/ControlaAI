@@ -1,5 +1,5 @@
 /** Database request boundary shared by web, WhatsApp and server jobs. */
-export type CompanyScope={userId:string;companyId:string;mode:"personal"|"business";allowBusiness?:boolean;companyName?:string;customCategoriesExpense?:string[];customCategoriesIncome?:string[]};
+export type CompanyScope={userId:string;companyId:string;mode:"personal"|"business";allowBusiness?:boolean;companyName?:string;customCategoriesExpense?:string[];customCategoriesIncome?:string[];archivedCompanyIds?:string[]};
 export const COMPANY_MODE_TABLES=new Set(["accounts","finances","tasks","reminders","goals","vehicles","recurring_transactions"]);
 export const COMPANY_SHARED_TABLES=new Set(["appointments","meets","drive_folders","drive_files"]);
 export const COMPANY_BUSINESS_TABLES=new Set(["employees","customers"]);
@@ -27,6 +27,10 @@ export function scopeCompanyRequest(input:URL,options:RequestInit,scope:CompanyS
  if(predicate.startsWith("company_id.eq.")&&!url.searchParams.has("company_id"))url.searchParams.set("company_id",`eq.${scope.companyId}`);
  else {
   const prior=url.searchParams.get("and");url.searchParams.set("and",`(${prior?`${prior.slice(1,-1)},`:""}${predicate})`);
+ }
+ if(scope.archivedCompanyIds?.length){
+  if(scope.archivedCompanyIds.some(id=>! /^[0-9a-f-]{36}$/i.test(id)))throw Error("COMPANY_INVALID");
+  const prior=url.searchParams.get("and");url.searchParams.set("and",`(${prior?`${prior.slice(1,-1)},`:""}or(company_id.is.null,company_id.not.in.(${scope.archivedCompanyIds.join(",")})))`);
  }
  if(method==="POST"||method==="PATCH"){
   if(typeof options.body!=="string")throw Error("COMPANY_PAYLOAD_INVALID");

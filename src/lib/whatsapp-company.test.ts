@@ -46,6 +46,32 @@ it("leaves a paused conversation and a disabled feature untouched", async () => 
 it("does not guess similar company names", () => {
   expect(companyChoice("Empresa", companies)).toBeUndefined(); expect(companyChoice("2", companies)).toBe("b"); expect(companyChoice("empresa a", companies)).toBe("a");
 });
+it("does not silently move a participant to another company after removal",async()=>{
+ m.links.mockResolvedValue([{phone:"5511",access:"both"}]);m.list.mockResolvedValue([{id:"a",name:"Old",isDefault:false,archivedAt:"2026-10-11"},companies[1]]);
+ const next=vi.fn();await withWhatsAppCompany({from:"5511",text:"gastei 20"},next);
+ expect(next).not.toHaveBeenCalled();expect(m.savePending).toHaveBeenCalledWith("5511",expect.objectContaining({type:"company_selection"}));expect(m.send).toHaveBeenCalledWith("5511",expect.not.stringContaining("Old"));
+});
+it("keeps personal requests working when every enterprise is archived and refuses business requests",async()=>{
+ m.list.mockResolvedValue([{...companies[0],archivedAt:"2026-10-11"}]);m.links.mockResolvedValue([{phone:"5511",access:"both",activeWorkspaceMode:"personal"}]);
+ const next=vi.fn();await withWhatsAppCompany({from:"5511",text:"gastei 20"},next);expect(next).toHaveBeenCalledOnce();expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({mode:"personal",allowBusiness:false,archivedCompanyIds:["a"]}));
+ m.links.mockResolvedValue([{phone:"5511",access:"business"}]);next.mockClear();await withWhatsAppCompany({from:"5511",text:"gastei 20"},next);expect(next).not.toHaveBeenCalled();expect(m.send).toHaveBeenCalledWith("5511",expect.stringContaining("não tem empresas ativas"));
+});
+it("continues a personal multi-turn request after the last company is archived",async()=>{
+ m.list.mockResolvedValue([{...companies[0],archivedAt:"2026-10-11"}]);m.links.mockResolvedValue([{phone:"5511",access:"both",activeWorkspaceMode:"personal"}]);
+ const next=vi.fn(async()=>{m.pending.mockResolvedValue({type:"slot_fill",userId:"owner",companyId:"a",workspaceMode:"personal"});});
+ await withWhatsAppCompany({from:"5511",text:"registre uma despesa"},next);
+ await withWhatsAppCompany({from:"5511",text:"50 reais na farmácia"},next);
+ expect(next).toHaveBeenCalledTimes(2);expect(m.clear).not.toHaveBeenCalled();
+ m.pending.mockResolvedValue({type:"slot_fill",userId:"owner",companyId:"a",workspaceMode:"business"});
+ await withWhatsAppCompany({from:"5511",text:"sim"},next);expect(next).toHaveBeenCalledTimes(2);expect(m.clear).toHaveBeenCalledWith("5511");
+});
+it("does not continue a pending request from another workspace or owner",async()=>{
+ m.links.mockResolvedValue([{phone:"5511",access:"both",activeCompanyId:"a",activeWorkspaceMode:"personal"}]);
+ m.pending.mockResolvedValue({type:"slot_fill",userId:"owner",companyId:"a",workspaceMode:"business"});const next=vi.fn();
+ await withWhatsAppCompany({from:"5511",text:"50"},next);expect(next).not.toHaveBeenCalled();expect(m.clear).toHaveBeenCalled();
+ m.pending.mockResolvedValue({type:"slot_fill",userId:"foreign",companyId:"a",workspaceMode:"personal"});
+ await expect(withWhatsAppCompany({from:"5511",text:"50"},next)).rejects.toThrow("COMPANY_OWNER_MISMATCH");expect(next).not.toHaveBeenCalled();
+});
 it("discards a held business request after the participant becomes personal-only",async()=>{
  m.links.mockResolvedValue([{phone:"5511",access:"personal"}]);
  m.pending.mockResolvedValue({type:"company_selection",userId:"owner",resume:{text:"paguei fornecedor 500"}});

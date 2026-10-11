@@ -54,8 +54,9 @@ async function runCron() {
         results.push({ id: r.id, sent: false, skipped: "inactive_account" });
         continue;
       }
+      const message=await companyNoticeDescription(r.userId,r.companyId,r.message);if(message===null){results.push({id:r.id,sent:false,skipped:"archived_company"});continue;}
       const dispatch = buildReminderTemplateDispatch({
-        message: await companyNoticeDescription(r.userId,r.companyId,r.message),
+        message,
         recipientType: r.recipientType,
         mode: r.mode,
         ownerName: owner.name,

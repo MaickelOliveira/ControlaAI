@@ -13,6 +13,7 @@ it("renames by owner and company ID even when both owners use the same name", as
   const query = {
    update: (value: Record<string, unknown>) => { patch = value; return query; },
    eq: (key: string, value: string) => { targets = targets.filter(row => row[key as keyof typeof row] === value); return query; },
+   is: (key:string,value:null)=>{targets=targets.filter(row=>(row[key as keyof typeof row]??null)===value);return query;},
    select: () => query,
    maybeSingle: async () => { for (const row of targets) Object.assign(row, patch); return { data: targets[0] ?? null, error: null }; },
   };

@@ -79,7 +79,7 @@ export async function createReminder(data: Omit<Reminder, "id" | "sent" | "faile
 
 export async function getDueReminders(): Promise<Reminder[]> {
   const now = new Date().toISOString();
-  const { data, error } = await getSupabase().from("reminders").select("*")
+  const { data, error } = await getSupabase().from(process.env.MULTI_COMPANY_ENABLED==="true"?"zelo_active_reminders":"reminders").select("*")
     .eq("sent", false).lte("scheduled_at", now).lt("failed_attempts", MAX_FAILED_ATTEMPTS);
   if (error) { console.error("[reminders] getDueReminders erro:", error.message); return []; }
   return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));

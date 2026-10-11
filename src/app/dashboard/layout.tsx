@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import WorkspaceHeader from "@/components/WorkspaceHeader";
+import CompanyWorkspaceGate from "@/components/CompanyWorkspaceGate";
 import UiIcon from "@/components/UiIcon";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -291,7 +292,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {pathname!=="/dashboard"&&<WorkspaceHeader name={user?.name} mode={user?.activeMode}/>}
         <div className="flex-1 overflow-auto">
           <main className="z-main">
-            {children}
+            <CompanyWorkspaceGate mode={user?.activeMode} name={user?.name}>{children}</CompanyWorkspaceGate>
           </main>
         </div>
       </div>

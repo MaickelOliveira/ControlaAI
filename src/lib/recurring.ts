@@ -380,7 +380,7 @@ export async function getRecurringByUser(userId: string, mode?: string, status?:
  *  hoje que ainda não foram notificados hoje. */
 export async function getRecurringDueToday(): Promise<RecurringTransaction[]> {
   const today = todaySP();
-  const { data, error } = await getSupabase().from("recurring_transactions").select("*").eq("status", "active").lte("next_due_date", today);
+  const { data, error } = await getSupabase().from(process.env.MULTI_COMPANY_ENABLED==="true"?"zelo_active_recurring_transactions":"recurring_transactions").select("*").eq("status", "active").lte("next_due_date", today);
   if (error || !data) return [];
   return (data as Row[]).map(fromRow).filter(r => r.lastNotifiedDate !== today);
 }

@@ -67,6 +67,50 @@ try{
  await owner();await db.query("update open_finance.resources set source_updated_at=now() where external_id='company-two-bank'");
  await assert.rejects(db.query('update open_finance.connections set company_id=$1 where id=$2',[ca,fresh.id]),/OF_COMPANY_REASSIGNMENT_DENIED/);
  await db.exec('set role anon');await assert.rejects(rpc('zelo_of_connection',[a,'business',fresh.id]),/permission denied/);await owner();
+
+ if(process.argv.includes('--archive')){
+  await headers();await db.exec('set role workspace_migrator');
+  await db.exec(await sql('../migrations/20261011210000_nfse_preparation.sql'));
+  await db.exec(await sql('../migrations/20261012010000_company_archive.sql'));await owner();
+  await db.query("update companies set name='Empresa' where id in ($1,$2,$3)",[ca,cb,c2]);
+  const finance=(await db.query("insert into finances(user_id,company_id,mode,type,amount,category,description,date,source)values($1,$2,'business','expense',50,'Outros','Teste',current_date,'web')returning id",[a,c2])).rows[0].id;
+  await db.query("insert into wpp_phone_links(phone,user_id,access,active_company_id,active_workspace_mode)values('5511999993333',$1,'both',$2,'business')",[a,c2]);
+  await db.query("insert into pending_actions(phone,data)values('5511999993333',$1::jsonb)",[JSON.stringify({userId:a,companyId:c2,type:'recurring_confirmation'})]);
+  await db.query("insert into pending_actions(phone,data)values('5511999994444',$1::jsonb)",[JSON.stringify({userId:a,companyId:c2,workspaceMode:'personal',type:'slot_fill'})]);
+  const before=(await db.query('select count(*)::int n from open_finance.movements')).rows[0].n;
+  await service();await assert.rejects(rpc('zelo_archive_company',[a,cb,'Empresa']),/COMPANY_NOT_FOUND/);
+  await assert.rejects(rpc('zelo_archive_company',[a,c2,'nome antigo']),/COMPANY_CONFIRMATION/);
+  const result=await rpc('zelo_archive_company',[a,c2,'Empresa']);assert.equal(result.activeCompanyId,ca);assert.equal(result.retiring,1);
+  assert.equal((await rpc('zelo_archive_company',[a,c2,'Empresa'])).retiring,0);
+  await owner();assert.equal((await db.query('select count(*)::int n from finances where id=$1',[finance])).rows[0].n,1);
+  assert.equal((await db.query('select count(*)::int n from open_finance.movements')).rows[0].n,before);
+  assert.equal((await db.query('select status from open_finance.connections where id=$1',[old.id])).rows[0].status,'active');
+  assert.equal((await db.query('select status from open_finance.connections where id=$1',[other.id])).rows[0].status,'active');
+  assert.equal((await db.query("select active_company_id from wpp_phone_links where phone='5511999993333'")).rows[0].active_company_id,null);
+  assert.equal((await db.query("select count(*)::int n from pending_actions where phone='5511999993333'")).rows[0].n,0);
+  assert.equal((await db.query("select count(*)::int n from pending_actions where phone='5511999994444'")).rows[0].n,1);
+  await assert.rejects(db.query('update finances set amount=999 where id=$1',[finance]),/COMPANY_ARCHIVED/);
+  await assert.rejects(db.query('delete from finances where id=$1',[finance]),/COMPANY_ARCHIVED/);
+  await headers(a,c2);await service();await assert.rejects(rpc('zelo_of_overview',[a,'production','business']),/OF_COMPANY_ACCESS_DENIED/);
+  await headers();const claim=await rpc('zelo_of_claim_retirement');assert.equal(claim.id,fresh.id);
+  await assert.rejects(rpc('zelo_of_finish_retirement',[claim.id,claim.retirement_lease_token,null,'AUTHORISED']),/OF_CANCELLATION_UNCONFIRMED/);
+  await rpc('zelo_of_finish_retirement',[claim.id,claim.retirement_lease_token,null,'REVOKED']);
+  await rpc('zelo_restore_company',[a,c2]);await owner();assert.equal((await db.query('select status from open_finance.connections where id=$1',[fresh.id])).rows[0].status,'revoked');
+  await db.query('update finances set amount=55 where id=$1',[finance]);
+  await db.query("insert into reminders(user_id,company_id,mode,message,phone,scheduled_at)values($1,$2,'business','Não enviar','5511',now())",[a,c2]);
+  await service();await rpc('zelo_archive_company',[a,c2,'Empresa']);await rpc('zelo_archive_company',[a,ca,'Empresa']);
+  await owner();assert.equal((await db.query('select active_mode from users where id=$1',[a])).rows[0].active_mode,'personal');
+  assert.equal((await db.query('select count(*)::int n from zelo_active_reminders where user_id=$1',[a])).rows[0].n,0);
+  await headers(a,ca);await service();const personal=await consent(a,4,'personal');assert.ok(personal.id);
+  await owner();await db.query("insert into finances(user_id,mode,type,amount,category,description,date)values($1,'personal','expense',10,'Outros','Pessoal funciona',current_date)",[a]);
+  await assert.rejects(db.query("insert into finances(user_id,mode,type,amount,category,description,date)values($1,'business','expense',10,'Outros','Derivação bloqueada',current_date)",[a]),/COMPANY_ARCHIVED/);
+  await service();const orphan={id:'10000000-0000-4000-8000-000000000005',cliente_user_id:a,institution_id:'20000000-0000-4000-8000-000000000001',institution_name:'Bank',products:['ACCOUNT']};
+  await rpc('zelo_of_register_retirement',[a,ca,'business',JSON.stringify(orphan)]);
+  await owner();assert.equal((await db.query('select status from open_finance.connections where external_consent_id=$1',[orphan.id])).rows[0].status,'revoking');
+  assert.equal((await db.query('select status from open_finance.connections where id=$1',[personal.id])).rows[0].status,'active');
+  await db.exec('set role anon');await assert.rejects(rpc('zelo_restore_company',[a,c2]),/permission denied/);await assert.rejects(db.query('select * from zelo_active_reminders'),/permission denied/);await owner();
+  console.log('Company archive: exact owner/ID/name, retained history, blocked writes, private cron views, provider-confirmed retirement, orphan compensation, restoration, last-company personal access and denied browser privileges passed.');
+ }
  await headers();await db.exec('set role workspace_migrator');await assert.rejects(db.exec(await sql('../rollbacks/20261011170000_open_finance_companies.sql')),/OF_WORKSPACE_HISTORY_REQUIRES_FORWARD_FIX/);await db.exec('rollback');await owner();
  console.log('Bank companies: real scoped role, legacy history, two companies, other holder, malformed headers, consent collision, catalog/transactions sync, report/category and webhook target passed.');
 }catch(error){console.error(error.message,error.where??'');process.exitCode=1;}finally{await db.close();}

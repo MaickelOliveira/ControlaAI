@@ -1,6 +1,12 @@
 import {expect,it} from "vitest";
 import {scopeCompanyRequest} from "./company-scope-policy";
 const scope={userId:"10000000-0000-4000-8000-000000000001",companyId:"20000000-0000-4000-8000-000000000001",mode:"business" as const};
+it("excludes archived legacy folders and records even from personal requests",()=>{
+ const archived="20000000-0000-4000-8000-000000000099";
+ const result=scopeCompanyRequest(new URL("https://db.test/rest/v1/drive_files"),{method:"GET"},{...scope,mode:"personal",archivedCompanyIds:[archived]});
+ expect(result.url.searchParams.get("and")).toContain(`company_id.not.in.(${archived})`);
+ expect(result.url.searchParams.get("and")).toContain("company_id.is.null");
+});
 it("restricts income/expense reads and mutations to personal or selected enterprise rows",()=>{
  for(const method of ["GET","PATCH","DELETE"]){
   const result=scopeCompanyRequest(new URL("https://db.test/rest/v1/finances?id=eq.foreign"),{method,...(method==="PATCH"?{body:"{}"}:{})},scope);

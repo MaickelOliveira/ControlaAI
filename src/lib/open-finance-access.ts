@@ -2,7 +2,7 @@ import "server-only";
 import {isSameOrigin} from "./request-origin";
 import { getSupabase } from "./supabase";
 import type { User } from "./users";
-import {multiCompanyEnabled,requireCompany} from "./companies";
+import {multiCompanyEnabled,requireCompany,companyContextData} from "./companies";
 import {companyScopeFor} from "./company-context";
 
 export type OpenFinanceScope = { userId: string; mode: "personal" | "business"; environment: "production"; companyId?:string; companyName?:string };
@@ -49,7 +49,7 @@ export async function getOpenFinanceAccess(user: OpenFinanceIdentity, requestedM
       // Worker/webhook targets come from the database; web and WhatsApp use their verified context.
       const context=options.companyId===undefined?await companyScopeFor(user.id):undefined;
       if(mode==="business"&&context?.allowBusiness===false)return null;
-      const company=await requireCompany(user.id,options.companyId??context?.companyId);
+      const company=mode==="business"?await requireCompany(user.id,options.companyId??context?.companyId):(await companyContextData(user.id,options.companyId??context?.companyId,"personal")).company;
       return {userId:user.id,mode,environment:"production",companyId:company.id,companyName:company.name};
     }
     return { userId: user.id, mode, environment: "production" };
