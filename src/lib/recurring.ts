@@ -8,6 +8,7 @@ import { withRetry } from "./retry";
 const TZ = "America/Sao_Paulo";
 
 export type RecurringTransaction = {
+  companyId?: string;
   id: string;
   userId: string;
   type: "income" | "expense";
@@ -38,6 +39,7 @@ export type RecurringTransaction = {
 };
 
 type Row = {
+  company_id?: string | null;
   id: string; user_id: string; type: "income" | "expense"; amount: number; total_amount: number | null;
   category: string; description: string; mode: "personal" | "business"; recurrence_type: "installment" | "recurring";
   total_installments: number | null; paid_installments: number; repeat_unit: RecurringTransaction["repeatUnit"];
@@ -47,7 +49,7 @@ type Row = {
 
 function fromRow(r: Row): RecurringTransaction {
   return {
-    id: r.id, userId: r.user_id, type: r.type, amount: Number(r.amount),
+    id: r.id, userId: r.user_id, companyId:r.company_id??undefined, type: r.type, amount: Number(r.amount),
     totalAmount: r.total_amount !== null ? Number(r.total_amount) : undefined,
     category: r.category, description: r.description, mode: r.mode, recurrenceType: r.recurrence_type,
     totalInstallments: r.total_installments ?? undefined, paidInstallments: r.paid_installments,

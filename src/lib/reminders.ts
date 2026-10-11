@@ -11,6 +11,7 @@ export type ReminderRecipientType = "self" | "customer" | "employee" | "contact"
 export const MAX_FAILED_ATTEMPTS = 5;
 
 export type Reminder = {
+  companyId?: string;
   id: string;
   userId: string;
   message: string;
@@ -26,6 +27,7 @@ export type Reminder = {
 };
 
 type Row = {
+  company_id?: string | null;
   id: string; user_id: string; message: string; phone: string; scheduled_at: string;
   repeat: ReminderRepeat; mode: "personal" | "business"; sent: boolean; failed_attempts: number;
   recipient_type: ReminderRecipientType | null; recipient_name: string | null; created_at: string;
@@ -33,7 +35,7 @@ type Row = {
 
 function fromRow(r: Row): Reminder {
   return {
-    id: r.id, userId: r.user_id, message: r.message, phone: r.phone, scheduledAt: r.scheduled_at,
+    id: r.id, userId: r.user_id, companyId:r.company_id??undefined, message: r.message, phone: r.phone, scheduledAt: r.scheduled_at,
     repeat: r.repeat, mode: r.mode, sent: r.sent, failedAttempts: r.failed_attempts ?? 0,
     recipientType: r.recipient_type || "self", recipientName: r.recipient_name ?? undefined, createdAt: r.created_at,
   };

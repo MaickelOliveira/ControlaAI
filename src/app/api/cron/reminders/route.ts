@@ -1,3 +1,4 @@
+import {companyNoticeDescription} from "@/lib/company-notices";
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { getDueReminders, markReminderSent, markReminderFailed, markReminderSkippedForInactiveUser } from "@/lib/reminders";
@@ -54,7 +55,7 @@ async function runCron() {
         continue;
       }
       const dispatch = buildReminderTemplateDispatch({
-        message: r.message,
+        message: await companyNoticeDescription(r.userId,r.companyId,r.message),
         recipientType: r.recipientType,
         mode: r.mode,
         ownerName: owner.name,

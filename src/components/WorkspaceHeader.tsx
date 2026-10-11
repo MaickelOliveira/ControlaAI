@@ -33,7 +33,7 @@ export default function WorkspaceHeader({name,mode,admin=false}:{name?:string;mo
       <button type="button" className="z-search-trigger" aria-expanded={open} aria-controls="workspace-search" onClick={()=>setOpen(v=>!v)}><UiIcon name="search" className="h-4 w-4"/><span>{es?"Buscar una página…":"Buscar uma página…"}</span><kbd className="ml-auto hidden sm:block text-[10px]">⌘ K</kbd></button>
       {open&&<div id="workspace-search" className="z-search-dialog"><label className="sr-only" htmlFor="workspace-query">{es?"Nombre de la página":"Nome da página"}</label><input ref={input} id="workspace-query" value={query} onChange={e=>setQuery(e.target.value)} placeholder={es?"Escribe para buscar":"Digite para buscar"}/><nav aria-label={es?"Resultados":"Resultados da busca"} className="max-h-72 overflow-y-auto mt-2">{available.filter(p=>p.label.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().includes(query.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase())).map(p=><Link key={p.href} href={p.href} onClick={()=>{setOpen(false);setQuery("");}}>{p.label}</Link>)}</nav></div>}
     </div>
-    <div className="z-header-preferences">{!admin&&mode&&<DashboardModeToggle mode={mode} es={es}/>}<ThemeToggle es={es}/>{!admin&&mode==="business"&&<CompanySelector es={es}/>}</div>
+    <div className="z-header-preferences">{!admin&&mode&&<DashboardModeToggle mode={mode} es={es}/>}{!admin&&mode==="business"&&<CompanySelector es={es}/>}<ThemeToggle es={es}/></div>
     {name&&<Link href={`${prefix}/configuracoes`} aria-label={es?"Mi perfil":"Meu perfil"} className="hidden sm:grid h-9 w-9 place-items-center rounded-full bg-ink text-surface text-xs font-semibold">{name.split(" ").slice(0,2).map(p=>p[0]).join("")}</Link>}
   </header>;
 }

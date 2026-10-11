@@ -71,7 +71,7 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
     }
     if (listCommand) { await ask(); return; }
     if (switchCommand || pending?.type === "company_selection") {
-      if (link.access === "personal") { await clearPendingAction(msg.from); return next(msg); }
+      if (link.access === "personal") { await clearPendingAction(msg.from); const personal=await requireCompany(user.id);activate(user.id,personal,"personal",link.access);return next(msg); }
       const choice = companyChoice(switchCommand?.[1] ?? text, companies);
       if (!choice) { await ask(pending?.type === "company_selection" && pending.resume ? {
         from: msg.from, ...pending.resume, fileBuffer: pending.resume.fileBase64 ? Buffer.from(pending.resume.fileBase64, "base64") : undefined,
