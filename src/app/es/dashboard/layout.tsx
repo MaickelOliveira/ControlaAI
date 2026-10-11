@@ -165,8 +165,7 @@ function SidebarContent({
     <>
       {/* Logo */}
       <div className="z-sidebar-brand">
-        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="z-wordmark z-wordmark-dark" priority />
-        <Image src="/brand/zelo-wordmark-light.png" alt="" width={640} height={293} className="z-wordmark z-wordmark-light" />
+        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="z-wordmark" priority />
         <p className="text-subtle text-[10px] mt-2">Gestión inteligente</p>
       </div>
 
@@ -274,7 +273,7 @@ export default function DashboardLayoutEs({ children }: { children: React.ReactN
             className="p-1.5 rounded-lg text-muted hover:bg-surface-muted transition">
             {Icons.menu}
           </button>
-          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="z-wordmark z-wordmark-dark" /><Image src="/brand/zelo-wordmark-light.png" alt="" width={640} height={293} className="z-wordmark z-wordmark-light"/>
+          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="z-wordmark" />
           {user && (
             <span className="z-mobile-mode-badge" data-mode={isPersonal ? "personal" : "business"}>
               <UiIcon name={isPersonal ? "person" : "business"}/>
