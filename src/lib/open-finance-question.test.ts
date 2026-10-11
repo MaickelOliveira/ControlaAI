@@ -8,12 +8,26 @@ import {answerBankQuestion,parseBankQuestion} from "./open-finance-question";
 const user={id:"owner",email:"owner@example.test",plan:"personal",activeMode:"personal"} as const;
 describe("bank questions from saved data",()=>{
   beforeEach(()=>vi.clearAllMocks());
+  it.each([
+    ["zelo quanto eu tenho de emprestimo?", "loans", undefined],
+    ["Quanto tenho de empréstimos em cada banco?", "loans", undefined],
+    ["Quantos empréstimos eu tenho nos bancos conectados?", "loans", undefined],
+    ["Mostre meus financiamentos", "financings", undefined],
+    ["Quanto eu tenho de crédito disponível no cartão Nubank?", "limits", "nubank"],
+    ["Qual meu limite disponível no Nubank?", "limits", "nubank"],
+    ["Quanto já utilizei do limite do cartão Nubank?", "limits", "nubank"],
+    ["Qual meu saldo no banco Sicredi?", "balances", "sicredi"],
+    ["Mostre meus investimentos no Inter", "investments", "inter"],
+    ["Qual o valor da fatura do cartão Nubank?", "bills", "nubank"],
+  ])("recognizes the bank query %s before the generic expense classifier",(question,kind,bankName)=>{
+    expect(parseBankQuestion(question,"2026-10-11")).toMatchObject({kind,...(bankName?{bankName}:{})});
+  });
   it("recognizes last month's card query without treating registrations as questions",()=>{
     expect(parseBankQuestion("Quanto gastei nos cartões mês passado?","2026-10-09")).toEqual({kind:"spending",from:"2026-09-01",to:"2026-09-30",source:"card"});
     expect(parseBankQuestion("Registra 50 no cartão","2026-10-09")).toBeNull();
     expect(parseBankQuestion("Quanto gastei com iFood nos cartões?","2026-10-09")).toBeNull();
     expect(parseBankQuestion("Qual o saldo da empresa?","2026-10-09")).toBeNull();
-    for(const question of ["Qual saldo dos bancos mês passado?","Quais faturas vencidas?","Qual limite do Nubank?","Qual meu limite hoje?","Como estavam meus investimentos mês passado?"])expect(parseBankQuestion(question,"2026-10-09")).toBeNull();
+    for(const question of ["Qual saldo dos bancos mês passado?","Quais faturas vencidas?","Qual meu limite hoje?","Como estavam meus investimentos mês passado?"])expect(parseBankQuestion(question,"2026-10-09")).toBeNull();
   });
   it("returns no bank answer for a hidden account",async()=>{
     vi.mocked(getOpenFinanceAccess).mockResolvedValue(null);
