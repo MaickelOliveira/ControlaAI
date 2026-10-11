@@ -1,6 +1,7 @@
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { getSupabase } from "./supabase";
-import { addFinance } from "./finances";
+import type { Finance } from "./finances";
+import { resolveCompanyDatabaseScope } from "./supabase";
 
 export const GROCERY_CATEGORIES = [
   "Mercearia",      // arroz, feijão, óleo, açúcar, macarrão...
@@ -70,6 +71,8 @@ export type GroceryPurchase = {
   createdAt: string;
   source?: string;
   financeId?: string;
+  mode?: "personal" | "business";
+  companyId?: string;
 };
 
 export type ShoppingListItem = {
@@ -190,33 +193,48 @@ export async function getProductsByUser(userId: string): Promise<GroceryProduct[
 }
 
 // ── Purchases ────────────────────────────
-type PurchaseRow = { id: string; user_id: string; store_id: string; date: string; total: string | number; source: string; finance_id: string | null; created_at: string; grocery_stores?: { name: string } | null };
+type PurchaseRow = { id: string; user_id: string; store_id: string; date: string; total: string | number; source: string; finance_id: string | null; mode: "personal" | "business"; company_id: string | null; created_at: string; grocery_stores?: { name: string } | null };
 type ItemRow = { id: string; purchase_id: string; product_id: string | null; product_name: string; category: string; price: string | number; quantity: string | number; unit: string; price_estimated: boolean };
 
+async function purchaseScope(userId: string, mode?: "personal" | "business") {
+ const scope = await resolveCompanyDatabaseScope();
+ if (scope && scope.userId !== userId) throw Error("COMPANY_OWNER_MISMATCH");
+ const selectedMode = mode ?? scope?.mode ?? "personal";
+ if (selectedMode === "business" && scope?.allowBusiness === false) throw Error("COMPANY_ACCESS_DENIED");
+ let companyId = selectedMode === "business" ? scope?.companyId ?? null : null;
+ if (selectedMode === "business" && !scope) {
+  const { data, error } = await getSupabase().from("companies").select("id").eq("user_id", userId).eq("is_default", true).single();
+  if (error || !data) throw Error("COMPANY_ACCESS_DENIED");
+  companyId = data.id;
+ }
+ return { mode: selectedMode, companyId };
+}
+async function purchaseRows(rows: PurchaseRow[]): Promise<GroceryPurchase[]> {
+ if (!rows.length) return [];
+ const { data: items, error } = await getSupabase().from("grocery_purchase_items").select("*").in("purchase_id", rows.map(row => row.id));
+ if (error) throw Error("Não foi possível carregar os produtos da compra.");
+ return rows.map(row => ({ id: row.id, userId: row.user_id, storeId: row.store_id, storeName: row.grocery_stores?.name ?? "Mercado", date: row.date, total: Number(row.total), createdAt: row.created_at, source: row.source, financeId: row.finance_id ?? undefined, mode: row.mode, companyId: row.company_id ?? undefined, items: ((items ?? []) as ItemRow[]).filter(item => item.purchase_id === row.id).map(item => ({ productName: item.product_name, category: canonicalGroceryCategory(item.category), price: Number(item.price), quantity: Number(item.quantity), unit: item.unit, productId: item.product_id ?? undefined, priceEstimated: item.price_estimated })) }));
+}
+export async function getGroceryPurchase(userId: string, id: string, mode?: "personal" | "business"): Promise<GroceryPurchase | null> {
+ const scope = await purchaseScope(userId, mode);
+ let query = getSupabase().from("grocery_purchases").select("*,grocery_stores(name)").eq("user_id", userId).eq("id", id).eq("mode", scope.mode);
+ query = scope.companyId ? query.eq("company_id", scope.companyId) : query.is("company_id", null);
+ const { data, error } = await query.maybeSingle();
+ if (error) throw Error("Não foi possível consultar esta compra.");
+ return data ? (await purchaseRows([data as PurchaseRow]))[0] : null;
+}
+
 export async function getPurchasesByUser(userId: string, limit = 100, offset = 0): Promise<GroceryPurchase[]> {
-  const { data: purchases, error } = await getSupabase().from("grocery_purchases")
+  const scope = await purchaseScope(userId);
+  let query = getSupabase().from("grocery_purchases")
     .select("*, grocery_stores(name)").eq("user_id", userId)
+    .eq("mode", scope.mode);
+  query = scope.companyId ? query.eq("company_id", scope.companyId) : query.is("company_id", null);
+  const { data: purchases, error } = await query
     .order("date", { ascending: false }).order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
-  if (error || !purchases?.length) return [];
-  const rows = purchases as PurchaseRow[];
-  const ids = rows.map(r => r.id);
-  const { data: items } = await getSupabase().from("grocery_purchase_items").select("*").in("purchase_id", ids);
-  const itemsByPurchase = new Map<string, GroceryPurchaseItem[]>();
-  for (const it of (items as ItemRow[] | null) ?? []) {
-    const list = itemsByPurchase.get(it.purchase_id) ?? [];
-    list.push({
-      productName: it.product_name, category: canonicalGroceryCategory(it.category),
-      price: Number(it.price), quantity: Number(it.quantity), unit: it.unit,
-      productId: it.product_id ?? undefined, priceEstimated: it.price_estimated,
-    });
-    itemsByPurchase.set(it.purchase_id, list);
-  }
-  return rows.map(r => ({
-    id: r.id, userId: r.user_id, storeId: r.store_id, storeName: r.grocery_stores?.name ?? "Mercado",
-    date: r.date, items: itemsByPurchase.get(r.id) ?? [], total: Number(r.total),
-    createdAt: r.created_at, source: r.source, financeId: r.finance_id ?? undefined,
-  }));
+  if (error) throw Error("Não foi possível carregar o histórico de compras.");
+  return purchaseRows((purchases ?? []) as PurchaseRow[]);
 }
 
 /** Compras num período (opcional) e/ou categoria (opcional) — base de
@@ -302,39 +320,34 @@ export function groceryStoreNameMatches(candidateName: string, requestedName: st
  *  findOrCreateProduct antes de inserir, então tanto o fluxo de foto quanto
  *  o de texto (slot-filling) ganham cadastro automático de catálogo sem
  *  duplicar lógica. */
-export async function addPurchase(
-  data: Omit<GroceryPurchase, "id" | "createdAt"> & { source?: string; financeId?: string }
+export async function saveGroceryPurchase(
+  data: Omit<GroceryPurchase, "id" | "createdAt">,
+  finance: Pick<Finance, "mode" | "source"> & { registeredBy: string; accountId?: string; cardInvoiceId?: string },
+  id?: string,
+  operation?: { key: string; checkedIds?: string[] },
 ): Promise<GroceryPurchase> {
-  const { data: inserted, error } = await getSupabase().from("grocery_purchases").insert({
-    id: randomUUID(), user_id: data.userId, store_id: data.storeId, date: data.date,
-    total: data.total, source: data.source ?? "manual", finance_id: data.financeId ?? null,
-  }).select("*").single();
-  if (error) throw new Error(`[grocery] addPurchase falhou: ${error.message}`);
-  const purchaseId = (inserted as { id: string }).id;
-
-  const itemRows = [];
+  const scope = await resolveCompanyDatabaseScope();
+  if (scope && (scope.userId !== data.userId || finance.mode === "business" && scope.allowBusiness === false)) throw Error("COMPANY_ACCESS_DENIED");
+  const items = [];
   for (const item of data.items) {
     const product = await findOrCreateProduct(data.userId, item.productName, item.category, item.unit);
-    itemRows.push({
-      id: randomUUID(), purchase_id: purchaseId, product_id: product.id,
-      product_name: item.productName, category: item.category, price: item.price,
-      quantity: item.quantity, unit: item.unit, price_estimated: item.priceEstimated ?? false,
-    });
+    items.push({ ...item, productId: product.id });
   }
-  if (itemRows.length) {
-    const { error: itemsError } = await getSupabase().from("grocery_purchase_items").insert(itemRows);
-    if (itemsError) throw new Error(`[grocery] addPurchase (items) falhou: ${itemsError.message}`);
-  }
-
-  return {
-    id: purchaseId, userId: data.userId, storeId: data.storeId, storeName: data.storeName,
-    date: data.date, items: data.items, total: data.total, createdAt: new Date().toISOString(),
-    source: data.source, financeId: data.financeId,
-  };
+  const { data: purchaseId, error } = await getSupabase().rpc("save_grocery_purchase", {
+   p_user: data.userId, p_purchase: id ?? null, p_store: data.storeId, p_date: data.date,
+   p_items: items, p_total: data.total,
+   p_finance: { ...finance, ...(!id ? { operationKey: operation?.key ?? randomUUID(), ...(operation?.checkedIds ? { checkedIds: operation.checkedIds } : {}) } : {}), purchaseSource: data.source ?? "manual", ...(finance.mode === "business" && scope ? { companyId: scope.companyId } : {}) },
+  });
+  if (error || typeof purchaseId !== "string") throw Error("Não foi possível salvar a compra e sua despesa. Tente novamente.");
+  const purchase = await getGroceryPurchase(data.userId, purchaseId, finance.mode);
+  if (!purchase) throw Error("Compra salva, mas não foi possível carregar o resultado. Atualize o histórico antes de tentar novamente.");
+  return purchase;
 }
-
-export async function setPurchaseFinanceId(purchaseId: string, userId: string, financeId: string): Promise<void> {
-  await getSupabase().from("grocery_purchases").update({ finance_id: financeId }).eq("id", purchaseId).eq("user_id", userId);
+export async function deleteGroceryPurchase(userId: string, id: string): Promise<boolean> {
+ if (!await getGroceryPurchase(userId, id)) return false;
+ const { data, error } = await getSupabase().rpc("delete_grocery_purchase", { p_user: userId, p_purchase: id });
+ if (error) throw Error("Não foi possível excluir a compra e sua despesa.");
+ return data === true;
 }
 
 // ── Analytics ────────────────────────────
@@ -354,8 +367,10 @@ export async function getSpendByStore(
       .map(([storeId, value]) => ({ storeId, ...value }))
       .sort((a, b) => b.total - a.total);
   }
-  const { data, error } = await getSupabase().from("grocery_purchases")
-    .select("store_id, total, grocery_stores(name)").eq("user_id", userId);
+  const scope = await purchaseScope(userId);
+  let query = getSupabase().from("grocery_purchases").select("store_id, total, grocery_stores(name)").eq("user_id", userId).eq("mode", scope.mode);
+  query = scope.companyId ? query.eq("company_id", scope.companyId) : query.is("company_id", null);
+  const { data, error } = await query;
   if (error || !data) return [];
   const map = new Map<string, { storeName: string; total: number; visits: number }>();
   for (const row of data as unknown as Array<{ store_id: string; total: string | number; grocery_stores?: { name: string } | null }>) {
@@ -379,6 +394,9 @@ export async function getPriceComparison(
   let query = getSupabase().from("grocery_purchase_items")
     .select("product_name, category, price, price_estimated, grocery_purchases!inner(user_id, date, store_id, grocery_stores(name))")
     .eq("grocery_purchases.user_id", userId).eq("price_estimated", false);
+  const scope = await purchaseScope(userId);
+  query = query.eq("grocery_purchases.mode", scope.mode);
+  query = scope.companyId ? query.eq("grocery_purchases.company_id", scope.companyId) : query.is("grocery_purchases.company_id", null);
   if (productName) query = query.ilike("product_name", `%${productName}%`);
   const { data, error } = await query;
   if (error || !data) return [];
@@ -442,6 +460,9 @@ export async function getSuggestedListItems(
   let query = getSupabase().from("grocery_purchase_items")
     .select("product_name, category, grocery_purchases!inner(user_id, date)")
     .eq("grocery_purchases.user_id", userId).gte("grocery_purchases.date", since);
+  const scope = await purchaseScope(userId);
+  query = query.eq("grocery_purchases.mode", scope.mode);
+  query = scope.companyId ? query.eq("grocery_purchases.company_id", scope.companyId) : query.is("grocery_purchases.company_id", null);
   if (categories?.length) query = query.in("category", categories);
   const { data, error } = await query;
   if (error || !data?.length) return [];
@@ -573,31 +594,40 @@ export async function addFromTemplate(userId: string, templateKey: string, selec
  *  não é o valor real de cada produto). */
 export async function finalizePurchaseFromChecked(
   userId: string, mode: "personal" | "business", storeName: string, total: number, registeredBy: string,
-  date?: string, itemPrices?: Record<string, number>, source = "whatsapp_quick"
+  date?: string, itemPrices?: Record<string, number>, source = "whatsapp_quick", operation?: { key: string; checkedIds: string[] }
 ): Promise<{ purchase: GroceryPurchase; financeId: string } | null> {
-  const checked = await getCheckedShoppingItems(userId);
+  if (operation) {
+    const { data: receipt, error } = await getSupabase().from("grocery_purchase_operations").select("purchase_id").eq("user_id", userId).eq("operation_key", operation.key).maybeSingle();
+    if (error) throw Error("Não foi possível conferir esta compra. Tente novamente.");
+    if (receipt) {
+      if (!receipt.purchase_id) throw Error("Esta compra já foi excluída. Abra uma nova compra para registrar outros produtos.");
+      const purchase = await getGroceryPurchase(userId, receipt.purchase_id, mode);
+      if (!purchase?.financeId) throw Error("Não foi possível carregar a compra concluída. Consulte o histórico.");
+      return { purchase, financeId: purchase.financeId };
+    }
+  }
+  const checked = (await getCheckedShoppingItems(userId)).filter(item => !operation || operation.checkedIds.includes(item.id));
+  if (operation && checked.length !== new Set(operation.checkedIds).size) throw Error("A lista mudou. Confira os produtos antes de finalizar a compra.");
   if (!checked.length) return null;
 
   const store = await findOrCreateStore(userId, storeName);
   const hasRealPrices = !!itemPrices && checked.every(i => typeof itemPrices[i.id] === "number");
+  if (itemPrices && !hasRealPrices) throw Error("Preencha o preço de cada produto desta compra.");
   const items: GroceryPurchaseItem[] = hasRealPrices
     ? checked.map(i => ({ productName: i.name, category: i.category, price: itemPrices![i.id], quantity: 1, unit: i.quantity, priceEstimated: false }))
     : checked.map(i => ({ productName: i.name, category: i.category, price: total / checked.length, quantity: 1, unit: i.quantity, priceEstimated: true }));
   const purchaseTotal = hasRealPrices ? items.reduce((s, i) => s + i.price, 0) : total;
   const purchaseDate = date || new Date().toISOString().slice(0, 10);
 
-  const purchase = await addPurchase({
+  const purchase = await saveGroceryPurchase({
     userId, storeId: store.id, storeName: store.name, date: purchaseDate, items, total: purchaseTotal, source,
+  }, {
+    mode, source: source.startsWith("whatsapp") ? "whatsapp" : "web", registeredBy,
+  }, undefined, operation ?? {
+    key: `list:${createHash("sha256").update(checked.map(item => item.id).sort().join(",")).digest("hex")}`,
+    checkedIds: checked.map(item => item.id),
   });
-
-  const finance = await addFinance({
-    userId, type: "expense", amount: purchaseTotal, category: "Alimentação",
-    description: `Compra no ${store.name}`, date: purchaseDate, mode, source: source.startsWith("whatsapp") ? "whatsapp" : "web", registeredBy,
-  });
-  await setPurchaseFinanceId(purchase.id, userId, finance.id);
-  await clearCheckedItems(userId);
-
-  return { purchase: { ...purchase, financeId: finance.id }, financeId: finance.id };
+  return { purchase, financeId: purchase.financeId! };
 }
 
 // Templates pré-configurados de lista por categoria

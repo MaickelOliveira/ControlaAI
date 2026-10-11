@@ -1,6 +1,7 @@
 "use client";
+import { useSearchParams } from "next/navigation";
 import PageTitle from "@/components/PageTitle";
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
@@ -67,12 +68,19 @@ const EMPTY_FORM: FormState = {
   startDate: new Date().toISOString().slice(0, 10), totalAmount: "",
 };
 
-export default function FinancasPage() {
+function FinancasContent() {
   const [mode, setMode] = useState("");
 
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<FinanceFilters>(() => {
+    const defaults = defaultFilters();
+    const from = searchParams.get("from"), to = searchParams.get("to");
+    const validDate = (date: string | null): date is string => !!date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date;
+    return validDate(from) && validDate(to) && from <= to ? { ...defaults, from, to } : defaults;
+  });
+
   const loadSequence = useRef(0);
   const [visibleCount,setVisibleCount]=useState(50);
   const loader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
@@ -932,4 +940,8 @@ export default function FinancasPage() {
       )}
     </div>
   );
+}
+
+export default function FinancasPage() {
+  return <Suspense fallback={<p className="p-6 text-sm text-subtle">Carregando…</p>}><FinancasContent /></Suspense>;
 }

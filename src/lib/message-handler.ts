@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {saveWorkspaceCategories} from "./workspace-categories";
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
@@ -22,7 +23,7 @@ import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, g
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
 import {
   addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore,
-  findOrCreateStore, addPurchase, setPurchaseFinanceId, getPriceComparison, getStorePriceRanking,
+  findOrCreateStore, saveGroceryPurchase, getPriceComparison, getStorePriceRanking,
   getSuggestedListItems, categoryForTemplateKey, getPurchasesInRange, findLatestPurchaseByStoreName, clearShoppingList,
   removeShoppingItem, updateShoppingItem,
   type GroceryPurchaseItem, type GroceryCategory,
@@ -1185,26 +1186,22 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               const items: GroceryPurchaseItem[] = receipt.items.map(i => ({
                 productName: cap(i.productName), category: i.category, price: i.unitPrice, quantity: i.quantity, unit: i.unit,
               }));
-              const purchase = await addPurchase({
-                userId: fileUser.id, storeId: store.id, storeName: store.name,
-                date: receipt.date, items, total: receipt.total, source: "whatsapp_receipt",
-              });
               const receiptAccountHint = documentAccountHintFromCaption(caption);
               const receiptAccount = receiptAccountHint
                 ? await resolveOrCreateInvoiceAccount(fileUser.id, gMode, receiptAccountHint, { transactionDate: receipt.date })
                 : await resolveAccountFields(fileUser.id, gMode, undefined);
-              const finance = await addFinance({
-                userId: fileUser.id, type: "expense", amount: receipt.total, category: "Alimentação",
-                description: `Compra no ${store.name}`, date: receipt.date, mode: gMode, source: "whatsapp", registeredBy: from,
+              const purchase = await saveGroceryPurchase({
+                userId: fileUser.id, storeId: store.id, storeName: store.name, date: receipt.date, items, total: receipt.total, source: "whatsapp_receipt",
+              }, {
+                mode: gMode, source: "whatsapp", registeredBy: from,
                 accountId: receiptAccount.accountId, cardInvoiceId: receiptAccount.cardInvoiceId,
-              });
-              await setPurchaseFinanceId(purchase.id, fileUser.id, finance.id);
+              }, undefined, { key: `receipt:${gMode}:${createHash("sha256").update(buffer).digest("hex")}` });
               const bal = await getBalance(fileUser.id, gMode, nowBR().getFullYear(), nowBR().getMonth() + 1);
 
               await setPendingAction(from, {
                 type: "receipt_save", userId: fileUser.id, fileBase64: buffer.toString("base64"), mimeType,
                 suggestedName: `${store.name} - ${receipt.date}${mimeType.includes("pdf") ? ".pdf" : ".jpg"}`,
-                description: `Compra no ${store.name}`, financeId: finance.id,
+                description: `Compra no ${store.name}`, financeId: purchase.financeId!,
               });
 
               const itemsList = items.map(i => `• ${i.productName} — ${formatCurrency(i.price)} × ${i.quantity} = ${formatCurrency(i.price * i.quantity)}`).join("\n");

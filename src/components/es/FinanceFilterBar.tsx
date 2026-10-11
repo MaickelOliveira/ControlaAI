@@ -41,7 +41,7 @@ export default function FinanceFilterBarEs({
   value: FinanceFilters;
   onChange: (f: FinanceFilters) => void;
 }) {
-  const [preset, setPreset] = useState<Preset>("this_month");
+  const [preset, setPreset] = useState<Preset>(() => { const current = monthRange(0); return value.from === current.from && value.to === current.to ? "this_month" : "custom"; });
   const [showCats, setShowCats] = useState(false);
   const [searchInput, setSearchInput] = useState(value.search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
