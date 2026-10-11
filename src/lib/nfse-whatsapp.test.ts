@@ -10,6 +10,7 @@ const user = { id: "owner", plan: "business", locale: "pt-BR" } as Parameters<ty
 beforeEach(() => { vi.clearAllMocks(); mocks.access.mockResolvedValue("business"); mocks.overview.mockResolvedValue({ profile: { legalName: "Empresa" }, services: [{ id: "service", service: { title: "Consultoria", amount: 150 } }], drafts: [] }); });
 it("does not intercept ordinary financial registrations mentioning an invoice", async () => {
  expect(await handleFiscalWhatsApp(user, "business", "phone", "gastei 50 com uma nota fiscal", null)).toBe(false);
+ expect(await handleFiscalWhatsApp(user, "business", "phone", "paguei R$200 pelo certificado digital do MEI, conforme nota fiscal", null)).toBe(false);
  expect(mocks.overview).not.toHaveBeenCalled();
 });
 it("blocks personal/unlinked numbers before any fiscal lookup", async () => {
@@ -43,4 +44,19 @@ it("does not advance past an oversized replacement amount", async () => {
  await handleFiscalWhatsApp(user, "business", "phone", "1000000000000", { type: "nfse_draft", userId: user.id, phone: "phone", expiresAt: new Date(Date.now() + 60_000).toISOString(), stage: "amount", serviceId: "service" });
  expect(mocks.pending).not.toHaveBeenCalled();
  expect(mocks.send.mock.calls[0][1]).toContain("valor do serviço");
+});
+it("explains MEI portal exemption and Zelo automation before asking for fiscal setup", async () => {
+ mocks.access.mockResolvedValue("personal");
+ expect(await handleFiscalWhatsApp(user, "personal", "phone", "Sou MEI, preciso de certificado digital para emitir nota fiscal?", null)).toBe(true);
+ expect(mocks.overview).not.toHaveBeenCalled();
+ expect(mocks.pending).not.toHaveBeenCalled();
+ expect(mocks.send.mock.calls[0][1]).toContain("sem certificado");
+ expect(mocks.send.mock.calls[0][1]).toContain("inclusive MEI");
+ expect(mocks.send.mock.calls[0][1]).toContain("Outras empresas");
+ expect(mocks.send.mock.calls[0][1]).toContain("homologação");
+});
+it("routes short certificate questions without requesting customer fiscal data", async () => {
+ expect(await handleFiscalWhatsApp(user, "business", "phone", "Sou MEI, preciso de certificado digital?", null)).toBe(true);
+ expect(mocks.overview).not.toHaveBeenCalled();
+ expect(mocks.send.mock.calls[0][1]).toContain("sem certificado");
 });

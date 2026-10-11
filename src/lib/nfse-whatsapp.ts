@@ -5,6 +5,7 @@ import { fiscalOverview, createFiscalDraft } from "./nfse";
 import { validateFiscalService, validateFiscalServiceAnswer, validFiscalDocument, type FiscalService } from "./nfse-validation";
 import { setPendingAction, clearPendingAction, type PendingAction, type PendingFiscalDraft } from "./pending-actions";
 import { sendText } from "./whatsapp";
+import { FISCAL_CERTIFICATE_GUIDANCE, FISCAL_CERTIFICATE_SOURCE, isFiscalCertificateQuestion } from "./nfse-guidance";
 const fields = ["title", "description", "nationalCode", "amount", "issTaxation", "withholding", "issRate", "estimatedFederal", "estimatedState", "estimatedMunicipal"];
 const questions: Record<string, string> = {
  title: "Qual o nome do serviço?", description: "Qual descrição deve aparecer na nota?", nationalCode: "Qual o código nacional do serviço? Informe os 6 dígitos confirmados para sua atividade.", amount: "Qual o valor do serviço em reais?", issTaxation: "Qual a tributação do ISS? Responda 1 (tributável), 2 (imunidade), 3 (exportação) ou 4 (não incidência), conforme seu enquadramento confirmado.", withholding: "Qual a retenção do ISS? 1 (não retido), 2 (pelo tomador) ou 3 (pelo intermediário).", issRate: "Qual a alíquota do ISS (%)? Se não se aplica, responda dispensado. Não escolha uma alíquota sem confirmação fiscal.", estimatedFederal: "Qual o percentual aproximado dos tributos federais? Informe o valor confirmado (inclusive 0, se for o caso).", estimatedState: "Qual o percentual aproximado dos tributos estaduais?", estimatedMunicipal: "Qual o percentual aproximado dos tributos municipais?",
@@ -13,13 +14,15 @@ function normalize(value: string) { return value.normalize("NFD").replace(/\p{Di
 function money(value: string) { const clean = value.replace(/r\$|\s/gi, ""); if (!/^\d+(?:[.,]\d{1,2})?$/.test(clean)) return NaN; return Number(clean.replace(",", ".")); }
 export async function handleFiscalWhatsApp(user: User, mode: "personal" | "business", phone: string, message: string, action: PendingAction | null): Promise<boolean> {
  const pending = action?.type === "nfse_draft" && action.userId === user.id ? action : null, text = normalize(message);
+ const certificateQuestion = !action && isFiscalCertificateQuestion(message);
  const requested = /\b(?:nota fiscal|notas fiscais|nfs[ -]?e)\b/.test(text) && /\b(?:emita|emitir|emite|tire|tirar|gerar|gere|preparar|prepare|consultar|consulte|listar|liste|ver|veja|envie|enviar|manda|mandar|pdf|servicos)\b/.test(text);
- if (!pending && !requested) return false;
+ if (!pending && !requested && !certificateQuestion) return false;
  const say = async (value: string) => {
   if (await getPhoneAccess(user.id, phone) !== access) { await clearPendingAction(phone); return; }
   if (await sendText(phone, value, { privateFinancial: true }) === false) { await clearPendingAction(phone); throw Error("Não consegui enviar a pergunta. Peça a preparação novamente."); }
  };
  const access = await getPhoneAccess(user.id, phone);
+ if (certificateQuestion) { if (access) await say(`${FISCAL_CERTIFICATE_GUIDANCE.map(item => `*${item.title}*\n${item.text}`).join("\n\n")}\n\nOrientação oficial: ${FISCAL_CERTIFICATE_SOURCE}`); return true; }
  if (!access || (access !== "both" && access !== "business") || mode !== "business" || user.plan !== "business" || user.locale !== "pt-BR") { if (pending) await clearPendingAction(phone); if (access) await say("Notas fiscais usam o modo Empresa de uma conta brasileira. Este número precisa ter acesso empresarial."); return true; }
  if (pending && /^(cancelar|cancela|sair|deixa pra la)$/.test(text)) { await clearPendingAction(phone); await say("Cancelei a preparação. Nenhuma nota fiscal foi emitida."); return true; }
  try {
