@@ -6,7 +6,12 @@ import { getUserById, hasAccess, type User } from "./users";
 // Supabase só para validar a conta. Dez segundos preservam revogação rápida e
 // eliminam a viagem de rede extra nas navegações seguintes do dashboard.
 const USER_AUTH_CACHE_MS = 10_000;
-const userAuthCache = new Map<string, { expiresAt: number; value: Promise<User | null> }>();
+// Route bundles can load separate copies of this module in the same process.
+// Keep invalidation shared so mode/status updates reach every API immediately.
+type CachedUser={expiresAt:number;value:Promise<User|null>};
+const userCacheKey=Symbol.for("zelo.userAuthCache");
+const userCacheRegistry=globalThis as typeof globalThis & {[userCacheKey]?:Map<string,CachedUser>};
+const userAuthCache=userCacheRegistry[userCacheKey]??(userCacheRegistry[userCacheKey]=new Map<string,CachedUser>());
 
 function getCachedUser(userId: string): Promise<User | null> {
   const now = Date.now();
