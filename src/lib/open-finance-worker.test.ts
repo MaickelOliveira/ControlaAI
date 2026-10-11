@@ -1,10 +1,11 @@
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 vi.mock("server-only",()=>({}));
-const m=vi.hoisted(()=>({rpc:vi.fn(),user:vi.fn(),access:vi.fn(),sync:vi.fn(),publicEnabled:vi.fn()}));
+const m=vi.hoisted(()=>({rpc:vi.fn(),user:vi.fn(),access:vi.fn(),sync:vi.fn(),publicEnabled:vi.fn(),retirement:vi.fn(),retirementEnabled:vi.fn()}));
 vi.mock("./supabase",()=>({getSupabase:()=>({rpc:m.rpc})}));
 vi.mock("./users",()=>({getUserById:m.user}));
 vi.mock("./open-finance-access",()=>({getOpenFinanceAccess:m.access,isPublicOpenFinanceEnabled:m.publicEnabled}));
 vi.mock("./open-finance-sync",()=>({runBankSyncPage:m.sync}));
+vi.mock("./open-finance-retirement",()=>({runBankRetirement:m.retirement,isBankRetirementEnabled:m.retirementEnabled}));
 import {runPublicBankSync,startOpenFinanceWorker} from "./open-finance-worker";
 const id="550e8400-e29b-41d4-a716-446655440000";
 beforeEach(()=>{vi.resetAllMocks();m.rpc.mockResolvedValue({data:{userId:id,mode:"business",environment:"production"}});m.user.mockResolvedValue({id});m.access.mockResolvedValue({userId:id,mode:"business",environment:"production"});m.sync.mockResolvedValue("done");});
@@ -25,4 +26,14 @@ it("starts no public work when the public gate is off and can stop its timer",as
   vi.useFakeTimers();m.publicEnabled.mockReturnValue(false);vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","true");
   const stop=startOpenFinanceWorker();await vi.advanceTimersByTimeAsync(6000);stop();await vi.advanceTimersByTimeAsync(6000);
   expect(m.rpc).not.toHaveBeenCalled();expect(vi.getTimerCount()).toBe(0);
+});
+it("continues retiring disabled customers when new connections and collection are paused",async()=>{
+  vi.useFakeTimers();m.publicEnabled.mockReturnValue(false);m.retirementEnabled.mockReturnValue(true);m.retirement.mockResolvedValue("idle");vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","false");
+  const stop=startOpenFinanceWorker();await vi.advanceTimersByTimeAsync(31000);stop();await vi.advanceTimersByTimeAsync(31000);
+  expect(m.retirement).toHaveBeenCalledTimes(2);expect(m.rpc).not.toHaveBeenCalled();expect(m.sync).not.toHaveBeenCalled();expect(vi.getTimerCount()).toBe(0);
+});
+it("does not let cancellation failures stop public synchronization",async()=>{
+  vi.useFakeTimers();vi.spyOn(console,"error").mockImplementation(()=>{});m.publicEnabled.mockReturnValue(true);m.retirementEnabled.mockReturnValue(true);m.retirement.mockRejectedValue(Error("temporary"));vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","true");
+  const stop=startOpenFinanceWorker();await vi.advanceTimersByTimeAsync(21000);stop();
+  expect(m.retirement).toHaveBeenCalledTimes(1);expect(m.sync).toHaveBeenCalled();vi.restoreAllMocks();
 });

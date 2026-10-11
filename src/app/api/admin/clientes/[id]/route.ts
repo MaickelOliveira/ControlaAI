@@ -43,7 +43,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Params }) 
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
-  await deleteUser(id);
-
-  return NextResponse.json({ ok: true });
+  try {
+    await deleteUser(id);
+    return NextResponse.json({ ok: true });
+  } catch(error) {
+    if(error instanceof Error&&error.message==="OF_CLIENT_HISTORY_PROTECTED")return NextResponse.json({error:"Este cliente tem histórico bancário que deve ser preservado. Use Desativar para encerrar o acesso e cancelar os vínculos bancários."},{status:409});
+    return NextResponse.json({error:"Não foi possível excluir o cliente. Tente novamente."},{status:503});
+  }
 }
