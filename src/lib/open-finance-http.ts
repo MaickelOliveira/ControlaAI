@@ -17,7 +17,12 @@ export async function openFinanceRequestScope(request: Request, mutation = false
   return scope;
 }
 export async function openFinanceRpc(scope: OpenFinanceScope, operation: string, params: Record<string, unknown> = {}): Promise<unknown> {
-  const { data, error } = await getSupabase().rpc(operation, { ...params, p_user: scope.userId, p_mode: scope.mode });
+  let query=getSupabase().rpc(operation, { ...params, p_user: scope.userId, p_mode: scope.mode });
+  if(process.env.MULTI_COMPANY_ENABLED==="true"){
+    if(!scope.companyId)throw Error("OF_COMPANY_SCOPE_MISSING");
+    query=query.setHeader("x-zelo-owner",scope.userId).setHeader("x-zelo-company",scope.companyId);
+  }
+  const { data, error } = await query;
   if (error) throw new Error("OF_STORAGE_ERROR");
   return data;
 }

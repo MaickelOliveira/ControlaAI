@@ -12,7 +12,8 @@ export async function runPublicBankSync(mode:"personal"|"business") {
   if(error)throw Error("OF_WORKER_UNAVAILABLE");
   if(!data)return "idle" as const;
   const selected=polpObject(data),user=await getUserById(polpUuid(selected.userId));
-  const scope=user?await getOpenFinanceAccess(user,mode,{throwOnStorageError:true}):null;
+  if(process.env.MULTI_COMPANY_ENABLED==="true"&&selected.companyId===undefined)throw Error("OF_COMPANY_SCOPE_MISSING");
+  const scope=user?await getOpenFinanceAccess(user,mode,{throwOnStorageError:true,companyId:selected.companyId===null?null:selected.companyId===undefined?undefined:polpUuid(selected.companyId)}):null;
   if(!scope || selected.mode!==mode || selected.environment!=="production")throw Error("OF_ACCESS_DENIED");
   return runBankSyncPage(scope);
 }

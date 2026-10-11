@@ -3,6 +3,7 @@ import { getSessionWithUser } from "@/lib/auth";
 import { getOpenFinanceAccess,canEnrollOpenFinance } from "@/lib/open-finance-access";
 import { getSupabase } from "@/lib/supabase";
 import { isBankConnectReady } from "@/lib/open-finance-ready";
+import {openFinanceRpc} from "@/lib/open-finance-http";
 
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
@@ -19,10 +20,8 @@ export async function GET(request: Request) {
       }
       return NextResponse.json({error:"Não disponível"},{status:404,headers:{"Cache-Control":"private, no-store"}});
     }
-    const { data, error } = await getSupabase().rpc("zelo_of_overview", {
-      p_user: scope.userId, p_environment: scope.environment, p_mode: scope.mode,
-    });
-    if (error || !data) throw new Error("STORAGE_UNAVAILABLE");
+    const data=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment});
+    if (!data || typeof data!=="object") throw new Error("STORAGE_UNAVAILABLE");
     const connectAvailable = await isBankConnectReady(scope);
     return NextResponse.json({ ...data, contactEmail: auth.user.email, connectAvailable }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
