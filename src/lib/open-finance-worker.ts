@@ -19,9 +19,17 @@ export async function runPublicBankSync(mode:"personal"|"business") {
 /** PostgreSQL leases coordinate instances; queries never download bank history. */
 export function startOpenFinanceWorker():()=>void {
   let stopped=false,timer:ReturnType<typeof setTimeout>|undefined,mode:"personal"|"business"="personal";
+  let nextSchedulesCheck=0;
   async function tick(){
     if(stopped)return;
-    try{if(isPublicOpenFinanceEnabled()&&process.env.OPEN_FINANCE_SYNC_ENABLED==="true")await runPublicBankSync(mode);}
+    try{if(isPublicOpenFinanceEnabled()&&process.env.OPEN_FINANCE_SYNC_ENABLED==="true"){
+      if(Date.now()>=nextSchedulesCheck){
+        const ownerEmail=process.env.OPEN_FINANCE_OWNER_BUSINESS_ENABLED==="true"?process.env.OPEN_FINANCE_OWNER_EMAIL?.trim().toLowerCase()??null:null;
+        const {data,error}=await getSupabase().rpc("zelo_of_prepare_schedules",{p_owner_email:ownerEmail});
+        nextSchedulesCheck=Date.now()+(error?60000:Number(data)>0?30000:900000);
+      }
+      await runPublicBankSync(mode);
+    }}
     catch{console.error("[open-finance] Sincronização temporariamente indisponível");}
     mode=mode==="personal"?"business":"personal";
     if(!stopped)timer=setTimeout(()=>void tick(),2000);

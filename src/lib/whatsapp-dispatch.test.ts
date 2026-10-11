@@ -28,6 +28,11 @@ vi.mock("@/lib/evolution", () => ({
 import { sendReminderTemplate, sendWelcomeTemplate,sendText } from "./whatsapp";
 
 describe("proactive WABA dispatch", () => {
+  it("redacts financial notices sent through an approved template from future AI prompts",async()=>{
+    mocks.windowOpen.mockResolvedValue(false);
+    await sendReminderTemplate("5511999999999","lbt_pessoal","Fatura do banco",{texto:"Fatura do banco"},"pt-BR",{privateFinancial:true});
+    expect(mocks.addMessage).toHaveBeenLastCalledWith("5511999999999",expect.objectContaining({privateFinancial:true}));
+  });
   it("marks private bank replies for redaction while preserving the actual customer message",async()=>{
     mocks.sendText.mockResolvedValue(true);
     await sendText("5511999999999","Private bank reply",{privateFinancial:true});

@@ -239,11 +239,12 @@ export async function getFinancesInRange(userId: string, mode?: FinanceMode, fro
 }
 
 /** Complete reads for unified totals: a missing page must never become zero. */
-export async function getFinancesInRangeStrict(userId:string,mode:FinanceMode,from?:string,to?:string):Promise<Finance[]> {
+export async function getFinancesInRangeStrict(userId:string,mode:FinanceMode,from?:string,to?:string,pendingOnly=false):Promise<Finance[]> {
   const rows:Row[]=[],seen=new Set<string>();
   let total:number|undefined;
   for(let page=0;page<50;page++){
     let query=getSupabase().from("finances").select("*",{count:"exact"}).eq("user_id",userId).eq("mode",mode);
+    if(pendingOnly)query=query.eq("pending",true);
     if(from)query=query.gte("date",from);if(to)query=query.lte("date",to);
     const {data,error,count}=await query.order("date",{ascending:true}).order("id",{ascending:true}).range(rows.length,rows.length+199);
     if(error||!Array.isArray(data)||count===null||!Number.isSafeInteger(count)||count<0||count>10000)throw Error("FINANCE_READ_UNAVAILABLE");

@@ -54,7 +54,7 @@ describe("replyAdvisorSummary", () => {
     expect(message).toContain("A receber");
     expect(message).toContain("Cliente Alfa");
     expect(message).toContain("Previsão de saldo");
-    expect(message).toContain("Saldo previsto");
+    expect(message).toContain("Resultado previsto");
   });
 
   it("uses the same complete briefing in Spanish", () => {

@@ -118,8 +118,14 @@ export async function findPhoneByRelation(userId: string, relation: string): Pro
   return phones.find(p => p.relation && normalizeName(p.relation) === target)?.phone;
 }
 
-/** Modo que a pessoa desse número pode acessar — "both" por padrão. */
-export async function getPhoneAccess(userId: string, phone: string): Promise<WppPhoneAccess> {
-  const { data } = await getSupabase().from("wpp_phone_links").select("access").eq("phone", phone).eq("user_id", userId).maybeSingle();
-  return (data as { access: WppPhoneAccess } | null)?.access ?? "both";
+/** Same canonical variant priority as ownership. Missing bindings fail closed. */
+export async function getPhoneAccess(userId: string, phone: string): Promise<WppPhoneAccess|null> {
+  const variants=phoneVariants(phone);
+  const {data,error}=await getSupabase().from("wpp_phone_links").select("phone,user_id,access").in("phone",variants);
+  if(error||!Array.isArray(data))return null;
+  for(const variant of variants){
+    const row=data.find(r=>r.phone===variant);
+    if(row)return row.user_id===userId&&["personal","business","both"].includes(row.access)?row.access as WppPhoneAccess:null;
+  }
+  return null;
 }

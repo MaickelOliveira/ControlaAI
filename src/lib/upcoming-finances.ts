@@ -193,8 +193,8 @@ export function replyUpcomingFinances(
   for (const forecast of forecasts) {
     message += `\n\n${modeLabel(forecast.mode, locale)}`;
     message += locale === "es"
-      ? `\n• Saldo actual del período: ${formatCurrency(forecast.currentBalance)}\n• Por cobrar: ${formatCurrency(forecast.upcomingIncome)}\n• Por pagar: ${formatCurrency(forecast.upcomingExpense)}\n• *Saldo previsto: ${formatCurrency(forecast.projectedBalance)}*`
-      : `\n• Saldo atual do período: ${formatCurrency(forecast.currentBalance)}\n• A receber: ${formatCurrency(forecast.upcomingIncome)}\n• A pagar: ${formatCurrency(forecast.upcomingExpense)}\n• *Saldo previsto: ${formatCurrency(forecast.projectedBalance)}*`;
+      ? `\n• Resultado realizado del período: ${formatCurrency(forecast.currentBalance)}\n• Por cobrar: ${formatCurrency(forecast.upcomingIncome)}\n• Por pagar: ${formatCurrency(forecast.upcomingExpense)}\n• *Resultado previsto: ${formatCurrency(forecast.projectedBalance)}*`
+      : `\n• Resultado realizado do período: ${formatCurrency(forecast.currentBalance)}\n• A receber: ${formatCurrency(forecast.upcomingIncome)}\n• A pagar: ${formatCurrency(forecast.upcomingExpense)}\n• *Resultado previsto: ${formatCurrency(forecast.projectedBalance)}*`;
   }
 
   const undated = requested.filter(item => !item.dueDate);

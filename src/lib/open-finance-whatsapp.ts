@@ -8,6 +8,8 @@ import {answerBankQuestion,parseBankQuestion} from "./open-finance-question";
 import {expandMerchantAliases,getPendingFinances} from "./finances";
 import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
+import {readBankAgenda} from "./financial-agenda";
+import {formatBankAgenda} from "./open-finance-schedules";
 import {bankDate,bankMoney} from "./open-finance-display";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
 
@@ -48,6 +50,11 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
       const categoryMatches=(e:{category:string})=>!query.category||normalize(e.category)===normalize(query.category);
       const upcoming=collectUpcomingFinanceItems(pending.filter(categoryMatches),recurring.filter(categoryMatches),{from,to,mode:requested,includeUndated:true}).filter(e=>e.type===query.type&&(!query.keywords?.length||query.keywords.some(k=>normalize(e.description).includes(normalize(k)))));
       if(upcoming.length)answer+=`\n\nValores ainda a ${query.type==="income"?"receber":"pagar"} (fora do total realizado):\n${upcoming.slice(0,20).map(e=>`${bankDate(e.dueDate)} · ${e.description.replace(/[\r\n*`_~<>]/g," ").slice(0,160)} · ${bankMoney(e.amount,"BRL")}`).join("\n")}${upcoming.length>20?"\nConsulte as demais pendências em Finanças.":""}`;
+    }
+    if(ai.intent==="finance_detail"&&query.type==="expense"&&!query.category&&query.source!=="account"){
+      const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:true});
+      const items=agenda.items.filter(item=>!query.keywords?.length||query.keywords.some(k=>normalize(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(normalize(k))));
+      answer+=formatBankAgenda(items,agenda.incomplete);
     }
     return answer;
   }catch{return "Não consegui consultar o extrato completo agora. Tente novamente em Finanças; não vou apresentar um total parcial como se fosse completo.";}

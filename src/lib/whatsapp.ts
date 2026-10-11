@@ -178,7 +178,7 @@ export function buildReminderTemplateDispatch(input: {
   };
 }
 
-export async function sendReminderTemplate(to: string, templateName: WhatsAppTemplateBase, renderedText: string, params: Record<string, string>, locale?: string): Promise<boolean> {
+export async function sendReminderTemplate(to: string, templateName: WhatsAppTemplateBase, renderedText: string, params: Record<string, string>, locale?: string,options?:{privateFinancial?:boolean}): Promise<boolean> {
   const provider = (await getConfig()).provider;
   let ok: boolean;
   if (provider === "waba") {
@@ -213,7 +213,7 @@ export async function sendReminderTemplate(to: string, templateName: WhatsAppTem
   } else {
     ok = await evolution.sendText(to, renderedText, defaultCountryIsoFor(locale));
   }
-  if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now() });
+  if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now(),...(options?.privateFinancial?{privateFinancial:true}:{}) });
   return ok;
 }
 
@@ -250,14 +250,14 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
   return sendReminderTemplate(to, "boas_vindas_cadastro2", renderedText, {}, locale);
 }
 
-export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string): Promise<boolean> {
+export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string,options?:{privateFinancial?:boolean}): Promise<boolean> {
   const provider = (await getConfig()).provider;
   const ok = provider === "waba"
     ? await waba.sendFile(to, fileBuffer, filename, mimeType, caption)
     : await evolution.sendFile(to, fileBuffer, filename, mimeType, caption);
   if (ok) {
     const label = mimeType.startsWith("image/") ? "📷 Imagem" : mimeType.startsWith("audio/") ? "🎵 Áudio" : `📎 ${filename}`;
-    await addMessage(to, { role: "assistant", content: caption ? `${label}\n${caption}` : label, ts: Date.now() });
+    await addMessage(to, { role: "assistant", content: caption ? `${label}\n${caption}` : label, ts: Date.now(),...(options?.privateFinancial?{privateFinancial:true}:{}) });
   }
   return ok;
 }

@@ -1,6 +1,7 @@
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
 import { checkRateLimit } from "@/lib/rate-limit";
+import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "@/lib/open-finance-whatsapp";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
@@ -31,8 +32,10 @@ import {
   mergeActionContinuation,
 } from "@/lib/action-completion";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription, findDueRecurringMatches, descriptionsLikelyMatch, upsertImportedInstallmentSchedules, type RecurringTransaction } from "@/lib/recurring";
-import { buildBalanceForecast, collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
+import { collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
+import {readFinancialAgenda} from "@/lib/financial-agenda";
+import {formatBankAgenda} from "@/lib/open-finance-schedules";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import { createAppointment, getUpcomingAppointments, getAppointmentsInRange, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
 import { formatReminderOffset, isAgendaReminderTarget, isStandaloneAppointmentReminderRequest, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
@@ -1368,6 +1371,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     // ou números vinculados antes dessa feature) continua usando o toggle
     // compartilhado de sempre.
     const phoneAccess = await getPhoneAccess(user.id, from);
+    if(!phoneAccess){await wppSend(from,replyPhoneNotLinked(from));return;}
     const mode: "personal" | "business" = phoneAccess === "both" ? user.activeMode : phoneAccess;
     const now = nowBR(); // horário de Brasília/São Paulo
     const year = now.getFullYear();
@@ -2624,7 +2628,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       }
       await clearPendingAction(from);
       const selected = pending.candidates[selectedIndex];
-      const result = await confirmRecurring(selected.id, user.id, selected.dueDate);
+      const result = await confirmRecurring(selected.id, user.id, selected.dueDate, from);
       if (result) {
         if (!result.alreadyPosted) {
           await setLastFinanceBatch(from, [{
@@ -2651,7 +2655,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
       const answer = parseRecurringConfirmationAnswer(messageText);
       if (answer === true) {
         await clearPendingAction(from);
-        const result = await confirmRecurring(pending.recurringId, user.id, pending.dueDate);
+        const result = await confirmRecurring(pending.recurringId, user.id, pending.dueDate, from);
         if (result) {
           await wppSend(from, result.alreadyPosted
             ? replyRecurringAlreadyPosted(result.updated, user.locale)
@@ -2783,6 +2787,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const recentHistory = (await getHistory(from))
       .slice(-16, -1)
       .map(messageForAiContext);
+    if(await sendRequestedBankBill(user,mode,from,messageText,todayStrBR()))return;
     const bankReply=await answerBankWhatsAppMessage(user,mode,phoneAccess,messageText,todayStrBR());
     if(bankReply){await wppSendLong(from,bankReply,3500,true);return;}
     const imageRequest = parsePublicImageRequest(messageText, recentHistory);
@@ -2853,7 +2858,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           return;
         }
         if (matches.length === 1) {
-          const result = await confirmRecurring(matches[0].id, user.id, matches[0].nextDueDate);
+          const result = await confirmRecurring(matches[0].id, user.id, matches[0].nextDueDate, from);
           if (result) {
             if (!result.alreadyPosted) {
               await setLastFinanceBatch(from, [{
@@ -3579,7 +3584,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         }
         if (dueRecurringItems.length === 1) {
           const recurringTarget = dueRecurringItems[0];
-          const result = await confirmRecurring(recurringTarget.id, user.id, recurringTarget.nextDueDate);
+          const result = await confirmRecurring(recurringTarget.id, user.id, recurringTarget.nextDueDate, from);
           if (result) {
             if (!result.alreadyPosted) {
               await setLastFinanceBatch(from, [{
@@ -3708,38 +3713,24 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         // acontecer. Resumos de períodos passados mantêm o intervalo inteiro.
         const appointmentFrom = periodFrom < today && periodTo >= today ? today : periodFrom;
 
-        const [pendingFinances, recurringTransactions, appointments, allTasks] = await Promise.all([
-          getPendingFinances(user.id, queryMode),
-          getRecurringByUser(user.id, queryMode, "active"),
-          getAppointmentsInRange(user.id, appointmentFrom, periodTo),
-          getPendingTasks(user.id, queryMode),
+        const [financialAgenda, appointments, allTasks] = await Promise.all([
+          readFinancialAgenda(user,queryMode,{from:periodFrom,to:periodTo,today,includeUndated:ai.intent==="weekly_summary",includeBank:process.env.OPEN_FINANCE_WHATSAPP_ENABLED==="true"}),
+          getAppointmentsInRange(user.id,appointmentFrom,periodTo),
+          getPendingTasks(user.id,queryMode),
         ]);
-        const upcomingItems = collectUpcomingFinanceItems(pendingFinances, recurringTransactions, {
-          from: periodFrom,
-          to: periodTo,
-          mode: queryMode,
-          includeUndated: ai.intent === "weekly_summary",
-        });
+        const upcomingItems=financialAgenda.commitments;
+        const forecasts=financialAgenda.forecasts;
         const summaryTasks = allTasks.filter(task => {
           if (!task.dueDate) return ai.intent === "weekly_summary";
           // Mantém atrasadas visíveis e inclui tudo que vence no período.
           return task.dueDate < today || (task.dueDate >= periodFrom && task.dueDate <= periodTo);
         });
 
-        const forecastModes: FinanceMode[] = queryMode ? [queryMode] : ["personal", "business"];
-        const balanceThrough = periodTo < today ? periodTo : today;
-        const forecasts = await Promise.all(forecastModes.map(async forecastMode => {
-          const current = periodFrom <= balanceThrough
-            ? await getBalanceInRange(user.id, forecastMode, periodFrom, balanceThrough)
-            : { income: 0, expense: 0, balance: 0 };
-          return buildBalanceForecast(forecastMode, current.balance, upcomingItems);
-        }));
-
         const dateLocale = user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR";
         const summaryPeriodLabel = periodFrom === periodTo
           ? new Date(`${periodFrom}T12:00:00`).toLocaleDateString(dateLocale, { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })
           : periodLabelFor({ from: periodFrom, to: periodTo }, now, user.locale);
-        await wppSend(from, replyAdvisorSummary(
+        await wppSendLong(from, replyAdvisorSummary(
           ai.intent === "daily_summary" ? "daily" : "weekly",
           summaryPeriodLabel,
           appointments,
@@ -3748,7 +3739,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
           forecasts,
           today,
           user.locale,
-        ));
+        )+formatBankAgenda(financialAgenda.bank.items,financialAgenda.bank.incomplete)+financialAgenda.coverage,3500,true);
         break;
       }
 
@@ -3768,36 +3759,17 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
         const periodTo = ai.period?.to || defaultTo;
         const today = todayStrBR();
 
-        const [pendingFinances, recurringTransactions] = await Promise.all([
-          getPendingFinances(user.id, queryMode),
-          getRecurringByUser(user.id, queryMode, "active"),
-        ]);
-        const upcomingItems = collectUpcomingFinanceItems(pendingFinances, recurringTransactions, {
-          // Inclui atrasadas ainda pendentes dentro do período; uma conta
-          // vencida continua sendo algo que o cliente precisa pagar.
-          from: periodFrom,
-          to: periodTo,
-          mode: queryMode,
-          includeUndated: true,
-        });
-
-        const forecastModes: FinanceMode[] = queryMode ? [queryMode] : ["personal", "business"];
-        const balanceThrough = periodTo < today ? periodTo : today;
-        const forecasts = await Promise.all(forecastModes.map(async forecastMode => {
-          const current = periodFrom <= balanceThrough
-            ? await getBalanceInRange(user.id, forecastMode, periodFrom, balanceThrough)
-            : { income: 0, expense: 0, balance: 0 };
-          return buildBalanceForecast(forecastMode, current.balance, upcomingItems);
-        }));
-
-        await wppSend(from, replyUpcomingFinances(
+        const financialAgenda=await readFinancialAgenda(user,queryMode,{from:periodFrom,to:periodTo,today,includeUndated:true,includeBank:process.env.OPEN_FINANCE_WHATSAPP_ENABLED==="true"});
+        const upcomingItems=financialAgenda.commitments;
+        const forecasts=financialAgenda.forecasts;
+        await wppSendLong(from, replyUpcomingFinances(
           upcomingItems,
           ai.financeType === "income" ? "income" : "expense",
           forecasts,
           periodLabelFor(ai.period, now, user.locale),
           today,
           user.locale,
-        ));
+        )+(ai.financeType==="income"?"":formatBankAgenda(financialAgenda.bank.items,financialAgenda.bank.incomplete))+financialAgenda.coverage,3500,true);
         break;
       }
 
