@@ -18,9 +18,16 @@ it("keeps an attempt visible when provider cancellation fails",async()=>{
   await expect(removeBankAttempt(scope,id)).rejects.toThrow("POLP_UNAVAILABLE");
   expect(m.rpc.mock.calls.some(c=>c[1]==="zelo_of_connection_visibility")).toBe(false);
 });
-it("never calls the provider when the database rejects a foreign, active or imported connection",async()=>{
+it("never calls the provider when the database rejects a foreign or active connection",async()=>{
   m.rpc.mockRejectedValueOnce(Error("OF_CONNECTION_ACTIVE"));
   await expect(removeBankAttempt(scope,id)).rejects.toThrow();expect(m.request).not.toHaveBeenCalled();
+});
+it("cancels an errored PJ connection with imported history before archiving it",async()=>{
+  m.rpc.mockResolvedValueOnce({status:"revoking",has_imported_data:true,external_consent_id:id});
+  await removeBankAttempt({...scope,mode:"business"},id);
+  expect(m.request).toHaveBeenCalledWith(`/consents/${id}`,"DELETE");
+  expect(m.rpc.mock.lastCall?.[2]).toEqual({p_id:id,p_archived:true});
+  expect(m.request.mock.invocationCallOrder[0]).toBeLessThan(m.rpc.mock.invocationCallOrder[3]);
 });
 it("archives an already cancelled attempt without repeating the provider request",async()=>{
   m.rpc.mockResolvedValueOnce({status:"revoked",external_consent_id:id});

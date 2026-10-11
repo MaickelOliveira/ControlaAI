@@ -23,7 +23,7 @@ export default function OpenFinanceAccounts({mode}:{mode:"personal"|"business"})
   async function action(id:string,name:BankConnectionAction) {
     if(busy)return;
     if(name==="revoke"&&!confirm("Desconectar este banco? O compartilhamento de dados com a Zelo será cancelado. O histórico recebido permanecerá disponível."))return;
-    if(name==="remove"&&!confirm("Remover esta tentativa da lista? Uma autorização pendente será cancelada antes da remoção. O registro continuará disponível em Histórico de conexões."))return;
+    if(name==="remove"&&!confirm("Remover esta conexão da lista? O compartilhamento será cancelado antes da remoção. As transações e demais dados recebidos serão mantidos, e o registro ficará em Histórico de conexões."))return;
     if(name==="recreate"&&!confirm("Gerar uma nova autorização com as mesmas categorias e condições já aceitas? Você precisará autorizar novamente no banco."))return;
     setBusy(id);setError("");setAuthorizations(previous=>({...previous,[id]:{authorizationUrl:null}}));
     try {

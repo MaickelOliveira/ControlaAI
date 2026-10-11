@@ -1,10 +1,10 @@
 # Gestão das conexões bancárias
 
 - Desconectar fica visível no card do banco e na linha da autorização, sem abrir detalhes. A confirmação informa que novas atualizações param e o histórico financeiro permanece.
-- Remover tentativa fica disponível para conexões sem produtos recebidos, pendentes, rejeitadas, expiradas ou canceladas. Uma conexão ativa nunca pode ser removida por essa ação.
+- Remover tentativa fica disponível para conexões sem produtos recebidos, pendentes, rejeitadas, expiradas ou canceladas. Conexões inativas com dados recebidos oferecem Remover da lista, com as mesmas garantias de cancelamento e preservação do histórico. Uma conexão ativa nunca pode ser removida por essa ação.
 - A remoção bloqueia importações sob o bloqueio da conexão, confirma o cancelamento no provedor e só então tira a tentativa da lista principal. Uma falha mantém a tentativa visível para nova tentativa.
 - O registro permanece acessível em Histórico de conexões, com prazo, finalidade, categorias, status e data do cancelamento. Restaurar na lista desfaz somente o arquivamento, sem reconectar nem recuperar acesso bancário.
-- Todas as operações exigem sessão do titular, origem válida e modo correto. A operação privada revalida status e produtos no banco, protegendo corridas com autorização/importação.
+- Todas as operações exigem sessão do titular, origem válida e modo correto. A operação privada revalida status no banco, protegendo corridas com autorização/importação. Desconectar também fica disponível para autorizações rejeitadas ou expiradas que já importaram produtos.
 - Verificar isolamento de titular/modo, falha do provedor, repetição, autorização concorrente, preservação dos dados e negação dos RPCs ao navegador. Nenhum banco real será desconectado só para testar os botões.
 
 ## Encerramento após desativação da assinatura

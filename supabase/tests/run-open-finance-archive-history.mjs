@@ -1,0 +1,52 @@
+import {readFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href);
+const db=new PGlite();
+const sql=p=>readFile(new URL(p,import.meta.url),'utf8');
+const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
+const rpc=async(name,args)=>(await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) as value`,args)).rows[0].value;
+try{
+  await db.exec(await sql('./open_finance_fixtures.sql'));
+  await db.exec("alter table public.users add column status text default 'active'; alter table public.users add column plan text default 'business'; alter table public.users add column email text; create table public.wpp_phone_links(phone text primary key,user_id uuid,access text)");
+  for(const name of ['20261009193000_open_finance_storage','20261009213000_open_finance_server_access','20261009220000_open_finance_consents','20261009230000_open_finance_sync_queue','20261009234000_open_finance_report','20261010230000_open_finance_public','20261011030000_open_finance_notifications','20261011090000_open_finance_connection_management','20261011093000_open_finance_subscription_retirement','20261011110000_open_finance_archive_history'])await db.exec(await sql('../migrations/'+name+'.sql'));
+  for(const role of ['anon','authenticated']){
+    await db.exec('set role '+role);
+    await assert.rejects(rpc('zelo_of_begin_removal',[a,'business',a]),/permission denied/);
+    await assert.rejects(rpc('zelo_of_connection_visibility',[a,'business',a,true]),/permission denied/);
+    await db.exec('reset role');
+  }
+  await db.exec('set role service_role');
+  await rpc('zelo_of_enable_brazil',[a,'business','BR',true]);await rpc('zelo_of_enable_brazil',[b,'business','BR',true]);
+  const connection=await rpc('zelo_of_save_consent',[a,'business',JSON.stringify({id:'10000000-0000-4000-8000-000000000001',cliente_user_id:a,institution_id:'20000000-0000-4000-8000-000000000001',institution_name:'Test bank PJ',status:'AUTHORISED',products:['CREDIT_CARD_ACCOUNT']})]);
+  await db.exec('reset role');
+  const resource=(await db.query("insert into open_finance.resources(connection_id,user_id,environment,mode,resource_type,external_id,name) values($1,$2,'production','business','card','test-card','Test card') returning id",[connection.id,a])).rows[0].id;
+  const bill=(await db.query("insert into open_finance.bills(resource_id,user_id,environment,mode,external_id,currency,total_amount,due_date) values($1,$2,'production','business','test-bill','BRL',42,'2026-10-20') returning id",[resource,a])).rows[0].id;
+  await db.query("insert into open_finance.movements(resource_id,user_id,environment,mode,resource_type,external_id,description,transaction_date,amount,currency,direction,classification,bill_id) values($1,$2,'production','business','card','test-transaction','Preserved purchase','2026-10-11',42,'BRL','debit','purchase',$3)",[resource,a,bill]);
+  const history=async()=>JSON.stringify((await db.query("select (select jsonb_agg(to_jsonb(r)) from open_finance.resources r) resources,(select jsonb_agg(to_jsonb(b)) from open_finance.bills b) bills,(select jsonb_agg(to_jsonb(m)) from open_finance.movements m) movements,(select jsonb_agg(to_jsonb(f)) from public.finances f) finances")).rows);
+  const before=await history();
+  await db.exec('set role service_role');
+  await assert.rejects(rpc('zelo_of_begin_removal',[a,'business',connection.id]),/OF_CONNECTION_ACTIVE/);
+  await rpc('zelo_of_set_status',[a,'business',connection.id,'error','REJECTED']);
+  await assert.rejects(rpc('zelo_of_begin_removal',[b,'business',connection.id]),/OF_CONNECTION_NOT_FOUND/);
+  await assert.rejects(rpc('zelo_of_begin_removal',[a,'personal',connection.id]),/OF_CONNECTION_NOT_FOUND/);
+  assert.equal((await rpc('zelo_of_begin_removal',[a,'business',connection.id])).status,'revoking');
+  await assert.rejects(rpc('zelo_of_connection_visibility',[a,'business',connection.id,true]),/OF_REMOVAL_NOT_CONFIRMED/);
+  await rpc('zelo_of_set_status',[a,'business',connection.id,'active','AUTHORISED']);
+  assert.equal((await rpc('zelo_of_connection',[a,'business',connection.id])).status,'revoking');
+  await rpc('zelo_of_set_status',[a,'business',connection.id,'revoked','REVOKED']);
+  await rpc('zelo_of_connection_visibility',[a,'business',connection.id,true]);
+  let overview=await rpc('zelo_of_overview',[a,'production','business']);
+  const archived=overview.connections.find(c=>c.id===connection.id);
+  assert.ok(archived.archived_at);assert.equal(archived.has_imported_data,true);assert.equal(archived.status,'revoked');
+  assert.equal(overview.resources.length,1);assert.equal(overview.bills.length,1);
+  await rpc('zelo_of_connection_visibility',[a,'business',connection.id,true]);
+  assert.equal((await rpc('zelo_of_connection',[a,'business',connection.id])).archived_at,archived.archived_at);
+  await rpc('zelo_of_connection_visibility',[a,'business',connection.id,false]);
+  overview=await rpc('zelo_of_overview',[a,'production','business']);
+  assert.equal(overview.connections[0].archived_at,null);assert.equal(overview.connections[0].status,'revoked');
+  await db.exec('reset role');
+  assert.equal(await history(),before,'archive and restore must leave financial history byte-for-byte unchanged');
+  await assert.rejects(db.query('delete from public.users where id=$1',[a]),/OF_CLIENT_HISTORY_PROTECTED/);
+  console.log('Archive with PJ history: holder/mode isolation, provider confirmation, late authorization, restore and unchanged products/bills/movements/finances passed');
+}finally{await db.close();}
