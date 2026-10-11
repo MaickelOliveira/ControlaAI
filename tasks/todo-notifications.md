@@ -1,0 +1,7 @@
+- [ ] Normalização com previsão explícita e parcelas observadas; testar datas inválidas, moedas e ausência de vencimento.
+- [ ] Persistência de snapshot e pagamentos de fatura; testar páginas, revogação, duas identidades/modos e grants.
+- [ ] Fila sincroniza novos produtos nos cartões atuais/novos e após atualização; testar retomada sem download por pergunta.
+- [ ] Agenda compartilhada e próximos pagamentos/resumos com resultados unificados; testar duplicidade e cobertura.
+- [ ] Avisos por telefone autorizado, revalidação, privacidade e entrega idempotente; testar falha incerta e mudança de vínculo.
+- [ ] Interface Contas mostra previsões/parcelas com linguagem correta; preservar funções existentes.
+- [ ] Revisão, verificações completas, CI, implantação, migração e evidência visual oficial.
