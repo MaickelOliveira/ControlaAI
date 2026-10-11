@@ -26,7 +26,7 @@ Manter recursos incompletos ocultos até todas as rotas estarem isoladas. Migra�
 - [x] Seletor compartilhado e gestão das empresas.
 - [x] Empresa ativa por participante no WhatsApp e continuidade segura.
 - [x] Open Finance e avisos por empresa.
-- [ ] Revisão, migração, implantação e verificação.
+- [x] Revisão, migração, implantação e verificação.
 
 ## Evidências antes da publicação
 - 920 testes passaram, 15 foram ignorados; TypeScript, compilação de 141 páginas e lint sem erros (duas advertências anteriores). Nova proteção de origem também passou nos testes focados.
@@ -35,3 +35,6 @@ Manter recursos incompletos ocultos até todas as rotas estarem isoladas. Migra�
 - Interface no Chrome a 390 px: seletor em Dashboard/Tarefas, troca de empresas, cadastro com registros vazios, sem rolagem horizontal.
 - Revisão independente aprovou isolamento, IA, cron, políticas bancárias e origem atrás do proxy.
 - Preflight de produção: 33 usuários, 762 lançamentos, 3 vínculos bancários; nenhuma fatura órfã ou vínculo cruzado de contas/arquivos encontrado. Ainda não migrado/ativado neste registro.
+
+## Ativação oficial
+PR #49 integrada e serviço controlaai implantado com sucesso em 11/10/2026 às 19:22:25 UTC. As duas migrações foram aplicadas no Supabase Zelo Brasil; MULTI_COMPANY_ENABLED=true foi salvo pelo EasyPanel. Verificação: 33 usuários e 762 lançamentos preservados, 33 empresas principais, vínculos bancários com empresa e sem acesso de navegador às operações privadas. Dashboard oficial confirmou seletor, saldo de R$ 50,42 e resumo anterior. Nenhum registro de teste foi criado em produção.
