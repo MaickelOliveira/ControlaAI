@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
@@ -238,33 +239,33 @@ export default function LembretesPagePt() {
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="z-page">
+      <div className="z-page-heading flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">🔔 Lembretes</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <PageTitle icon="bell">Lembretes</PageTitle>
+          <p className="text-subtle text-sm mt-0.5">
             {mode === "business" ? "🏢 Empresa" : "👤 Pessoal"} · {activeCount} ativo{activeCount !== 1 ? "s" : ""}
             {overdueCount > 0 && <span className="text-red-500 ml-2">· {overdueCount} atrasado{overdueCount !== 1 ? "s" : ""}</span>}
           </p>
         </div>
         <button onClick={openNew}
-          className="px-4 py-2 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition shadow-sm">
+          className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary-hover transition shadow-sm">
           + Novo lembrete
         </button>
       </div>
 
       {/* Como usar via WhatsApp */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-        <p className="text-sm font-semibold text-amber-800 mb-2">💬 Cria lembretes pelo WhatsApp:</p>
+      <div className="bg-amber-soft border border-line rounded-2xl p-4">
+        <p className="text-sm font-semibold text-amber-ink mb-2">💬 Cria lembretes pelo WhatsApp:</p>
         <div className="grid md:grid-cols-3 gap-2">
           {[
             { ex: '"Lembra-me de tomar o remédio todos os dias às 8h"', desc: "Diário" },
             { ex: '"Lembrete: pagar a conta sexta às 14h"', desc: "Único" },
             { ex: '"Todos os meses no dia 5 pagar a renda"', desc: "Mensal" },
           ].map(i => (
-            <div key={i.ex} className="bg-white rounded-xl p-2.5 border border-amber-100">
-              <p className="text-xs text-slate-600 font-mono leading-relaxed">{i.ex}</p>
-              <p className="text-[10px] text-amber-600 font-semibold mt-1">{i.desc}</p>
+            <div key={i.ex} className="bg-surface rounded-xl p-2.5 border border-line">
+              <p className="text-xs text-muted font-mono leading-relaxed">{i.ex}</p>
+              <p className="text-[10px] text-amber-ink font-semibold mt-1">{i.desc}</p>
             </div>
           ))}
         </div>
@@ -279,7 +280,7 @@ export default function LembretesPagePt() {
         ] as const).map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)}
             className={clsx("px-3 py-1.5 rounded-xl text-xs font-semibold transition border",
-              filter === f.key ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50")}>
+              filter === f.key ? "bg-slate-800 text-white border-slate-800" : "bg-surface border-line text-muted hover:bg-surface-muted")}>
             {f.label}
           </button>
         ))}
@@ -287,14 +288,14 @@ export default function LembretesPagePt() {
 
       {/* Lista */}
       {loading ? (
-        <p className="text-slate-400 text-sm">A carregar...</p>
+        <p className="text-subtle text-sm">A carregar...</p>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
+        <div className="bg-surface rounded-2xl border border-line p-12 text-center shadow-sm">
           <p className="text-4xl mb-3">🔔</p>
-          <p className="font-semibold text-slate-700">
+          <p className="font-semibold text-ink">
             {filter === "active" ? "Nenhum lembrete ativo" : filter === "sent" ? "Nenhum lembrete enviado" : "Nenhum lembrete"}
           </p>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-subtle mt-1">
             {filter === "active" ? 'Cria um ou envia uma mensagem como "Lembra-me de..."' : ""}
           </p>
         </div>
@@ -305,42 +306,42 @@ export default function LembretesPagePt() {
             return (
               <div key={r.id}
                 className={clsx(
-                  "bg-white rounded-2xl border shadow-sm p-4 flex items-start gap-4 transition",
-                  r.sent ? "border-slate-100 opacity-60" :
-                  overdue ? "border-red-200 bg-red-50/40" :
-                  "border-slate-100 hover:border-slate-200"
+                  "bg-surface rounded-2xl border shadow-sm p-4 flex items-start gap-4 transition",
+                  r.sent ? "border-line opacity-60" :
+                  overdue ? "border-line bg-red-soft/40" :
+                  "border-line hover:border-line"
                 )}>
                 {/* Ícone */}
                 <div className={clsx(
                   "w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0",
-                  r.sent ? "bg-slate-100" :
-                  overdue ? "bg-red-100" :
-                  "bg-amber-100"
+                  r.sent ? "bg-surface-muted" :
+                  overdue ? "bg-red-soft" :
+                  "bg-amber-soft"
                 )}>
                   {r.sent ? "✓" : REPEAT_ICON[r.repeat] || "🔔"}
                 </div>
 
                 {/* Conteúdo */}
                 <div className="flex-1 min-w-0">
-                  <p className={clsx("font-semibold text-sm", r.sent ? "text-slate-500 line-through" : "text-slate-800")}>
+                  <p className={clsx("font-semibold text-sm", r.sent ? "text-muted line-through" : "text-ink")}>
                     {r.message}
                   </p>
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
-                    <span className={clsx("text-xs", overdue ? "text-red-500 font-semibold" : "text-slate-400")}>
+                    <span className={clsx("text-xs", overdue ? "text-red-500 font-semibold" : "text-subtle")}>
                       {overdue && "⚠ "}
                       {formatDate(r.scheduledAt)}
                     </span>
                     <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium border",
-                      r.sent ? "bg-slate-100 text-slate-400 border-slate-200" :
-                      r.repeat !== "none" ? "bg-blue-50 text-blue-600 border-blue-200" :
-                      "bg-slate-50 text-slate-500 border-slate-200"
+                      r.sent ? "bg-surface-muted text-subtle border-line" :
+                      r.repeat !== "none" ? "bg-blue-soft text-blue-ink border-line" :
+                      "bg-surface-muted text-muted border-line"
                     )}>
                       {REPEAT_LABEL[r.repeat]}
                     </span>
                     <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium border",
                       r.recipientType && r.recipientType !== "self"
-                        ? "bg-violet-50 text-violet-600 border-violet-200"
-                        : "bg-slate-50 text-slate-400 border-slate-200"
+                        ? "bg-violet-soft text-violet-ink border-line"
+                        : "bg-surface-muted text-subtle border-line"
                     )}>
                       {r.recipientType === "self" || !r.recipientType
                         ? `${RECIPIENT_LABEL.self} · ${r.recipientName || linkedPhones.find(p => p.phone === r.phone)?.name || linkedPhones.find(p => p.phone === r.phone)?.relation || formatPhone(r.phone)}`
@@ -349,8 +350,8 @@ export default function LembretesPagePt() {
                     {!r.sent && r.failedAttempts > 0 && (
                       <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium border",
                         r.failedAttempts >= MAX_FAILED_ATTEMPTS
-                          ? "bg-red-50 text-red-600 border-red-200"
-                          : "bg-amber-50 text-amber-600 border-amber-200"
+                          ? "bg-red-soft text-red-ink border-line"
+                          : "bg-amber-soft text-amber-ink border-line"
                       )}>
                         {r.failedAttempts >= MAX_FAILED_ATTEMPTS
                           ? "⚠ desistiu após várias tentativas"
@@ -364,11 +365,11 @@ export default function LembretesPagePt() {
                 {!r.sent && (
                   <div className="flex gap-2 shrink-0">
                     <button onClick={() => openEdit(r)}
-                      className="text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 px-2 py-1.5 rounded-lg transition border border-transparent hover:border-blue-200">
+                      className="text-xs text-subtle hover:text-blue-ink hover:bg-blue-soft px-2 py-1.5 rounded-lg transition border border-transparent hover:border-line">
                       Editar
                     </button>
                     <button onClick={() => deleteReminder(r.id)}
-                      className="text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg transition border border-transparent hover:border-red-200">
+                      className="text-xs text-subtle hover:text-red-500 hover:bg-red-soft px-2 py-1.5 rounded-lg transition border border-transparent hover:border-line">
                       Eliminar
                     </button>
                   </div>
@@ -382,23 +383,23 @@ export default function LembretesPagePt() {
       {/* Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-slate-900 mb-4">
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold text-ink mb-4">
               {editingId ? "✏️ Editar lembrete" : "🔔 Novo lembrete"}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Presets rápidos */}
               {!editingId && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-2 font-medium">Sugestões rápidas:</p>
+                  <p className="text-xs text-muted mb-2 font-medium">Sugestões rápidas:</p>
                   <div className="flex gap-1.5 flex-wrap">
                     {PRESETS.map(p => (
                       <button key={p} type="button"
                         onClick={() => setForm(f => ({ ...f, message: p }))}
                         className={clsx("text-xs px-2.5 py-1.5 rounded-lg border transition",
                           form.message === p
-                            ? "bg-amber-600 text-white border-amber-600"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700")}>
+                            ? "bg-primary text-on-primary border-amber-600"
+                            : "bg-surface-muted text-muted border-line hover:bg-amber-soft hover:border-line hover:text-amber-ink")}>
                         {p}
                       </button>
                     ))}
@@ -407,14 +408,14 @@ export default function LembretesPagePt() {
               )}
 
               <div>
-                <label className="text-xs text-slate-500 font-medium mb-1 block">Mensagem do lembrete</label>
+                <label className="text-xs text-muted font-medium mb-1 block">Mensagem do lembrete</label>
                 <input value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} required
                   placeholder="Ex: Tomar remédio de pressão"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
+                  className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
               </div>
 
               <div>
-                <label className="text-xs text-slate-500 font-medium mb-1 block">Para quem é este lembrete?</label>
+                <label className="text-xs text-muted font-medium mb-1 block">Para quem é este lembrete?</label>
                 <div className={clsx("grid gap-2", mode === "business" ? "grid-cols-4" : "grid-cols-2")}>
                   {(mode === "business"
                     ? (["self", "customer", "employee", "other"] as const)
@@ -425,7 +426,7 @@ export default function LembretesPagePt() {
                       className={clsx("py-2 rounded-xl text-xs font-medium border transition text-center",
                         recipientType === t
                           ? "bg-violet-600 text-white border-violet-600"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100")}>
+                          : "bg-surface-muted text-muted border-line hover:bg-surface-muted")}>
                       {t === "self" ? "Para mim" : t === "customer" ? "Cliente" : t === "employee" ? "Funcionário" : "Outro número"}
                     </button>
                   ))}
@@ -434,23 +435,23 @@ export default function LembretesPagePt() {
                 {recipientType === "self" && (
                   <div className="mt-2 space-y-2">
                     {linkedPhones.length === 0 ? (
-                      <p className="text-xs text-amber-700 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                      <p className="text-xs text-amber-ink rounded-xl border border-line bg-amber-soft px-3 py-2.5">
                         Nenhum WhatsApp vinculado. Vincula um número em <strong>Configurações</strong>.
                       </p>
                     ) : (
                       <>
-                        <p className="text-xs text-slate-500">Escolhe apenas um número para receber:</p>
+                        <p className="text-xs text-muted">Escolhe apenas um número para receber:</p>
                         {linkedPhones.map(phone => (
                           <label key={phone.phone} className={clsx(
                             "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition",
-                            selfPhone === phone.phone ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-slate-50 hover:border-violet-200",
+                            selfPhone === phone.phone ? "border-violet-400 bg-violet-soft" : "border-line bg-surface-muted hover:border-line",
                           )}>
                             <input type="radio" name="selfPhone" value={phone.phone} checked={selfPhone === phone.phone}
                               onChange={() => { setSelfPhone(phone.phone); setFormError(""); }} required
                               className="h-4 w-4 accent-violet-600" />
                             <span className="min-w-0">
-                              <span className="block text-sm font-semibold text-slate-700">{phone.name || "Sem nome"}{phone.relation ? ` · ${phone.relation}` : ""}</span>
-                              <span className="block text-xs text-slate-500">{formatPhone(phone.phone)}</span>
+                              <span className="block text-sm font-semibold text-ink">{phone.name || "Sem nome"}{phone.relation ? ` · ${phone.relation}` : ""}</span>
+                              <span className="block text-xs text-muted">{formatPhone(phone.phone)}</span>
                             </span>
                           </label>
                         ))}
@@ -461,58 +462,58 @@ export default function LembretesPagePt() {
 
                 {recipientType === "customer" && (
                   <select value={recipientId} onChange={e => setRecipientId(e.target.value)} required
-                    className="w-full mt-2 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200">
+                    className="w-full mt-2 border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200">
                     <option value="">Seleciona o cliente...</option>
                     {customers.filter(c => c.phone).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 )}
                 {recipientType === "employee" && (
                   <select value={recipientId} onChange={e => setRecipientId(e.target.value)} required
-                    className="w-full mt-2 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200">
+                    className="w-full mt-2 border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200">
                     <option value="">Seleciona o funcionário...</option>
                     {employees.filter(e => e.phone).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                   </select>
                 )}
                 {(recipientType === "customer" || recipientType === "employee") && (customers.length === 0 && employees.length === 0) && (
-                  <p className="text-xs text-amber-600 mt-1.5">Nenhum cliente/funcionário com telefone registado ainda.</p>
+                  <p className="text-xs text-amber-ink mt-1.5">Nenhum cliente/funcionário com telefone registado ainda.</p>
                 )}
                 {recipientType === "other" && (
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <input value={recipientLabel} onChange={e => setRecipientLabel(e.target.value)} required
                       placeholder="Nome (ex: Milena)"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200" />
+                      className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200" />
                     <input value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} required
                       placeholder="Telefone com indicativo"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200" />
+                      className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-200" />
                   </div>
                 )}
               </div>
 
-              {formError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{formError}</p>}
+              {formError && <p role="alert" className="rounded-xl border border-line bg-red-soft px-3 py-2 text-xs font-medium text-red-ink">{formError}</p>}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-500 font-medium mb-1 block">Data</label>
+                  <label className="text-xs text-muted font-medium mb-1 block">Data</label>
                   <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} required
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                    className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500 font-medium mb-1 block">Hora</label>
+                  <label className="text-xs text-muted font-medium mb-1 block">Hora</label>
                   <input type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} required
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                    className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-500 font-medium mb-1 block">Repetição</label>
+                <label className="text-xs text-muted font-medium mb-1 block">Repetição</label>
                 <div className="grid grid-cols-4 gap-2">
                   {Object.entries(REPEAT_LABEL).map(([key, label]) => (
                     <button key={key} type="button"
                       onClick={() => setForm(f => ({ ...f, repeat: key }))}
                       className={clsx("py-2 rounded-xl text-xs font-medium border transition text-center",
                         form.repeat === key
-                          ? "bg-amber-600 text-white border-amber-600"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100")}>
+                          ? "bg-primary text-on-primary border-amber-600"
+                          : "bg-surface-muted text-muted border-line hover:bg-surface-muted")}>
                       <div>{REPEAT_ICON[key]}</div>
                       <div className="mt-0.5">{label}</div>
                     </button>
@@ -522,11 +523,11 @@ export default function LembretesPagePt() {
 
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }}
-                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">
+                  className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">
                   Cancelar
                 </button>
                 <button type="submit" disabled={saving || (recipientType === "self" && !selfPhone)}
-                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:cursor-not-allowed disabled:opacity-50">
+                  className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition disabled:cursor-not-allowed disabled:opacity-50">
                   {saving ? "A guardar..." : editingId ? "Guardar" : "Criar lembrete"}
                 </button>
               </div>

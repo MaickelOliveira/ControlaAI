@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useRef, useState } from "react";
 
 type DriveFolder = { id: string; name: string; parentId: string | null; createdAt: string };
@@ -114,26 +115,26 @@ export default function DrivePageEs() {
   const totalSize = files.reduce((s, f) => s + f.size, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="z-page">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="z-page-heading flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">📁 Drive Inteligente</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
+          <PageTitle icon="folder">Drive Inteligente</PageTitle>
+          <p className="text-muted text-sm mt-0.5">
             {files.length} archivo{files.length !== 1 ? "s" : ""} · {formatSize(totalSize)} usado{totalSize > 0 ? "s" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowNewFolder(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-line text-sm text-muted hover:bg-surface-muted transition"
           >
             <span className="text-base">📂</span> Nueva carpeta
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition disabled:opacity-60"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-medium hover:bg-primary-hover transition disabled:opacity-60"
           >
             {uploading ? "Enviando..." : (
               <>
@@ -149,30 +150,30 @@ export default function DrivePageEs() {
       </div>
 
       {/* WhatsApp hint */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+      <div className="bg-amber-soft border border-line rounded-xl p-4 flex items-start gap-3">
         <span className="text-2xl shrink-0">💡</span>
-        <div className="text-sm text-amber-800">
+        <div className="text-sm text-amber-ink">
           <p className="font-semibold">¡Envía archivos por WhatsApp!</p>
-          <p className="text-amber-700 mt-0.5">Envía PDF, imagen o documento directo al chat y la IA los organiza automáticamente. Para buscar: <em>&quot;Encuentra el comprobante del mecánico&quot;</em></p>
+          <p className="text-amber-ink mt-0.5">Envía PDF, imagen o documento directo al chat y la IA los organiza automáticamente. Para buscar: <em>&quot;Encuentra el comprobante del mecánico&quot;</em></p>
         </div>
       </div>
 
       {/* New folder modal */}
       {showNewFolder && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Nueva carpeta</h3>
+          <div className="bg-surface rounded-2xl shadow-xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="text-base font-bold text-ink">Nueva carpeta</h3>
             <input
               autoFocus
               value={newFolderName}
               onChange={e => setNewFolderName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleCreateFolder()}
               placeholder="Nombre de la carpeta..."
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             <div className="flex gap-2 justify-end">
-              <button onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 transition">Cancelar</button>
-              <button onClick={handleCreateFolder} disabled={savingFolder || !newFolderName.trim()} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition disabled:opacity-60">
+              <button onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} className="px-4 py-2 text-sm text-muted hover:text-ink transition">Cancelar</button>
+              <button onClick={handleCreateFolder} disabled={savingFolder || !newFolderName.trim()} className="px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-medium hover:bg-primary-hover transition disabled:opacity-60">
                 {savingFolder ? "Creando..." : "Crear"}
               </button>
             </div>
@@ -182,43 +183,43 @@ export default function DrivePageEs() {
 
       {/* Search */}
       <div className="relative">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle">
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Buscar archivos..."
-          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+          className="w-full pl-10 pr-4 py-2.5 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-surface"
         />
       </div>
 
       {/* Breadcrumb / folder nav */}
-      <div className="flex items-center gap-2 text-sm text-slate-500">
+      <div className="flex items-center gap-2 text-sm text-muted">
         <button
           onClick={() => setCurrentFolder(null)}
-          className={`hover:text-slate-800 transition ${!currentFolder ? "font-semibold text-slate-900" : ""}`}
+          className={`hover:text-ink transition ${!currentFolder ? "font-semibold text-ink" : ""}`}
         >
           📁 Drive
         </button>
         {currentFolder && (
           <>
-            <span className="text-slate-300">/</span>
-            <span className="font-semibold text-slate-900">{currentFolder.name}</span>
+            <span className="text-subtle">/</span>
+            <span className="font-semibold text-ink">{currentFolder.name}</span>
           </>
         )}
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-slate-400 text-sm">Cargando...</div>
+        <div className="text-center py-12 text-subtle text-sm">Cargando...</div>
       ) : (
         <div className="space-y-6">
           {/* Folders grid — only show at root level */}
           {!currentFolder && (
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Carpetas</p>
+              <p className="text-xs font-semibold text-subtle uppercase tracking-wide mb-3">Carpetas</p>
               {rootFolders.length === 0 ? (
-                <p className="text-sm text-slate-400">Ninguna carpeta todavía.</p>
+                <p className="text-sm text-subtle">Ninguna carpeta todavía.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {rootFolders.map(folder => {
@@ -227,17 +228,17 @@ export default function DrivePageEs() {
                       <div
                         key={folder.id}
                         onClick={() => setCurrentFolder(folder)}
-                        className="group relative bg-white border border-slate-200 rounded-xl p-4 cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition"
+                        className="group relative bg-surface border border-line rounded-xl p-4 cursor-pointer hover:border-amber-300 hover:bg-amber-soft transition"
                       >
                         <button
                           onClick={e => handleDeleteFolder(folder.id, e)}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition text-slate-300 hover:text-red-500 text-xs"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition text-subtle hover:text-red-500 text-xs"
                         >
                           ✕
                         </button>
                         <div className="text-3xl mb-2">📁</div>
-                        <p className="text-sm font-semibold text-slate-800 truncate">{folder.name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{count} archivo{count !== 1 ? "s" : ""}</p>
+                        <p className="text-sm font-semibold text-ink truncate">{folder.name}</p>
+                        <p className="text-xs text-subtle mt-0.5">{count} archivo{count !== 1 ? "s" : ""}</p>
                       </div>
                     );
                   })}
@@ -248,37 +249,37 @@ export default function DrivePageEs() {
 
           {/* Files list */}
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
+            <p className="text-xs font-semibold text-subtle uppercase tracking-wide mb-3">
               {currentFolder ? `Archivos en ${currentFolder.name}` : "Todos los archivos"}
             </p>
             {currentFolderFiles.length === 0 ? (
-              <div className="text-center py-12 bg-white border border-dashed border-slate-200 rounded-xl">
+              <div className="text-center py-12 bg-surface border border-dashed border-line rounded-xl">
                 <p className="text-4xl mb-3">📂</p>
-                <p className="text-slate-500 text-sm">
+                <p className="text-muted text-sm">
                   {search ? "Ningún archivo encontrado." : "Ningún archivo aquí todavía."}
                 </p>
                 {!search && (
-                  <p className="text-slate-400 text-xs mt-1">Haz clic en Subir o envía por WhatsApp.</p>
+                  <p className="text-subtle text-xs mt-1">Haz clic en Subir o envía por WhatsApp.</p>
                 )}
               </div>
             ) : (
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="divide-y divide-slate-100">
+              <div className="bg-surface border border-line rounded-xl overflow-hidden">
+                <div className="divide-y divide-line">
                   {currentFolderFiles.map(file => {
                     const folder = folders.find(f => f.id === file.folderId);
                     return (
-                      <div key={file.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition group">
+                      <div key={file.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-muted transition group">
                         <span className="text-xl shrink-0">{fileIcon(file.mimeType)}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{file.originalName}</p>
+                          <p className="text-sm font-medium text-ink truncate">{file.originalName}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-slate-400">{formatSize(file.size)}</span>
+                            <span className="text-xs text-subtle">{formatSize(file.size)}</span>
                             {folder && !currentFolder && (
-                              <span className="text-xs text-slate-400">· {folder.name}</span>
+                              <span className="text-xs text-subtle">· {folder.name}</span>
                             )}
-                            <span className="text-xs text-slate-400">· {formatDate(file.createdAt)}</span>
+                            <span className="text-xs text-subtle">· {formatDate(file.createdAt)}</span>
                             {file.source === "whatsapp" && (
-                              <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded px-1.5 py-0.5">WhatsApp</span>
+                              <span className="text-xs bg-amber-soft text-amber-ink border border-line rounded px-1.5 py-0.5">WhatsApp</span>
                             )}
                           </div>
                         </div>
@@ -287,7 +288,7 @@ export default function DrivePageEs() {
                             href={`/api/drive/${file.id}/serve`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                            className="p-1.5 rounded-lg text-subtle hover:text-ink hover:bg-surface-muted transition"
                             title="Ver"
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4 h-4">
@@ -298,7 +299,7 @@ export default function DrivePageEs() {
                           <a
                             href={`/api/drive/${file.id}/serve`}
                             download={file.originalName}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                            className="p-1.5 rounded-lg text-subtle hover:text-ink hover:bg-surface-muted transition"
                             title="Descargar"
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4 h-4">
@@ -307,7 +308,7 @@ export default function DrivePageEs() {
                           </a>
                           <button
                             onClick={() => handleDelete(file.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition"
+                            className="p-1.5 rounded-lg text-subtle hover:text-red-500 hover:bg-red-soft transition"
                             title="Eliminar"
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4 h-4">

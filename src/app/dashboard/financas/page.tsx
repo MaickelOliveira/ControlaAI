@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
@@ -408,71 +409,71 @@ export default function FinancasPage() {
   const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
 
   function recStatus(r: Recurring): { label: string; color: string } {
-    if (r.nextDueDate < today) return { label: "Vencido", color: "bg-red-100 text-red-600" };
-    if (r.nextDueDate === today) return { label: "Vence hoje", color: "bg-orange-100 text-orange-600" };
-    return { label: `A vencer ${fmtDate(r.nextDueDate)}`, color: "bg-slate-100 text-slate-500" };
+    if (r.nextDueDate < today) return { label: "Vencido", color: "bg-red-soft text-red-ink" };
+    if (r.nextDueDate === today) return { label: "Vence hoje", color: "bg-orange-soft text-orange-ink" };
+    return { label: `A vencer ${fmtDate(r.nextDueDate)}`, color: "bg-surface-muted text-muted" };
   }
 
   return (
-    <div className="space-y-5">
+    <div className="z-page">
       {banner && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-sm px-4 py-3">
+        <div className="rounded-xl border border-line bg-amber-soft text-amber-ink text-sm px-4 py-3">
           {banner}
         </div>
       )}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="z-page-heading flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">💰 Finanças</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{modeLabel}</p>
+          <PageTitle icon="finance">Finanças</PageTitle>
+          <p className="text-subtle text-sm mt-0.5">{modeLabel}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={openImport}
-            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition">
+            className="px-4 py-2.5 bg-surface border border-line text-muted rounded-xl text-sm font-semibold hover:bg-surface-muted transition">
             📑 Importar fatura
           </button>
           <button onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}
-            className="px-5 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition shadow-sm">
+            className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary-hover transition shadow-sm">
             + Adicionar
           </button>
         </div>
       </div>
 
       <FinanceFilterBar key={filters.search} categories={allCategories} value={filters} onChange={setFilters} />
-      {ledgerError&&<p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{ledgerError} O extrato pode estar desatualizado.</p>}
-      {ledger?.bank&&<p className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>Conta, cartão, WhatsApp e plataforma no mesmo extrato · Pessoal e Empresa separados.</span><span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">Atualização automática</span></p>}
-      {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-800">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
-      {!!ledger?.bank?.report.missing_dates&&<p className="text-xs text-amber-800">Há {ledger.bank.report.missing_dates} movimento(s) sem data enviados pelo banco, fora deste período.</p>}
-      {postedFinances.some(f=>f.possibleDuplicate)&&<p className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-900">Há registros com mesmo valor e data em mais de uma origem. Estão identificados no extrato para conferência; os totais ainda podem conter repetições.</p>}
+      {ledgerError&&<p role="alert" className="rounded-xl border border-line bg-amber-soft p-4 text-sm text-amber-ink">{ledgerError} O extrato pode estar desatualizado.</p>}
+      {ledger?.bank&&<p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>Conta, cartão, WhatsApp e plataforma no mesmo extrato · Pessoal e Empresa separados.</span><span className="rounded-full bg-emerald-soft px-3 py-1 text-emerald-ink">Atualização automática</span></p>}
+      {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-ink">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
+      {!!ledger?.bank?.report.missing_dates&&<p className="text-xs text-amber-ink">Há {ledger.bank.report.missing_dates} movimento(s) sem data enviados pelo banco, fora deste período.</p>}
+      {postedFinances.some(f=>f.possibleDuplicate)&&<p className="rounded-xl border border-line bg-amber-soft p-3 text-xs text-amber-ink">Há registros com mesmo valor e data em mais de uma origem. Estão identificados no extrato para conferência; os totais ainda podem conter repetições.</p>}
 
       {/* Saldo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-emerald-600 rounded-2xl p-5 shadow-sm">
-          <p className="text-xs text-emerald-100 font-medium uppercase tracking-wide">Receitas</p>
-          <p className="text-2xl font-bold text-white mt-2">{ledger?fmt(periodBalance.income):"—"}</p>
+        <div className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
+          <p className="text-xs text-emerald-ink font-medium uppercase tracking-wide">Receitas</p>
+          <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(periodBalance.income):"—"}</p>
         </div>
-        <div className="bg-red-500 rounded-2xl p-5 shadow-sm">
-          <p className="text-xs text-red-100 font-medium uppercase tracking-wide">Despesas</p>
-          <p className="text-2xl font-bold text-white mt-2">{ledger?fmt(periodBalance.expense):"—"}</p>
+        <div className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
+          <p className="text-xs text-red-ink font-medium uppercase tracking-wide">Despesas</p>
+          <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(periodBalance.expense):"—"}</p>
         </div>
-        <div className={clsx("rounded-2xl p-5 shadow-sm", totalBalance.balance >= 0 ? "bg-blue-600" : "bg-orange-500")}>
-          <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Saldo registrado na Zelo</p>
-          <p className="text-2xl font-bold text-white mt-2">{ledger?fmt(totalBalance.balance):"—"}</p>
-          <p className="mt-1 text-[10px] text-blue-100">Acumulado dos registros · saldo do banco em Contas</p>
+        <div className={clsx("rounded-2xl p-5 shadow-sm", totalBalance.balance >= 0 ? "bg-amber-soft border border-line" : "bg-red-soft border border-line")}>
+          <p className="text-xs text-amber-ink font-medium uppercase tracking-wide">Saldo registrado na Zelo</p>
+          <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(totalBalance.balance):"—"}</p>
+          <p className="mt-1 text-[10px] text-muted">Acumulado dos registros · saldo do banco em Contas</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         {/* Categorias */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <div className="lg:col-span-2 bg-surface rounded-2xl border border-line shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-800 text-sm">📊 Despesas por Categoria</h3>
+            <h3 className="font-semibold text-ink text-sm">📊 Despesas por Categoria</h3>
             <button onClick={() => { setCatType("expense"); setCatName(""); setCatError(""); setShowCatModal(true); }}
-              className="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1 transition">
+              className="text-xs text-amber-ink hover:text-amber-ink font-medium flex items-center gap-1 transition">
               <span className="text-base leading-none">+</span> Categoria
             </button>
           </div>
           {topCats.length === 0 ? (
-            <div className="text-center py-10 text-slate-300">
+            <div className="text-center py-10 text-subtle">
               <p className="text-3xl mb-2">📊</p>
               <p className="text-sm">Sem despesas registradas</p>
             </div>
@@ -485,13 +486,13 @@ export default function FinancasPage() {
                 return (
                   <div key={cat}>
                     <div className="flex justify-between text-sm mb-1.5">
-                      <span className="text-slate-600 font-medium">{cat}</span>
-                      <span className="font-semibold text-slate-800">{fmt(val)}</span>
+                      <span className="text-muted font-medium">{cat}</span>
+                      <span className="font-semibold text-ink">{fmt(val)}</span>
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full">
+                    <div className="h-2 bg-surface-muted rounded-full">
                       <div className={clsx("h-2 rounded-full transition-all",val<0?"bg-emerald-500":"bg-amber-500")} style={{ width: `${pct}%` }} />
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5 text-right">{val<0?"Estornos e ajustes líquidos":"Despesa líquida da categoria"}</p>
+                    <p className="text-xs text-subtle mt-0.5 text-right">{val<0?"Estornos e ajustes líquidos":"Despesa líquida da categoria"}</p>
                   </div>
                 );
               })}
@@ -500,41 +501,41 @@ export default function FinancasPage() {
         </div>
 
         {/* Extrato unificado */}
-        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <div className="lg:col-span-3 bg-surface rounded-2xl border border-line shadow-sm p-5">
           <div className="flex items-center justify-between mb-4 gap-2">
-            <h3 className="font-semibold text-slate-800 text-sm">📋 Extrato</h3>
+            <h3 className="font-semibold text-ink text-sm">📋 Extrato</h3>
             {selectableFinances.length > 0 && (
               <button onClick={toggleSelectMode}
                 className={clsx("text-xs font-medium px-2.5 py-1 rounded-lg transition shrink-0",
-                  selectMode ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100")}>
+                  selectMode ? "bg-slate-800 text-white" : "text-muted hover:bg-surface-muted")}>
                 {selectMode ? "Cancelar seleção" : "Selecionar"}
               </button>
             )}
           </div>
           {selectMode && (
-            <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
-              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+            <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-xl bg-surface-muted border border-line">
+              <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
                 <input type="checkbox" checked={allSelected}
                   onChange={() => setSelectedIds(allSelected ? new Set() : new Set(selectableFinances.map(f => f.id)))}
                   className="w-4 h-4 accent-slate-800" />
                 {selectedIds.size > 0 ? `${selectedIds.size} selecionado(s)` : "Selecionar tudo"}
               </label>
               <button onClick={handleBulkDelete} disabled={selectedIds.size === 0 || bulkDeleting}
-                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition disabled:opacity-40 disabled:hover:bg-red-50 shrink-0">
+                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-soft text-red-ink hover:bg-red-soft transition disabled:opacity-40 disabled:hover:bg-red-soft shrink-0">
                 {bulkDeleting ? "Excluindo..." : "🗑️ Excluir selecionados"}
               </button>
             </div>
           )}
-          {loading ? <p className="text-slate-400 text-sm">Carregando...</p> :
+          {loading ? <p className="text-subtle text-sm">Carregando...</p> :
             (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0) ? (
-              <div className="text-center py-16 text-slate-400">
+              <div className="text-center py-16 text-subtle">
                 <p className="text-4xl mb-3">💬</p>
-                <p className="font-medium text-slate-500">Nenhum registro ainda</p>
+                <p className="font-medium text-muted">Nenhum registro ainda</p>
                 <p className="text-xs mt-1">Envie uma mensagem para o bot ou clique em + Adicionar!</p>
               </div>
             ) : (
               <div className="space-y-1 max-h-[480px] overflow-y-auto">
-                {!ledger&&<p className="px-3 py-3 text-xs text-amber-800">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
+                {!ledger&&<p className="px-3 py-3 text-xs text-amber-ink">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
 
                 {/* Pendentes: recorrentes/parcelados */}
                 {sortedRecs.map(r => {
@@ -543,32 +544,32 @@ export default function FinancasPage() {
                     ? ` (${r.paidInstallments + 1}/${r.totalInstallments})`
                     : ` · ${UNIT_LABEL[r.repeatUnit]}`;
                   return (
-                    <div key={r.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition border border-dashed border-slate-200">
+                    <div key={r.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-surface-muted transition border border-dashed border-line">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", r.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
+                        <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", r.type === "income" ? "bg-emerald-soft text-emerald-ink" : "bg-red-soft text-red-500")}>
                           {r.type === "income" ? "↑" : "↓"}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-medium text-slate-800 truncate">{visibleFinanceDescription(r.description)}{installLabel}</p>
+                            <p className="text-sm font-medium text-ink truncate">{visibleFinanceDescription(r.description)}{installLabel}</p>
                             <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0", st.color)}>{st.label}</span>
                           </div>
-                          <p className="text-xs text-slate-400">{r.category}{purchaseDateFromDescription(r.description) ? ` · compra em ${fmtDate(purchaseDateFromDescription(r.description)!)}` : ""}</p>
+                          <p className="text-xs text-subtle">{r.category}{purchaseDateFromDescription(r.description) ? ` · compra em ${fmtDate(purchaseDateFromDescription(r.description)!)}` : ""}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <span className={clsx("text-sm font-bold", r.type === "income" ? "text-emerald-600" : "text-red-500")}>
+                        <span className={clsx("text-sm font-bold", r.type === "income" ? "text-emerald-ink" : "text-red-500")}>
                           {r.type === "income" ? "+" : "-"}{fmt(r.amount)}
                         </span>
                         <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setEditRec(r); setEditRecForm({ amount: String(r.amount), description: r.description, category: r.category, dayOfMonth: r.dayOfMonth ? String(r.dayOfMonth) : "", repeatUnit: r.repeatUnit }); }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition" title="Editar">✏️</button>
+                            className="p-1.5 rounded-lg text-subtle hover:text-blue-ink hover:bg-blue-soft transition" title="Editar">✏️</button>
                           <button onClick={() => handleCancelRec(r)} disabled={cancellingRec === r.id}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Cancelar">🗑️</button>
+                            className="p-1.5 rounded-lg text-subtle hover:text-red-ink hover:bg-red-soft transition" title="Cancelar">🗑️</button>
                         </div>
                         <button onClick={() => handleMarkPaid(r)} disabled={markingPaid === r.id}
                           className={clsx("px-2.5 py-1 rounded-lg text-xs font-semibold transition shrink-0 disabled:opacity-50",
-                            r.type === "income" ? "bg-amber-600 text-white hover:bg-amber-700" : "bg-amber-600 text-white hover:bg-amber-700")}>
+                            r.type === "income" ? "bg-primary text-on-primary hover:bg-primary-hover" : "bg-primary text-on-primary hover:bg-primary-hover")}>
                           {markingPaid === r.id ? "..." : r.type === "income" ? "✓ Recebido" : "✓ Pago"}
                         </button>
                       </div>
@@ -581,38 +582,38 @@ export default function FinancasPage() {
                   const dueDate = new Date(f.date + "T12:00:00");
                   const dueFmt = dueDate.toLocaleDateString("pt-BR");
                   const isOverdue = f.date < today;
-                  const badgeColor = isOverdue ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500";
+                  const badgeColor = isOverdue ? "bg-red-soft text-red-ink" : "bg-surface-muted text-muted";
                   const badgeLabel = isOverdue ? `Vencido ${dueFmt}` : `A vencer ${dueFmt}`;
                   return (
-                    <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition border border-dashed border-slate-200">
+                    <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-surface-muted transition border border-dashed border-line">
                       <div className="flex items-center gap-3 min-w-0">
                         {selectMode && (
                           <input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => toggleSelected(f.id)}
                             className="w-4 h-4 accent-slate-800 shrink-0" />
                         )}
-                        <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500")}>
+                        <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", f.type === "income" ? "bg-emerald-soft text-emerald-ink" : "bg-red-soft text-red-500")}>
                           {f.type === "income" ? "↑" : "↓"}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-medium text-slate-800 truncate">{f.description}</p>
+                            <p className="text-sm font-medium text-ink truncate">{f.description}</p>
                             <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0", badgeColor)}>{badgeLabel}</span>
                           </div>
-                          <p className="text-xs text-slate-400">{f.category}</p>
+                          <p className="text-xs text-subtle">{f.category}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <span className={clsx("text-sm font-bold", f.type === "income" ? "text-emerald-600" : "text-red-500")}>
+                        <span className={clsx("text-sm font-bold", f.type === "income" ? "text-emerald-ink" : "text-red-500")}>
                           {f.type === "income" ? "+" : "-"}{fmt(f.amount)}
                         </span>
                         <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button onClick={() => openEdit(f)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition" title="Editar">✏️</button>
+                            className="p-1.5 rounded-lg text-subtle hover:text-blue-ink hover:bg-blue-soft transition" title="Editar">✏️</button>
                           <button onClick={() => setDeleteTarget(f)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Excluir">🗑️</button>
+                            className="p-1.5 rounded-lg text-subtle hover:text-red-ink hover:bg-red-soft transition" title="Excluir">🗑️</button>
                         </div>
                         <button onClick={() => handleConfirmPending(f)} disabled={confirmingPending === f.id}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold transition shrink-0 disabled:opacity-50 bg-amber-600 text-white hover:bg-amber-700">
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold transition shrink-0 disabled:opacity-50 bg-primary text-on-primary hover:bg-primary-hover">
                           {confirmingPending === f.id ? "..." : f.type === "income" ? "✓ Recebido" : "✓ Pago"}
                         </button>
                       </div>
@@ -623,16 +624,16 @@ export default function FinancasPage() {
                 {/* Separador se tiver pendentes e lançamentos confirmados */}
                 {(sortedRecs.length > 0 || pendingFinances.length > 0) && postedFinances.length > 0 && (
                   <div className="flex items-center gap-2 py-1">
-                    <div className="flex-1 h-px bg-slate-100" />
-                    <span className="text-xs text-slate-300">confirmados</span>
-                    <div className="flex-1 h-px bg-slate-100" />
+                    <div className="flex-1 h-px bg-surface-muted" />
+                    <span className="text-xs text-subtle">confirmados</span>
+                    <div className="flex-1 h-px bg-surface-muted" />
                   </div>
                 )}
 
                 {/* Lançamentos confirmados de todas as origens, em ordem de data */}
                 <FinanceLedgerRows entries={postedFinances.slice(0,visibleCount)} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} onCategory={setBankCategoryTarget} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
-                {postedFinances.length>visibleCount&&<button onClick={()=>setVisibleCount(n=>n+50)} className="w-full rounded-xl border border-slate-200 py-3 text-xs font-semibold text-slate-600">Ver mais lançamentos ({postedFinances.length-visibleCount})</button>}
-                {ledger?.bank&&<p className="px-3 pt-3 text-[11px] leading-5 text-slate-400">Resumo em reais. Pagamentos de fatura, transferências identificadas e investimentos aparecem no extrato sem alterar receitas/gastos. O histórico enviado pelo banco pode estar incompleto.</p>}
+                {postedFinances.length>visibleCount&&<button onClick={()=>setVisibleCount(n=>n+50)} className="w-full rounded-xl border border-line py-3 text-xs font-semibold text-muted">Ver mais lançamentos ({postedFinances.length-visibleCount})</button>}
+                {ledger?.bank&&<p className="px-3 pt-3 text-[11px] leading-5 text-subtle">Resumo em reais. Pagamentos de fatura, transferências identificadas e investimentos aparecem no extrato sem alterar receitas/gastos. O histórico enviado pelo banco pode estar incompleto.</p>}
               </div>
             )}
         </div>
@@ -645,8 +646,8 @@ export default function FinancasPage() {
       {/* ── Modal Adicionar (único + recorrente + parcelado) ── */}
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-slate-900 mb-4">+ Nova transação</h3>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-ink mb-4">+ Nova transação</h3>
             <form onSubmit={handleSave} className="space-y-3">
 
               {/* Tipo */}
@@ -654,7 +655,7 @@ export default function FinancasPage() {
                 {([["expense", "💸 Despesa"], ["income", "💰 Receita"]] as const).map(([v, l]) => (
                   <button key={v} type="button" onClick={() => setForm(f => ({ ...f, type: v, category: "" }))}
                     className={clsx("py-2.5 rounded-xl text-sm font-semibold border transition",
-                      form.type === v ? "bg-amber-600 text-white border-amber-600" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>
+                      form.type === v ? "bg-primary text-on-primary border-amber-600" : "border-line text-muted hover:bg-surface-muted")}>
                     {l}
                   </button>
                 ))}
@@ -665,7 +666,7 @@ export default function FinancasPage() {
                 {([["once", "Único"], ["recurring", "🔁 Recorrente"], ["installment", "💳 Parcelado"]] as const).map(([v, l]) => (
                   <button key={v} type="button" onClick={() => setForm(f => ({ ...f, frequency: v }))}
                     className={clsx("py-2 rounded-xl text-xs font-medium border transition",
-                      form.frequency === v ? "bg-slate-800 text-white border-slate-800" : "border-slate-200 text-slate-500 hover:bg-slate-50")}>
+                      form.frequency === v ? "bg-slate-800 text-white border-slate-800" : "border-line text-muted hover:bg-surface-muted")}>
                     {l}
                   </button>
                 ))}
@@ -674,17 +675,17 @@ export default function FinancasPage() {
               {/* Campos comuns */}
               <input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required
                 placeholder={form.frequency === "installment" ? "Valor por parcela (R$)" : "Valor (R$)"}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
+                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
 
               <div className="flex gap-2 items-center">
                 <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                   required={form.frequency === "once"}
-                  className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                  className="flex-1 border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
                   <option value="">{form.frequency === "once" ? "Categoria *" : "Categoria (opcional)"}</option>
                   {cats.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <button type="button" onClick={() => { setCatType(form.type); setCatName(""); setCatError(""); setShowCatModal(true); }}
-                  className="shrink-0 px-3 py-2.5 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-amber-400 hover:text-amber-600 transition">
+                  className="shrink-0 px-3 py-2.5 border border-dashed border-line rounded-xl text-xs text-muted hover:border-amber-400 hover:text-amber-ink transition">
                   + Nova
                 </button>
               </div>
@@ -692,7 +693,7 @@ export default function FinancasPage() {
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 required={form.frequency !== "once"}
                 placeholder={form.frequency === "once" ? "Descrição (opcional)" : "Descrição (ex: Netflix, Geladeira)"}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
 
               {/* Campos extras para recorrente/parcelado */}
               {form.frequency !== "once" && (
@@ -700,14 +701,14 @@ export default function FinancasPage() {
                   {form.frequency === "installment" && (
                     <div className="grid grid-cols-2 gap-3">
                       <input type="number" value={form.totalInstallments} onChange={e => setForm(f => ({ ...f, totalInstallments: e.target.value }))} required
-                        placeholder="Nº de parcelas" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                        placeholder="Nº de parcelas" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
                       <input type="number" step="0.01" value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))}
-                        placeholder="Valor total (opcional)" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                        placeholder="Valor total (opcional)" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
                     </div>
                   )}
                   {form.frequency === "recurring" && (
                     <select value={form.repeatUnit} onChange={e => setForm(f => ({ ...f, repeatUnit: e.target.value as FormState["repeatUnit"] }))}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                      className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
                       <option value="monthly">Todo mês</option>
                       <option value="weekly">Toda semana</option>
                       <option value="daily">Todo dia</option>
@@ -716,18 +717,18 @@ export default function FinancasPage() {
                   )}
                   <div className="grid grid-cols-2 gap-3">
                     <input type="number" min="1" max="31" value={form.dayOfMonth} onChange={e => setForm(f => ({ ...f, dayOfMonth: e.target.value }))}
-                      placeholder="Dia do mês (ex: 10)" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                      placeholder="Dia do mês (ex: 10)" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
                     <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                      className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                      className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
                   </div>
                 </>
               )}
 
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowForm(false)}
-                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                  className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
                 <button type="submit" disabled={saving}
-                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
+                  className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition disabled:opacity-50">
                   {saving ? "Salvando..." : "Salvar"}
                 </button>
               </div>
@@ -739,26 +740,26 @@ export default function FinancasPage() {
       {/* Modal — Editar lançamento confirmado */}
       {editTarget && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-slate-900 mb-1">✏️ Editar lançamento</h3>
-            <p className="text-xs text-slate-400 mb-4">{editTarget.type === "income" ? "💰 Receita" : "💸 Despesa"}</p>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold text-ink mb-1">✏️ Editar lançamento</h3>
+            <p className="text-xs text-subtle mb-4">{editTarget.type === "income" ? "💰 Receita" : "💸 Despesa"}</p>
             <form onSubmit={handleEdit} className="space-y-3">
               <input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} required
-                placeholder="Valor (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
+                placeholder="Valor (R$)" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
               <select value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} required
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
                 <option value="">Categoria</option>
                 {editCats.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="Descrição" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Descrição" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setEditTarget(null)}
-                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                  className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
                 <button type="submit"
-                  className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 transition">Salvar</button>
+                  className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary transition">Salvar</button>
               </div>
             </form>
           </div>
@@ -768,26 +769,26 @@ export default function FinancasPage() {
       {/* Modal — Editar recorrente/parcelado */}
       {editRec && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-slate-900 mb-1">✏️ Editar {editRec.recurrenceType === "installment" ? "parcelamento" : "recorrente"}</h3>
-            <p className="text-xs text-slate-400 mb-4">{editRec.description}</p>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold text-ink mb-1">✏️ Editar {editRec.recurrenceType === "installment" ? "parcelamento" : "recorrente"}</h3>
+            <p className="text-xs text-subtle mb-4">{editRec.description}</p>
             <form onSubmit={handleEditRec} className="space-y-3">
               <input type="number" step="0.01" value={editRecForm.amount} onChange={e => setEditRecForm(f => ({ ...f, amount: e.target.value }))}
-                placeholder="Novo valor (R$)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
+                placeholder="Novo valor (R$)" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
               <input value={editRecForm.description} onChange={e => setEditRecForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="Descrição" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Descrição" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <select value={editRecForm.category} onChange={e => setEditRecForm(f => ({ ...f, category: e.target.value }))}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
                 <option value="">Categoria</option>
                 {editRecCats.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <input type="number" min="1" max="31" value={editRecForm.dayOfMonth} onChange={e => setEditRecForm(f => ({ ...f, dayOfMonth: e.target.value }))}
-                placeholder="Dia do mês" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Dia do mês" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setEditRec(null)}
-                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                  className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
                 <button type="submit"
-                  className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 transition">Salvar</button>
+                  className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary transition">Salvar</button>
               </div>
             </form>
           </div>
@@ -797,13 +798,13 @@ export default function FinancasPage() {
       {/* Modal — Nova Categoria */}
       {showCatModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="font-bold text-slate-900 mb-1">+ Nova categoria</h3>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-ink mb-1">+ Nova categoria</h3>
             <div className="flex gap-2 mb-4 mt-2">
               {(["expense", "income"] as const).map(t => (
                 <button key={t} type="button" onClick={() => setCatType(t)}
                   className={clsx("flex-1 py-2 rounded-xl text-xs font-semibold border transition",
-                    catType === t ? "bg-amber-600 text-white border-amber-600" : "border-slate-200 text-slate-500 hover:bg-slate-50")}>
+                    catType === t ? "bg-primary text-on-primary border-amber-600" : "border-line text-muted hover:bg-surface-muted")}>
                   {t === "expense" ? "💸 Despesa" : "💰 Receita"}
                 </button>
               ))}
@@ -811,19 +812,19 @@ export default function FinancasPage() {
             <form onSubmit={handleSaveCategory} className="space-y-3">
               <input value={catName} onChange={e => { setCatName(e.target.value); setCatError(""); }} required autoFocus
                 placeholder="Nome da categoria (ex: Pet, Assinaturas)"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
+                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
               {catError && <p className="text-xs text-red-500">{catError}</p>}
 
               {/* Categorias personalizadas existentes */}
               {(catType === "expense" ? customExpense : customIncome).length > 0 && (
                 <div>
-                  <p className="text-xs text-slate-400 mb-1.5">Suas categorias:</p>
+                  <p className="text-xs text-subtle mb-1.5">Suas categorias:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {(catType === "expense" ? customExpense : customIncome).map(c => (
-                      <span key={c} className="flex items-center gap-1 text-xs bg-slate-100 text-slate-600 rounded-lg px-2 py-1">
+                      <span key={c} className="flex items-center gap-1 text-xs bg-surface-muted text-muted rounded-lg px-2 py-1">
                         {c}
                         <button type="button" onClick={() => handleDeleteCategory(catType, c)}
-                          className="text-slate-400 hover:text-red-500 transition leading-none">×</button>
+                          className="text-subtle hover:text-red-500 transition leading-none">×</button>
                       </span>
                     ))}
                   </div>
@@ -832,9 +833,9 @@ export default function FinancasPage() {
 
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowCatModal(false)}
-                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                  className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
                 <button type="submit" disabled={catSaving}
-                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
+                  className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition disabled:opacity-50">
                   {catSaving ? "Salvando..." : "Salvar"}
                 </button>
               </div>
@@ -846,16 +847,16 @@ export default function FinancasPage() {
       {/* Modal — Confirmar exclusão */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
             <p className="text-3xl mb-3">🗑️</p>
-            <h3 className="font-bold text-slate-900 mb-1">Excluir lançamento?</h3>
-            <p className="text-sm text-slate-500 mb-1">{deleteTarget.description}</p>
-            <p className={clsx("text-lg font-bold mb-5", deleteTarget.type === "income" ? "text-emerald-600" : "text-red-500")}>
+            <h3 className="font-bold text-ink mb-1">Excluir lançamento?</h3>
+            <p className="text-sm text-muted mb-1">{deleteTarget.description}</p>
+            <p className={clsx("text-lg font-bold mb-5", deleteTarget.type === "income" ? "text-emerald-ink" : "text-red-500")}>
               {deleteTarget.type === "income" ? "+" : "-"}{fmt(deleteTarget.amount)}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)}
-                className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
               <button onClick={handleDelete}
                 className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 transition">Excluir</button>
             </div>
@@ -866,61 +867,61 @@ export default function FinancasPage() {
       {/* Modal — Importar fatura */}
       {showImport && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-slate-900 mb-1">📑 Importar fatura</h3>
-            <p className="text-xs text-slate-400 mb-4">Envie a fatura do cartão em PDF, imagem ou CSV — cada compra é identificada separadamente e o que já foi registrado não é duplicado.</p>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-ink mb-1">📑 Importar fatura</h3>
+            <p className="text-xs text-subtle mb-4">Envie a fatura do cartão em PDF, imagem ou CSV — cada compra é identificada separadamente e o que já foi registrado não é duplicado.</p>
 
             {importItems.length === 0 ? (
               <div className="space-y-3">
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={e => setImportFile(e.target.files?.[0] ?? null)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-50 file:text-amber-700 file:text-xs file:font-semibold" />
+                  className="w-full text-sm border border-line rounded-xl px-3 py-2.5 outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-soft file:text-amber-ink file:text-xs file:font-semibold" />
                 {importError && <p className="text-xs text-red-500">{importError}</p>}
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={() => setShowImport(false)}
-                    className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                    className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
                   <button type="button" onClick={handleAnalyzeInvoice} disabled={!importFile || importLoading}
-                    className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
+                    className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition disabled:opacity-50">
                     {importLoading ? "Analisando..." : "Analisar fatura"}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-500">
+                <div className="flex items-center justify-between text-xs text-muted">
                   <span>{importMeta.sourceTransactionCount && importMeta.sourceTransactionCount > importItems.length ? `${importMeta.sourceTransactionCount} movimentações lidas · ${importItems.length} compras` : `${importItems.length} compra(s) encontrada(s)`}</span>
                   <span>{importItems.filter(i => i.selected).length} selecionado(s) — {fmt(importItems.filter(i => i.selected).reduce((s, i) => s + i.amount, 0))}</span>
                 </div>
-                {!!importMeta.ignoredTransactionCount && <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">ℹ️ {importMeta.ignoredTransactionCount} pagamento/crédito/estorno foi lido e ignorado corretamente; não vira despesa.</p>}
-                {importMeta.bankName && <p className="text-xs text-amber-700">🏦 Banco/cartão identificado: <strong>{importMeta.bankName}</strong></p>}
-                {importItems[0]?.date && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-2">📅 As compras serão contabilizadas na competência <strong>{fmtMonth(importItems[0].date)}</strong>.{importMeta.dueDate ? <> A fatura vence em <strong>{fmtDate(importMeta.dueDate)}</strong>; sua baixa não cria outra despesa.</> : ""}</p>}
+                {!!importMeta.ignoredTransactionCount && <p className="text-xs text-muted bg-surface-muted rounded-lg p-2">ℹ️ {importMeta.ignoredTransactionCount} pagamento/crédito/estorno foi lido e ignorado corretamente; não vira despesa.</p>}
+                {importMeta.bankName && <p className="text-xs text-amber-ink">🏦 Banco/cartão identificado: <strong>{importMeta.bankName}</strong></p>}
+                {importItems[0]?.date && <p className="text-xs text-blue-ink bg-blue-soft rounded-lg p-2">📅 As compras serão contabilizadas na competência <strong>{fmtMonth(importItems[0].date)}</strong>.{importMeta.dueDate ? <> A fatura vence em <strong>{fmtDate(importMeta.dueDate)}</strong>; sua baixa não cria outra despesa.</> : ""}</p>}
                 {importMeta.probableRepeat
-                  ? <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">📄 Esta parece ser uma fatura atualizada: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} compras já estão registradas. Somente as novas foram selecionadas.</p>
-                  : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">⚠️ Você realmente gastou estes valores duas vezes no mesmo dia? Os possíveis duplicados começam desmarcados; marque apenas os que aconteceram duas vezes.</p>}
-                <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                  ? <p className="text-xs text-amber-ink bg-amber-soft rounded-lg p-2">📄 Esta parece ser uma fatura atualizada: {importMeta.alreadyRegisteredCount ?? 0} de {importItems.length} compras já estão registradas. Somente as novas foram selecionadas.</p>
+                  : importItems.some(item => item.duplicate) && <p className="text-xs text-amber-ink bg-amber-soft rounded-lg p-2">⚠️ Você realmente gastou estes valores duas vezes no mesmo dia? Os possíveis duplicados começam desmarcados; marque apenas os que aconteceram duas vezes.</p>}
+                <div className="border border-line rounded-xl divide-y divide-line max-h-80 overflow-y-auto">
                   {importItems.map((item, idx) => (
-                    <label key={idx} className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-50">
+                    <label key={idx} className="flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer hover:bg-surface-muted">
                       <input type="checkbox" checked={item.selected}
                         onChange={e => setImportItems(prev => prev.map((it, i) => i === idx ? { ...it, selected: e.target.checked } : it))}
                         className="accent-amber-600" />
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 truncate">{item.description}</p>
-                        <p className="text-xs text-slate-400">
+                        <p className="font-medium text-ink truncate">{item.description}</p>
+                        <p className="text-xs text-subtle">
                           {item.purchaseDate && item.purchaseDate !== item.date ? `Data impressa ${fmtDate(item.purchaseDate)} · competência ${fmtDate(item.date)}` : fmtDate(item.date)} · {item.category}
-                          {item.installmentCurrent && item.installmentTotal && <span className="ml-1.5 text-blue-600">· parcela {item.installmentCurrent}/{item.installmentTotal} · restantes {item.installmentsRemaining ?? item.installmentTotal - item.installmentCurrent}</span>}
-                          {item.duplicate && <span className="ml-1.5 text-amber-600">· possível repetição — marque se gastou 2 vezes</span>}
+                          {item.installmentCurrent && item.installmentTotal && <span className="ml-1.5 text-blue-ink">· parcela {item.installmentCurrent}/{item.installmentTotal} · restantes {item.installmentsRemaining ?? item.installmentTotal - item.installmentCurrent}</span>}
+                          {item.duplicate && <span className="ml-1.5 text-amber-ink">· possível repetição — marque se gastou 2 vezes</span>}
                         </p>
                       </div>
-                      <span className="font-semibold text-slate-700 shrink-0">{fmt(item.amount)}</span>
+                      <span className="font-semibold text-ink shrink-0">{fmt(item.amount)}</span>
                     </label>
                   ))}
                 </div>
                 {importError && <p className="text-xs text-red-500">{importError}</p>}
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={() => setShowImport(false)}
-                    className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
+                    className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
                   <button type="button" onClick={handleConfirmImport} disabled={importSaving || importItems.filter(i => i.selected).length === 0}
-                    className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50">
+                    className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition disabled:opacity-50">
                     {importSaving ? "Importando..." : `Importar ${importItems.filter(i => i.selected).length} lançamento(s)`}
                   </button>
                 </div>

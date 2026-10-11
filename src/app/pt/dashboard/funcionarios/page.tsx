@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
@@ -63,38 +64,38 @@ export default function FuncionariosPagePt() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <p className="text-4xl mb-3">🏢</p>
-          <p className="font-semibold text-slate-700">Disponível no Modo Empresa</p>
-          <p className="text-sm text-slate-400 mt-1">Muda para o modo empresa na barra lateral para gerir funcionários.</p>
+          <p className="font-semibold text-ink">Disponível no Modo Empresa</p>
+          <p className="text-sm text-subtle mt-1">Muda para o modo empresa na barra lateral para gerir funcionários.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="z-page">
+      <div className="z-page-heading flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">👥 Funcionários</h1>
-          <p className="text-slate-400 text-sm mt-0.5">🏢 Empresa</p>
+          <PageTitle icon="users">Funcionários</PageTitle>
+          <p className="text-subtle text-sm mt-0.5">🏢 Empresa</p>
         </div>
         <button onClick={() => { setEditing(null); setForm({ name: "", role: "", salary: "", startDate: "", phone: "", email: "", notes: "" }); setShowForm(true); }}
-          className="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-semibold hover:bg-slate-700 transition">
+          className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary-hover transition">
           + Funcionário
         </button>
       </div>
 
       {/* Resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-blue-600 rounded-2xl p-5 text-white shadow-sm">
-          <p className="text-xs text-blue-100 uppercase tracking-wide">Ativos</p>
+        <div className="bg-surface border border-line rounded-2xl p-5 text-ink shadow-sm">
+          <p className="text-xs text-blue-ink uppercase tracking-wide">Ativos</p>
           <p className="text-2xl font-bold mt-1">{employees.filter(e => e.status === "active").length}</p>
         </div>
-        <div className="bg-red-500 rounded-2xl p-5 text-white shadow-sm">
-          <p className="text-xs text-red-100 uppercase tracking-wide">Folha Salarial</p>
+        <div className="bg-surface border border-line rounded-2xl p-5 text-ink shadow-sm">
+          <p className="text-xs text-red-ink uppercase tracking-wide">Folha Salarial</p>
           <p className="text-2xl font-bold mt-1">{fmt(totalPayroll)}</p>
         </div>
-        <div className="bg-slate-800 rounded-2xl p-5 text-white shadow-sm">
-          <p className="text-xs text-slate-300 uppercase tracking-wide">Inativos</p>
+        <div className="bg-surface border border-line rounded-2xl p-5 text-ink shadow-sm">
+          <p className="text-xs text-subtle uppercase tracking-wide">Inativos</p>
           <p className="text-2xl font-bold mt-1">{employees.filter(e => e.status === "inactive").length}</p>
         </div>
       </div>
@@ -104,51 +105,51 @@ export default function FuncionariosPagePt() {
         {(["active","inactive","all"] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={clsx("px-3 py-1.5 rounded-xl text-xs font-semibold transition border",
-              filter === f ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50")}>
+              filter === f ? "bg-slate-800 text-white border-slate-800" : "bg-surface border-line text-muted hover:bg-surface-muted")}>
             {f === "active" ? "Ativos" : f === "inactive" ? "Inativos" : "Todos"}
           </button>
         ))}
       </div>
 
       {/* Lista */}
-      {loading ? <p className="text-slate-400 text-sm">A carregar...</p> :
+      {loading ? <p className="text-subtle text-sm">A carregar...</p> :
         visibleEmployees.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
+          <div className="bg-surface rounded-2xl border border-line p-12 text-center shadow-sm">
             <p className="text-4xl mb-3">👥</p>
-            <p className="font-semibold text-slate-700">Nenhum funcionário registado</p>
+            <p className="font-semibold text-ink">Nenhum funcionário registado</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+          <div className="bg-surface rounded-2xl border border-line shadow-sm overflow-x-auto">
             <table className="w-full min-w-[640px]">
-              <thead className="bg-slate-50 border-b border-slate-100">
+              <thead className="bg-surface-muted border-b border-line">
                 <tr>
                   {["Funcionário", "Cargo", "Salário", "Pagamentos recebidos", "Início", "Estado", ""].map(h => (
-                    <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">{h}</th>
+                    <th key={h} className="text-left text-xs font-semibold text-muted uppercase tracking-wide px-5 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {visibleEmployees.map(emp => (
-                  <tr key={emp.id} className="hover:bg-slate-50 transition">
+                  <tr key={emp.id} className="hover:bg-surface-muted transition">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600 shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-blue-soft flex items-center justify-center text-sm font-bold text-blue-ink shrink-0">
                           {emp.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-medium text-slate-800 text-sm">{emp.name}</p>
-                          {emp.phone && <p className="text-xs text-slate-400">{emp.phone}</p>}
+                          <p className="font-medium text-ink text-sm">{emp.name}</p>
+                          {emp.phone && <p className="text-xs text-subtle">{emp.phone}</p>}
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-sm text-slate-600">{emp.role}</td>
-                    <td className="px-5 py-4 text-sm font-semibold text-slate-800">{fmt(emp.salary)}</td>
-                    <td className="px-5 py-4 text-xs text-slate-500 min-w-[190px]">
+                    <td className="px-5 py-4 text-sm text-muted">{emp.role}</td>
+                    <td className="px-5 py-4 text-sm font-semibold text-ink">{fmt(emp.salary)}</td>
+                    <td className="px-5 py-4 text-xs text-muted min-w-[190px]">
                       {(paymentsByEmployee[emp.id] || []).length === 0 ? "Nenhum pagamento associado" : (
                         <div className="space-y-1">
                           {(paymentsByEmployee[emp.id] || []).slice(0, 3).map(payment => (
                             <p key={payment.id}>
-                              <span className="font-semibold text-slate-700">{fmt(payment.amount)}</span>
+                              <span className="font-semibold text-ink">{fmt(payment.amount)}</span>
                               {" · "}{new Date(payment.date + "T12:00:00").toLocaleDateString("pt-PT")}
                               {payment.status === "pending" ? " · Pendente" : ""}
                             </p>
@@ -156,17 +157,17 @@ export default function FuncionariosPagePt() {
                         </div>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-xs text-slate-400">{new Date(emp.startDate + "T12:00:00").toLocaleDateString("pt-PT")}</td>
+                    <td className="px-5 py-4 text-xs text-subtle">{new Date(emp.startDate + "T12:00:00").toLocaleDateString("pt-PT")}</td>
                     <td className="px-5 py-4">
                       <span className={clsx("text-xs px-2.5 py-1 rounded-full font-medium border",
-                        emp.status === "active" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
+                        emp.status === "active" ? "bg-amber-soft text-amber-ink border-line" : "bg-surface-muted text-muted border-line")}>
                         {emp.status === "active" ? "● Ativo" : "○ Inativo"}
                       </span>
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex gap-2">
-                        <button onClick={() => openEdit(emp)} className="text-xs text-blue-600 hover:underline">Editar</button>
-                        <button onClick={() => toggleStatus(emp)} className="text-xs text-slate-400 hover:underline">
+                        <button onClick={() => openEdit(emp)} className="text-xs text-blue-ink hover:underline">Editar</button>
+                        <button onClick={() => toggleStatus(emp)} className="text-xs text-subtle hover:underline">
                           {emp.status === "active" ? "Desativar" : "Ativar"}
                         </button>
                       </div>
@@ -182,31 +183,31 @@ export default function FuncionariosPagePt() {
       {/* Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-slate-900 mb-4">{editing ? "✏️ Editar Funcionário" : "👤 Novo Funcionário"}</h3>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-ink mb-4">{editing ? "✏️ Editar Funcionário" : "👤 Novo Funcionário"}</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required
-                placeholder="Nome completo" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
-              <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                placeholder="Nome completo" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
+              <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} required className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
                 <option value="">Cargo / Função</option>
                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <input type="number" step="0.01" value={form.salary} onChange={e => setForm(f => ({ ...f, salary: e.target.value }))}
-                placeholder="Salário (€)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Salário (€)" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Data de admissão</label>
+                <label className="text-xs text-muted mb-1 block">Data de admissão</label>
                 <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                  className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               </div>
               <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="Telefone (opcional)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Telefone (opcional)" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="Email (opcional)" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                placeholder="Email (opcional)" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="Observações" rows={2} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none resize-none" />
+                placeholder="Observações" rows={2} className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none resize-none" />
               <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" className="flex-1 bg-slate-800 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-700 transition">
+                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
+                <button type="submit" className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition">
                   {editing ? "Guardar" : "Registar"}
                 </button>
               </div>

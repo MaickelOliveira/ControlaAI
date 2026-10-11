@@ -32,20 +32,23 @@ export default function OpenFinanceAccounts({mode}:{mode:"personal"|"business"})
       setAuthorizations(previous=>({...previous,[id]:result.status==="pending"?result:{authorizationUrl:null}}));await load();
     }catch(e){setError(e instanceof Error?e.message:"Tente novamente.");if(name==="revoke"||name==="remove")await load().catch(()=>{});}finally{setBusy("");}
   }
-  if(!data)return (error||updatesError)?<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error||updatesError}</p>:null;
+  if(!data)return (error||updatesError)?<p role="alert" className="rounded-xl border border-line bg-red-soft p-4 text-sm text-red-ink">{error||updatesError}</p>:null;
   if(data.eligibilityRequired)return <OpenFinanceEligibility key={mode} mode={mode} onEnabled={load}/>;
-  return <section aria-label="Bancos conectados" className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-    <div className="flex flex-wrap items-center justify-between gap-5 border-b border-slate-100 bg-gradient-to-r from-violet-50/80 via-white to-white px-5 py-6 sm:px-7"><div><div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.16em] text-violet-700"><OpenFinanceIcon name="bank" className="h-4 w-4"/>Open Finance · Brasil</div><h2 className="text-2xl font-semibold tracking-tight text-slate-950">Seus bancos, em um só lugar.</h2><p className="mt-2 text-sm text-slate-500">{mode==="personal"?"Contas pessoais (PF)":"Contas da sua empresa (PJ)"} · conexão feita diretamente com o banco</p></div>
-      {data.connectAvailable&&<button onClick={()=>setConnecting(true)} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600"><OpenFinanceIcon name="plus" className="h-4 w-4"/>Conectar banco</button>}</div>
-    <div className="space-y-5 p-5 sm:p-7"><div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span className="flex items-center gap-2"><span className={`h-1.5 w-1.5 rounded-full ${updatesError?"bg-amber-500":"bg-emerald-500"}`}/>{updatesError?"Atualização em nova tentativa":"Atualização automática do painel"}</span><span className="flex items-center gap-1.5"><OpenFinanceIcon name="shield" className="h-3.5 w-3.5"/>Autorização no seu banco</span></div>
-      {!data.connectAvailable&&<p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Novas conexões aguardam a conclusão da configuração.</p>}
-      {(error||updatesError)&&<p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{error||updatesError}</p>}
-      {connecting&&<OpenFinanceConnect mode={mode} contactEmail={data.contactEmail} onClose={()=>{setConnecting(false);void load();}}/>}
-      <OpenFinanceResources data={data} mode={mode} busy={!!busy} onDisconnect={id=>void action(id,"revoke")}/>
-      <div className="border-t border-slate-100 pt-5"><h3 className="text-sm font-semibold text-slate-900">Conexões e permissões</h3><p className="mt-1 text-xs leading-5 text-slate-500">A autorização feita no celular aparece aqui automaticamente. Você pode consultar ou cancelar o compartilhamento quando quiser.</p>
-        {data.connections.filter(c=>!c.archived_at).map(c=><OpenFinanceConnection key={c.id} connection={c} busy={!!busy} connectAvailable={!!data.connectAvailable} onAction={(id,name)=>void action(id,name)} authorization={authorizations[c.id]}/>)}
-        {data.connections.some(c=>c.archived_at)&&<details className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Histórico de conexões · {data.connections.filter(c=>c.archived_at).length} removida(s)</summary><p className="mt-2 text-xs leading-5 text-slate-500">Autorizações e tentativas removidas da lista. Você pode consultar os detalhes ou restaurar a exibição.</p>{data.connections.filter(c=>c.archived_at).map(c=><OpenFinanceConnection key={c.id} connection={c} busy={!!busy} connectAvailable={false} onAction={(id,name)=>void action(id,name)}/>)}</details>}
-      </div><p className="text-[11px] leading-5 text-slate-500">Dados recebidos do banco. Em Finanças, contas, cartões e seus lançamentos aparecem no mesmo extrato, com a origem identificada.</p>
-    </div>
+  const current = data.connections.filter(c => !c.archived_at);
+  const pending = current.filter(c => c.status !== "active");
+  const active = current.filter(c => c.status === "active");
+  const archived = data.connections.filter(c => c.archived_at);
+  const renderConnection = (c: BankOverview["connections"][number]) => <OpenFinanceConnection key={c.id} connection={c} busy={!!busy} connectAvailable={!!data.connectAvailable && !c.archived_at} onAction={(id,name)=>void action(id,name)} authorization={authorizations[c.id]}/>;
+  return <section aria-label="Bancos conectados" className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Bancos conectados</h2><p className="mt-1 flex items-center gap-2 text-xs text-muted"><span className={`h-1.5 w-1.5 rounded-full ${updatesError?"bg-amber-500":"bg-emerald-500"}`}/>{updatesError?"Atualização em nova tentativa":"Atualização automática"} · {mode==="personal"?"PF":"PJ"}</p></div>
+      {data.connectAvailable&&<button onClick={()=>setConnecting(true)} className="z-primary"><OpenFinanceIcon name="plus" className="h-4 w-4"/>Conectar banco</button>}</div>
+    {!data.connectAvailable&&<p role="status" className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink">Novas conexões aguardam a conclusão da configuração.</p>}
+    {(error||updatesError)&&<p role="alert" className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink">{error||updatesError}</p>}
+    {connecting&&<OpenFinanceConnect mode={mode} contactEmail={data.contactEmail} onClose={()=>{setConnecting(false);void load();}}/>}
+    <OpenFinanceResources data={data} mode={mode} busy={!!busy} onDisconnect={id=>void action(id,"revoke")}/>
+    {pending.length>0&&<section className="z-card"><h3 className="text-sm font-semibold">Conexões em andamento e tentativas</h3><p className="mt-1 text-xs text-muted">Continue a autorização ou remova uma tentativa que não concluiu.</p>{pending.map(renderConnection)}</section>}
+    {(active.length>0||archived.length>0)&&<details className="z-finance-details"><summary>Permissões e histórico de conexões <span className="text-xs font-normal text-muted">{active.length} ativa(s)</span></summary><div className="mt-3 rounded-2xl border border-line bg-surface p-4"><p className="text-xs leading-5 text-muted">Consulte as autorizações e o histórico. Desconectar interrompe o compartilhamento e preserva os dados recebidos.</p>{active.map(renderConnection)}
+      {archived.length>0&&<details className="mt-4 rounded-xl border border-line bg-surface-muted p-4"><summary className="cursor-pointer text-xs font-semibold">Conexões removidas · {archived.length}</summary>{archived.map(renderConnection)}</details>}
+    </div></details>}
   </section>;
 }

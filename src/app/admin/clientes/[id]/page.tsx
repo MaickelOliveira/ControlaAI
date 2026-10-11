@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -38,14 +39,14 @@ export default function ClienteDetailPage() {
     load();
   }
 
-  if (!cliente) return <div className="text-slate-400 p-4">Carregando...</div>;
+  if (!cliente) return <div className="text-subtle p-4">Carregando...</div>;
 
   const trialDays = Math.max(0, Math.ceil((new Date(cliente.trialEndsAt).getTime() - now) / 86400000));
 
   return (
     <div className="space-y-5 max-w-3xl">
       <div className="flex items-center gap-3">
-        <Link href="/admin/clientes" className="text-slate-400 hover:text-slate-900 transition">← Voltar</Link>
+        <Link href="/admin/clientes" className="text-subtle hover:text-ink transition">← Voltar</Link>
       </div>
 
       <div className="flex items-center gap-4">
@@ -53,8 +54,8 @@ export default function ClienteDetailPage() {
           {cliente.name.charAt(0)}
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">{cliente.name}</h1>
-          <p className="text-slate-400 text-sm">{cliente.email} · {cliente.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</p>
+          <PageTitle icon="client">{cliente.name}</PageTitle>
+          <p className="text-subtle text-sm">{cliente.email} · {cliente.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</p>
         </div>
         <div className="ml-auto flex gap-2">
           {cliente.activeToday && <span className="text-xs bg-amber-900/30 text-amber-400 border border-amber-800 px-2 py-1 rounded-full">● Ativo hoje</span>}
@@ -75,15 +76,15 @@ export default function ClienteDetailPage() {
           { label: "WhatsApp", value: cliente.wppPhone || "Não cadastrado", icon: "📱" },
           { label: "Modo Ativo", value: cliente.activeMode === "business" ? "🏢 Empresa" : "👤 Pessoal", icon: "⇄" },
         ].map(k => (
-          <div key={k.label} className="bg-white border border-slate-200 rounded-2xl p-4">
-            <p className="text-slate-400 text-xs">{k.label}</p>
-            <p className="text-slate-900 font-semibold text-sm mt-1 truncate">{k.value}</p>
+          <div key={k.label} className="bg-surface border border-line rounded-2xl p-4">
+            <p className="text-subtle text-xs">{k.label}</p>
+            <p className="text-ink font-semibold text-sm mt-1 truncate">{k.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-4">Detalhes da Conta</h2>
+      <div className="bg-surface border border-line rounded-2xl p-5">
+        <h2 className="font-semibold text-ink mb-4">Detalhes da Conta</h2>
         <div className="space-y-2 text-sm">
           {[
             { label: "Telefone de cadastro", value: cliente.phone },
@@ -93,34 +94,34 @@ export default function ClienteDetailPage() {
             { label: "Última atividade", value: new Date(cliente.lastActivity).toLocaleDateString("pt-BR") },
             { label: "Trial expira em", value: new Date(cliente.trialEndsAt).toLocaleDateString("pt-BR") },
           ].map(r => (
-            <div key={r.label} className="flex justify-between py-2 border-b border-slate-200 last:border-0">
-              <span className="text-slate-400">{r.label}</span>
+            <div key={r.label} className="flex justify-between py-2 border-b border-line last:border-0">
+              <span className="text-subtle">{r.label}</span>
               <span className="text-slate-200">{r.value}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-1">Valor negociado</h2>
-        <p className="text-slate-400 text-xs mb-4">
+      <div className="bg-surface border border-line rounded-2xl p-5">
+        <h2 className="font-semibold text-ink mb-1">Valor negociado</h2>
+        <p className="text-subtle text-xs mb-4">
           Deixe em branco pra usar o preço padrão do plano ({cliente.plan === "business" ? "Empresa" : "Pessoal"}), definido em{" "}
-          <Link href="/admin/faturamento" className="text-amber-600 hover:underline">Faturamento</Link>.
+          <Link href="/admin/faturamento" className="text-amber-ink hover:underline">Faturamento</Link>.
         </p>
         <div className="flex items-end gap-3">
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">R$/mês</label>
+            <label className="text-xs text-muted mb-1 block">R$/mês</label>
             <input type="number" step="0.01" min="0" value={priceInput} onChange={e => setPriceInput(e.target.value)}
               placeholder="Preço padrão do plano"
-              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none w-48" />
+              className="border border-line rounded-xl px-3 py-2 text-sm outline-none w-48" />
           </div>
           <button onClick={savePriceOverride} disabled={savingPrice}
-            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition disabled:opacity-50">
+            className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary transition disabled:opacity-50">
             {savingPrice ? "Salvando..." : "Salvar"}
           </button>
         </div>
         {cliente.priceOverride !== undefined && (
-          <p className="text-xs text-purple-600 mt-2">🤝 Atualmente pagando {fmt(cliente.priceOverride)}/mês (negociado)</p>
+          <p className="text-xs text-purple-ink mt-2">🤝 Atualmente pagando {fmt(cliente.priceOverride)}/mês (negociado)</p>
         )}
       </div>
     </div>

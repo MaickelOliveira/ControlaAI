@@ -1,4 +1,6 @@
 "use client";
+import ThemeToggle from "@/components/ThemeToggle";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
 import PasswordField from "@/components/pt/PasswordField";
 import GoogleCalendarIntegration from "@/components/GoogleCalendarIntegration";
@@ -121,32 +123,33 @@ export default function ClienteConfigPagePt() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="z-page">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">⚙️ Configurações</h1>
-        <p className="text-slate-400 text-sm mt-0.5">Configura o teu acesso ao bot do WhatsApp e gere a tua conta</p>
+        <PageTitle icon="settings">Configurações</PageTitle>
+        <p className="text-subtle text-sm mt-0.5">Configura o teu acesso ao bot do WhatsApp e gere a tua conta</p>
       </div>
 
       {/* Linha 1: WhatsApp + Conta */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <section className="z-card flex flex-wrap items-center justify-between gap-5"><div><h2 className="font-semibold">Aparência</h2><p className="mt-1 text-xs text-muted">Escolha como quer ver a Zelo. Sua preferência fica salva neste navegador.</p></div><ThemeToggle/></section>
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* WhatsApp — 2/3 */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        <div className="lg:col-span-2 bg-surface rounded-2xl border border-line shadow-sm p-6">
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-            <h2 className="font-semibold text-slate-800 flex items-center gap-2 text-base">
+            <h2 className="font-semibold text-ink flex items-center gap-2 text-base">
               <span className="text-xl">📱</span> Vincular WhatsApp ao Bot
             </h2>
             {botConnected !== null && (
               <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                botConnected ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
+                botConnected ? "bg-emerald-soft text-emerald-ink" : "bg-red-soft text-red-ink"
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${botConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
                 {botConnected ? "Bot ligado" : "Bot desligado"}
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-400 mb-5">
+          <p className="text-sm text-subtle mb-5">
             Vincula o teu número para usares o assistente de IA pelo WhatsApp. O sistema identifica-te automaticamente.
           </p>
 
@@ -154,33 +157,33 @@ export default function ClienteConfigPagePt() {
           {user && user.wppPhones.length > 0 ? (
             <div className="space-y-2 mb-4">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-slate-600">Números vinculados</p>
-                <span className="text-xs font-semibold text-emerald-600">{user.wppPhones.length} vinculado(s) · ilimitados</span>
+                <p className="text-xs font-semibold text-muted">Números vinculados</p>
+                <span className="text-xs font-semibold text-emerald-ink">{user.wppPhones.length} vinculado(s) · ilimitados</span>
               </div>
-              <p className="text-[11px] text-slate-400 -mt-1 mb-1">
+              <p className="text-[11px] text-subtle -mt-1 mb-1">
                 Dá um nome, relação (ex: esposa, filho) e o modo que cada pessoa pode aceder — o bot já sabe quem é quem e limita o que cada uma vê.
               </p>
               {user.wppPhones.map(phone => (
-                <div key={phone} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <div key={phone} className="bg-amber-soft border border-line rounded-xl p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600 text-sm shrink-0">✓</div>
+                      <div className="w-7 h-7 rounded-lg bg-amber-soft flex items-center justify-center text-amber-ink text-sm shrink-0">✓</div>
                       <div className="min-w-0">
-                        <p className="text-sm font-mono text-amber-700">+{phone}</p>
+                        <p className="text-sm font-mono text-amber-ink">+{phone}</p>
                         {editingPhone !== phone && (user.wppPhoneNames[phone] || user.wppPhoneRelations[phone]) && (
-                          <p className="text-xs text-amber-600 font-semibold truncate">
+                          <p className="text-xs text-amber-ink font-semibold truncate">
                             {user.wppPhoneNames[phone] || "Sem nome"}{user.wppPhoneRelations[phone] ? ` · ${user.wppPhoneRelations[phone]}` : ""}
                           </p>
                         )}
                         {editingPhone !== phone && (
-                          <p className="text-[10px] text-slate-500 mt-0.5">{ACCESS_LABEL[user.wppPhoneAccess[phone] || "both"]}</p>
+                          <p className="text-[10px] text-muted mt-0.5">{ACCESS_LABEL[user.wppPhoneAccess[phone] || "both"]}</p>
                         )}
                       </div>
                     </div>
                     <button
                       onClick={() => unlink(phone)}
                       disabled={unlinkingPhone === phone}
-                      className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-2.5 py-1 transition disabled:opacity-50 shrink-0">
+                      className="text-xs border border-line text-red-500 hover:bg-red-soft rounded-lg px-2.5 py-1 transition disabled:opacity-50 shrink-0">
                       {unlinkingPhone === phone ? "..." : "Desvincular"}
                     </button>
                   </div>
@@ -202,25 +205,25 @@ export default function ClienteConfigPagePt() {
                       <select
                         value={editForm.access}
                         onChange={e => setEditForm(f => ({ ...f, access: e.target.value as EditForm["access"] }))}
-                        className="w-full text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 outline-none bg-white">
+                        className="w-full text-xs border border-amber-300 rounded-lg px-2.5 py-1.5 outline-none bg-surface">
                         <option value="personal">👤 Só pessoal</option>
                         <option value="business">🏢 Só empresarial</option>
                         <option value="both">🔓 Os dois modos</option>
                       </select>
                       <div className="flex items-center gap-2">
                         <button onClick={() => saveEdit(phone)} disabled={savingName || !editForm.name.trim()}
-                          className="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-2.5 py-1.5 transition disabled:opacity-50">
+                          className="text-xs bg-primary hover:bg-primary-hover text-on-primary rounded-lg px-2.5 py-1.5 transition disabled:opacity-50">
                           {savingName ? "..." : "Guardar"}
                         </button>
                         <button onClick={() => setEditingPhone(null)}
-                          className="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1.5 transition">
+                          className="text-xs text-subtle hover:text-muted px-1.5 py-1.5 transition">
                           Cancelar
                         </button>
                       </div>
                     </div>
                   ) : (
                     <button onClick={() => startEdit(phone)}
-                      className="text-[11px] text-amber-700 hover:underline mt-1.5">
+                      className="text-[11px] text-amber-ink hover:underline mt-1.5">
                       {user.wppPhoneNames[phone] ? "✏️ Editar" : "+ Adicionar nome, relação e acesso"}
                     </button>
                   )}
@@ -228,25 +231,25 @@ export default function ClienteConfigPagePt() {
               ))}
             </div>
           ) : (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 text-lg shrink-0">⚠</div>
+            <div className="bg-amber-soft border border-line rounded-xl p-4 mb-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-soft flex items-center justify-center text-amber-ink text-lg shrink-0">⚠</div>
               <div>
-                <p className="text-sm font-semibold text-amber-700">WhatsApp não vinculado</p>
-                <p className="text-xs text-amber-600 mt-0.5">Vincula o teu número para começares a usar o bot.</p>
+                <p className="text-sm font-semibold text-amber-ink">WhatsApp não vinculado</p>
+                <p className="text-xs text-amber-ink mt-0.5">Vincula o teu número para começares a usar o bot.</p>
               </div>
             </div>
           )}
 
           {/* Erro de limite */}
           {linkError && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 text-xs text-red-600">{linkError}</div>
+            <div className="bg-red-soft border border-line rounded-xl p-3 mb-3 text-xs text-red-ink">{linkError}</div>
           )}
 
           {!code ? (
             <button
               onClick={generateCode}
               disabled={linking || (user ? !unlimitedPhones && user.wppPhones.length >= user.maxWppPhones : false)}
-              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
+              className="w-full bg-primary hover:bg-primary-hover text-on-primary font-semibold rounded-xl py-3 text-sm transition disabled:opacity-50 flex items-center justify-center gap-2">
               {linking ? (
                 <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> A gerar...</>
               ) : user && !unlimitedPhones && user.wppPhones.length >= user.maxWppPhones ? (
@@ -259,20 +262,20 @@ export default function ClienteConfigPagePt() {
             <div className="space-y-4">
               {/* Código + copiar */}
               <div className="bg-slate-900 rounded-2xl p-5 text-center">
-                <p className="text-xs text-slate-400 mb-3 uppercase tracking-widest font-medium">O teu código de vinculação</p>
+                <p className="text-xs text-subtle mb-3 uppercase tracking-widest font-medium">O teu código de vinculação</p>
                 <p className="text-5xl font-bold tracking-[0.25em] text-white font-mono mb-3">{code}</p>
                 <button
                   onClick={() => { navigator.clipboard.writeText(code ?? ""); }}
                   className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg px-4 py-1.5 transition font-medium">
                   📋 Copiar código
                 </button>
-                <p className="text-xs text-slate-500 mt-3">⏱ Válido por 10 minutos</p>
+                <p className="text-xs text-muted mt-3">⏱ Válido por 10 minutos</p>
               </div>
 
               {/* Instrução */}
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <p className="text-sm font-semibold text-amber-800 mb-2">Como vincular:</p>
-                <ol className="space-y-1.5 text-xs text-amber-700">
+              <div className="bg-amber-soft border border-line rounded-xl p-4">
+                <p className="text-sm font-semibold text-amber-ink mb-2">Como vincular:</p>
+                <ol className="space-y-1.5 text-xs text-amber-ink">
                   <li className="flex gap-2"><span className="font-bold shrink-0">1.</span> Clica no botão verde abaixo para abrir o WhatsApp</li>
                   <li className="flex gap-2"><span className="font-bold shrink-0">2.</span> O código <strong className="font-mono">{code}</strong> já estará escrito — só tens de clicar em enviar</li>
                   <li className="flex gap-2"><span className="font-bold shrink-0">3.</span> O bot confirma e já podes usar!</li>
@@ -294,18 +297,18 @@ export default function ClienteConfigPagePt() {
               </a>
 
               {!botNumber && (
-                <p className="text-center text-xs text-slate-500">
+                <p className="text-center text-xs text-muted">
                   Procura a conversa com o bot, cola o código <strong className="font-mono">{code}</strong> e envia.
                 </p>
               )}
 
               <div className="flex gap-2">
                 <button onClick={refresh}
-                  className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl py-2.5 text-sm transition">
+                  className="flex-1 border border-line text-muted hover:bg-surface-muted rounded-xl py-2.5 text-sm transition">
                   ✓ Já enviei, verificar
                 </button>
                 <button onClick={() => setCode(null)}
-                  className="text-slate-400 hover:text-slate-600 rounded-xl px-4 py-2.5 text-sm transition">
+                  className="text-subtle hover:text-muted rounded-xl px-4 py-2.5 text-sm transition">
                   Cancelar
                 </button>
               </div>
@@ -315,8 +318,8 @@ export default function ClienteConfigPagePt() {
 
         {/* Sua Conta — 1/3 */}
         {user && (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col">
-            <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2 text-base">
+          <div className="bg-surface rounded-2xl border border-line shadow-sm p-6 flex flex-col">
+            <h2 className="font-semibold text-ink mb-5 flex items-center gap-2 text-base">
               <span>👤</span> A Tua Conta
             </h2>
 
@@ -325,21 +328,21 @@ export default function ClienteConfigPagePt() {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white text-2xl font-bold shadow-sm mb-3">
                 {user.name.charAt(0).toUpperCase()}
               </div>
-              <p className="font-semibold text-slate-800">{user.name}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{user.email}</p>
+              <p className="font-semibold text-ink">{user.name}</p>
+              <p className="text-xs text-subtle mt-0.5">{user.email}</p>
             </div>
 
-            <div className="space-y-0 border border-slate-100 rounded-xl overflow-hidden flex-1">
-              <div className="flex justify-between items-center px-4 py-3 bg-slate-50 border-b border-slate-100">
-                <span className="text-xs text-slate-500">Plano</span>
-                <span className="text-xs font-semibold text-slate-800">{user.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</span>
+            <div className="space-y-0 border border-line rounded-xl overflow-hidden flex-1">
+              <div className="flex justify-between items-center px-4 py-3 bg-surface-muted border-b border-line">
+                <span className="text-xs text-muted">Plano</span>
+                <span className="text-xs font-semibold text-ink">{user.plan === "business" ? "🏢 Empresarial" : "👤 Pessoal"}</span>
               </div>
               <div className="flex justify-between items-center px-4 py-3">
-                <span className="text-xs text-slate-500">WhatsApp</span>
-                <span className="text-xs font-semibold text-slate-800">
+                <span className="text-xs text-muted">WhatsApp</span>
+                <span className="text-xs font-semibold text-ink">
                   {user.wppPhones.length > 0
-                    ? <span className="text-amber-600">✓ {user.wppPhones.length} número{user.wppPhones.length > 1 ? "s" : ""} · ilimitados</span>
-                    : <span className="text-amber-600">⚠ Não vinculado</span>}
+                    ? <span className="text-amber-ink">✓ {user.wppPhones.length} número{user.wppPhones.length > 1 ? "s" : ""} · ilimitados</span>
+                    : <span className="text-amber-ink">⚠ Não vinculado</span>}
                 </span>
               </div>
             </div>
@@ -348,47 +351,47 @@ export default function ClienteConfigPagePt() {
       </div>
 
       {/* Linha 2: Comandos do Bot */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
+      <div className="bg-surface rounded-2xl border border-line shadow-sm p-6">
+        <h2 className="font-semibold text-ink mb-1 flex items-center gap-2 text-base">
           <span>💬</span> Comandos do Bot
         </h2>
-        <p className="text-xs text-slate-400 mb-5">Envia estas mensagens para o WhatsApp do bot para usares cada função</p>
+        <p className="text-xs text-subtle mb-5">Envia estas mensagens para o WhatsApp do bot para usares cada função</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {commands.map(item => (
-            <div key={item.title} className="flex items-start gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+            <div key={item.title} className="flex items-start gap-3 p-3.5 bg-surface-muted rounded-xl border border-line hover:border-line transition">
               <span className="text-xl shrink-0 mt-0.5">{item.icon}</span>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-700">{item.title}</p>
-                <p className="text-[11px] text-slate-400 font-mono mt-0.5 break-words">{item.ex}</p>
+                <p className="text-xs font-semibold text-ink">{item.title}</p>
+                <p className="text-[11px] text-subtle font-mono mt-0.5 break-words">{item.ex}</p>
               </div>
             </div>
           ))}
         </div>
       </div>
       {/* Integrações */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
+      <div className="bg-surface rounded-2xl border border-line shadow-sm p-6">
+        <h2 className="font-semibold text-ink mb-1 flex items-center gap-2 text-base">
           <span>🤝</span> Integrações
         </h2>
-        <p className="text-xs text-slate-400 mb-5">Conecta serviços externos para ampliar as funcionalidades do bot</p>
+        <p className="text-xs text-subtle mb-5">Conecta serviços externos para ampliar as funcionalidades do bot</p>
 
         <GoogleCalendarIntegration locale="pt-PT" />
       </div>
 
       {/* Alterar senha */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-base">
+      <div className="bg-surface rounded-2xl border border-line shadow-sm p-6">
+        <h2 className="font-semibold text-ink mb-1 flex items-center gap-2 text-base">
           <span>🔑</span> Alterar Senha
         </h2>
-        <p className="text-xs text-slate-400 mb-5">Mantém a tua conta segura com uma senha forte</p>
+        <p className="text-xs text-subtle mb-5">Mantém a tua conta segura com uma senha forte</p>
         <form onSubmit={changePassword} className="max-w-sm space-y-3">
-          <PasswordField value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} required autoComplete="current-password" placeholder="Senha atual" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
-          <PasswordField minLength={10} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required autoComplete="new-password" placeholder="Nova senha (mín. 10 caracteres)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
-          <PasswordField value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required autoComplete="new-password" placeholder="Confirmar nova senha" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <PasswordField value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} required autoComplete="current-password" placeholder="Senha atual" className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <PasswordField minLength={10} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required autoComplete="new-password" placeholder="Nova senha (mín. 10 caracteres)" className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
+          <PasswordField value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required autoComplete="new-password" placeholder="Confirmar nova senha" className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 transition" />
           {pwMsg && (
-            <p className={`text-xs px-3 py-2 rounded-lg ${pwMsg.ok ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-600"}`}>{pwMsg.text}</p>
+            <p className={`text-xs px-3 py-2 rounded-lg ${pwMsg.ok ? "bg-amber-soft text-amber-ink" : "bg-red-soft text-red-ink"}`}>{pwMsg.text}</p>
           )}
-          <button type="submit" disabled={pwLoading} className="bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl px-5 py-2.5 text-sm transition disabled:opacity-50">
+          <button type="submit" disabled={pwLoading} className="bg-primary hover:bg-primary-hover text-on-primary font-semibold rounded-xl px-5 py-2.5 text-sm transition disabled:opacity-50">
             {pwLoading ? "A guardar..." : "Alterar senha"}
           </button>
         </form>
