@@ -74,9 +74,9 @@ export function replyBalance(personal: { income: number; expense: number; balanc
 }
 
 export function replyPersonNotFound(name: string, locale?: string): string {
-  if (isEs(locale)) return `No encontré a nadie llamado *${name}* entre los números vinculados a tu cuenta.\n\nPara que pueda identificar quién registró cada gasto, cada persona necesita vincular su propio WhatsApp en *Configuración* y decirme su nombre cuando yo pregunte.`;
-  if (isPtPt(locale)) return `Não encontrei ninguém chamado *${name}* entre os números associados à tua conta.\n\nPara eu identificar quem registou cada gasto, cada pessoa precisa de associar o próprio WhatsApp em *Configurações* e dizer-me o nome quando eu perguntar.`;
-  return `Não encontrei ninguém chamado *${name}* entre os números vinculados à sua conta.\n\nPara eu identificar quem registrou cada gasto, cada pessoa precisa vincular o próprio WhatsApp em *Configurações* e me dizer o nome quando eu perguntar.`;
+  if (isEs(locale)) return `No encontré a nadie llamado *${name}* entre los números vinculados a tu cuenta.\n\nPara que pueda identificar quién registró cada gasto, cada persona necesita vincular su propio WhatsApp en *Configuración* e identificarse con su propio nombre; el titular usa el nombre de la plataforma.`;
+  if (isPtPt(locale)) return `Não encontrei ninguém chamado *${name}* entre os números associados à tua conta.\n\nPara eu identificar quem registou cada gasto, cada pessoa precisa de associar o próprio WhatsApp em *Configurações* e identificar-se com o próprio nome; o titular usa o nome da plataforma.`;
+  return `Não encontrei ninguém chamado *${name}* entre os números vinculados à sua conta.\n\nPara eu identificar quem registrou cada gasto, cada pessoa precisa vincular o próprio WhatsApp em *Configurações* e se identificar com o próprio nome; o titular usa o nome da plataforma.`;
 }
 
 export function replyWppNameSaved(name: string, locale?: string): string {
