@@ -23,16 +23,21 @@ export function startOpenFinanceWorker():()=>void {
   let stopped=false,timer:ReturnType<typeof setTimeout>|undefined,mode:"personal"|"business"="personal";
   let nextSchedulesCheck=0;
   let nextRetirementCheck=0;
+  const nextSyncCheck={personal:0,business:0},failures={personal:0,business:0};
+  const nextErrorLog:Record<string,number>={};
+  function reportFailure(key:string,message:string){
+    if(Date.now()>=(nextErrorLog[key]??0)){console.error(message);nextErrorLog[key]=Date.now()+300_000;}
+  }
   async function tick(){
     if(stopped)return;
     if(isBankRetirementEnabled()&&Date.now()>=nextRetirementCheck){
       try {
         const result=await runBankRetirement();
-        nextRetirementCheck=Date.now()+(result==="idle"?30000:10000);
-        if(result==="failed")console.error("[open-finance] Cancelamento bancário aguardando nova tentativa");
+        nextRetirementCheck=Date.now()+(result==="idle"||result==="failed"?30000:10000);
+        if(result==="failed")reportFailure("retirement","[open-finance] Cancelamento bancário aguardando nova tentativa");
       } catch {
         nextRetirementCheck=Date.now()+30000;
-        console.error("[open-finance] Cancelamento bancário temporariamente indisponível");
+        reportFailure("retirement","[open-finance] Cancelamento bancário temporariamente indisponível");
       }
     }
     try{if(isPublicOpenFinanceEnabled()&&process.env.OPEN_FINANCE_SYNC_ENABLED==="true"){
@@ -41,9 +46,17 @@ export function startOpenFinanceWorker():()=>void {
         const {data,error}=await getSupabase().rpc("zelo_of_prepare_schedules",{p_owner_email:ownerEmail});
         nextSchedulesCheck=Date.now()+(error?60000:Number(data)>0?30000:900000);
       }
-      await runPublicBankSync(mode);
+      if(Date.now()>=nextSyncCheck[mode]){
+        const result=await runPublicBankSync(mode);
+        failures[mode]=result==="failed"?failures[mode]+1:0;
+        nextSyncCheck[mode]=Date.now()+(result==="idle"?30000:result==="failed"?Math.min(300000,30000*2**Math.min(failures[mode]-1,4)):2000);
+      }
     }}
-    catch{console.error("[open-finance] Sincronização temporariamente indisponível");}
+    catch{
+      failures[mode]++;
+      nextSyncCheck[mode]=Date.now()+Math.min(300000,30000*2**Math.min(failures[mode]-1,4));
+      reportFailure(`sync-${mode}`,"[open-finance] Sincronização temporariamente indisponível");
+    }
     mode=mode==="personal"?"business":"personal";
     if(!stopped)timer=setTimeout(()=>void tick(),2000);
   }

@@ -1,6 +1,7 @@
 import "server-only";
 import { polpObject, polpUuid } from "./polp-production";
-export type BankInstitution = { id: string; name: string; type: "PERSONAL" | "BUSINESS" | "BOTH"; status: string; is_outage: boolean; organizationName: string; parentOrganizationName: string };
+import {safeBankLogoUrl} from "./bank-logos";
+export type BankInstitution = { id: string; name: string; logoUrl?:string|null; type: "PERSONAL" | "BUSINESS" | "BOTH"; status: string; is_outage: boolean; organizationName: string; parentOrganizationName: string };
 let cached: { until: number; banks: BankInstitution[] } | undefined;
 function text(value: unknown, max = 250): string { return typeof value === "string" ? value.slice(0, max) : ""; }
 export async function getBankInstitutions(): Promise<BankInstitution[]> {
@@ -17,7 +18,7 @@ export async function getBankInstitutions(): Promise<BankInstitution[]> {
     for (const item of body.data) {
       const bank = polpObject(item);
       if (!["PERSONAL","BUSINESS","BOTH"].includes(String(bank.type))) continue;
-      banks.push({ id: polpUuid(bank.id), name: text(bank.name), type: bank.type as BankInstitution["type"], status: text(bank.status), is_outage: bank.is_outage === true, organizationName: text(bank.organizationName), parentOrganizationName: text(bank.parentOrganizationName) });
+      banks.push({ id: polpUuid(bank.id), name: text(bank.name), logoUrl:safeBankLogoUrl(bank.logo_url), type: bank.type as BankInstitution["type"], status: text(bank.status), is_outage: bank.is_outage === true, organizationName: text(bank.organizationName), parentOrganizationName: text(bank.parentOrganizationName) });
     }
     const next = body.meta ? polpObject(body.meta).next_cursor : null;
     if (!next) { cached = { until: Date.now() + 60_000, banks }; return banks; }
