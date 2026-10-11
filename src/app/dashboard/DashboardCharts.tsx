@@ -9,7 +9,7 @@ type PieEntry = { name: string; value: number };
 type AreaEntry = { label: string; saldo: number };
 type FlowEntry = { label: string; receitas: number; despesas: number };
 
-const PIE_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6"];
+const PIE_COLORS = ["#fc8b7d", "#f2c455", "#62b2ed", "#9b83d7", "#7ec5aa", "#aab1c2", "#dda3bf", "#72bdc1"];
 
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtK(v: number) {
@@ -21,18 +21,18 @@ export function BarChartComponent({ data }: { data: BarEntry[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ComposedChart data={data} barCategoryGap="30%" barGap={4}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--z-chart-grid)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} />
+        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} width={52} />
         <Tooltip
           formatter={(value, name) => [fmt(Number(value ?? 0)), name === "receitas" ? "Receitas" : name === "despesas" ? "Despesas" : "Resultado"]}
           contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
-          cursor={{ fill: "#f8fafc" }}
+          cursor={{ fill: "var(--z-surface-muted)" }}
         />
         <Legend formatter={(v) => v === "receitas" ? "Receitas" : v === "despesas" ? "Despesas" : "Resultado"} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-        <Bar dataKey="receitas" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={36} />
-        <Bar dataKey="despesas" fill="#ef4444" radius={[6, 6, 0, 0]} maxBarSize={36} />
-        <Line type="monotone" dataKey="saldo" stroke="#0f172a" strokeWidth={2.5} dot={{ r: 3, fill: "#0f172a" }} activeDot={{ r: 5 }} />
+        <Bar dataKey="receitas" fill="var(--z-chart-income)" radius={[6, 6, 0, 0]} maxBarSize={36} />
+        <Bar dataKey="despesas" fill="var(--z-chart-expense)" radius={[6, 6, 0, 0]} maxBarSize={36} />
+        <Line type="monotone" dataKey="saldo" stroke="var(--z-chart-result)" strokeWidth={2.5} dot={{ r: 3, fill: "var(--z-chart-result)" }} activeDot={{ r: 5 }} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -42,16 +42,16 @@ export function DailyFlowChartComponent({ data }: { data: FlowEntry[] }) {
   return (
     <ResponsiveContainer width="100%" height={230}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} minTickGap={22} />
-        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--z-chart-grid)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} minTickGap={22} />
+        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} width={52} />
         <Tooltip
           formatter={(value, name) => [fmt(Number(value ?? 0)), name === "receitas" ? "Receitas" : "Despesas"]}
           contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
         />
         <Legend formatter={(v) => v === "receitas" ? "Receitas" : "Despesas"} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-        <Line type="monotone" dataKey="receitas" stroke="#10b981" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-        <Line type="monotone" dataKey="despesas" stroke="#f43f5e" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+        <Line type="monotone" dataKey="receitas" stroke="var(--z-chart-income)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+        <Line type="monotone" dataKey="despesas" stroke="var(--z-chart-expense)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -61,13 +61,13 @@ export function CategoryBarChartComponent({ data }: { data: PieEntry[] }) {
   return (
     <ResponsiveContainer width="100%" height={238}>
       <BarChart data={data.slice(0, 6)} layout="vertical" margin={{ top: 2, right: 12, left: 4, bottom: 2 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-        <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-        <YAxis type="category" dataKey="name" width={92} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--z-chart-grid)" horizontal={false} />
+        <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="name" width={92} tick={{ fontSize: 11, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(value) => [fmt(Number(value ?? 0)), "Despesas"]}
           contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
-          cursor={{ fill: "#f8fafc" }}
+          cursor={{ fill: "var(--z-surface-muted)" }}
         />
         <Bar dataKey="value" fill="#f59e0b" radius={[0, 7, 7, 0]} maxBarSize={22} />
       </BarChart>
@@ -87,9 +87,9 @@ export function AreaChartComponent({ data }: { data: AreaEntry[] }) {
             <stop offset="100%" stopColor={hasNegative ? "#f59e0b" : "#3b82f6"} stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--z-chart-grid)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} />
+        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} width={52} />
         <Tooltip
           formatter={(value) => [fmt(Number(value ?? 0)), "Saldo"]}
           contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
@@ -122,8 +122,8 @@ export function PieChartComponent({ data, totalExpense }: { data: PieEntry[]; to
           return (
             <div key={entry.name} className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-              <span className="text-xs text-slate-600 flex-1 truncate">{entry.name}</span>
-              <span className="text-xs font-semibold text-slate-700">{pct}%</span>
+              <span className="text-xs text-muted flex-1 truncate">{entry.name}</span>
+              <span className="text-xs font-semibold text-ink">{pct}%</span>
             </div>
           );
         })}

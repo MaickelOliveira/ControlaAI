@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -75,37 +76,37 @@ export default function ContasPage() {
     else await load(mode);
   }
 
-  return <div className="space-y-5">
-    <div className="flex items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-slate-900">🏦 {es ? "Cuentas" : "Contas"}</h1><p className="text-sm text-slate-500 mt-1">{es ? "Organiza tus cuentas manuales y conecta bancos de Brasil para consultar saldos, tarjetas y movimientos." : "Organize suas contas manuais e conecte bancos do Brasil para acompanhar saldos, cartões e movimentações."}</p></div>
-      <button onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold">+ {es ? "Nueva cuenta" : "Nova conta"}</button>
+  return <div className="z-page z-accounts-page">
+    <div className="z-page-heading flex items-center justify-between gap-3">
+      <div><PageTitle icon="wallet">{es ? "Cuentas" : "Contas"}</PageTitle><p className="text-sm text-muted mt-1">{es ? "Organiza tus cuentas manuales y conecta bancos de Brasil para consultar saldos, tarjetas y movimientos." : "Saldos, cartões e investimentos dos seus bancos, em uma visão simples."}</p></div>
+      <button onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold">+ {es ? "Nueva cuenta" : "Conta manual"}</button>
     </div>
 
-    <div className="flex gap-2">{(["personal", "business"] as const).map(value => <button key={value} onClick={() => { setMode(value); void load(value); }} className={`px-4 py-2 rounded-xl text-sm font-medium border ${mode === value ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-600"}`}>{value === "personal" ? (es ? "Personal" : "Pessoal") : "Empresa"}</button>)}</div>
     {!es&&<OpenFinanceAccounts key={mode} mode={mode}/>}
-    {error && <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600">{error}</div>}
-    {loading ? <div className="py-16 text-center text-slate-400">{es ? "Cargando..." : "Carregando..."}</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{accounts.map(account => <div key={account.id} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
-      <div className="flex justify-between gap-2"><div><div className="font-semibold text-slate-800">{account.currentInvoice || account.type === "credit_card" ? "💳" : "👛"} {account.name}</div><div className="text-xs text-slate-400 mt-1">{account.currentInvoice || account.type === "credit_card" ? (es ? "Tarjeta/factura" : "Cartão/fatura") : (es ? "Cuenta manual" : "Conta manual")}</div></div>{account.isDefault && <span className="text-xs text-amber-700 bg-amber-100 h-fit px-2 py-1 rounded-full">⭐ {es ? "Predeterminada" : "Padrão"}</span>}</div>
-      {account.currentInvoice && <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3">
+    {error && <div className="rounded-xl bg-red-soft border border-line p-3 text-sm text-red-ink">{error}</div>}
+    <div className="flex items-center justify-between gap-3 border-t border-line pt-6"><div><h2 className="text-base font-semibold">{es ? "Cuentas registradas" : "Contas registradas"}</h2><p className="mt-1 text-xs text-muted">{es ? "Cuentas organizadas por ti para tus movimientos." : "Contas organizadas por você para os seus lançamentos."}</p></div><span className="z-badge">{accounts.length}</span></div>
+    {loading ? <div className="py-16 text-center text-subtle">{es ? "Cargando..." : "Carregando..."}</div> : accounts.length === 0 ? <div className="z-empty">{es ? "Añade una cuenta para organizar tus movimientos." : "Adicione uma conta para organizar seus lançamentos manuais."}</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{accounts.map(account => <div key={account.id} className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
+      <div className="flex justify-between gap-2"><div><div className="font-semibold text-ink">{account.currentInvoice || account.type === "credit_card" ? "💳" : "👛"} {account.name}</div><div className="text-xs text-subtle mt-1">{account.currentInvoice || account.type === "credit_card" ? (es ? "Tarjeta/factura" : "Cartão/fatura") : (es ? "Cuenta manual" : "Conta manual")}</div></div>{account.isDefault && <span className="text-xs text-amber-ink bg-amber-soft h-fit px-2 py-1 rounded-full">⭐ {es ? "Predeterminada" : "Padrão"}</span>}</div>
+      {account.currentInvoice && <div className="mt-4 rounded-xl border border-line bg-blue-soft p-3">
         <div className="flex items-start justify-between gap-3">
-          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">{es ? "Factura pendiente" : "Fatura pendente"}</p><p className="mt-1 text-lg font-bold text-slate-900">{account.currentInvoice.total.toLocaleString(es ? "es-419" : "pt-BR", { style: "currency", currency: "BRL" })}</p></div>
-          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-blue-700">{new Date(account.currentInvoice.dueDate + "T12:00:00").toLocaleDateString(es ? "es-419" : "pt-BR")}</span>
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">{es ? "Factura pendiente" : "Fatura pendente"}</p><p className="mt-1 text-lg font-bold text-ink">{account.currentInvoice.total.toLocaleString(es ? "es-419" : "pt-BR", { style: "currency", currency: "BRL" })}</p></div>
+          <span className="rounded-full bg-surface px-2 py-1 text-[10px] font-semibold text-blue-ink">{new Date(account.currentInvoice.dueDate + "T12:00:00").toLocaleDateString(es ? "es-419" : "pt-BR")}</span>
         </div>
-        <button onClick={() => void post({ action: "pay_invoice", invoiceId: account.currentInvoice!.id })} className="mt-3 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">{es ? "Marcar factura como pagada" : "Marcar fatura como paga"}</button>
-        <p className="mt-2 text-[10px] leading-relaxed text-blue-600">{es ? "La baja no crea otro gasto; las compras ya están contabilizadas." : "A baixa não cria outra despesa; as compras já estão contabilizadas."}</p>
+        <button onClick={() => void post({ action: "pay_invoice", invoiceId: account.currentInvoice!.id })} className="mt-3 w-full rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary hover:bg-primary">{es ? "Marcar factura como pagada" : "Marcar fatura como paga"}</button>
+        <p className="mt-2 text-[10px] leading-relaxed text-blue-ink">{es ? "La baja no crea otro gasto; las compras ya están contabilizadas." : "A baixa não cria outra despesa; as compras já estão contabilizadas."}</p>
       </div>}
       <div className="flex flex-wrap gap-2 mt-4">
-        {!account.isDefault && <button onClick={() => void post({ action: "set_default", id: account.id, mode })} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700">{es ? "Usar como predeterminada" : "Definir como padrão"}</button>}
-        <button onClick={() => { setEditing(account); setName(account.name); setShowForm(true); }} className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700">✏️ {es ? "Editar" : "Editar"}</button>
-        {account.name.toLocaleLowerCase() !== "dinheiro" && <button onClick={() => { if (confirm(es ? `¿Eliminar ${account.name}? Los movimientos anteriores se conservarán.` : `Excluir ${account.name}? Os lançamentos antigos serão preservados.`)) void post({ action: "delete", id: account.id }); }} className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600">🗑️ {es ? "Eliminar" : "Excluir"}</button>}
+        {!account.isDefault && <button onClick={() => void post({ action: "set_default", id: account.id, mode })} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-soft text-indigo-ink">{es ? "Usar como predeterminada" : "Definir como padrão"}</button>}
+        <button onClick={() => { setEditing(account); setName(account.name); setShowForm(true); }} className="text-xs px-3 py-1.5 rounded-lg bg-surface-muted text-ink">✏️ {es ? "Editar" : "Editar"}</button>
+        {account.name.toLocaleLowerCase() !== "dinheiro" && <button onClick={() => { if (confirm(es ? `¿Eliminar ${account.name}? Los movimientos anteriores se conservarán.` : `Excluir ${account.name}? Os lançamentos antigos serão preservados.`)) void post({ action: "delete", id: account.id }); }} className="text-xs px-3 py-1.5 rounded-lg bg-red-soft text-red-ink">🗑️ {es ? "Eliminar" : "Excluir"}</button>}
       </div>
     </div>)}</div>}
 
-    {showForm && <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center p-4"><form onSubmit={submit} className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+    {showForm && <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center p-4"><form onSubmit={submit} className="bg-surface rounded-2xl p-6 w-full max-w-md shadow-xl">
       <h2 className="font-bold text-lg mb-4">{editing ? (es ? "Editar cuenta" : "Editar conta") : (es ? "Nueva cuenta" : "Nova conta")}</h2>
-      <input autoFocus required maxLength={60} value={name} onChange={event => setName(event.target.value)} placeholder={es ? "Ej.: Efectivo, Nubank, Caja" : "Ex.: Dinheiro, Nubank, Caixa"} className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200" />
-      <p className="text-xs text-slate-400 mt-2">{es ? "Conexión con el banco: en implementación, pronto disponible para todos." : "Conexão com o banco: em implementação, em breve disponível para todos."}</p>
-      <div className="flex gap-3 mt-5"><button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm">Cancelar</button><button type="submit" className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold">{es ? "Guardar" : "Salvar"}</button></div>
+      <input autoFocus required maxLength={60} value={name} onChange={event => setName(event.target.value)} placeholder={es ? "Ej.: Efectivo, Nubank, Caja" : "Ex.: Dinheiro, Nubank, Caixa"} className="w-full border border-line rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-200" />
+      <p className="text-xs text-subtle mt-2">{es ? "Esta cuenta organiza tus movimientos manuales." : "Esta conta organiza seus lançamentos manuais. Para importar dados bancários, use Conectar banco."}</p>
+      <div className="flex gap-3 mt-5"><button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-line rounded-xl py-2.5 text-sm">Cancelar</button><button type="submit" className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold">{es ? "Guardar" : "Salvar"}</button></div>
     </form></div>}
   </div>;
 }

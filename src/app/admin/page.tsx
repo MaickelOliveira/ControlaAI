@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
@@ -31,45 +32,45 @@ export default function AdminPage() {
   return (
     <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Visão Geral</h1>
-        <p className="text-slate-400 text-sm mt-0.5">Resumo da plataforma</p>
+        <PageTitle icon="home">Visão Geral</PageTitle>
+        <p className="text-subtle text-sm mt-0.5">Resumo da plataforma</p>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className="bg-white border border-slate-200 rounded-2xl p-4">
+          <div key={k.label} className="bg-surface border border-line rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xl">{k.icon}</span>
             </div>
             <p className={clsx("text-3xl font-bold", k.color)}>{loading ? "—" : k.value}</p>
-            <p className="text-slate-400 text-xs mt-1">{k.label}</p>
+            <p className="text-subtle text-xs mt-1">{k.label}</p>
           </div>
         ))}
       </div>
 
       {/* Clientes recentes */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
+      <div className="bg-surface border border-line rounded-2xl p-5">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-semibold text-slate-900">Clientes Recentes</h2>
+          <h2 className="font-semibold text-ink">Clientes Recentes</h2>
           <Link href="/admin/clientes" className="text-amber-400 text-sm hover:underline">Ver todos →</Link>
         </div>
         {loading ? (
-          <p className="text-slate-400 text-sm">Carregando...</p>
+          <p className="text-subtle text-sm">Carregando...</p>
         ) : recentClients.length === 0 ? (
-          <p className="text-slate-400 text-sm">Nenhum cliente ainda.</p>
+          <p className="text-subtle text-sm">Nenhum cliente ainda.</p>
         ) : (
           <div className="space-y-3">
             {recentClients.map(c => (
               <Link href={`/admin/clientes/${c.id}`} key={c.id}
-                className="flex items-center justify-between p-3 bg-slate-50/80 hover:bg-slate-100 rounded-xl transition group">
+                className="flex items-center justify-between p-3 bg-surface-muted/80 hover:bg-surface-muted rounded-xl transition group">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-xl bg-amber-600/20 flex items-center justify-center text-sm font-bold text-amber-400">
                     {c.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-900">{c.name}</p>
-                    <p className="text-xs text-slate-400">{c.plan === "business" ? "🏢 Empresa" : "👤 Pessoal"} · {c.financesCount} transações</p>
+                    <p className="text-sm font-medium text-ink">{c.name}</p>
+                    <p className="text-xs text-subtle">{c.plan === "business" ? "🏢 Empresa" : "👤 Pessoal"} · {c.financesCount} transações</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">

@@ -126,7 +126,7 @@ export default function SupportWidget() {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm h-[28rem] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm h-[28rem] bg-surface rounded-2xl shadow-2xl border border-line flex flex-col overflow-hidden">
           <div className="bg-[#128C7E] text-white px-4 py-3 flex items-center justify-between shrink-0">
             <div>
               <p className="font-semibold text-sm">Suporte Zelo</p>
@@ -135,9 +135,9 @@ export default function SupportWidget() {
             <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white text-xl leading-none px-1" aria-label="Fechar">×</button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-[#F1F5F9]">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-surface-muted">
             {messages.length === 0 && (
-              <p className="text-center text-xs text-slate-400 mt-6">Manda sua dúvida ou problema que a gente te ajuda por aqui.</p>
+              <p className="text-center text-xs text-subtle mt-6">Manda sua dúvida ou problema que a gente te ajuda por aqui.</p>
             )}
             {messages.map((m, i) => (
               <div key={i} className={clsx("flex", m.sender === "user" ? "justify-end" : "justify-start")}>
@@ -146,8 +146,8 @@ export default function SupportWidget() {
                   m.sender === "user"
                     ? "bg-[#005c4b] text-white rounded-br-sm"
                     : m.sender === "admin"
-                    ? "bg-white text-slate-800 rounded-bl-sm border border-slate-200"
-                    : "bg-amber-50 text-amber-800 border border-amber-200 text-xs italic"
+                    ? "bg-surface text-ink rounded-bl-sm border border-line"
+                    : "bg-amber-soft text-amber-ink border border-line text-xs italic"
                 )}>
                   {m.attachment?.type === "image" && (
                     <a
@@ -168,7 +168,7 @@ export default function SupportWidget() {
                     </a>
                   )}
                   {m.text && <span className={clsx("block", m.attachment && "mt-1.5")}>{m.text}</span>}
-                  <div className={clsx("text-[10px] mt-1", m.sender === "user" ? "text-emerald-100 text-right" : "text-slate-400")}>
+                  <div className={clsx("text-[10px] mt-1", m.sender === "user" ? "text-emerald-100 text-right" : "text-subtle")}>
                     {formatTime(m.ts)}
                   </div>
                 </div>
@@ -177,23 +177,23 @@ export default function SupportWidget() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-2.5 border-t border-slate-200 shrink-0">
+          <div className="p-2.5 border-t border-line shrink-0">
             {imagePreview && (
-              <div className="mb-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+              <div className="mb-2 flex items-center gap-2 rounded-xl border border-line bg-surface-muted p-2">
                 <Image src={imagePreview} alt="Pré-visualização da imagem" width={48} height={48} unoptimized
                   className="h-12 w-12 rounded-lg object-cover" />
-                <p className="min-w-0 flex-1 truncate text-xs text-slate-600">{selectedImage?.name}</p>
+                <p className="min-w-0 flex-1 truncate text-xs text-muted">{selectedImage?.name}</p>
                 <button type="button" onClick={removeSelectedImage} disabled={sending}
-                  className="h-7 w-7 rounded-full text-lg leading-none text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+                  className="h-7 w-7 rounded-full text-lg leading-none text-muted hover:bg-line disabled:opacity-40"
                   aria-label="Remover imagem">×</button>
               </div>
             )}
-            {sendError && <p className="mb-2 text-xs text-red-600" role="alert">{sendError}</p>}
+            {sendError && <p className="mb-2 text-xs text-red-ink" role="alert">{sendError}</p>}
             <div className="flex gap-2">
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
                 onChange={e => selectImage(e.target.files?.[0] ?? null)} />
               <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending}
-                className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-slate-100 text-slate-600 transition hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-40"
+                className="h-10 w-10 shrink-0 rounded-xl border border-line bg-surface-muted text-muted transition hover:border-emerald-500 hover:text-emerald-ink disabled:opacity-40"
                 aria-label="Anexar uma foto" title="Anexar foto (até 5 MB)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="mx-auto h-5 w-5" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a3.75 3.75 0 0 0-5.303-5.303L6.11 9.53a5.25 5.25 0 0 0 7.425 7.425l7.5-7.5M8.25 12.75l7.5-7.5" />
@@ -202,7 +202,7 @@ export default function SupportWidget() {
               <input value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                 placeholder={selectedImage ? "Descreva o problema (opcional)..." : "Digite sua mensagem..."}
-                className="min-w-0 flex-1 bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 transition" />
+                className="min-w-0 flex-1 bg-surface-muted border border-line rounded-xl px-3 py-2 text-sm text-ink caret-ink placeholder:text-subtle outline-none focus:border-emerald-500 transition" />
               <button onClick={send} disabled={(!input.trim() && !selectedImage) || sending}
                 className="bg-[#128C7E] hover:bg-[#0e7268] text-white font-semibold rounded-xl px-3.5 text-sm transition disabled:opacity-40 shrink-0">
                 {sending ? "Enviando..." : "Enviar"}

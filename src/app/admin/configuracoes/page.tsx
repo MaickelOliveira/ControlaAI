@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useState } from "react";
 
 export default function AdminConfigPage() {
@@ -31,12 +32,12 @@ export default function AdminConfigPage() {
   return (
     <div className="max-w-lg space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Configurações</h1>
-        <p className="text-slate-400 text-sm">Credenciais de acesso admin</p>
+        <PageTitle icon="settings">Configurações</PageTitle>
+        <p className="text-subtle text-sm">Credenciais de acesso admin</p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-4">🔐 Alterar Senha Admin</h2>
+      <div className="bg-surface border border-line rounded-2xl p-5">
+        <h2 className="font-semibold text-ink mb-4">🔐 Alterar Senha Admin</h2>
         <form onSubmit={saveAdmin} className="space-y-3">
           {[
             { key: "email", label: "Email", type: "email", placeholder: "admin@controlaai.app" },
@@ -45,16 +46,16 @@ export default function AdminConfigPage() {
             { key: "confirmPassword", label: "Confirmar nova senha", type: "password", placeholder: "••••••" },
           ].map(f => (
             <div key={f.key}>
-              <label className="block text-xs text-slate-400 mb-1">{f.label}</label>
+              <label className="block text-xs text-subtle mb-1">{f.label}</label>
               <input type={f.type} value={(form as Record<string,string>)[f.key]}
                 onChange={e => setForm(fr => ({ ...fr, [f.key]: e.target.value }))}
                 required minLength={f.key === "newPassword" || f.key === "confirmPassword" ? 12 : undefined}
                 placeholder={f.placeholder}
-                className="w-full bg-slate-100 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
+                className="w-full bg-surface-muted border border-line text-ink rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
             </div>
           ))}
-          {msg && <p className="text-amber-600 text-sm">{msg}</p>}
-          <button type="submit" disabled={saving} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
+          {msg && <p className="text-amber-ink text-sm">{msg}</p>}
+          <button type="submit" disabled={saving} className="w-full bg-amber-600 hover:bg-amber-500 text-ink font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50">
             {saving ? "Salvando..." : "Salvar"}
           </button>
         </form>

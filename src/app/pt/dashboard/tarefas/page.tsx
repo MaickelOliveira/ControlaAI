@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
@@ -6,15 +7,15 @@ import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 type Task = { id: string; title: string; status: string; priority: string; dueDate?: string; mode: string };
 
 const STATUS_COLS = [
-  { key: "pending", label: "Pendente", icon: "📌", color: "border-orange-200 bg-orange-50/50" },
-  { key: "in_progress", label: "Em curso", icon: "🔄", color: "border-blue-200 bg-blue-50/50" },
-  { key: "completed", label: "Concluída", icon: "✅", color: "border-amber-200 bg-amber-50/50" },
+  { key: "pending", label: "Pendente", icon: "📌", color: "border-line bg-orange-soft/50" },
+  { key: "in_progress", label: "Em curso", icon: "🔄", color: "border-line bg-blue-soft/50" },
+  { key: "completed", label: "Concluída", icon: "✅", color: "border-line bg-amber-soft/50" },
 ] as const;
 
 const PR_COLOR: Record<string, string> = {
-  high: "bg-red-100 text-red-600",
-  medium: "bg-amber-100 text-amber-600",
-  low: "bg-slate-100 text-slate-500",
+  high: "bg-red-soft text-red-ink",
+  medium: "bg-amber-soft text-amber-ink",
+  low: "bg-surface-muted text-muted",
 };
 const PR_ICON: Record<string, string> = { high: "!", medium: "·", low: "·" };
 
@@ -58,14 +59,14 @@ export default function TarefasPagePt() {
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="z-page">
+      <div className="z-page-heading flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">📋 Tarefas</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{modeLabel}</p>
+          <PageTitle icon="task">Tarefas</PageTitle>
+          <p className="text-subtle text-sm mt-0.5">{modeLabel}</p>
         </div>
         <button onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-semibold hover:bg-slate-700 transition">
+          className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary-hover transition">
           + Nova Tarefa
         </button>
       </div>
@@ -75,31 +76,31 @@ export default function TarefasPagePt() {
         {STATUS_COLS.map(col => {
           const colTasks = tasks.filter(t => t.status === col.key);
           return (
-            <div key={col.key} className={clsx("bg-white rounded-2xl border-t-4 shadow-sm p-4", col.color)}>
+            <div key={col.key} className={clsx("bg-surface rounded-2xl border-t-4 shadow-sm p-4", col.color)}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-1.5">
+                <h3 className="font-semibold text-ink text-sm flex items-center gap-1.5">
                   <span>{col.icon}</span>{col.label}
                 </h3>
-                <span className="bg-slate-100 text-slate-500 text-xs rounded-full px-2 py-0.5 font-medium">{colTasks.length}</span>
+                <span className="bg-surface-muted text-muted text-xs rounded-full px-2 py-0.5 font-medium">{colTasks.length}</span>
               </div>
               <div className="space-y-2.5 min-h-16">
-                {loading ? <p className="text-slate-300 text-xs">A carregar...</p> :
-                  colTasks.length === 0 ? <p className="text-slate-300 text-xs text-center py-3">Vazio</p> :
+                {loading ? <p className="text-subtle text-xs">A carregar...</p> :
+                  colTasks.length === 0 ? <p className="text-subtle text-xs text-center py-3">Vazio</p> :
                   colTasks.map(t => (
-                    <div key={t.id} className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm">
+                    <div key={t.id} className="bg-surface border border-line rounded-xl p-3 shadow-sm">
                       <div className="flex items-start gap-2 mb-2">
                         <div className={clsx("w-5 h-5 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 mt-0.5", PR_COLOR[t.priority])}>
                           {PR_ICON[t.priority]}
                         </div>
-                        <p className="text-sm font-medium text-slate-800 leading-tight">{t.title}</p>
+                        <p className="text-sm font-medium text-ink leading-tight">{t.title}</p>
                       </div>
                       {t.dueDate && (
-                        <p className="text-xs text-slate-400 mb-2">📅 {new Date(t.dueDate + "T12:00:00").toLocaleDateString("pt-PT")}</p>
+                        <p className="text-xs text-subtle mb-2">📅 {new Date(t.dueDate + "T12:00:00").toLocaleDateString("pt-PT")}</p>
                       )}
                       <div className="flex gap-1 flex-wrap">
                         {STATUS_COLS.filter(c => c.key !== col.key).map(other => (
                           <button key={other.key} onClick={() => updateStatus(t.id, other.key)}
-                            className="text-xs px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100 transition">
+                            className="text-xs px-2 py-1 bg-surface-muted border border-line rounded-lg text-muted hover:bg-surface-muted transition">
                             → {other.label}
                           </button>
                         ))}
@@ -115,25 +116,25 @@ export default function TarefasPagePt() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-slate-900 mb-4">+ Nova tarefa</h3>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold text-ink mb-4">+ Nova tarefa</h3>
             <form onSubmit={handleAdd} className="space-y-3">
               <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required
-                placeholder="Título da tarefa" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-200" />
+                placeholder="Título da tarefa" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-line" />
               <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none bg-white">
+                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
                 <option value="low">⚪ Baixa prioridade</option>
                 <option value="medium">🟡 Média prioridade</option>
                 <option value="high">⚡ Alta prioridade</option>
               </select>
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Prazo (opcional)</label>
+                <label className="text-xs text-muted mb-1 block">Prazo (opcional)</label>
                 <input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" />
+                  className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               </div>
               <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" className="flex-1 bg-slate-800 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-700 transition">Criar</button>
+                <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
+                <button type="submit" className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition">Criar</button>
               </div>
             </form>
           </div>

@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
@@ -81,23 +82,23 @@ export default function VeiculosPageEs() {
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Personal";
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="z-page">
+      <div className="z-page-heading flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">🚗 Vehículos</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{modeLabel}</p>
+          <PageTitle icon="car">Vehículos</PageTitle>
+          <p className="text-subtle text-sm mt-0.5">{modeLabel}</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-semibold hover:bg-slate-700 transition">
+        <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary-hover transition">
           + Vehículo
         </button>
       </div>
 
-      {loading ? <p className="text-slate-400 text-sm">Cargando...</p> :
+      {loading ? <p className="text-subtle text-sm">Cargando...</p> :
         vehicles.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
+          <div className="bg-surface rounded-2xl border border-line p-12 text-center shadow-sm">
             <p className="text-4xl mb-3">🚗</p>
-            <p className="font-semibold text-slate-700">Ningún vehículo registrado</p>
-            <button onClick={() => setShowForm(true)} className="mt-3 px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-700 transition">Agregar vehículo</button>
+            <p className="font-semibold text-ink">Ningún vehículo registrado</p>
+            <button onClick={() => setShowForm(true)} className="mt-3 px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-medium hover:bg-primary-hover transition">Agregar vehículo</button>
           </div>
         ) : (
           <div className="grid lg:grid-cols-3 gap-5">
@@ -105,18 +106,18 @@ export default function VeiculosPageEs() {
             <div className="space-y-2">
               {vehicles.map(v => (
                 <button key={v.id} onClick={() => setSelected(v)}
-                  className={clsx("w-full text-left bg-white border rounded-2xl p-4 transition shadow-sm",
-                    selected?.id === v.id ? "border-slate-700 ring-2 ring-slate-100" : "border-slate-100 hover:border-slate-200")}>
+                  className={clsx("w-full text-left bg-surface border rounded-2xl p-4 transition shadow-sm",
+                    selected?.id === v.id ? "border-slate-700 ring-2 ring-slate-100" : "border-line hover:border-line")}>
                   <div className="flex items-center gap-2.5">
                     <span className="text-xl">🚗</span>
                     <div>
-                      <p className="font-semibold text-slate-800 text-sm">{v.brand} {v.model}</p>
-                      <p className="text-xs text-slate-400">{v.year}{v.plate ? ` · ${v.plate}` : ""}</p>
+                      <p className="font-semibold text-ink text-sm">{v.brand} {v.model}</p>
+                      <p className="text-xs text-subtle">{v.year}{v.plate ? ` · ${v.plate}` : ""}</p>
                     </div>
                   </div>
-                  <div className="mt-2.5 flex justify-between text-xs text-slate-400">
+                  <div className="mt-2.5 flex justify-between text-xs text-subtle">
                     <span>{v.currentKm.toLocaleString()} km</span>
-                    <span className="font-medium text-slate-600">{fmt(v.expenses.reduce((s, e) => s + e.amount, 0))}</span>
+                    <span className="font-medium text-muted">{fmt(v.expenses.reduce((s, e) => s + e.amount, 0))}</span>
                   </div>
                 </button>
               ))}
@@ -125,47 +126,47 @@ export default function VeiculosPageEs() {
             {/* Detalhe */}
             {selected && (
               <div className="lg:col-span-2 space-y-4">
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <div className="bg-surface rounded-2xl border border-line shadow-sm p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h2 className="font-bold text-slate-800">{selected.brand} {selected.model} {selected.year}</h2>
-                      <p className="text-sm text-slate-400">Placa: {selected.plate || "—"} · {selected.currentKm.toLocaleString()} km</p>
+                      <h2 className="font-bold text-ink">{selected.brand} {selected.model} {selected.year}</h2>
+                      <p className="text-sm text-subtle">Placa: {selected.plate || "—"} · {selected.currentKm.toLocaleString()} km</p>
                     </div>
-                    <button onClick={() => setShowExpense(true)} className="px-3 py-1.5 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-700 transition shrink-0">
+                    <button onClick={() => setShowExpense(true)} className="px-3 py-1.5 bg-primary text-on-primary rounded-xl text-xs font-semibold hover:bg-primary-hover transition shrink-0">
                       + Gasto
                     </button>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-5">
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                      <p className="text-xs text-slate-400">Total Gastos</p>
+                    <div className="bg-red-soft border border-line rounded-xl p-3">
+                      <p className="text-xs text-subtle">Total Gastos</p>
                       <p className="text-lg font-bold text-red-500 mt-0.5">{fmt(totalExpenses)}</p>
                     </div>
-                    <div className="bg-orange-50 border border-orange-100 rounded-xl p-3">
-                      <p className="text-xs text-slate-400">Combustible</p>
+                    <div className="bg-orange-soft border border-line rounded-xl p-3">
+                      <p className="text-xs text-subtle">Combustible</p>
                       <p className="text-lg font-bold text-orange-500 mt-0.5">{fmt(selected.expenses.filter(e => e.type === "fuel").reduce((s, e) => s + e.amount, 0))}</p>
                     </div>
                   </div>
 
-                  <h3 className="font-semibold text-slate-700 text-sm mb-3">Historial de Gastos</h3>
+                  <h3 className="font-semibold text-ink text-sm mb-3">Historial de Gastos</h3>
                   {recentExpenses.length === 0 ? (
-                    <p className="text-slate-400 text-sm text-center py-4">Ningún gasto registrado</p>
+                    <p className="text-subtle text-sm text-center py-4">Ningún gasto registrado</p>
                   ) : (
                     <div className="space-y-1">
                       {recentExpenses.map(e => (
-                        <div key={e.id} className="flex items-center justify-between py-2.5 px-2 rounded-xl hover:bg-slate-50 group transition">
+                        <div key={e.id} className="flex items-center justify-between py-2.5 px-2 rounded-xl hover:bg-surface-muted group transition">
                           <div className="flex items-center gap-2.5">
                             <span>{TYPE_EMOJI[e.type] || "📌"}</span>
                             <div>
-                              <p className="text-sm text-slate-700">{e.description || TYPE_LABEL[e.type]}</p>
-                              <p className="text-xs text-slate-400">{new Date(e.date + "T12:00:00").toLocaleDateString("es-419")}{e.km ? ` · ${e.km.toLocaleString()} km` : ""}</p>
+                              <p className="text-sm text-ink">{e.description || TYPE_LABEL[e.type]}</p>
+                              <p className="text-xs text-subtle">{new Date(e.date + "T12:00:00").toLocaleDateString("es-419")}{e.km ? ` · ${e.km.toLocaleString()} km` : ""}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-red-500">{fmt(e.amount)}</span>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                              <button onClick={() => openEdit(e)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-xs transition" title="Editar">✏️</button>
-                              <button onClick={() => deleteExpense(e)} className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 text-xs transition" title="Eliminar">🗑️</button>
+                              <button onClick={() => openEdit(e)} className="p-1 rounded-lg text-subtle hover:text-muted hover:bg-surface-muted text-xs transition" title="Editar">✏️</button>
+                              <button onClick={() => deleteExpense(e)} className="p-1 rounded-lg text-subtle hover:text-red-500 hover:bg-red-soft text-xs transition" title="Eliminar">🗑️</button>
                             </div>
                           </div>
                         </div>
@@ -182,26 +183,26 @@ export default function VeiculosPageEs() {
       {/* Modal criar veículo */}
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-slate-900 mb-4">🚗 Nuevo Vehículo</h3>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="font-bold text-ink mb-4">🚗 Nuevo Vehículo</h3>
             <form onSubmit={createVehicle} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <input value={vForm.brand} onChange={e => setVForm(f => ({ ...f, brand: e.target.value }))} required placeholder="Marca" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
-                <input value={vForm.model} onChange={e => setVForm(f => ({ ...f, model: e.target.value }))} required placeholder="Modelo" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input value={vForm.brand} onChange={e => setVForm(f => ({ ...f, brand: e.target.value }))} required placeholder="Marca" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input value={vForm.model} onChange={e => setVForm(f => ({ ...f, model: e.target.value }))} required placeholder="Modelo" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <input value={vForm.plate} onChange={e => setVForm(f => ({ ...f, plate: e.target.value }))} placeholder="Placa (ABC-1234)" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
-                <input type="number" value={vForm.year} onChange={e => setVForm(f => ({ ...f, year: parseInt(e.target.value) }))} placeholder="Año" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input value={vForm.plate} onChange={e => setVForm(f => ({ ...f, plate: e.target.value }))} placeholder="Placa (ABC-1234)" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input type="number" value={vForm.year} onChange={e => setVForm(f => ({ ...f, year: parseInt(e.target.value) }))} placeholder="Año" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <input type="number" value={vForm.currentKm} onChange={e => setVForm(f => ({ ...f, currentKm: parseInt(e.target.value) || 0 }))} placeholder="KM actual" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
-                <select value={vForm.fuelType} onChange={e => setVForm(f => ({ ...f, fuelType: e.target.value }))} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none bg-white">
+                <input type="number" value={vForm.currentKm} onChange={e => setVForm(f => ({ ...f, currentKm: parseInt(e.target.value) || 0 }))} placeholder="KM actual" className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <select value={vForm.fuelType} onChange={e => setVForm(f => ({ ...f, fuelType: e.target.value }))} className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none bg-surface">
                   {[["flex","Flex"],["gasoline","Gasolina"],["ethanol","Etanol"],["diesel","Diésel"],["electric","Eléctrico"]].map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
               <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" className="flex-1 bg-slate-800 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-700 transition">Registrar</button>
+                <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
+                <button type="submit" className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition">Registrar</button>
               </div>
             </form>
           </div>
@@ -211,23 +212,23 @@ export default function VeiculosPageEs() {
       {/* Modal gasto / edição */}
       {showExpense && selected && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="font-bold text-slate-900 mb-1">{editingExpense ? "✏️ Editar gasto" : "+ Gasto del vehículo"}</h3>
-            <p className="text-sm text-slate-400 mb-4">{selected.brand} {selected.model}</p>
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-ink mb-1">{editingExpense ? "✏️ Editar gasto" : "+ Gasto del vehículo"}</h3>
+            <p className="text-sm text-subtle mb-4">{selected.brand} {selected.model}</p>
             <form onSubmit={addExpense} className="space-y-3">
-              <select value={eForm.type} onChange={e => setEForm(f => ({ ...f, type: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none bg-white">
+              <select value={eForm.type} onChange={e => setEForm(f => ({ ...f, type: e.target.value }))} className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none bg-surface">
                 {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{TYPE_EMOJI[k]} {v}</option>)}
               </select>
-              <input type="number" step="0.01" value={eForm.amount} onChange={e => setEForm(f => ({ ...f, amount: e.target.value }))} required placeholder="Monto ($)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
-              <input value={eForm.description} onChange={e => setEForm(f => ({ ...f, description: e.target.value }))} placeholder="Descripción" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+              <input type="number" step="0.01" value={eForm.amount} onChange={e => setEForm(f => ({ ...f, amount: e.target.value }))} required placeholder="Monto ($)" className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
+              <input value={eForm.description} onChange={e => setEForm(f => ({ ...f, description: e.target.value }))} placeholder="Descripción" className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
               <div className="grid grid-cols-2 gap-3">
-                <input type="date" value={eForm.date} onChange={e => setEForm(f => ({ ...f, date: e.target.value }))} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
-                <input type="number" value={eForm.km} onChange={e => setEForm(f => ({ ...f, km: e.target.value }))} placeholder="KM (opcional)" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input type="date" value={eForm.date} onChange={e => setEForm(f => ({ ...f, date: e.target.value }))} className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input type="number" value={eForm.km} onChange={e => setEForm(f => ({ ...f, km: e.target.value }))} placeholder="KM (opcional)" className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
               </div>
               <div className="flex gap-3">
                 <button type="button" onClick={() => { setShowExpense(false); setEditingExpense(null); setEForm({ type: "fuel", amount: "", description: "", km: "", date: "" }); }}
-                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancelar</button>
-                <button type="submit" className="flex-1 bg-slate-800 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-700 transition">
+                  className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
+                <button type="submit" className="flex-1 bg-primary text-on-primary rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-hover transition">
                   {editingExpense ? "Guardar" : "Registrar"}
                 </button>
               </div>

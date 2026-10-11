@@ -1,4 +1,5 @@
 "use client";
+import PageTitle from "@/components/PageTitle";
 import { useEffect, useState, useMemo } from "react";
 
 type AppointmentRepeat = "none" | "daily" | "weekly" | "monthly" | "yearly";
@@ -254,57 +255,57 @@ export default function AgendaPageEs() {
   const totalScheduled = appointments.filter(a => a.status === "scheduled").length;
 
   return (
-    <div className="space-y-4">
+    <div className="z-page">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="z-page-heading flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">🗓️ Agenda</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <PageTitle icon="calendar">Agenda</PageTitle>
+          <p className="text-subtle text-sm mt-0.5">
             {totalScheduled} compromiso{totalScheduled !== 1 ? "s" : ""} programado{totalScheduled !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {/* Toggle view */}
-          <div className="flex bg-slate-100 rounded-xl p-1 text-xs font-medium">
+          <div className="flex bg-surface-muted rounded-xl p-1 text-xs font-medium">
             <button
               onClick={() => setView("month")}
-              className={`px-3 py-1.5 rounded-lg transition ${view === "month" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-800"}`}>
+              className={`px-3 py-1.5 rounded-lg transition ${view === "month" ? "bg-surface shadow-sm text-ink" : "text-muted hover:text-ink"}`}>
               Mes
             </button>
             <button
               onClick={() => setView("list")}
-              className={`px-3 py-1.5 rounded-lg transition ${view === "list" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-800"}`}>
+              className={`px-3 py-1.5 rounded-lg transition ${view === "list" ? "bg-surface shadow-sm text-ink" : "text-muted hover:text-ink"}`}>
               Lista
             </button>
           </div>
           <button
             onClick={() => openNew(selectedDay || today)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition">
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:bg-primary transition">
             <span className="text-base leading-none">+</span> Nuevo
           </button>
         </div>
       </div>
 
       {view === "month" ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-line shadow-sm overflow-hidden">
           {/* Navegação */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-line">
             <div className="flex items-center gap-3">
-              <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-600">
+              <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-surface-muted transition text-muted">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <h2 className="text-base font-bold text-slate-900 w-44 text-center">
+              <h2 className="text-base font-bold text-ink w-44 text-center">
                 {MONTH_NAMES[curMonth - 1]} {curYear}
               </h2>
-              <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-600">
+              <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-surface-muted transition text-muted">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
               </button>
             </div>
-            <button onClick={goToday} className="text-xs text-blue-600 border border-blue-200 rounded-lg px-3 py-1.5 hover:bg-blue-50 transition font-medium">
+            <button onClick={goToday} className="text-xs text-blue-ink border border-line rounded-lg px-3 py-1.5 hover:bg-blue-soft transition font-medium">
               Hoy
             </button>
           </div>
@@ -313,7 +314,7 @@ export default function AgendaPageEs() {
           <div className="grid grid-cols-7">
             {/* Cabeçalho dias da semana */}
             {WEEKDAYS.map(d => (
-              <div key={d} className="py-2 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100">
+              <div key={d} className="py-2 text-center text-[11px] font-semibold text-subtle uppercase tracking-wide border-b border-line">
                 {d}
               </div>
             ))}
@@ -321,7 +322,7 @@ export default function AgendaPageEs() {
             {/* Células dos dias */}
             {cells.map((cell, i) => {
               if (!cell) {
-                return <div key={`empty-${i}`} className="min-h-[100px] bg-slate-50/50 border-b border-r border-slate-100 last:border-r-0" />;
+                return <div key={`empty-${i}`} className="min-h-[100px] bg-surface-muted/50 border-b border-r border-line last:border-r-0" />;
               }
               const isToday = cell === today;
               const isSelected = cell === selectedDay;
@@ -334,19 +335,19 @@ export default function AgendaPageEs() {
                 <div
                   key={cell}
                   onClick={() => setSelectedDay(cell)}
-                  className={`min-h-[100px] p-1.5 border-b border-r border-slate-100 last:border-r-0 cursor-pointer transition-colors
-                    ${isSelected ? "bg-blue-50" : "hover:bg-slate-50"}
-                    ${(isSun || isSat) ? "bg-slate-50/60" : ""}`}>
+                  className={`min-h-[100px] p-1.5 border-b border-r border-line last:border-r-0 cursor-pointer transition-colors
+                    ${isSelected ? "bg-blue-soft" : "hover:bg-surface-muted"}
+                    ${(isSun || isSat) ? "bg-surface-muted/60" : ""}`}>
                   {/* Número do dia */}
                   <div className="flex justify-between items-start mb-1">
                     <span className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full transition
-                      ${isToday ? "bg-blue-600 text-white" : isSelected ? "text-blue-700" : (isSun || isSat) ? "text-slate-400" : "text-slate-700"}`}>
+                      ${isToday ? "bg-blue-600 text-white" : isSelected ? "text-blue-ink" : (isSun || isSat) ? "text-subtle" : "text-ink"}`}>
                       {dayNum}
                     </span>
                     {events.length > 0 && (
                       <button
                         onClick={e => { e.stopPropagation(); openNew(cell); }}
-                        className="opacity-0 hover:opacity-100 group-hover:opacity-100 text-slate-300 hover:text-blue-500 text-lg leading-none transition">
+                        className="opacity-0 hover:opacity-100 group-hover:opacity-100 text-subtle hover:text-blue-500 text-lg leading-none transition">
                         +
                       </button>
                     )}
@@ -364,7 +365,7 @@ export default function AgendaPageEs() {
                       </div>
                     ))}
                     {events.length > 3 && (
-                      <div className="text-[10px] text-slate-500 font-medium pl-1">
+                      <div className="text-[10px] text-muted font-medium pl-1">
                         +{events.length - 3} más
                       </div>
                     )}
@@ -376,25 +377,25 @@ export default function AgendaPageEs() {
 
           {/* Painel do dia selecionado */}
           {selectedDay && (
-            <div className="border-t border-slate-100 px-5 py-4">
+            <div className="border-t border-line px-5 py-4">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-sm font-semibold text-ink">
                   {new Date(selectedDay + "T12:00:00").toLocaleDateString("es-419", {
                     weekday: "long", day: "2-digit", month: "long",
                   })}
                   {selectedDay === today && (
-                    <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-bold uppercase">Hoy</span>
+                    <span className="ml-2 text-[10px] bg-blue-soft text-blue-ink rounded-full px-2 py-0.5 font-bold uppercase">Hoy</span>
                   )}
                 </p>
                 <button
                   onClick={() => openNew(selectedDay)}
-                  className="text-xs text-blue-600 hover:underline font-medium">
+                  className="text-xs text-blue-ink hover:underline font-medium">
                   + Agregar
                 </button>
               </div>
 
               {selectedDayEvents.length === 0 ? (
-                <p className="text-sm text-slate-400 py-2">Ningún compromiso en este día.</p>
+                <p className="text-sm text-subtle py-2">Ningún compromiso en este día.</p>
               ) : (
                 <div className="space-y-2">
                   {selectedDayEvents.map(evt => (
@@ -426,96 +427,96 @@ export default function AgendaPageEs() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[90vh]">
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[90vh]">
             <div className="p-6 space-y-4">
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-base font-bold text-ink">
                 {editing ? "Editar compromiso" : "Nuevo compromiso"}
               </h3>
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Título *</label>
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Título *</label>
                 <input autoFocus value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="Ej: Reunión con cliente"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Fecha *</label>
+                  <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Fecha *</label>
                   <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Hora de inicio</label>
+                  <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Hora de inicio</label>
                   <input type="time" value={form.startTime} disabled={form.allDay}
                     onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-40" />
+                    className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-40" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Fecha de fin</label>
+                  <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Fecha de fin</label>
                   <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Hora de fin</label>
+                  <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Hora de fin</label>
                   <input type="time" value={form.endTime} disabled={form.allDay || !form.endDate}
                     onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-40" />
+                    className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-40" />
                 </div>
               </div>
               <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <input type="checkbox" checked={form.allDay}
                   onChange={e => setForm(f => ({ ...f, allDay: e.target.checked, startTime: e.target.checked ? "" : f.startTime }))}
                   className="w-4 h-4 rounded accent-blue-600" />
-                <span className="text-sm text-slate-700">Todo el día</span>
+                <span className="text-sm text-ink">Todo el día</span>
               </label>
 
               {/* Toggle Google Meet — só para novos compromissos com horário fim */}
               {!editing && googleConnected && (
                 <label className={`flex items-center gap-2.5 cursor-pointer select-none rounded-xl p-3 border transition
-                  ${form.withMeet ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}>
+                  ${form.withMeet ? "bg-blue-soft border-line" : "bg-surface-muted border-line"}`}>
                   <input type="checkbox" checked={form.withMeet}
                     onChange={e => setForm(f => ({ ...f, withMeet: e.target.checked }))}
                     className="w-4 h-4 rounded accent-blue-600" />
                   <div>
-                    <p className="text-sm font-medium text-slate-800">🎥 Incluir enlace de Google Meet</p>
-                    <p className="text-xs text-slate-400">Crea un enlace de reunión automático en Google Calendar</p>
+                    <p className="text-sm font-medium text-ink">🎥 Incluir enlace de Google Meet</p>
+                    <p className="text-xs text-subtle">Crea un enlace de reunión automático en Google Calendar</p>
                     {form.withMeet && !form.endDate && (
-                      <p className="text-xs text-amber-600 mt-0.5">⚠ Completa la hora de fin para generar el Meet</p>
+                      <p className="text-xs text-amber-ink mt-0.5">⚠ Completa la hora de fin para generar el Meet</p>
                     )}
                   </div>
                 </label>
               )}
               {!editing && !googleConnected && (
-                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 rounded-xl p-3 border border-slate-200">
+                <div className="flex items-center gap-2 text-xs text-subtle bg-surface-muted rounded-xl p-3 border border-line">
                   <span>🎥</span>
                   <span>Para incluir Google Meet, <a href="/es/dashboard/configuracoes" className="text-blue-500 underline">conecta tu cuenta de Google</a></span>
                 </div>
               )}
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Ubicación</label>
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Ubicación</label>
                 <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                   placeholder="Ej: Sala de reuniones, Zoom..."
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               {/* Botão Entrar no Meet — visível ao editar compromisso com meet link */}
               {editing?.meetLink && (
                 <a href={editing.meetLink} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition">
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-primary hover:bg-primary text-on-primary text-sm font-semibold transition">
                   🎥 Entrar a Google Meet
                 </a>
               )}
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Descripción</label>
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Descripción</label>
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="Notas sobre el compromiso..."
                   rows={2}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
+                  className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Repetición</label>
+                <label className="text-xs font-semibold text-muted uppercase tracking-wide block mb-1">Repetición</label>
                 <select value={form.repeat} onChange={e => setForm(f => ({ ...f, repeat: e.target.value as AppointmentRepeat }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                  className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-surface">
                   {(Object.entries(REPEAT_LABEL) as [AppointmentRepeat, string][]).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
                   ))}
@@ -523,11 +524,11 @@ export default function AgendaPageEs() {
               </div>
               <div className="flex gap-2 justify-end pt-1">
                 <button onClick={() => { setShowModal(false); setEditing(null); }}
-                  className="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 transition">
+                  className="px-4 py-2 text-sm text-muted hover:text-ink transition">
                   Cancelar
                 </button>
                 <button onClick={handleSave} disabled={saving || !form.title.trim() || !form.startDate}
-                  className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-60">
+                  className="px-5 py-2 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:bg-primary transition disabled:opacity-60">
                   {saving ? "Guardando..." : editing ? "Guardar" : "Crear"}
                 </button>
               </div>
@@ -547,11 +548,11 @@ function DayEventRow({ evt, onEdit, onDone, onDelete }: {
 }) {
   const color = colorForId(evt.id);
   return (
-    <div className="group flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition cursor-pointer" onClick={() => onEdit(evt)}>
+    <div className="group flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-muted transition cursor-pointer" onClick={() => onEdit(evt)}>
       <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${color}`} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate">{evt.title}</p>
-        <p className="text-xs text-slate-400">
+        <p className="text-sm font-medium text-ink truncate">{evt.title}</p>
+        <p className="text-xs text-subtle">
           {evt.allDay ? "Todo el día" : formatTimeSP(evt.startAt)}
           {evt.endAt && !evt.allDay && ` – ${formatTimeSP(evt.endAt)}`}
           {evt.location && ` · 📍${evt.location}`}
@@ -560,19 +561,19 @@ function DayEventRow({ evt, onEdit, onDone, onDelete }: {
       <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
         {evt.meetLink && (
           <a href={evt.meetLink} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition text-xs font-medium">
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-soft text-blue-ink hover:bg-blue-soft transition text-xs font-medium">
             🎥 Entrar
           </a>
         )}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
           <button onClick={() => onDone(evt.id)} title="Completado"
-            className="p-1 rounded text-slate-300 hover:text-amber-700 hover:bg-amber-50 transition">
+            className="p-1 rounded text-subtle hover:text-amber-ink hover:bg-amber-soft transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </button>
           <button onClick={() => onDelete(evt.id)} title="Eliminar"
-            className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
+            className="p-1 rounded text-subtle hover:text-red-500 hover:bg-red-soft transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -603,12 +604,12 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, loading }: {
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
   }, [scheduled]);
 
-  if (loading) return <div className="text-center py-16 text-slate-400 text-sm">Cargando...</div>;
+  if (loading) return <div className="text-center py-16 text-subtle text-sm">Cargando...</div>;
   if (grouped.length === 0) return (
-    <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-2xl">
+    <div className="text-center py-16 bg-surface border border-dashed border-line rounded-2xl">
       <p className="text-5xl mb-4">🗓️</p>
-      <p className="text-slate-600 font-medium">Ningún compromiso programado</p>
-      <p className="text-slate-400 text-sm mt-1">Haz clic en &quot;Nuevo&quot; o envía por WhatsApp.</p>
+      <p className="text-muted font-medium">Ningún compromiso programado</p>
+      <p className="text-subtle text-sm mt-1">Haz clic en &quot;Nuevo&quot; o envía por WhatsApp.</p>
     </div>
   );
 
@@ -621,24 +622,24 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, loading }: {
           weekday: "short", day: "2-digit", month: "short",
         });
         return (
-          <div key={date} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div key={date} className="bg-surface rounded-2xl border border-line overflow-hidden">
             {/* Linha de data */}
-            <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-slate-100
-              ${isToday ? "bg-blue-50" : isPast ? "bg-slate-50" : "bg-white"}`}>
+            <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-line
+              ${isToday ? "bg-blue-soft" : isPast ? "bg-surface-muted" : "bg-surface"}`}>
               <div className={`w-2 h-2 rounded-full ${isToday ? "bg-blue-500" : isPast ? "bg-slate-300" : "bg-slate-400"}`} />
-              <p className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-blue-700" : isPast ? "text-slate-400" : "text-slate-600"}`}>
+              <p className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-blue-ink" : isPast ? "text-subtle" : "text-muted"}`}>
                 {isToday ? `Hoy · ${dateLabel}` : dateLabel}
               </p>
-              <span className="ml-auto text-xs text-slate-300">{items.length}</span>
+              <span className="ml-auto text-xs text-subtle">{items.length}</span>
             </div>
             {/* Eventos do dia */}
             <div className="divide-y divide-slate-50">
               {items.map(evt => (
-                <div key={evt.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition cursor-pointer" onClick={() => onEdit(evt)}>
+                <div key={evt.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-surface-muted transition cursor-pointer" onClick={() => onEdit(evt)}>
                   <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorForId(evt.id)}`} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium truncate ${isPast ? "text-slate-500" : "text-slate-800"}`}>{evt.title}</p>
-                    <p className="text-xs text-slate-400">
+                    <p className={`text-sm font-medium truncate ${isPast ? "text-muted" : "text-ink"}`}>{evt.title}</p>
+                    <p className="text-xs text-subtle">
                       {evt.allDay ? "Todo el día" : formatTimeSP(evt.startAt)}
                       {evt.endAt && !evt.allDay && ` – ${formatTimeSP(evt.endAt)}`}
                       {evt.location && ` · 📍${evt.location}`}
@@ -648,19 +649,19 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, loading }: {
                   <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                     {evt.meetLink && (
                       <a href={evt.meetLink} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition text-xs font-medium">
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-soft text-blue-ink hover:bg-blue-soft transition text-xs font-medium">
                         🎥 Entrar
                       </a>
                     )}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                       <button onClick={() => onDone(evt.id)} title="Completado"
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-amber-700 hover:bg-amber-50 transition">
+                        className="p-1.5 rounded-lg text-subtle hover:text-amber-ink hover:bg-amber-soft transition">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                       </button>
                       <button onClick={() => onDelete(evt.id)} title="Eliminar"
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
+                        className="p-1.5 rounded-lg text-subtle hover:text-red-500 hover:bg-red-soft transition">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>

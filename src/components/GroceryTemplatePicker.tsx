@@ -104,39 +104,39 @@ export function GroceryTemplatePicker({ templateKey, templateLabel, existingName
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6 max-h-[90vh] flex flex-col">
+      <div className="bg-surface rounded-2xl shadow-xl w-full max-w-xl p-6 max-h-[90vh] flex flex-col">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h3 className="font-bold text-slate-900">{templateLabel} — {copy.title}</h3>
-            <p className="text-sm text-slate-500 mt-1">{copy.subtitle}</p>
+            <h3 className="font-bold text-ink">{templateLabel} — {copy.title}</h3>
+            <p className="text-sm text-muted mt-1">{copy.subtitle}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label={copy.cancel} className="text-slate-400 hover:text-slate-700 p-1">✕</button>
+          <button type="button" onClick={onClose} aria-label={copy.cancel} className="text-subtle hover:text-ink p-1">✕</button>
         </div>
 
         {!loading && !error && (
           <div className="flex gap-3 mb-3 text-xs font-semibold">
-            <button type="button" onClick={() => setSelected(new Set(availableItems.map(item => item.name)))} className="text-amber-700 hover:underline">
+            <button type="button" onClick={() => setSelected(new Set(availableItems.map(item => item.name)))} className="text-amber-ink hover:underline">
               {copy.selectAll}
             </button>
-            <button type="button" onClick={() => setSelected(new Set())} className="text-slate-500 hover:underline">
+            <button type="button" onClick={() => setSelected(new Set())} className="text-muted hover:underline">
               {copy.clear}
             </button>
           </div>
         )}
 
-        <div className="overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-100 min-h-32">
+        <div className="overflow-y-auto border border-line rounded-xl divide-y divide-line min-h-32">
           {loading ? (
-            <p className="p-8 text-center text-sm text-slate-400">{copy.loading}</p>
+            <p className="p-8 text-center text-sm text-subtle">{copy.loading}</p>
           ) : error ? (
             <p className="p-8 text-center text-sm text-red-500">{error}</p>
           ) : items.map(item => {
             const alreadyAdded = existing.has(normalize(item.name));
             return (
-              <label key={item.name} className={`flex items-center gap-3 px-4 py-3 ${alreadyAdded ? "bg-slate-50 opacity-60" : "hover:bg-amber-50 cursor-pointer"}`}>
+              <label key={item.name} className={`flex items-center gap-3 px-4 py-3 ${alreadyAdded ? "bg-surface-muted opacity-60" : "hover:bg-amber-soft cursor-pointer"}`}>
                 <input type="checkbox" disabled={alreadyAdded} checked={selected.has(item.name)} onChange={() => toggle(item.name)}
                   className="w-4 h-4 accent-amber-600" />
-                <span className="text-sm text-slate-700 flex-1">{item.name}</span>
-                <span className="text-xs text-slate-400">{alreadyAdded ? copy.existing : item.quantity}</span>
+                <span className="text-sm text-ink flex-1">{item.name}</span>
+                <span className="text-xs text-subtle">{alreadyAdded ? copy.existing : item.quantity}</span>
               </label>
             );
           })}
@@ -144,7 +144,7 @@ export function GroceryTemplatePicker({ templateKey, templateLabel, existingName
 
         {error && <p className="text-xs text-red-500 mt-3">{error}</p>}
         <div className="flex gap-3 mt-5">
-          <button type="button" onClick={onClose} className="flex-1 border border-slate-200 rounded-xl py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition">
+          <button type="button" onClick={onClose} className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">
             {copy.cancel}
           </button>
           <button type="button" onClick={addSelected} disabled={saving || selected.size === 0}

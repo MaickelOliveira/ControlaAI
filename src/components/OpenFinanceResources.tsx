@@ -1,34 +1,59 @@
 import { bankMoney, bankDate, bankResourceName, type BankOverview, type BankResource } from "@/lib/open-finance-display";
-import {groupBankResources} from "@/lib/open-finance-grouping";
-import {canDisconnectBank} from "@/lib/open-finance-connection-actions";
+import { groupBankResources } from "@/lib/open-finance-grouping";
+import { canDisconnectBank } from "@/lib/open-finance-connection-actions";
 import OpenFinanceIcon from "./OpenFinanceIcon";
-const labels={account:"Conta bancária",card:"Cartão de crédito",investment:"Investimento",loan:"Empréstimo",financing:"Financiamento",reserve:"Reserva de saldo"};
 
-function Product({resource,data,mode}:{resource:BankResource;data:BankOverview;mode:"personal"|"business"}){
-  const limits=data.limits.filter(l=>l.resource_id===resource.id);
-  const bills=data.bills.filter(b=>b.resource_id===resource.id).sort((a,b)=>(b.due_date??"").localeCompare(a.due_date??""));
-  const schedules=data.agenda?.items.filter(i=>i.resource_id===resource.id&&i.kind!=="bill")??[];
-  return <div className="min-w-0 rounded-2xl bg-slate-50/80 p-5">
-    <div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><OpenFinanceIcon name={resource.resource_type==="card"?"card":resource.resource_type==="investment"?"chart":"bank"} className="h-4 w-4"/>{labels[resource.resource_type]}{resource.identification_last4?` · final ${resource.identification_last4}`:""}</div>
-    <h3 className="mt-1.5 text-sm font-semibold text-slate-900">{bankResourceName(resource.name)}</h3>
-    {["account","reserve"].includes(resource.resource_type)&&<div className="mt-4"><p className="text-xs text-slate-500">Saldo disponível</p><p className="mt-1 break-words text-3xl font-semibold tracking-tight text-slate-950">{bankMoney(resource.available_amount,resource.currency)}</p></div>}
-    {resource.resource_type==="investment"&&<div className="mt-4"><p className="text-xs text-slate-500">Saldo líquido</p><p className="mt-1 text-2xl font-semibold text-slate-950">{bankMoney(resource.net_amount,resource.currency)}</p><p className="mt-3 text-xs text-slate-500">Bruto: {bankMoney(resource.gross_amount,resource.currency)} · Posição: {bankDate(resource.valuation_date)}</p></div>}
-    {resource.resource_type==="card"&&<div className="mt-4 space-y-3">
-      {!limits.length&&<p className="text-sm text-slate-500">O banco ainda não informou os limites.</p>}
-      {limits.map(limit=><div key={limit.id} className="rounded-xl border border-slate-200/70 bg-white p-4"><p className="text-xs text-slate-500">{limit.line_name||"Linha de crédito"}{limit.consolidation_type?` · ${limit.consolidation_type}`:""}</p><p className="mt-3 text-xs text-slate-500">Limite disponível</p><p className="mt-1 text-2xl font-semibold text-violet-800">{bankMoney(limit.available_amount,limit.currency)}</p><div className="mt-3 grid grid-cols-2 gap-3 text-xs"><p className="text-slate-500">Total<span className="mt-1 block font-medium text-slate-700">{bankMoney(limit.total_amount,limit.currency)}</span></p><p className="text-slate-500">Utilizado<span className="mt-1 block font-medium text-slate-700">{bankMoney(limit.used_amount,limit.currency)}</span></p></div>{limit.is_flexible&&<p className="mt-3 text-xs text-slate-500">Limite flexível, sujeito à análise do banco.</p>}</div>)}
-      {limits.length>1&&<p className="text-xs text-slate-500">Linhas compartilhadas: os limites não são somados.</p>}
-      <details className="rounded-xl border border-slate-200/70 bg-white p-4"><summary className="cursor-pointer text-xs font-semibold text-slate-700">Faturas · {bills.length} recebida(s)</summary><div className="mt-3 space-y-3">{!bills.length&&<p className="text-xs text-slate-500">Aguardando dados de faturas do banco.</p>}{bills.slice(0,12).map(b=><div key={b.id} className="border-t border-slate-100 pt-3 text-xs"><div className="flex justify-between gap-2"><span>Vencimento {bankDate(b.due_date)}</span><strong>{bankMoney(b.total_amount,b.currency)}</strong></div><p className="mt-1 text-slate-500">{b.payment_evidence?`Pagamentos informados: ${bankMoney(b.payment_amount,b.currency)}. Confira no banco.`:"Pagamento não confirmado pelo banco."}</p><a href={`/api/open-finance/bills/${b.id}?mode=${mode}`} className="mt-2 inline-block font-medium text-violet-700 hover:underline">Baixar demonstrativo da Zelo ↓</a></div>)}{bills.length>12&&<p className="text-xs text-slate-500">Peça à IA a fatura do mês desejado.</p>}</div></details>
-      {schedules.length>0&&<details className="rounded-xl border border-slate-200/70 bg-white p-4"><summary className="cursor-pointer text-xs font-semibold text-slate-700">Assinaturas e parcelas · {schedules.length}</summary><div className="mt-3 space-y-3">{schedules.map(s=><div key={s.id} className="border-t border-slate-100 pt-3 text-xs"><p className="font-medium text-slate-800">{s.description}</p><p className="mt-1 text-slate-500">{s.kind==="recurring"?`Cobrança prevista: ${bankDate(s.due_date)} · estimativa ${bankMoney(s.amount,s.currency)}`:`${s.observed_installments}/${s.total_installments} parcelas observadas; próximo vencimento não informado.`}</p></div>)}<p className="text-[11px] text-slate-500">Previsões do histórico, sujeitas a mudanças. Parcelas observadas não confirmam pagamento.</p></div></details>}
-    </div>}
-    {data.credit.filter(d=>d.resource_id===resource.id).map(credit=><div key={credit.resource_id} className="mt-4 space-y-2 text-sm"><p className="text-xs text-slate-500">Saldo devedor</p><p className="text-2xl font-semibold text-slate-950">{bankMoney(credit.outstanding_amount,credit.currency)}</p><p className="text-xs text-slate-500">Contratado: {bankMoney(credit.contract_amount,credit.currency)}<br/>Próxima parcela: {bankMoney(credit.next_installment_amount,credit.currency)}<br/>Vencimento final: {bankDate(credit.due_date)}</p></div>)}
-    <p className="mt-4 flex items-center gap-1.5 text-[11px] text-slate-400"><OpenFinanceIcon name="clock" className="h-3 w-3"/>Recebido em {bankDate(resource.synced_at)}</p>
-  </div>;
+const labels = { account: "Conta bancária", card: "Cartão de crédito", investment: "Investimento", loan: "Empréstimo", financing: "Financiamento", reserve: "Reserva de saldo" };
+
+function Product({ resource, data, mode }: { resource: BankResource; data: BankOverview; mode: "personal" | "business" }) {
+  const limits = data.limits.filter(l => l.resource_id === resource.id);
+  const bills = data.bills.filter(b => b.resource_id === resource.id).sort((a, b) => (b.due_date ?? "").localeCompare(a.due_date ?? ""));
+  const schedules = data.agenda?.items.filter(i => i.resource_id === resource.id && i.kind !== "bill") ?? [];
+  const credit = data.credit.find(c => c.resource_id === resource.id);
+  const isDebt = resource.resource_type === "loan" || resource.resource_type === "financing";
+  const value = resource.resource_type === "card" ? bankMoney(limits[0]?.available_amount, limits[0]?.currency)
+    : resource.resource_type === "investment" ? bankMoney(resource.net_amount, resource.currency)
+    : isDebt ? bankMoney(credit?.outstanding_amount, credit?.currency) : bankMoney(resource.available_amount, resource.currency);
+  const valueLabel = resource.resource_type === "card" ? `Disponível · ${limits[0]?.line_name || "Linha de crédito"}` : resource.resource_type === "investment" ? "Saldo líquido" : isDebt ? "Saldo devedor" : "Saldo disponível";
+  const icon = resource.resource_type === "card" ? "card" : resource.resource_type === "investment" ? "chart" : "bank";
+
+  return <details className={`z-bank-product ${isDebt ? "z-bank-debt" : "z-bank-tile"} z-bank-type-${resource.resource_type}`}>
+    <summary>
+      <span className={`z-bank-product-icon ${resource.resource_type === "card" ? "bg-amber-soft text-amber-ink" : "bg-surface-muted text-muted"}`}><OpenFinanceIcon name={icon} className="h-5 w-5" /></span>
+      <span className="min-w-0"><strong>{bankResourceName(resource.name)}</strong><small>{labels[resource.resource_type]}{resource.identification_last4 ? ` · final ${resource.identification_last4}` : ""}</small></span>
+      <span className="z-bank-product-value"><small>{valueLabel}</small><strong>{value}</strong>{limits.length > 1 && <small>{limits.length} linhas · ver detalhes</small>}</span>
+      <span className="z-bank-chevron" aria-hidden="true">⌄</span>
+    </summary>
+    <div className="z-bank-product-details">
+      {resource.resource_type === "investment" && <p className="text-xs text-muted">Valor bruto: {bankMoney(resource.gross_amount, resource.currency)} · Posição em {bankDate(resource.valuation_date)}</p>}
+      {resource.resource_type === "card" && <div className="space-y-4">
+        {!limits.length && <p className="text-xs text-muted">O banco ainda não informou os limites.</p>}
+        {limits.map(limit => <div key={limit.id} className="rounded-xl border border-line bg-surface p-4">
+          <p className="text-xs font-medium text-muted">{limit.line_name || "Linha de crédito"}{limit.consolidation_type ? ` · ${limit.consolidation_type}` : ""}</p>
+          <dl className="mt-3 space-y-3 text-xs">{([["Disponível",limit.available_amount],["Total",limit.total_amount],["Utilizado",limit.used_amount]] as const).map(([label,amount])=><div key={label} className="flex flex-wrap justify-between gap-2"><dt className="text-muted">{label}</dt><dd className="font-semibold text-ink">{bankMoney(amount,limit.currency)}</dd></div>)}</dl>
+          {limit.is_flexible && <p className="mt-3 text-xs text-muted">Limite flexível, sujeito à análise do banco.</p>}
+        </div>)}
+        {limits.length > 1 && <p className="text-xs text-muted">Cada linha mantém seu limite. Limites compartilhados não são somados.</p>}
+        <div><h4 className="text-xs font-semibold">Faturas · {bills.length} recebida(s)</h4>
+          {!bills.length && <p className="mt-2 text-xs text-muted">Aguardando dados de faturas do banco.</p>}
+          {bills.slice(0, 12).map(b => <div key={b.id} className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 text-xs"><div><p>Vencimento {bankDate(b.due_date)} · <strong>{bankMoney(b.total_amount, b.currency)}</strong></p><p className="mt-1 text-muted">{b.payment_evidence ? `Pagamentos informados: ${bankMoney(b.payment_amount, b.currency)}. Confira no banco.` : "Pagamento não confirmado pelo banco."}</p></div><a href={`/api/open-finance/bills/${b.id}?mode=${mode}`} className="rounded-lg border border-line bg-surface px-3 py-2 font-medium hover:bg-surface-muted">Baixar demonstrativo ↓</a></div>)}
+          {bills.length > 12 && <p className="mt-3 text-xs text-muted">Peça à Zelo pelo WhatsApp a fatura do mês desejado.</p>}
+        </div>
+        {schedules.length > 0 && <details className="rounded-xl border border-line p-3"><summary className="cursor-pointer text-xs font-medium">Assinaturas e parcelas · {schedules.length}</summary><div className="mt-3 space-y-3">{schedules.map(s => <div key={s.id} className="text-xs"><p className="font-medium">{s.description}</p><p className="mt-1 text-muted">{s.kind === "recurring" ? `Cobrança prevista: ${bankDate(s.due_date)} · estimativa ${bankMoney(s.amount, s.currency)}` : `${s.observed_installments}/${s.total_installments} parcelas observadas; próximo vencimento não informado.`}</p></div>)}<p className="text-[11px] text-muted">Previsões do histórico, sujeitas a mudanças. Parcelas observadas não confirmam pagamento.</p></div></details>}
+      </div>}
+      {credit && <div className="grid gap-3 text-xs sm:grid-cols-3"><p className="text-muted">Valor contratado<strong className="mt-1 block text-ink">{bankMoney(credit.contract_amount, credit.currency)}</strong></p><p className="text-muted">Próxima parcela<strong className="mt-1 block text-ink">{bankMoney(credit.next_installment_amount, credit.currency)}</strong></p><p className="text-muted">Vencimento final<strong className="mt-1 block text-ink">{bankDate(credit.due_date)}</strong></p></div>}
+      <p className="mt-3 flex items-center gap-1.5 text-[11px] text-subtle"><OpenFinanceIcon name="clock" className="h-3 w-3" />Recebido em {bankDate(resource.synced_at)}</p>
+    </div>
+  </details>;
 }
-export default function OpenFinanceResources({data,mode,busy=false,onDisconnect}:{data:BankOverview;mode:"personal"|"business";busy?:boolean;onDisconnect?:(id:string)=>void}) {
-  if(!data.resources.length)return <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-9 text-center"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm"><OpenFinanceIcon name="bank"/></span><h3 className="mt-4 font-semibold text-slate-900">Seu próximo banco começa aqui</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Conecte uma conta e autorize no aplicativo do banco. A Zelo reconhece a autorização automaticamente; os dados podem levar alguns minutos para chegar.</p></div>;
-  return <div className="space-y-4">{groupBankResources(data).map(bank=><article key={bank.id} aria-label={bank.name} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-violet-50 via-white to-white px-5 py-5"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-700 text-white"><OpenFinanceIcon name="bank"/></span><div><h3 className="text-base font-semibold text-slate-950">{bank.name}</h3><p className="mt-0.5 text-xs text-slate-500">Conta, crédito e demais produtos do seu banco</p></div></div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-600">{bank.resources.length} produto(s)</span>{onDisconnect&&data.connections.filter(c=>canDisconnectBank(c)&&bank.resources.some(r=>r.connection_id===c.id)).map((c,_,connections)=><button key={c.id} type="button" disabled={busy} onClick={()=>onDisconnect(c.id)} aria-label={`Desconectar banco ${c.institution_name} · ${bankDate(c.created_at)}`} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">Desconectar banco{connections.length>1?` · ${bankDate(c.created_at)}`:""}</button>)}</div></div>
-    <div className={`grid items-start gap-4 p-4 sm:p-5 ${bank.resources.length>1?"md:grid-cols-2":""} ${bank.resources.length>2?"xl:grid-cols-3":""}`}>{bank.resources.map(resource=><Product key={resource.id} resource={resource} data={data} mode={mode}/>)}</div>
-    <div className="border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500">Saldo e limite de crédito têm finalidades diferentes. Cada produto mantém os valores recebidos do banco.</div>
+
+export default function OpenFinanceResources({ data, mode, busy = false, onDisconnect }: { data: BankOverview; mode: "personal" | "business"; busy?: boolean; onDisconnect?: (id: string) => void }) {
+  if (!data.resources.length) return <div className="rounded-2xl border border-dashed border-line bg-surface px-6 py-9 text-center"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-soft text-amber-ink"><OpenFinanceIcon name="bank" /></span><h3 className="mt-4 font-semibold">Seu próximo banco começa aqui</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">Autorize a conexão no aplicativo do banco. Ela aparece automaticamente na Zelo; os dados podem levar alguns minutos para chegar.</p></div>;
+  return <div className="space-y-4">{groupBankResources(data).map(bank => <article key={bank.id} aria-label={bank.name} className="z-bank-card">
+    <header className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-soft text-amber-ink"><OpenFinanceIcon name="bank" /></span><div><h3 className="text-base font-semibold">{bank.name}</h3><p className="mt-0.5 text-xs text-muted">{bank.resources.length} produto(s) · {mode === "personal" ? "Pessoa física" : "Pessoa jurídica"}</p></div></div>
+      {onDisconnect && data.connections.filter(c => canDisconnectBank(c) && bank.resources.some(r => r.connection_id === c.id)).map((c, _, connections) => <button key={c.id} type="button" disabled={busy} onClick={() => onDisconnect(c.id)} aria-label={`Desconectar banco ${c.institution_name} · ${bankDate(c.created_at)}`} className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-muted hover:bg-red-soft hover:text-red-ink disabled:opacity-50">Desconectar{connections.length > 1 ? ` · ${bankDate(c.created_at)}` : ""}</button>)}
+    </header>
+    <div className="z-bank-products">{bank.resources.filter(r => r.resource_type !== "loan" && r.resource_type !== "financing").map(resource => <Product key={resource.id} resource={resource} data={data} mode={mode} />)}</div><div>{bank.resources.filter(r => r.resource_type === "loan" || r.resource_type === "financing").map(resource => <Product key={resource.id} resource={resource} data={data} mode={mode} />)}</div>
+    <p className="mt-4 text-[11px] text-subtle">Saldo é dinheiro em conta. Crédito é o limite do cartão. Clique no produto para ver faturas e detalhes.</p>
   </article>)}</div>;
 }

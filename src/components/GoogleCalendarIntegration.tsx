@@ -98,46 +98,46 @@ export default function GoogleCalendarIntegration({ locale }: { locale: Locale }
   const privacyHref = locale === "es" ? "/es/privacidad" : locale === "pt-PT" ? "/pt/privacidade" : "/privacidade";
 
   return (
-    <div className="flex flex-col gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex flex-col gap-4 p-4 rounded-xl border border-line bg-surface-muted sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm text-xl shrink-0">🗓️</div>
+        <div className="w-10 h-10 rounded-xl bg-surface border border-line flex items-center justify-center shadow-sm text-xl shrink-0">🗓️</div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-800">Google Calendar / Meet</p>
-          <p className="text-xs text-slate-400 mt-0.5">{copy.description}</p>
-          <p className="mt-1 max-w-xl text-[11px] leading-4 text-slate-400">
-            {copy.privacy} <a href={privacyHref} className="font-semibold text-blue-600 underline">{copy.privacyLink}</a>.
+          <p className="text-sm font-semibold text-ink">Google Calendar / Meet</p>
+          <p className="text-xs text-subtle mt-0.5">{copy.description}</p>
+          <p className="mt-1 max-w-xl text-[11px] leading-4 text-subtle">
+            {copy.privacy} <a href={privacyHref} className="font-semibold text-blue-ink underline">{copy.privacyLink}</a>.
           </p>
-          {status?.connected && status.email && <p className="text-xs text-amber-600 mt-1 font-medium">✓ {status.email}</p>}
+          {status?.connected && status.email && <p className="text-xs text-amber-ink mt-1 font-medium">✓ {status.email}</p>}
 
           {status?.connected && (
             <div className="mt-3 max-w-md">
-              {loadingCalendars ? <p className="text-xs text-slate-500">{copy.loading}</p> : reauthRequired ? (
+              {loadingCalendars ? <p className="text-xs text-muted">{copy.loading}</p> : reauthRequired ? (
                 <div className="space-y-2">
-                  <p className="text-xs text-amber-700">{copy.reconnect}</p>
-                  <a href={`/api/google/connect?locale=${encodeURIComponent(localeQuery)}`} className="inline-flex text-xs font-semibold text-blue-600 underline">{copy.reconnectButton}</a>
+                  <p className="text-xs text-amber-ink">{copy.reconnect}</p>
+                  <a href={`/api/google/connect?locale=${encodeURIComponent(localeQuery)}`} className="inline-flex text-xs font-semibold text-blue-ink underline">{copy.reconnectButton}</a>
                 </div>
               ) : calendars.length > 0 ? (
-                <label className="block text-xs font-semibold text-slate-600">
+                <label className="block text-xs font-semibold text-muted">
                   {copy.choose}
                   <select
                     value={selectedId}
                     onChange={event => void chooseCalendar(event.target.value)}
                     disabled={saving}
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-blue-400 disabled:opacity-60"
+                    className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-blue-400 disabled:opacity-60"
                   >
                     {calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name}{calendar.primary ? " (principal)" : ""}</option>)}
                   </select>
                 </label>
               ) : null}
-              {message && <p className={`mt-1.5 text-[11px] ${message.ok ? "text-emerald-600" : "text-red-600"}`}>{message.text}</p>}
+              {message && <p className={`mt-1.5 text-[11px] ${message.ok ? "text-emerald-ink" : "text-red-ink"}`}>{message.text}</p>}
             </div>
           )}
         </div>
       </div>
 
       <div className="shrink-0">
-        {status === null ? <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" /> : status.connected ? (
-          <button onClick={disconnect} disabled={saving} className="text-xs border border-red-200 text-red-500 hover:bg-red-50 rounded-lg px-3 py-1.5 transition disabled:opacity-50">{saving ? "..." : copy.disconnect}</button>
+        {status === null ? <div className="w-4 h-4 border-2 border-line border-t-transparent rounded-full animate-spin" /> : status.connected ? (
+          <button onClick={disconnect} disabled={saving} className="text-xs border border-line text-red-500 hover:bg-red-soft rounded-lg px-3 py-1.5 transition disabled:opacity-50">{saving ? "..." : copy.disconnect}</button>
         ) : (
           <a href={`/api/google/connect?locale=${encodeURIComponent(localeQuery)}`} className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-1.5 transition">{copy.connect}</a>
         )}

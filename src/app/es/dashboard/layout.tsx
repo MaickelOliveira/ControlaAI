@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import WorkspaceHeader from "@/components/WorkspaceHeader";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
@@ -144,17 +145,11 @@ type User = { name: string; plan: string; status: string; activeMode: string; tr
 function SidebarContent({
   user,
   pathname,
-  modeChanging,
-  isPersonal,
-  toggleMode,
   logout,
   onNavClick,
 }: {
   user: User | null;
   pathname: string;
-  modeChanging: boolean;
-  isPersonal: boolean;
-  toggleMode: () => void;
   logout: () => void;
   onNavClick: () => void;
 }) {
@@ -168,54 +163,23 @@ function SidebarContent({
   return (
     <>
       {/* Logo */}
-      <div className="p-5 border-b border-slate-100 text-center">
-        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="mx-auto h-auto w-full max-w-[150px]" priority />
-        <p className="text-slate-400 text-base mt-1.5">Gestión inteligente</p>
+      <div className="z-sidebar-brand">
+        <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="z-wordmark z-wordmark-dark" priority />
+        <Image src="/brand/zelo-wordmark-light.png" alt="" width={640} height={293} className="z-wordmark z-wordmark-light" />
+        <p className="text-subtle text-[10px] mt-2">Gestión inteligente</p>
       </div>
 
-      {/* User info + Mode toggle */}
-      {user && (
-        <div className="p-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-600">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-slate-800 text-xs font-semibold truncate">{user.name}</p>
-              <p className="text-slate-400 text-[10px]">
-                {user.status === "trial"
-                  ? `Prueba · ${Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now) / 86400000))} días`
-                  : "Plan Activo"}
-              </p>
-            </div>
-          </div>
-          <button onClick={toggleMode} disabled={modeChanging}
-            className="w-full rounded-xl p-2.5 flex items-center gap-2.5 transition border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left">
-            <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm shrink-0">
-              {isPersonal ? Icons.person : Icons.building}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-700">
-                {isPersonal ? "Modo Personal" : "Modo Empresa"}
-              </p>
-              <p className="text-[10px] text-slate-400">{modeChanging ? "Cambiando..." : "Haz clic para cambiar"}</p>
-            </div>
-            <div className="text-slate-400 shrink-0">{Icons.switch}</div>
-          </button>
-        </div>
-      )}
-
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <nav className="z-nav flex-1 space-y-0.5 overflow-y-auto">
         {navItems.map(item => {
           const isActive = pathname === item.href;
           return (
-            <Link key={item.href} href={item.href} onClick={onNavClick}
+            <Link key={item.href} href={item.href} aria-current={isActive ? "page" : undefined} onClick={onNavClick}
               className={clsx(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition",
                 isActive
-                  ? "bg-amber-50 text-amber-700 font-semibold border border-amber-200"
-                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                  ? "bg-amber-soft text-amber-ink font-semibold border border-line"
+                  : "text-muted hover:text-ink hover:bg-surface-muted"
               )}>
               <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
               {item.label}
@@ -225,17 +189,36 @@ function SidebarContent({
         })}
       </nav>
 
+      {/* User info + Mode toggle */}
+      {user && (
+        <div className="z-sidebar-profile">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="w-8 h-8 rounded-xl bg-surface-muted flex items-center justify-center text-sm font-bold text-muted">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-ink text-xs font-semibold truncate">{user.name}</p>
+              <p className="text-subtle text-[10px]">
+                {user.status === "trial"
+                  ? `Prueba · ${Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now) / 86400000))} días`
+                  : "Plan Activo"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Logout */}
-      <div className="p-3 border-t border-slate-100 space-y-1">
+      <div className="p-3 border-t border-line space-y-1">
         <button onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition">
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-subtle hover:text-ink hover:bg-surface-muted transition">
           <span className="w-5 flex items-center justify-center">{Icons.logout}</span>
           Salir
         </button>
-        <p className="px-3 text-[10px] text-slate-300">
-          <Link href="/dashboard" className="hover:text-slate-500 hover:underline">Português (Brasil)</Link>
+        <p className="px-3 text-[10px] text-subtle">
+          <Link href="/dashboard" className="hover:text-muted hover:underline">Português (Brasil)</Link>
           {" · "}
-          <Link href="/pt/dashboard" className="hover:text-slate-500 hover:underline">Português (Portugal)</Link>
+          <Link href="/pt/dashboard" className="hover:text-muted hover:underline">Português (Portugal)</Link>
         </p>
       </div>
     </>
@@ -246,7 +229,6 @@ export default function DashboardLayoutEs({ children }: { children: React.ReactN
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [modeChanging, setModeChanging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -259,28 +241,18 @@ export default function DashboardLayoutEs({ children }: { children: React.ReactN
     setSidebarOpen(false);
   }
 
-  async function toggleMode() {
-    if (!user || modeChanging) return;
-    setModeChanging(true);
-    const newMode = user.activeMode === "personal" ? "business" : "personal";
-    await fetch("/api/admin/user-mode", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: newMode }) });
-    setUser(u => u ? { ...u, activeMode: newMode } : u);
-    setModeChanging(false);
-    window.location.reload();
-  }
-
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/es/login");
   }
 
   const isPersonal = user?.activeMode !== "business";
-  const sidebarProps = { user, pathname, modeChanging, isPersonal, toggleMode, logout, onNavClick: () => setSidebarOpen(false) };
+  const sidebarProps = { user, pathname, logout, onNavClick: () => setSidebarOpen(false) };
 
   return (
-    <div className="flex h-screen bg-[#F6F7F9]">
+    <div className="zelo-app z-shell">
       {/* Sidebar — desktop (lg+) */}
-      <div className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col shrink-0 shadow-sm">
+      <div className="z-sidebar hidden lg:flex flex-col shrink-0">
         <SidebarContent {...sidebarProps} />
       </div>
 
@@ -288,29 +260,30 @@ export default function DashboardLayoutEs({ children }: { children: React.ReactN
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
-          <div className="relative w-72 max-w-[85vw] h-full bg-white flex flex-col shadow-xl">
+          <div className="relative w-72 max-w-[85vw] h-full bg-surface flex flex-col shadow-xl">
             <SidebarContent {...sidebarProps} />
           </div>
         </div>
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 shrink-0">
-          <button onClick={() => setSidebarOpen(true)}
-            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition">
+      <div className="z-workspace">
+        <div className="z-mobile-topbar lg:hidden flex items-center gap-3 px-4 py-3 border-b border-line shrink-0">
+          <button aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg text-muted hover:bg-surface-muted transition">
             {Icons.menu}
           </button>
-          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="h-9 w-auto" />
+          <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={293} className="z-wordmark z-wordmark-dark" /><Image src="/brand/zelo-wordmark-light.png" alt="" width={640} height={293} className="z-wordmark z-wordmark-light"/>
           {user && (
-            <span className="ml-auto text-xs text-slate-500 truncate max-w-[120px]">
+            <span className="ml-auto text-xs text-muted truncate max-w-[120px]">
               {isPersonal ? "👤 Personal" : "🏢 Empresa"}
             </span>
           )}
         </div>
 
+        {pathname!=="/es/dashboard"&&<WorkspaceHeader name={user?.name} mode={user?.activeMode}/>}
         <div className="flex-1 overflow-auto">
-          <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-7">
+          <main className="z-main">
             {children}
           </main>
         </div>

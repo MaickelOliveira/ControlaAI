@@ -6,6 +6,11 @@ import Link from "next/link";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankDate} from "@/lib/open-finance-display";
+import {bankDashboardAccounts} from "@/lib/bank-dashboard";
+import {bankMoney} from "@/lib/open-finance-display";
+import DashboardCredit from "@/components/DashboardCredit";
+import DashboardAgenda from "@/components/DashboardAgenda";
+import EclipseDashboardHeader from "@/components/EclipseDashboardHeader";
 import DashboardBalanceSummary from "@/components/DashboardBalanceSummary";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters, previousRange } from "@/components/FinanceFilterBar";
 
@@ -13,23 +18,23 @@ const BankDashboard = dynamic(()=>import("@/components/BankDashboard"),{ssr:fals
 
 const BarChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.BarChartComponent),
-  { ssr: false, loading: () => <div className="h-[220px] flex items-center justify-center text-slate-300 text-sm">Carregando gráfico...</div> }
+  { ssr: false, loading: () => <div className="h-[220px] flex items-center justify-center text-subtle text-sm">Carregando gráfico...</div> }
 );
 const PieChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.PieChartComponent),
-  { ssr: false, loading: () => <div className="h-[170px] flex items-center justify-center text-slate-300 text-sm">Carregando...</div> }
+  { ssr: false, loading: () => <div className="h-[170px] flex items-center justify-center text-subtle text-sm">Carregando...</div> }
 );
 const AreaChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.AreaChartComponent),
-  { ssr: false, loading: () => <div className="h-[200px] flex items-center justify-center text-slate-300 text-sm">Carregando gráfico...</div> }
+  { ssr: false, loading: () => <div className="h-[200px] flex items-center justify-center text-subtle text-sm">Carregando gráfico...</div> }
 );
 const CategoryBarChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.CategoryBarChartComponent),
-  { ssr: false, loading: () => <div className="h-[238px] animate-pulse rounded-2xl bg-slate-50" /> }
+  { ssr: false, loading: () => <div className="h-[238px] animate-pulse rounded-2xl bg-surface-muted" /> }
 );
 const DailyFlowChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.DailyFlowChartComponent),
-  { ssr: false, loading: () => <div className="h-[230px] animate-pulse rounded-2xl bg-slate-50" /> }
+  { ssr: false, loading: () => <div className="h-[230px] animate-pulse rounded-2xl bg-surface-muted" /> }
 );
 
 type Finance = LedgerEntry;
@@ -146,7 +151,7 @@ function TrendBadge({ pct, goodWhenUp }: { pct: number | null; goodWhenUp: boole
   const isUp = pct >= 0;
   const isGood = isUp === goodWhenUp;
   return (
-    <span className={clsx("text-[11px] font-semibold inline-flex items-center gap-0.5", isGood ? "text-emerald-600" : "text-red-500")}>
+    <span className={clsx("text-[11px] font-semibold inline-flex items-center gap-0.5", isGood ? "text-emerald-ink" : "text-red-500")}>
       {isUp ? "▲" : "▼"} {Math.abs(pct)}% vs período anterior
     </span>
   );
@@ -155,34 +160,21 @@ function TrendBadge({ pct, goodWhenUp }: { pct: number | null; goodWhenUp: boole
 function DashboardLoading() {
   return (
     <div className="space-y-5 animate-pulse" aria-label="Carregando dashboard">
-      <div className="h-52 rounded-[28px] bg-slate-200" />
-      <div className="h-14 rounded-2xl bg-slate-100" />
+      <div className="h-52 rounded-[28px] bg-line" />
+      <div className="h-14 rounded-2xl bg-surface-muted" />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[0, 1, 2, 3].map(item => <div key={item} className="h-32 rounded-2xl bg-slate-100" />)}
+        {[0, 1, 2, 3].map(item => <div key={item} className="h-32 rounded-2xl bg-surface-muted" />)}
       </div>
       <div className="grid lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 h-80 rounded-2xl bg-slate-100" />
-        <div className="h-80 rounded-2xl bg-slate-100" />
+        <div className="lg:col-span-2 h-80 rounded-2xl bg-surface-muted" />
+        <div className="h-80 rounded-2xl bg-surface-muted" />
       </div>
     </div>
   );
 }
 
 function EmptyChart({ label }: { label: string }) {
-  return <div className="flex h-52 items-center justify-center rounded-2xl bg-slate-50 text-center text-xs font-medium text-slate-400">{label}</div>;
-}
-
-function EmptyList({ label }: { label: string }) {
-  return <div className="flex h-36 items-center justify-center rounded-2xl bg-slate-50 text-center text-xs font-medium text-slate-400">{label}</div>;
-}
-
-function PanelTitle({ title, href }: { title: string; href: string }) {
-  return (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <h3 className="font-semibold text-slate-800">{title}</h3>
-      <Link href={href} className="text-[11px] font-semibold text-amber-600 transition hover:text-amber-700">Ver tudo →</Link>
-    </div>
-  );
+  return <div className="flex h-52 items-center justify-center rounded-2xl bg-surface-muted text-center text-xs font-medium text-subtle">{label}</div>;
 }
 
 export default function DashboardPage() {
@@ -265,12 +257,11 @@ export default function DashboardPage() {
   const flowData = useMemo(() => buildFlowData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
 
   if (loading||(!ledger&&!ledgerError)) return <DashboardLoading />;
-  if(!ledger&&ledgerError)return <div className="space-y-5"><h1 className="text-2xl font-bold text-slate-900">Dashboard</h1><FinanceFilterBar categories={categories} value={filters} onChange={setFilters}/><p role="alert" className="rounded-2xl bg-amber-50 p-5 text-sm text-amber-900">{ledgerError} Tente reduzir o período. Tentaremos atualizar novamente.</p></div>;
+  if(!ledger&&ledgerError)return <div className="space-y-5"><h1 className="text-2xl font-bold text-ink">Dashboard</h1><FinanceFilterBar categories={categories} value={filters} onChange={setFilters}/><p role="alert" className="rounded-2xl bg-amber-soft p-5 text-sm text-amber-ink">{ledgerError} Tente reduzir o período. Tentaremos atualizar novamente.</p></div>;
 
   if (!data) return null;
 
   const { user, tasks, recentTransactions } = data;
-  const isPersonal = user.activeMode !== "business";
   const monthLabel = new Date(now).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const trialDays = Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now) / 86400000));
   const rangeDays = Math.max(1, Math.round((new Date(filters.to + "T12:00:00").getTime() - new Date(filters.from + "T12:00:00").getTime()) / 86_400_000) + 1);
@@ -280,145 +271,48 @@ export default function DashboardPage() {
   const positiveExpenses=pieData.filter(g=>g.value>0),positiveExpenseTotal=positiveExpenses.reduce((sum,g)=>sum+g.value,0);
   const postedCount = filteredFinances.filter(f => f.status !== "pending").length;
   const rangeLabel = `${new Date(filters.from + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} — ${new Date(filters.to + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
-  const kpis = [
-    { label: "Receitas", value: fmt(activeBalance.income), icon: "↗", color: "text-emerald-600", accent: "bg-emerald-500", trend: !ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.income, prevBalance.income)} goodWhenUp /> },
-    { label: "Despesas", value: fmt(activeBalance.expense), icon: "↘", color: "text-rose-600", accent: "bg-rose-500", trend: !ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.expense, prevBalance.expense)} goodWhenUp={false} /> },
-    { label: "Taxa de economia", value: `${savingsRate}%`, icon: "◎", color: savingsRate >= 0 ? "text-blue-600" : "text-orange-600", accent: savingsRate >= 0 ? "bg-blue-500" : "bg-orange-500", sub: savingsRate >= 20 ? "Ótimo ritmo no período" : savingsRate >= 0 ? "Há espaço para melhorar" : "Despesas acima das receitas" },
-    { label: "Tarefas pendentes", value: String(tasks.pendingCount), icon: tasks.overdueCount > 0 ? "!" : "✓", color: tasks.overdueCount > 0 ? "text-amber-600" : "text-violet-600", accent: tasks.overdueCount > 0 ? "bg-amber-500" : "bg-violet-500", sub: tasks.overdueCount > 0 ? `${tasks.overdueCount} atrasada${tasks.overdueCount > 1 ? "s" : ""}` : "Tudo dentro do prazo" },
-  ];
+  const cashGroups=ledger?.bank?bankDashboardAccounts(ledger.bank.overview):[];
+  const primaryCash=cashGroups.find(group=>group.currency==="BRL")??cashGroups[0];
+  const cashValue=primaryCash?bankMoney(primaryCash.total,primaryCash.currency):"—";
 
   return (
-    <div className="space-y-7 pb-8">
-      <section className="relative overflow-hidden rounded-[28px] bg-slate-950 px-5 py-6 text-white shadow-xl shadow-slate-300/40 sm:px-7 sm:py-7">
-        <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-amber-400/20 blur-2xl" />
-        <div className="absolute -bottom-24 right-1/3 h-44 w-44 rounded-full bg-blue-500/10 blur-2xl" />
-        <div className="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div>
-            <div className="mb-5 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-200">
-                {isPersonal ? "Modo pessoal" : "Modo empresa"}
-              </span>
-              <span className="text-xs capitalize text-slate-400">{monthLabel}</span>
-              {user.status === "trial" && <span className="rounded-full bg-amber-400 px-3 py-1 text-[11px] font-bold text-slate-950">Trial · {trialDays} dias</span>}
+    <div className="z-page z-eclipse-dashboard pb-8">
+      <EclipseDashboardHeader name={user.name} mode={user.activeMode} monthLabel={monthLabel} syncAt={ledger?.bank?.report.last_successful_sync_at} updating={ledger?.bank?.report.sync_pending}/>
+      <FinanceFilterBar categories={[...new Set([...categories,...finances.map(f=>f.category)])]} value={filters} onChange={setFilters}/>
+      {user.status==="trial"&&<p className="text-xs text-amber-ink">Trial · {trialDays} dias</p>}
+      {ledgerError&&<p role="alert" className="rounded-xl bg-amber-soft p-4 text-xs text-amber-ink">{ledgerError} Os valores exibidos podem estar desatualizados.</p>}
+      <div className="z-eclipse-grid">
+        <div className="min-w-0">
+          <section className="z-eclipse-focus" aria-label="Visão geral financeira">
+            <div className="z-card-heading"><h2>Visão geral financeira</h2><span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] text-white/70">{rangeLabel}</span></div>
+            <div className="z-eclipse-stats">
+              <div className="z-eclipse-stat"><span>Saldo disponível nas contas</span><strong>{cashValue}</strong><small>{primaryCash?`${primaryCash.accounts.length} conta(s) · ${primaryCash.currency}${primaryCash.missing?" · há saldos não informados":""}`:"Conecte um banco em Contas"}</small></div>
+              <div className="z-eclipse-stat"><span>Entradas do período</span><strong>{fmt(activeBalance.income)}</strong>{!ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.income,prevBalance.income)} goodWhenUp/>}<small>Todas as origens</small></div>
+              <div className="z-eclipse-stat"><span>Saídas do período</span><strong>{fmt(activeBalance.expense)}</strong>{!ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.expense,prevBalance.expense)} goodWhenUp={false}/>}<small>Contas, cartões e registros</small></div>
+              <div className="z-eclipse-stat"><DashboardBalanceSummary balance={activeBalance} compact/></div>
             </div>
-            <p className="text-sm text-slate-400">Olá, {user.name.split(" ")[0]}. Veja seus registros e seus bancos em um só lugar.</p>
-            <DashboardBalanceSummary balance={activeBalance}/>
+            <div className="mb-4 flex justify-between gap-3"><h3 className="text-sm font-medium">Entradas e saídas</h3><span className="text-[10px] text-white/50">Últimos 6 meses</span></div>
+            {history.mode!==mode?<div className="z-chart-empty">Carregando histórico…</div>:history.error?<p role="alert" className="z-chart-empty">{history.error}</p>:barData.every(d=>d.receitas===0&&d.despesas===0)?<div className="z-chart-empty">Seu histórico financeiro aparecerá aqui.</div>:<DailyFlowChartComponent data={barData}/>}
+            {ledger?.bank&&<p className="mt-3 text-[10px] leading-5 text-white/50">Saldo: posição recebida do banco. Resultado: entradas menos saídas do período. Última importação: {bankDate(ledger.bank.report.last_successful_sync_at)}{ledger.bank.report.sync_pending?" · atualizando":""}. O histórico bancário pode estar incompleto.</p>}
+            {cashGroups.length>1&&<p className="mt-2 text-[10px] text-white/70">Outras moedas: {cashGroups.filter(group=>group!==primaryCash).map(group=>bankMoney(group.total,group.currency)).join(" · ")} · exibidas separadamente.</p>}
+          </section>
+          <div className="z-eclipse-secondary">
+            <article className="z-card"><div className="z-card-heading"><h2>Onde você gastou</h2><span className="z-badge">{rangeLabel}</span></div>{positiveExpenses.length?<PieChartComponent data={positiveExpenses} totalExpense={positiveExpenseTotal}/>:<div className="z-empty">Sem despesas positivas neste período.</div>}{pieData.some(g=>g.value<0)&&<p className="mt-3 text-[10px] text-emerald-ink">Estornos líquidos aparecem no ranking, fora desta participação.</p>}</article>
+            <article className="z-card"><div className="z-card-heading"><h2>Últimas movimentações</h2><Link href="/dashboard/financas">Ver todas →</Link></div>{!filteredFinances.length?<div className="z-empty">Nenhuma movimentação neste período.</div>:filteredFinances.slice(0,6).map(transaction=><div key={transaction.id} className="z-transaction-row"><span className={clsx("grid h-8 w-8 shrink-0 place-items-center rounded-xl",transaction.type==="income"?"bg-emerald-soft text-emerald-ink":"bg-red-soft text-red-ink")}>{transaction.type==="income"?"↗":"↘"}</span><div className="min-w-0 flex-1"><p className="truncate">{transaction.description}</p><small>{transaction.category}</small><span className="z-badge ml-1">{financeOrigin(transaction)}</span></div><strong className={transaction.type==="income"?"text-emerald-ink":"text-red-ink"}>{transaction.type==="income"?"+":"−"}{fmt(transaction.amount)}</strong></div>)}</article>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/dashboard/financas" className="rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-300">+ Movimentação</Link>
-            <Link href="/dashboard/tarefas" className="rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/15">+ Tarefa</Link>
-            <Link href="/dashboard/metas" className="rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/15">+ Meta</Link>
-          </div>
         </div>
+        <aside className="z-eclipse-rail" aria-label="Crédito e planejamento">
+          <DashboardCredit overview={ledger?.bank?.overview??null}/>
+          <DashboardAgenda/>
+          <article className="z-card"><div className="z-card-heading"><h2>Tarefas</h2><Link href="/dashboard/tarefas">Ver todas →</Link></div><p className="mb-3 text-[11px] text-subtle">{tasks.pendingCount} pendente(s){tasks.overdueCount?` · ${tasks.overdueCount} atrasada(s)`:" · tudo dentro do prazo"}</p>{tasks.recent.length?tasks.recent.slice(0,4).map(task=><Link href="/dashboard/tarefas" key={task.id} className="z-task-item"><span className="z-task-dot">{task.priority==="high"?"!":""}</span><span className="truncate">{task.title}</span></Link>):<div className="z-empty">Tudo em dia.</div>}<Link href="/dashboard/tarefas" className="mt-3 block rounded-full border border-line py-2.5 text-center text-[11px]">+ Nova tarefa</Link></article>
+          <article className="z-card"><div className="z-card-heading"><h2>Suas metas</h2><Link href="/dashboard/metas">Ver todas →</Link></div>{goals.length?goals.slice(0,3).map(goal=>{const pct=goal.targetAmount>0?Math.min(100,Math.round(goal.currentAmount/goal.targetAmount*100)):0;return <div key={goal.id} className="mb-4 last:mb-0"><div className="mb-2 flex justify-between text-xs"><span className="truncate">{goal.title}</span><strong>{pct}%</strong></div><div className="h-1.5 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-primary" style={{width:`${pct}%`}}/></div><p className="mt-1.5 text-[10px] text-subtle">{fmt(goal.currentAmount)} de {fmt(goal.targetAmount)}</p></div>;}):<div className="z-empty">Qual é seu próximo objetivo?<br/><Link href="/dashboard/metas" className="text-amber-ink">Criar uma meta →</Link></div>}</article>
+        </aside>
+      </div>
+      <section className="space-y-5" aria-label="Análise financeira completa"><h2 className="text-lg font-semibold text-ink">Análise financeira completa</h2>
+        <div className="grid gap-4 sm:grid-cols-3 mb-4"><div className="z-card"><p className="text-xs text-subtle">Média diária de gastos</p><strong className="mt-2 block text-lg">{fmt(averageDailyExpense)}</strong></div><div className="z-card"><p className="text-xs text-subtle">Maior categoria</p><strong className="mt-2 block text-lg">{topCategory?`${topCategory.name} · ${fmt(topCategory.value)}`:"Sem despesas"}</strong></div><div className="z-card"><p className="text-xs text-subtle">Taxa de economia · {postedCount} movimentos</p><strong className="mt-2 block text-lg">{savingsRate}%</strong></div></div>
+        <div className="grid gap-5 lg:grid-cols-12"><article className="z-card lg:col-span-8"><div className="z-card-heading"><h2>Receitas, despesas e resultado</h2></div>{history.error?<p role="alert" className="text-amber-ink text-xs">{history.error}</p>:<BarChartComponent data={barData}/>}</article><article className="z-card lg:col-span-4"><div className="z-card-heading"><h2>Ranking de categorias</h2></div>{pieData.length?<CategoryBarChartComponent data={pieData}/>:<EmptyChart label="Sem categorias para comparar"/>}</article><BankDashboard data={ledger?.bank??null} entries={filteredFinances}/><article className="z-card lg:col-span-12"><div className="z-card-heading"><h2>Evolução do resultado</h2></div>{areaData.length?<AreaChartComponent data={areaData}/>:<EmptyChart label="Sem movimentações no período"/>}</article><article className="z-card lg:col-span-12"><div className="z-card-heading"><h2>Ritmo das movimentações</h2></div>{flowData.length?<DailyFlowChartComponent data={flowData}/>:<EmptyChart label="Sem fluxo para visualizar"/>}</article></div>
       </section>
-
-      {ledgerError&&<p role="alert" className="rounded-xl bg-amber-50 p-4 text-xs text-amber-900">{ledgerError} Os valores exibidos podem estar desatualizados.</p>}
-      <FinanceFilterBar categories={[...new Set([...categories,...finances.map(f=>f.category)])]} value={filters} onChange={setFilters} />
-
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        {kpis.map(k => (
-          <div key={k.label} className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-            <div className={clsx("absolute inset-x-0 top-0 h-1", k.accent)} />
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs font-medium text-slate-500">{k.label}</p>
-              <span className={clsx("flex h-8 w-8 items-center justify-center rounded-xl bg-slate-50 text-base font-bold", k.color)}>{k.icon}</span>
-            </div>
-            <p className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{k.value}</p>
-            {k.sub && <p className="mt-1 text-[11px] text-slate-400">{k.sub}</p>}
-            {k.trend && <div className="mt-1.5">{k.trend}</div>}
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Média diária de gastos</p>
-          <p className="mt-1 text-base font-bold text-slate-800">{fmt(averageDailyExpense)}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Maior categoria</p>
-          <p className="mt-1 truncate text-base font-bold text-slate-800">{topCategory ? `${topCategory.name} · ${fmt(topCategory.value)}` : "Sem despesas"}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Movimentações no período</p>
-          <p className="mt-1 text-base font-bold text-slate-800">{postedCount} registro{postedCount === 1 ? "" : "s"}</p>
-        </div>
-      </section>
-
-      <section aria-label="Visão financeira integrada" className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">Seu financeiro</p>
-          <h2 className="mt-1 text-xl font-bold text-slate-900">Tudo em uma só visão</h2>
-          <p className="mt-1 text-xs text-slate-500">Todas as origens nos mesmos gráficos e indicadores. Histórico fixo de seis meses; saldos das contas e crédito mostram a posição recebida do banco.</p></div>
-          {!!ledger?.bank?.overview.connections.length&&<Link href="/dashboard/contas" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Gerenciar contas →</Link>}
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-12">
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-8">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div><h3 className="font-semibold text-slate-800">Receitas, despesas e resultado</h3><p className="mt-0.5 text-xs text-slate-400">Comparativo dos últimos 6 meses</p></div>
-              <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">6 meses</span>
-            </div>
-            {history.mode!==mode?<EmptyChart label="Carregando os seis meses..."/>:history.error?<p role="alert" className="rounded-xl bg-amber-50 p-4 text-xs text-amber-900">{history.error}</p>:barData.every(d => d.receitas === 0 && d.despesas === 0) ? <EmptyChart label="Sem histórico financeiro" /> : <BarChartComponent data={barData} />}
-          </article>
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-4">
-            <div className="mb-3"><h3 className="font-semibold text-slate-800">Participação das despesas</h3><p className="mt-0.5 text-xs text-slate-400">Categorias com gasto líquido positivo</p></div>
-            {positiveExpenses.length === 0 ? <EmptyChart label="Sem despesas positivas no período" /> : <PieChartComponent data={positiveExpenses} totalExpense={positiveExpenseTotal} />}
-            {pieData.some(g=>g.value<0)&&<p className="mt-3 text-[11px] text-emerald-700">Categorias com estorno líquido aparecem com valor negativo no ranking; ficam fora desta participação.</p>}
-          </article>
-          <BankDashboard data={ledger?.bank??null} entries={filteredFinances}/>
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-7">
-            <div className="mb-4"><h3 className="font-semibold text-slate-800">Evolução do resultado</h3><p className="mt-0.5 text-xs text-slate-400">Acumulado ao longo do período</p></div>
-            {areaData.length === 0 ? <EmptyChart label="Sem movimentações no período" /> : <AreaChartComponent data={areaData} />}
-          </article>
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-5">
-            <div className="mb-3"><h3 className="font-semibold text-slate-800">Ranking de categorias</h3><p className="mt-0.5 text-xs text-slate-400">Onde você mais concentrou gastos</p></div>
-            {pieData.length === 0 ? <EmptyChart label="Sem categorias para comparar" /> : <CategoryBarChartComponent data={pieData} />}
-          </article>
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-12">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-            <div><h3 className="font-semibold text-slate-800">Ritmo das movimentações</h3><p className="mt-0.5 text-xs text-slate-400">Picos de entradas e saídas no período selecionado</p></div>
-            <span className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">{rangeLabel}</span>
-          </div>
-          {flowData.length === 0 ? <EmptyChart label="Sem fluxo para visualizar" /> : <DailyFlowChartComponent data={flowData} />}
-          </article>
-        </div>
-        {ledger?.bank&&<p className="text-[11px] text-slate-500">Atualização automática · última importação concluída em {bankDate(ledger.bank.report.last_successful_sync_at)} · histórico bancário pode estar incompleto{ledger.bank.report.sync_pending?" · há dados sendo atualizados":""}</p>}
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-end justify-between gap-4">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">Planejamento</p><h2 className="mt-1 text-xl font-bold text-slate-900">Próximos passos</h2></div>
-        </div>
-        <div className="grid gap-5 xl:grid-cols-3">
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-            <PanelTitle title="Metas em andamento" href="/dashboard/metas" />
-            {goals.length === 0 ? <EmptyList label="Nenhuma meta ativa" /> : <div className="space-y-4">{goals.slice(0, 4).map(g => {
-              const pct = g.targetAmount > 0 ? Math.min(100, Math.round(g.currentAmount / g.targetAmount * 100)) : 0;
-              return <div key={g.id}><div className="mb-1.5 flex justify-between gap-3 text-xs"><span className="truncate font-medium text-slate-700">{g.title}</span><span className="font-bold text-slate-800">{pct}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500" style={{ width: `${pct}%` }} /></div><p className="mt-1 text-[10px] text-slate-400">{fmt(g.currentAmount)} de {fmt(g.targetAmount)}</p></div>;
-            })}</div>}
-          </article>
-
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-            <PanelTitle title="Transações recentes" href="/dashboard/financas" />
-            {finances.filter(t => t.mode === user.activeMode&&t.status!=="pending").length === 0 ? <EmptyList label="Nenhuma transação ainda" /> : <div className="space-y-1">{finances.filter(t => t.mode === user.activeMode&&t.status!=="pending").slice(0, 5).map(t => (
-              <div key={t.id} className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-0"><span className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold", t.type === "income" ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600")}>{t.type === "income" ? "↗" : "↘"}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-700">{t.description}</p><p className="text-[10px] text-slate-400">{t.category} · {financeOrigin(t)}</p></div><span className={clsx("text-xs font-bold", t.type === "income" ? "text-emerald-600" : "text-rose-600")}>{t.type === "income" ? "+" : "-"}{fmt(t.amount)}</span></div>
-            ))}</div>}
-          </article>
-
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-            <PanelTitle title="Tarefas pendentes" href="/dashboard/tarefas" />
-            {tasks.recent.length === 0 ? <EmptyList label="Tudo em dia" /> : <div className="space-y-2">{tasks.recent.slice(0, 5).map(t => {
-              const prColor = t.priority === "high" ? "bg-rose-50 text-rose-600" : t.priority === "medium" ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-500";
-              return <div key={t.id} className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5"><span className={clsx("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold", prColor)}>{t.priority === "high" ? "!" : "•"}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-700">{t.title}</p>{t.dueDate && <p className="mt-0.5 text-[10px] text-slate-400">Prazo {new Date(t.dueDate + "T12:00:00").toLocaleDateString("pt-BR")}</p>}</div></div>;
-            })}</div>}
-          </article>
-        </div>
-      </section>
-
-      {recentTransactions.length === 0 && (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-bold text-slate-800">Comece pelo WhatsApp</h3><p className="mt-1 text-sm text-slate-500">Experimente enviar “Gastei 50 no mercado”, “Criar tarefa: ligar para o cliente” ou “Meta: guardar 5000 para viagem”.</p></section>
-      )}
+      {recentTransactions.length===0&&<p className="text-xs text-subtle">Comece pelo WhatsApp: “Gastei 50 no mercado”, “Criar tarefa: ligar para o cliente” ou “Meta: guardar 5000 para viagem”.</p>}
     </div>
   );
 }

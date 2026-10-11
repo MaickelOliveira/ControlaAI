@@ -64,9 +64,9 @@ function formatFullTime(ts: number): string {
 }
 
 function SupportStatusBadge({ status }: { status: SupportStatus }) {
-  if (status === "attended") return <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 rounded-full px-2 py-0.5 shrink-0">Atendido</span>;
-  if (status === "needs_attention") return <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 shrink-0">Precisa atendimento</span>;
-  return <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 shrink-0">Em andamento</span>;
+  if (status === "attended") return <span className="text-[10px] font-semibold text-emerald-ink bg-emerald-soft rounded-full px-2 py-0.5 shrink-0">Atendido</span>;
+  if (status === "needs_attention") return <span className="text-[10px] font-semibold text-amber-ink bg-amber-soft rounded-full px-2 py-0.5 shrink-0">Precisa atendimento</span>;
+  return <span className="text-[10px] font-semibold text-muted bg-surface-muted rounded-full px-2 py-0.5 shrink-0">Em andamento</span>;
 }
 
 export default function AdminInboxPage() {
@@ -345,18 +345,18 @@ export default function AdminInboxPage() {
   const supportPendingCount = supportConvs.filter(c => c.status === "needs_attention").length;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3rem)] sm:h-[calc(100vh-4rem)] -m-4 sm:-m-6 bg-white rounded-none sm:rounded-2xl overflow-hidden border border-slate-200">
+    <div className="flex flex-col z-inbox min-h-0 bg-surface rounded-2xl overflow-hidden border border-line">
       {/* Seletor de abas */}
-      <div className="flex border-b border-slate-200 shrink-0 bg-white">
+      <div className="flex border-b border-line shrink-0 bg-surface">
         <button onClick={() => setTab("inbox")}
           className={clsx("flex-1 sm:flex-none sm:px-6 px-4 py-3 text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5",
-            tab === "inbox" ? "border-amber-500 text-amber-700" : "border-transparent text-slate-400 hover:text-slate-600")}>
+            tab === "inbox" ? "border-amber-500 text-amber-ink" : "border-transparent text-subtle hover:text-muted")}>
           💬 Inbox
           {totalUnread > 0 && <span className="bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">{totalUnread}</span>}
         </button>
         <button onClick={() => setTab("suporte")}
           className={clsx("flex-1 sm:flex-none sm:px-6 px-4 py-3 text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5",
-            tab === "suporte" ? "border-amber-500 text-amber-700" : "border-transparent text-slate-400 hover:text-slate-600")}>
+            tab === "suporte" ? "border-amber-500 text-amber-ink" : "border-transparent text-subtle hover:text-muted")}>
           🎧 Suporte
           {supportPendingCount > 0 && <span className="bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">{supportPendingCount}</span>}
         </button>
@@ -365,31 +365,31 @@ export default function AdminInboxPage() {
       {tab === "inbox" ? (
         <div className="flex flex-1 min-h-0">
           {/* Sidebar */}
-          <div className={clsx("w-full sm:w-80 border-r border-slate-200 flex flex-col shrink-0", selected && "hidden sm:flex")}>
-            <div className="p-4 border-b border-slate-200">
+          <div className={clsx("w-full sm:w-80 border-r border-line flex flex-col shrink-0", selected && "hidden sm:flex")}>
+            <div className="p-4 border-b border-line">
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome ou telefone..."
-                className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
+                className="w-full bg-surface-muted border border-line rounded-xl px-3 py-2 text-sm text-ink caret-ink placeholder:text-subtle outline-none focus:border-amber-500 transition" />
             </div>
             <div className="flex-1 overflow-y-auto">
               {filtered.length === 0 && (
-                <p className="text-slate-400 text-sm text-center p-6">Nenhuma conversa ainda.</p>
+                <p className="text-subtle text-sm text-center p-6">Nenhuma conversa ainda.</p>
               )}
               {filtered.map(c => (
                 <button key={c.phone} onClick={() => handleSelect(c.phone)}
-                  className={clsx("w-full flex items-center gap-3 px-4 py-3 text-left border-b border-slate-100 transition hover:bg-slate-50",
-                    selected === c.phone && "bg-amber-50")}>
-                  <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
+                  className={clsx("w-full flex items-center gap-3 px-4 py-3 text-left border-b border-line transition hover:bg-surface-muted",
+                    selected === c.phone && "bg-amber-soft")}>
+                  <div className="w-10 h-10 rounded-full bg-line text-muted flex items-center justify-center text-xs font-bold shrink-0">
                     {initials(c.contactName ?? displayPhone(c.phone))}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={clsx("text-sm truncate", c.unread ? "font-bold text-slate-900" : "font-medium text-slate-700")}>
+                      <p className={clsx("text-sm truncate", c.unread ? "font-bold text-ink" : "font-medium text-ink")}>
                         {c.contactName ?? displayPhone(c.phone)}
                       </p>
-                      <span className="text-[10px] text-slate-400 shrink-0">{c.lastActivity ? formatTime(c.lastActivity) : ""}</span>
+                      <span className="text-[10px] text-subtle shrink-0">{c.lastActivity ? formatTime(c.lastActivity) : ""}</span>
                     </div>
-                    <p className="text-xs text-slate-400 truncate flex items-center gap-1">
-                      {c.lastMessage?.role === "assistant" && <span className="text-amber-600">✓✓</span>}
+                    <p className="text-xs text-subtle truncate flex items-center gap-1">
+                      {c.lastMessage?.role === "assistant" && <span className="text-amber-ink">✓✓</span>}
                       {c.lastMessage?.type === "audio" ? "🎵 Áudio" : c.lastMessage?.type === "image" ? "📷 Imagem" : (c.lastMessage?.content ?? "").slice(0, 60)}
                     </p>
                   </div>
@@ -402,36 +402,36 @@ export default function AdminInboxPage() {
           {/* Chat */}
           <div className={clsx("flex-1 flex flex-col min-w-0", !selected && "hidden sm:flex")}>
             {!selected || !selectedConv ? (
-              <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+              <div className="flex-1 flex items-center justify-center text-subtle text-sm">
                 Selecione uma conversa para ver o histórico
               </div>
             ) : (
               <>
-                <div className="p-4 border-b border-slate-200 flex items-center gap-3">
-                  <button onClick={() => { setSelected(null); selectedRef.current = null; }} className="sm:hidden text-slate-400">←</button>
-                  <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
+                <div className="p-4 border-b border-line flex items-center gap-3">
+                  <button onClick={() => { setSelected(null); selectedRef.current = null; }} className="sm:hidden text-subtle">←</button>
+                  <div className="w-9 h-9 rounded-full bg-line text-muted flex items-center justify-center text-xs font-bold shrink-0">
                     {initials(selectedConv.contactName ?? displayPhone(selectedConv.phone))}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-semibold text-slate-900 text-sm truncate">{selectedConv.contactName ?? displayPhone(selectedConv.phone)}</p>
-                    <p className="text-xs text-slate-400">{displayPhone(selectedConv.phone)}</p>
+                    <p className="font-semibold text-ink text-sm truncate">{selectedConv.contactName ?? displayPhone(selectedConv.phone)}</p>
+                    <p className="text-xs text-subtle">{displayPhone(selectedConv.phone)}</p>
                   </div>
                 </div>
 
                 {selectedConv.aiPaused && (
-                  <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between">
-                    <p className="text-xs text-amber-700">⏸️ IA pausada — atendimento manual</p>
-                    <button onClick={() => toggleAiPause(false)} className="text-xs font-medium text-amber-700 underline">Reativar IA</button>
+                  <div className="bg-amber-soft border-b border-line px-4 py-2 flex items-center justify-between">
+                    <p className="text-xs text-amber-ink">⏸️ IA pausada — atendimento manual</p>
+                    <button onClick={() => toggleAiPause(false)} className="text-xs font-medium text-amber-ink underline">Reativar IA</button>
                   </div>
                 )}
 
-                <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#F1F5F9]">
+                <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-2 bg-surface-muted">
                   {messages.map((m, i) => (
                     <div key={i} className={clsx("flex", m.role === "assistant" ? "justify-end" : "justify-start")}>
                       <div className={clsx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words",
-                        m.role === "assistant" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-white text-slate-800 rounded-bl-sm border border-slate-200")}>
+                        m.role === "assistant" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-surface text-ink rounded-bl-sm border border-line")}>
                         {m.type === "audio" && !m.content ? "🎵 Áudio" : m.content}
-                        <div className={clsx("text-[10px] mt-1 flex items-center gap-1 justify-end", m.role === "assistant" ? "text-emerald-100" : "text-slate-400")}>
+                        <div className={clsx("text-[10px] mt-1 flex items-center gap-1 justify-end", m.role === "assistant" ? "text-emerald-100" : "text-subtle")}>
                           {formatFullTime(m.ts)}
                           {m.role === "assistant" && <span>✓✓</span>}
                         </div>
@@ -441,13 +441,13 @@ export default function AdminInboxPage() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                <div className="p-3 border-t border-slate-200 flex gap-2">
+                <div className="p-3 border-t border-line flex gap-2">
                   <input value={input} onChange={e => setInput(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                     placeholder="Digite uma mensagem..."
-                    className="flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
+                    className="flex-1 bg-surface-muted border border-line rounded-xl px-4 py-2.5 text-sm text-ink caret-ink placeholder:text-subtle outline-none focus:border-amber-500 transition" />
                   <button onClick={send} disabled={!input.trim() || sending}
-                    className="bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40">
+                    className="bg-amber-600 hover:bg-amber-500 text-ink font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40">
                     Enviar
                   </button>
                 </div>
@@ -458,32 +458,32 @@ export default function AdminInboxPage() {
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Sidebar */}
-          <div className={clsx("w-full sm:w-80 border-r border-slate-200 flex flex-col shrink-0", supportSelected && "hidden sm:flex")}>
-            <div className="p-4 border-b border-slate-200">
+          <div className={clsx("w-full sm:w-80 border-r border-line flex flex-col shrink-0", supportSelected && "hidden sm:flex")}>
+            <div className="p-4 border-b border-line">
               <input value={supportSearch} onChange={e => setSupportSearch(e.target.value)} placeholder="Buscar por nome..."
-                className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
+                className="w-full bg-surface-muted border border-line rounded-xl px-3 py-2 text-sm text-ink caret-ink placeholder:text-subtle outline-none focus:border-amber-500 transition" />
             </div>
             <div className="flex-1 overflow-y-auto">
               {supportFiltered.length === 0 && (
-                <p className="text-slate-400 text-sm text-center p-6">Nenhum pedido de suporte ainda.</p>
+                <p className="text-subtle text-sm text-center p-6">Nenhum pedido de suporte ainda.</p>
               )}
               {supportFiltered.map(c => (
                 <button key={c.userId} onClick={() => handleSupportSelect(c.userId)}
-                  className={clsx("w-full flex items-center gap-3 px-4 py-3 text-left border-b border-slate-100 transition hover:bg-slate-50",
-                    supportSelected === c.userId && "bg-amber-50")}>
-                  <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
+                  className={clsx("w-full flex items-center gap-3 px-4 py-3 text-left border-b border-line transition hover:bg-surface-muted",
+                    supportSelected === c.userId && "bg-amber-soft")}>
+                  <div className="w-10 h-10 rounded-full bg-line text-muted flex items-center justify-center text-xs font-bold shrink-0">
                     {initials(c.userName ?? "?")}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={clsx("text-sm truncate", c.unreadAdmin ? "font-bold text-slate-900" : "font-medium text-slate-700")}>
+                      <p className={clsx("text-sm truncate", c.unreadAdmin ? "font-bold text-ink" : "font-medium text-ink")}>
                         {c.userName ?? "Usuário"}
                       </p>
-                      <span className="text-[10px] text-slate-400 shrink-0">{c.lastActivity ? formatTime(c.lastActivity) : ""}</span>
+                      <span className="text-[10px] text-subtle shrink-0">{c.lastActivity ? formatTime(c.lastActivity) : ""}</span>
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-0.5">
-                      <p className="text-xs text-slate-400 truncate">
-                        {c.lastMessage?.sender === "admin" && <span className="text-amber-600">✓✓ </span>}
+                      <p className="text-xs text-subtle truncate">
+                        {c.lastMessage?.sender === "admin" && <span className="text-amber-ink">✓✓ </span>}
                         {(c.lastMessage?.text || (c.lastMessage?.attachment ? "📷 Foto" : "")).slice(0, 50)}
                       </p>
                       <SupportStatusBadge status={c.status} />
@@ -498,39 +498,39 @@ export default function AdminInboxPage() {
           {/* Chat */}
           <div className={clsx("flex-1 flex flex-col min-w-0", !supportSelected && "hidden sm:flex")}>
             {!supportSelected || !supportSelectedConv ? (
-              <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+              <div className="flex-1 flex items-center justify-center text-subtle text-sm">
                 Selecione uma conversa de suporte para ver o histórico
               </div>
             ) : (
               <>
-                <div className="p-4 border-b border-slate-200 flex items-center gap-3">
-                  <button onClick={() => { setSupportSelected(null); supportSelectedRef.current = null; }} className="sm:hidden text-slate-400">←</button>
-                  <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
+                <div className="p-4 border-b border-line flex items-center gap-3">
+                  <button onClick={() => { setSupportSelected(null); supportSelectedRef.current = null; }} className="sm:hidden text-subtle">←</button>
+                  <div className="w-9 h-9 rounded-full bg-line text-muted flex items-center justify-center text-xs font-bold shrink-0">
                     {initials(supportSelectedConv.userName ?? "?")}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-slate-900 text-sm truncate">{supportSelectedConv.userName ?? "Usuário"}</p>
+                    <p className="font-semibold text-ink text-sm truncate">{supportSelectedConv.userName ?? "Usuário"}</p>
                     <SupportStatusBadge status={supportSelectedConv.status} />
                   </div>
                   {supportSelectedConv.status === "attended" ? (
-                    <button onClick={() => setSupportStatus("needs_attention")} className="text-xs font-medium text-amber-700 underline shrink-0">Reabrir</button>
+                    <button onClick={() => setSupportStatus("needs_attention")} className="text-xs font-medium text-amber-ink underline shrink-0">Reabrir</button>
                   ) : (
-                    <button onClick={() => setSupportStatus("attended")} className="text-xs font-medium text-emerald-700 underline shrink-0">Marcar atendido</button>
+                    <button onClick={() => setSupportStatus("attended")} className="text-xs font-medium text-emerald-ink underline shrink-0">Marcar atendido</button>
                   )}
                 </div>
 
-                <div ref={supportScrollContainerRef} onScroll={handleSupportScroll} className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#F1F5F9]">
+                <div ref={supportScrollContainerRef} onScroll={handleSupportScroll} className="flex-1 overflow-y-auto p-4 space-y-2 bg-surface-muted">
                   {supportMessages.map((m, i) => (
                     m.sender === "system" ? (
                       <div key={i} className="flex justify-center">
-                        <div className="max-w-[85%] rounded-xl px-3 py-1.5 text-xs italic text-amber-800 bg-amber-50 border border-amber-200 text-center">
+                        <div className="max-w-[85%] rounded-xl px-3 py-1.5 text-xs italic text-amber-ink bg-amber-soft border border-line text-center">
                           {m.text}
                         </div>
                       </div>
                     ) : (
                       <div key={i} className={clsx("flex", m.sender === "admin" ? "justify-end" : "justify-start")}>
                         <div className={clsx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words",
-                          m.sender === "admin" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-white text-slate-800 rounded-bl-sm border border-slate-200")}>
+                          m.sender === "admin" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-surface text-ink rounded-bl-sm border border-line")}>
                           {m.attachment?.type === "image" && supportSelected && (
                             <a
                               href={`/api/admin/support/attachments/${encodeURIComponent(supportSelected)}/${encodeURIComponent(m.attachment.fileName)}`}
@@ -550,7 +550,7 @@ export default function AdminInboxPage() {
                             </a>
                           )}
                           {m.text && <span className={clsx("block", m.attachment && "mt-1.5")}>{m.text}</span>}
-                          <div className={clsx("text-[10px] mt-1 flex items-center gap-1 justify-end", m.sender === "admin" ? "text-emerald-100" : "text-slate-400")}>
+                          <div className={clsx("text-[10px] mt-1 flex items-center gap-1 justify-end", m.sender === "admin" ? "text-emerald-100" : "text-subtle")}>
                             {formatFullTime(m.ts)}
                             {m.sender === "admin" && <span>✓✓</span>}
                           </div>
@@ -561,23 +561,23 @@ export default function AdminInboxPage() {
                   <div ref={supportMessagesEndRef} />
                 </div>
 
-                <div className="p-3 border-t border-slate-200 shrink-0">
+                <div className="p-3 border-t border-line shrink-0">
                   {supportImagePreview && (
-                    <div className="mb-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <div className="mb-2 flex items-center gap-2 rounded-xl border border-line bg-surface-muted p-2">
                       <Image src={supportImagePreview} alt="Pré-visualização da imagem" width={48} height={48} unoptimized
                         className="h-12 w-12 rounded-lg object-cover" />
-                      <p className="min-w-0 flex-1 truncate text-xs text-slate-600">{supportImage?.name}</p>
+                      <p className="min-w-0 flex-1 truncate text-xs text-muted">{supportImage?.name}</p>
                       <button type="button" onClick={clearSupportImage} disabled={supportSending}
-                        className="h-7 w-7 rounded-full text-lg leading-none text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+                        className="h-7 w-7 rounded-full text-lg leading-none text-muted hover:bg-line disabled:opacity-40"
                         aria-label="Remover imagem">×</button>
                     </div>
                   )}
-                  {supportSendError && <p className="mb-2 text-xs text-red-600" role="alert">{supportSendError}</p>}
+                  {supportSendError && <p className="mb-2 text-xs text-red-ink" role="alert">{supportSendError}</p>}
                   <div className="flex gap-2">
                     <input ref={supportFileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
                       onChange={event => selectSupportImage(event.target.files?.[0] ?? null)} />
                     <button type="button" onClick={() => supportFileInputRef.current?.click()} disabled={supportSending}
-                      className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-slate-100 text-slate-600 transition hover:border-amber-500 hover:text-amber-700 disabled:opacity-40"
+                      className="h-10 w-10 shrink-0 rounded-xl border border-line bg-surface-muted text-muted transition hover:border-amber-500 hover:text-amber-ink disabled:opacity-40"
                       aria-label="Anexar uma imagem" title="Anexar imagem (até 5 MB)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="mx-auto h-5 w-5" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a3.75 3.75 0 0 0-5.303-5.303L6.11 9.53a5.25 5.25 0 0 0 7.425 7.425l7.5-7.5M8.25 12.75l7.5-7.5" />
@@ -586,9 +586,9 @@ export default function AdminInboxPage() {
                     <input value={supportInput} onChange={e => setSupportInput(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendSupport(); } }}
                       placeholder={supportImage ? "Escreva uma legenda (opcional)..." : "Digite uma mensagem..."}
-                      className="min-w-0 flex-1 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 transition" />
+                      className="min-w-0 flex-1 bg-surface-muted border border-line rounded-xl px-4 py-2.5 text-sm text-ink caret-ink placeholder:text-subtle outline-none focus:border-amber-500 transition" />
                     <button onClick={sendSupport} disabled={(!supportInput.trim() && !supportImage) || supportSending}
-                      className="bg-amber-600 hover:bg-amber-500 text-slate-900 font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40 shrink-0">
+                      className="bg-amber-600 hover:bg-amber-500 text-ink font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40 shrink-0">
                       {supportSending ? "Enviando..." : "Enviar"}
                     </button>
                   </div>

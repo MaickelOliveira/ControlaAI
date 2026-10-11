@@ -71,13 +71,13 @@ export default function FinanceFilterBarEs({
   }
 
   return (
-    <div className="bg-white border border-slate-100 rounded-2xl p-3 shadow-sm flex flex-wrap items-center gap-2">
+    <div className="bg-surface border border-line rounded-2xl p-3 shadow-sm flex flex-wrap items-center gap-2">
       {/* Período */}
-      <div className="flex items-center gap-1 bg-slate-50 rounded-xl p-1">
+      <div className="flex items-center gap-1 bg-surface-muted rounded-xl p-1">
         {([["this_month", "Este mes"], ["last_month", "Mes pasado"], ["last_3_months", "Últimos 3 meses"]] as const).map(([v, l]) => (
           <button key={v} type="button" onClick={() => applyPreset(v)}
             className={clsx("px-3 py-1.5 rounded-lg text-xs font-medium transition",
-              preset === v ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700")}>
+              preset === v ? "bg-surface shadow-sm text-ink" : "text-muted hover:text-ink")}>
             {l}
           </button>
         ))}
@@ -86,18 +86,18 @@ export default function FinanceFilterBarEs({
       {/* Datas customizadas */}
       <div className="flex items-center gap-1.5">
         <input type="date" value={value.from} onChange={e => { setPreset("custom"); onChange({ ...value, from: e.target.value }); }}
-          className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none" />
-        <span className="text-slate-300 text-xs">hasta</span>
+          className="border border-line rounded-lg px-2 py-1.5 text-xs outline-none" />
+        <span className="text-subtle text-xs">hasta</span>
         <input type="date" value={value.to} onChange={e => { setPreset("custom"); onChange({ ...value, to: e.target.value }); }}
-          className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none" />
+          className="border border-line rounded-lg px-2 py-1.5 text-xs outline-none" />
       </div>
 
       {/* Tipo */}
-      <div className="flex items-center gap-1 bg-slate-50 rounded-xl p-1">
+      <div className="flex items-center gap-1 bg-surface-muted rounded-xl p-1">
         {([["all", "Todos"], ["income", "Ingresos"], ["expense", "Gastos"]] as const).map(([v, l]) => (
           <button key={v} type="button" onClick={() => onChange({ ...value, type: v })}
             className={clsx("px-3 py-1.5 rounded-lg text-xs font-medium transition",
-              value.type === v ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700")}>
+              value.type === v ? "bg-surface shadow-sm text-ink" : "text-muted hover:text-ink")}>
             {l}
           </button>
         ))}
@@ -106,24 +106,24 @@ export default function FinanceFilterBarEs({
       {/* Categoria (multi-select) */}
       <div className="relative">
         <button type="button" onClick={() => setShowCats(s => !s)}
-          className="flex items-center gap-1.5 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
+          className="flex items-center gap-1.5 border border-line rounded-xl px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-muted transition">
           🏷️ Categoría
           {value.categories.length > 0 && (
-            <span className="bg-amber-100 text-amber-700 rounded-full px-1.5 text-[10px] font-bold">{value.categories.length}</span>
+            <span className="bg-amber-soft text-amber-ink rounded-full px-1.5 text-[10px] font-bold">{value.categories.length}</span>
           )}
         </button>
         {showCats && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setShowCats(false)} />
-            <div className="absolute z-20 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg p-2 max-h-64 overflow-y-auto w-48">
+            <div className="absolute z-20 mt-1 bg-surface border border-line rounded-xl shadow-lg p-2 max-h-64 overflow-y-auto w-48">
               {value.categories.length > 0 && (
                 <button type="button" onClick={() => onChange({ ...value, categories: [] })}
-                  className="w-full text-left text-xs text-amber-600 hover:bg-amber-50 rounded-lg px-2 py-1.5 mb-1 font-medium">
+                  className="w-full text-left text-xs text-amber-ink hover:bg-amber-soft rounded-lg px-2 py-1.5 mb-1 font-medium">
                   Limpiar selección
                 </button>
               )}
               {categories.map(c => (
-                <label key={c} className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50 rounded-lg cursor-pointer">
+                <label key={c} className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted hover:bg-surface-muted rounded-lg cursor-pointer">
                   <input type="checkbox" checked={value.categories.includes(c)} onChange={() => toggleCategory(c)} className="accent-amber-600" />
                   {c}
                 </label>
@@ -136,7 +136,7 @@ export default function FinanceFilterBarEs({
       {/* Busca */}
       <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
         placeholder="🔍 Buscar por descripción..."
-        className="flex-1 min-w-[160px] border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-amber-400 transition" />
+        className="flex-1 min-w-[160px] border border-line rounded-xl px-3 py-1.5 text-xs outline-none focus:border-amber-400 transition" />
     </div>
   );
 }
