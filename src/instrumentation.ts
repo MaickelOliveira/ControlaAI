@@ -86,8 +86,9 @@ export async function register() {
             continue;
           }
           const locale = owner.locale;
+          const message=await companyNoticeDescription(r.userId,r.companyId,r.message);if(message===null)continue;
           const dispatch = buildReminderTemplateDispatch({
-            message: await companyNoticeDescription(r.userId,r.companyId,r.message),
+            message,
             recipientType: r.recipientType,
             mode: r.mode,
             ownerName: owner.name,
@@ -146,7 +147,7 @@ export async function register() {
               const user = await getUserById(rec.userId);
               if (!user || !usersModule.hasAccess(user)) continue;
               const phones = (await getPhonesForUser(user.id)).filter(link=>link.access===rec.mode||link.access==="both").map(link=>link.phone);
-              const description=await companyNoticeDescription(rec.userId,rec.companyId,rec.description);
+              const description=await companyNoticeDescription(rec.userId,rec.companyId,rec.description);if(description===null)continue;
               const msg = buildRecurringNotification({...rec,description}, user.locale);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
               const params = { descricao: description, valor: formatCurrency(rec.amount), data: dueDateStr };
@@ -198,7 +199,7 @@ export async function register() {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
               const phones = companyAppointmentPhones(apt,await getPhonesForUser(aptUser.id));
-              const title = await companyNoticeDescription(apt.userId,apt.companyId,apt.title);
+              const title = await companyNoticeDescription(apt.userId,apt.companyId,apt.title);if(title===null)continue;
               const msg = replyAppointmentReminder({...apt,title}, "2 horas", aptUser.locale);
               const params = { compromisso: title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;
@@ -242,7 +243,7 @@ export async function register() {
               const aptUser = await getUserById(apt.userId);
               if (!aptUser || !usersModule.hasAccess(aptUser)) continue;
               const phones = companyAppointmentPhones(apt,await getPhonesForUser(aptUser.id));
-              const title = await companyNoticeDescription(apt.userId,apt.companyId,apt.title);
+              const title = await companyNoticeDescription(apt.userId,apt.companyId,apt.title);if(title===null)continue;
               const msg = replyAppointmentReminder({...apt,title}, "15 minutos", aptUser.locale);
               const params = { compromisso: title, horario: formatTimeBR(apt.startAt) };
               let sentToAny = false;

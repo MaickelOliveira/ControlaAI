@@ -24,8 +24,8 @@ export function contextualCompanyUser(user: User): User {
     company: scope.companyName, customCategoriesExpense: scope.customCategoriesExpense, customCategoriesIncome: scope.customCategoriesIncome,
   } : {}) };
 }
-function activate(userId: string, company: Company, mode: "personal" | "business", access: string) {
-  setCompanyContext({ userId, companyId: company.id, mode, allowBusiness: access !== "personal", companyName: company.name,
+function activate(userId: string, company: Company, mode: "personal" | "business", access: string, archivedCompanyIds:string[]=[]) {
+  setCompanyContext({ userId, companyId: company.id, mode, archivedCompanyIds, allowBusiness: access !== "personal", companyName: company.name,
     customCategoriesExpense: company.customCategoriesExpense, customCategoriesIncome: company.customCategoriesIncome });
 }
 /** Selection belongs to this verified participant; web selection is independent. */
@@ -46,12 +46,19 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
     if (companyCommand && link.access === "personal") {
       await sendText(msg.from, es ? "Este número solo tiene acceso al modo personal." : "Este número tem acesso somente ao modo pessoal."); return;
     }
-    const companies = await getCompanies(user.id);
+    const all=await getCompanies(user.id,true),companies=all.filter(c=>!c.archivedAt),archivedCompanyIds=all.filter(c=>c.archivedAt).map(c=>c.id);
     const mode = link.access === "both" ? link.activeWorkspaceMode ?? user.activeMode : link.access;
     let selected = link.activeCompanyId ? companies.find(company => company.id === link.activeCompanyId) : undefined;
-    if (link.activeCompanyId && !selected) throw Error("COMPANY_NOT_FOUND");
+    if (link.activeCompanyId && !selected) {
+      await clearPendingAction(msg.from);
+      await sendText(msg.from,es?"La empresa seleccionada ya no está activa. Elige otra empresa antes de repetir el pedido.":"A empresa selecionada não está mais ativa. Escolha outra antes de repetir o pedido.");return;
+    }
     const pending = await getPendingAction(msg.from);
     if(pending&&pending.userId!==user.id){await clearPendingAction(msg.from);throw Error("COMPANY_OWNER_MISMATCH");}
+    const pendingMode=pending?.workspaceMode??(pending&&"mode" in pending&&(pending.mode==="personal"||pending.mode==="business")?pending.mode:undefined);
+    if(pendingMode&&pendingMode!==mode&&!companyCommand){
+      await clearPendingAction(msg.from);await sendText(msg.from,es?"El pedido pendiente pertenece a otro modo. Hazlo nuevamente en el modo correcto.":"O pedido pendente pertence a outro modo. Faça novamente no modo correto.");return;
+    }
     if(pending?.type==="company_selection"&&/^(cancelar|cancela|cancel|salir|sair)$/i.test(normalized)){
       await clearPendingAction(msg.from);await sendText(msg.from,es?"Selección cancelada. No registré ningún movimiento.":"Escolha cancelada. Nenhuma movimentação foi registrada.");return;
     }
@@ -66,30 +73,39 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
       if (!await checkRateLimit(`company-create:${user.id}`, 10, 60_000)) { await sendText(msg.from, "Aguarde um pouco antes de cadastrar outra empresa."); return; }
       selected = await createCompany(user.id, createCommand[1]);
       await setPhoneWorkspace(user.id, link.phone, selected.id, "business"); await clearPendingAction(msg.from);
-      activate(user.id, selected, "business", link.access);
+      activate(user.id, selected, "business", link.access,archivedCompanyIds);
       await sendText(msg.from, es ? `Empresa *${selected.name}* creada. Tus próximos pedidos usarán esta empresa.` : `Empresa *${selected.name}* cadastrada. Seus próximos pedidos usarão essa empresa.`); return;
+    }
+    if(!companies.length){
+      if(mode==="personal"&&!companyCommand){
+        const company=all.find(c=>c.isDefault)??all[0];if(!company)throw Error("COMPANY_REQUIRED");
+        setCompanyContext({userId:user.id,companyId:company.id,mode:"personal",allowBusiness:false,archivedCompanyIds});
+        if(pending?.companyId&&pendingMode!=="personal"){await clearPendingAction(msg.from);await sendText(msg.from,es?"La empresa del pedido ya no está activa. Haz un nuevo pedido en modo personal.":"A empresa do pedido não está mais ativa. Faça um novo pedido no modo Pessoal.");return;}
+        return next(msg);
+      }
+      await clearPendingAction(msg.from);await sendText(msg.from,es?"No hay empresas activas. Registra o restaura una en Zelo antes de hacer pedidos empresariales.":"Você não tem empresas ativas. Cadastre ou restaure uma na Zelo antes de fazer pedidos empresariais.");return;
     }
     if (listCommand) { await ask(); return; }
     if (switchCommand || pending?.type === "company_selection") {
-      if (link.access === "personal") { await clearPendingAction(msg.from); const personal=await requireCompany(user.id);activate(user.id,personal,"personal",link.access);return next(msg); }
+      if (link.access === "personal") { await clearPendingAction(msg.from); const personal=await requireCompany(user.id);activate(user.id,personal,"personal",link.access,archivedCompanyIds);return next(msg); }
       const choice = companyChoice(switchCommand?.[1] ?? text, companies);
       if (!choice) { await ask(pending?.type === "company_selection" && pending.resume ? {
         from: msg.from, ...pending.resume, fileBuffer: pending.resume.fileBase64 ? Buffer.from(pending.resume.fileBase64, "base64") : undefined,
       } : undefined); return; }
       selected = await requireCompany(user.id, choice);
       await setPhoneWorkspace(user.id, link.phone, selected.id, "business"); await clearPendingAction(msg.from);
-      activate(user.id, selected, "business", link.access);
+      activate(user.id, selected, "business", link.access,archivedCompanyIds);
       if (pending?.type === "company_selection" && pending.resume && !switchCommand) {
         await next({ from: msg.from, ...pending.resume, fileBuffer: pending.resume.fileBase64 ? Buffer.from(pending.resume.fileBase64, "base64") : undefined });
       } else await sendText(msg.from, es ? `Ahora estás en *${selected.name}*.` : `Agora você está em *${selected.name}*.`);
       return;
     }
-    if (!selected && mode === "business" && companies.length > 1) { await ask(msg); return; }
-    selected ??= companies.find(company => company.isDefault);
+    if (!selected && mode === "business" && companies.length > 0) { await ask(msg); return; }
+    selected ??= companies.find(company => company.isDefault)??companies[0];
     if (!selected) throw Error("COMPANY_NOT_FOUND");
     if (!link.activeCompanyId || !link.activeWorkspaceMode) await setPhoneWorkspace(user.id, link.phone, selected.id, mode);
-    activate(user.id, selected, mode, link.access);
-    if (pending?.companyId && pending.companyId !== selected.id) {
+    activate(user.id, selected, mode, link.access,archivedCompanyIds);
+    if (pending?.companyId && pendingMode!=="personal" && pending.companyId !== selected.id) {
       await clearPendingAction(msg.from);
       await sendText(msg.from, es ? "La acción pendiente pertenece a otra empresa. Haz el pedido nuevamente en la empresa correcta." : "A ação pendente pertence a outra empresa. Faça o pedido novamente na empresa correta."); return;
     }

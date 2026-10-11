@@ -5,6 +5,10 @@ vi.mock("./companies",()=>({multiCompanyEnabled:()=>process.env.MULTI_COMPANY_EN
 import {companyAppointmentPhones,companyNoticeDescription} from "./company-notices";
 afterEach(()=>{vi.unstubAllEnvs();vi.clearAllMocks();});
 const links=[{phone:"personal",access:"personal" as const},{phone:"business",access:"business" as const},{phone:"both",access:"both" as const}];
+it("silently skips archived notices while propagating an actual storage failure",async()=>{
+ vi.stubEnv("MULTI_COMPANY_ENABLED","true");company.mockRejectedValueOnce(Error("COMPANY_NOT_FOUND"));expect(await companyNoticeDescription("owner","archived","Aviso")).toBeNull();
+ company.mockRejectedValueOnce(Error("COMPANIES_UNAVAILABLE"));await expect(companyNoticeDescription("owner","active","Aviso")).rejects.toThrow("COMPANIES_UNAVAILABLE");
+});
 it("labels business notices with their own company, retaining personal text",async()=>{
  vi.stubEnv("MULTI_COMPANY_ENABLED","true");company.mockResolvedValue({name:"Empresa Dois"});
  expect(await companyNoticeDescription("owner","company-two","Salário")).toBe("Empresa Dois · Salário");expect(company).toHaveBeenCalledWith("owner","company-two");

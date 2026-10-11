@@ -1,14 +1,35 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), cookieGet: vi.fn(), cookieSet: vi.fn(), list: vi.fn(), create: vi.fn(), require: vi.fn(), enabled: vi.fn(), rename: vi.fn() }));
-vi.mock("@/lib/auth", () => ({ getSessionWithUser: mocks.auth }));
+vi.mock("server-only", () => ({}));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), invalidate:vi.fn(), cookieGet: vi.fn(), cookieSet: vi.fn(), list: vi.fn(), create: vi.fn(), require: vi.fn(), enabled: vi.fn(), rename: vi.fn(),archive:vi.fn(),restore:vi.fn() }));
+vi.mock("@/lib/auth", () => ({ getSessionWithUser: mocks.auth,invalidateUserAuthCache:mocks.invalidate }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: mocks.cookieGet, set: mocks.cookieSet }) }));
-vi.mock("@/lib/companies", () => ({ COMPANY_COOKIE: "zelo_company", multiCompanyEnabled: mocks.enabled, getCompanies: mocks.list, createCompany: mocks.create, requireCompany: mocks.require, renameCompany: mocks.rename }));
-import { GET, PATCH, POST, PUT } from "./route";
+vi.mock("@/lib/companies", () => ({ COMPANY_COOKIE: "zelo_company", multiCompanyEnabled: mocks.enabled, getCompanies: mocks.list, createCompany: mocks.create, requireCompany: mocks.require, renameCompany: mocks.rename,archiveCompany:mocks.archive,restoreCompany:mocks.restore }));
+import { GET, PATCH, POST, PUT,DELETE } from "./route";
 const owner = "10000000-0000-4000-8000-000000000001", id = "20000000-0000-4000-8000-000000000001";
 beforeEach(() => {
   vi.clearAllMocks(); mocks.enabled.mockReturnValue(true); mocks.auth.mockResolvedValue({ session: { role: "client" }, user: { id: owner } });
   mocks.cookieGet.mockReturnValue(undefined); mocks.list.mockResolvedValue([{ id, name: "Empresa A", isDefault: true }]);
   mocks.create.mockResolvedValue({ id, name: "Empresa nova" }); mocks.require.mockResolvedValue({ id, name: "Empresa A" });
+  mocks.archive.mockResolvedValue({activeCompanyId:null,mode:"personal",retiring:1});mocks.restore.mockResolvedValue(undefined);
+});
+it("removes only the authenticated ID after confirmation, clears last selection and blocks foreign origins",async()=>{
+ const r=await DELETE(request("DELETE",{companyId:id,confirmation:"Empresa A",userId:"foreign"}));
+ expect(r.status).toBe(200);expect(mocks.archive).toHaveBeenCalledWith(owner,id,"Empresa A");
+ expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith(owner);
+ expect(mocks.cookieSet).toHaveBeenCalledWith("zelo_company","",expect.objectContaining({maxAge:0,httpOnly:true}));
+ expect((await DELETE(request("DELETE",{companyId:id,confirmation:"Empresa A"},"https://attacker.test"))).status).toBe(403);
+ expect(mocks.archive).toHaveBeenCalledTimes(1);
+ mocks.cookieSet.mockClear();mocks.archive.mockRejectedValueOnce(Error("COMPANY_CONFIRMATION"));
+ expect((await DELETE(request("DELETE",{companyId:id,confirmation:"old name"}))).status).toBe(409);expect(mocks.cookieSet).not.toHaveBeenCalled();
+});
+it("keeps another active selection and exposes archived metadata only to its owner",async()=>{
+ const active="20000000-0000-4000-8000-000000000002";
+ mocks.list.mockResolvedValue([{id,name:"Empresa A",isDefault:false,archivedAt:"2026-10-11"},{id:active,name:"Empresa A",isDefault:true}]);
+ mocks.cookieGet.mockReturnValue({value:`${owner}:${id}`});expect(await (await GET()).json()).toMatchObject({activeCompanyId:active,companies:[{id:active,name:"Empresa A"}],archivedCompanies:[{id,name:"Empresa A"}]});
+ mocks.cookieGet.mockReturnValue({value:`${owner}:${active}`});await DELETE(request("DELETE",{companyId:id,confirmation:"Empresa A"}));expect(mocks.cookieSet).not.toHaveBeenCalled();
+ mocks.list.mockResolvedValue([{id,name:"Empresa A",isDefault:true,archivedAt:"2026-10-11"}]);mocks.cookieGet.mockReturnValue(undefined);expect(await (await GET()).json()).toMatchObject({activeCompanyId:null,companies:[]});
+ const restore=new Request("https://zelo.test/api/companies?action=restore",{method:"PUT",headers:{origin:"https://zelo.test"},body:JSON.stringify({companyId:id,userId:"foreign"})});
+ expect((await PUT(restore)).status).toBe(200);expect(mocks.restore).toHaveBeenCalledWith(owner,id);
 });
 const request = (method: string, body: unknown, origin = "https://zelo.test") => new Request("https://zelo.test/api/companies", { method, headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
 afterEach(()=>vi.unstubAllEnvs());

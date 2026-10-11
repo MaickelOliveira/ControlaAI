@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m = vi.hoisted(() => ({ scope: vi.fn(), rpc: vi.fn(), banks: vi.fn(), create: vi.fn() }));
+const m = vi.hoisted(() => ({ scope: vi.fn(), rpc: vi.fn(), banks: vi.fn(), create: vi.fn(),retire:vi.fn(),revoke:vi.fn() }));
+vi.mock("@/lib/supabase",()=>({getSupabase:()=>({rpc:m.retire})}));
+vi.mock("@/lib/open-finance-revocation",()=>({revokeProductionConsent:m.revoke}));
 vi.mock("@/lib/open-finance-http", () => ({ openFinanceRequestScope: m.scope, openFinanceRpc: m.rpc, OF_HEADERS: { "Cache-Control": "private, no-store" } }));
 vi.mock("@/lib/open-finance-institutions", () => ({ getBankInstitutions: m.banks }));
 vi.mock("@/lib/open-finance-ready", () => ({ isBankConnectReady:vi.fn(async()=>true) }));
@@ -16,6 +18,15 @@ beforeEach(() => {
   m.banks.mockResolvedValue([{ id, name: "Bank", status: "OPERATIONAL", type: "PERSONAL" }]);
   m.create.mockResolvedValue({ id, status: "AWAITING_AUTHORIZATION", products: ["ACCOUNT"], url_to_authenticate: "https://authorize.example/oauth" });
   m.rpc.mockResolvedValue({ id, status: "pending" });
+  m.retire.mockResolvedValue({error:null});m.revoke.mockResolvedValue("REVOKED");
+});
+it("queues a created consent when company removal overlaps storage, without leaking documents",async()=>{
+ m.scope.mockResolvedValue({userId:id,mode:"personal",environment:"production",companyId:id});m.rpc.mockRejectedValueOnce(Error("OF_STORAGE_ERROR"));
+ const response=await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));
+ expect(response.status).toBe(503);expect(m.retire).toHaveBeenCalledWith("zelo_of_register_retirement",expect.objectContaining({p_owner:id,p_company:id,p_consent:expect.objectContaining({id})}));
+ expect(JSON.stringify(m.retire.mock.calls)).not.toContain("52998224725");expect(m.revoke).not.toHaveBeenCalled();
+ m.rpc.mockRejectedValueOnce(Error("OF_STORAGE_ERROR"));m.retire.mockResolvedValueOnce({error:{message:"private"}});
+ await POST(request({institutionId:id,cpf:"52998224725",acceptedTerms:true,journeyVersion:"celcoin-2026-10"}));expect(m.revoke).toHaveBeenCalledWith(id,id);
 });
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
 describe("real bank connection", () => {
