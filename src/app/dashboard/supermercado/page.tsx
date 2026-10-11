@@ -3,12 +3,13 @@ import PageTitle from "@/components/PageTitle";
 import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
+import { GroceryPurchaseHistory, type PurchaseHistoryRecord } from "@/components/GroceryPurchaseHistory";
 import { GroceryTemplatePicker } from "@/components/GroceryTemplatePicker";
 
 type ShoppingItem = { id: string; name: string; category: string; quantity: string; checked: boolean };
 type PriceComp = { productName: string; category: string; prices: Array<{ storeName: string; price: number; date: string }> };
 type SpendByStore = { storeId: string; storeName: string; total: number; visits: number };
-type Purchase = { id: string; storeName: string; date: string; total: number; items: Array<{ productName: string; price: number; quantity: number; category: string; unit: string }> };
+type Purchase = PurchaseHistoryRecord;
 type Product = { id: string; name: string; category: string; defaultUnit: string };
 
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -47,6 +48,21 @@ export default function SupermercadoPage() {
   const [prices, setPrices] = useState<PriceComp[]>([]);
   const [spend, setSpend] = useState<SpendByStore[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [historyError, setHistoryError] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [purchaseOperation, setPurchaseOperation] = useState("");
+  const loadPurchases = useCallback(async (offset = 0) => {
+    try {
+      const response = await fetch(`/api/admin/grocery?view=purchases&offset=${offset}`);
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data)) throw Error(data.error || "Não foi possível carregar as compras.");
+      setHistoryError("");
+      setPurchases(current => offset ? [...current, ...data] : data);
+      setHistoryHasMore(data.length === 100);
+    } catch (error) { setHistoryError(error instanceof Error ? error.message : "Confira sua conexão e tente novamente."); }
+    finally { setHistoryLoading(false); }
+  }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [overview, setOverview] = useState<{ totalSpent: number; purchasesCount: number; topStore: SpendByStore | null; shoppingListCount: number } | null>(null);
 
@@ -58,6 +74,8 @@ export default function SupermercadoPage() {
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [savingPurchase, setSavingPurchase] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
+  const [finishOperation, setFinishOperation] = useState<{ key: string; checkedIds: string[] } | null>(null);
+  const [finishError, setFinishError] = useState("");
   const [finishForm, setFinishForm] = useState({ storeName: "", date: "" });
   const [finishPrices, setFinishPrices] = useState<Record<string, string>>({});
   const [finishing, setFinishing] = useState(false);
@@ -80,10 +98,6 @@ export default function SupermercadoPage() {
   useEffect(() => {
     if (tab === "lista") loadList(listFilter);
     if (tab === "whatsapp") loadList();
-    // "compras" (Histórico) e "gastos" (Por mercado) mostram a mesma lista
-    // de purchases — antes só "gastos" buscava, então Histórico ficava
-    // vazio até o usuário clicar em Por mercado primeiro.
-    if (tab === "compras" || tab === "gastos") fetch("/api/admin/grocery?view=purchases").then(r => r.json()).then(setPurchases);
     if (tab === "comparar") fetch("/api/admin/grocery?view=prices").then(r => r.json()).then(setPrices);
     if (tab === "gastos") fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend);
     if (tab === "catalogo") fetch("/api/admin/grocery?view=products").then(r => r.json()).then(setProducts);
@@ -135,27 +149,26 @@ export default function SupermercadoPage() {
     setShowAddItem(false); setNewItem({ name: "", category: "Mercearia", quantity: "1" }); loadList(listFilter); loadOverview();
   }
   async function addPurchase(e: React.FormEvent) {
-    e.preventDefault();
-    setPurchaseError(null);
-    setSavingPurchase(true);
-    const items = purchaseForm.items.filter(i => i.productName && i.price).map(i => ({ ...i, price: parseFloat(i.price), quantity: parseInt(i.quantity) || 1 }));
-    const r = await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "purchase", storeName: purchaseForm.storeName, date: purchaseForm.date || undefined, items }) });
-    setSavingPurchase(false);
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      setPurchaseError(d.error || "Não consegui registrar a compra");
-      return;
-    }
-    setShowAddPurchase(false);
-    setPurchaseForm({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
-    loadOverview();
-    if (tab === "gastos") { fetch("/api/admin/grocery?view=spend").then(r2 => r2.json()).then(setSpend); fetch("/api/admin/grocery?view=purchases").then(r2 => r2.json()).then(setPurchases); }
+    e.preventDefault(); setPurchaseError(null); setSavingPurchase(true);
+    try {
+      const items = purchaseForm.items.map(i => ({ ...i, price: i.price === "" ? null : Number(i.price), quantity: i.quantity === "" ? null : Number(i.quantity) }));
+      const response = await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "purchase", operationKey: purchaseOperation, storeName: purchaseForm.storeName, date: purchaseForm.date || undefined, items }) });
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || "Não consegui registrar a compra");
+      setShowAddPurchase(false);
+      setPurchaseForm({ storeName: "", date: "", items: [{ productName: "", category: "Mercearia", price: "", quantity: "1", unit: "und" }] });
+      loadOverview(); void loadPurchases();
+      if (tab === "gastos") fetch("/api/admin/grocery?view=spend").then(r => r.json()).then(setSpend);
+    } catch (error) { setPurchaseError(error instanceof Error ? error.message : "Não consegui registrar a compra"); }
+    finally { setSavingPurchase(false); }
   }
 
   function openFinish() {
     const prices: Record<string, string> = {};
     for (const item of list.filter(i => i.checked)) prices[item.id] = "";
     setFinishPrices(prices);
+    setFinishOperation({ key: crypto.randomUUID(), checkedIds: list.filter(item => item.checked).map(item => item.id) });
+    setFinishError("");
     setShowFinish(true);
   }
 
@@ -163,22 +176,17 @@ export default function SupermercadoPage() {
   const finishAllFilled = Object.values(finishPrices).length > 0 && Object.values(finishPrices).every(v => parseFloat(v) > 0);
 
   async function finishFromChecked(e: React.FormEvent) {
-    e.preventDefault();
-    setFinishing(true);
-    const itemPrices: Record<string, number> = {};
-    for (const [id, v] of Object.entries(finishPrices)) itemPrices[id] = parseFloat(v) || 0;
-    const r = await fetch("/api/admin/grocery", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "finish_from_checked", storeName: finishForm.storeName, itemPrices, date: finishForm.date || undefined }),
-    });
-    setFinishing(false);
-    if (r.ok) {
-      setShowFinish(false);
-      setFinishForm({ storeName: "", date: "" });
-      setFinishPrices({});
-      loadList(listFilter);
-      loadOverview();
-    }
+    e.preventDefault(); if (!finishOperation) return;
+    setFinishing(true); setFinishError("");
+    try {
+      const itemPrices = Object.fromEntries(Object.entries(finishPrices).map(([id, value]) => [id, Number(value)]));
+      const response = await fetch("/api/admin/grocery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "finish_from_checked", operationKey: finishOperation.key, checkedIds: finishOperation.checkedIds, storeName: finishForm.storeName, itemPrices, date: finishForm.date || undefined }) });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || "Não foi possível finalizar a compra.");
+      setShowFinish(false); setFinishForm({ storeName: "", date: "" }); setFinishPrices({}); setFinishOperation(null);
+      loadList(listFilter); loadOverview(); void loadPurchases();
+    } catch (error) { setFinishError(error instanceof Error ? error.message : "Confira sua conexão e tente novamente."); }
+    finally { setFinishing(false); }
   }
 
   const checkedCount = list.filter(i => i.checked).length;
@@ -191,7 +199,7 @@ export default function SupermercadoPage() {
         <div className="text-center">
           <p className="text-4xl mb-3">🛒</p>
           <p className="font-semibold text-ink">Disponível no Modo Pessoal</p>
-          <p className="text-sm text-subtle mt-1">Alterne para o modo pessoal na sidebar para usar o controle de supermercado.</p>
+          <p className="text-sm text-subtle mt-1">Alterne para o modo pessoal no menu superior para usar o controle de supermercado.</p>
         </div>
       </div>
     );
@@ -211,7 +219,7 @@ export default function SupermercadoPage() {
               ✅ Finalizar compra ({checkedCount})
             </button>
           )}
-          <button onClick={() => setShowAddPurchase(true)}
+          <button onClick={() => { setPurchaseOperation(crypto.randomUUID()); setPurchaseError(null); setShowAddPurchase(true); }}
             className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary-hover transition">
             + Registrar do zero
           </button>
@@ -262,7 +270,7 @@ export default function SupermercadoPage() {
           { key: "gastos", label: "📊 Por mercado" },
           { key: "catalogo", label: "📦 Catálogo" },
         ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
+          <button key={t.key} onClick={() => { if (t.key === "compras" || t.key === "gastos") { setHistoryLoading(true); void loadPurchases(); } setTab(t.key as typeof tab); }}
             className={clsx("px-4 py-2 rounded-lg text-sm font-medium transition shrink-0",
               tab === t.key ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink")}>
             {t.label}
@@ -425,32 +433,10 @@ export default function SupermercadoPage() {
       {/* ── HISTÓRICO ── */}
       {tab === "compras" && (
         <div className="space-y-3">
-          {purchases.length === 0 ? (
-            <div className="bg-surface rounded-2xl border border-line p-12 text-center shadow-sm">
-              <p className="text-4xl mb-3">🧾</p>
-              <p className="font-semibold text-ink">Nenhuma compra registrada</p>
-            </div>
-          ) : purchases.map(p => (
-            <div key={p.id} className="bg-surface rounded-2xl border border-line shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="font-semibold text-ink">🛒 {p.storeName}</p>
-                  <p className="text-xs text-subtle">{new Date(p.date + "T12:00:00").toLocaleDateString("pt-BR")} · {p.items.length} itens</p>
-                </div>
-                <span className="text-base font-bold text-amber-ink">{fmt(p.total)}</span>
-              </div>
-              <div className="space-y-0.5">
-                {p.items.map((item, i) => (
-                  <div key={i} className="flex justify-between text-xs py-1 border-b border-slate-50">
-                    <span className="text-muted">{item.productName}</span>
-                    <span className="text-muted shrink-0 ml-2">
-                      {fmt(item.price)} × {item.quantity} = <span className="font-medium text-ink">{fmt(item.price * item.quantity)}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+          {historyError && <p role="alert" className="rounded-xl bg-red-soft p-3 text-sm text-red-ink">{historyError} <button onClick={() => void loadPurchases()} className="underline">Tentar novamente</button></p>}
+          {historyLoading && <p role="status" className="text-sm text-subtle">Carregando compras…</p>}
+          <GroceryPurchaseHistory purchases={purchases} locale="pt-BR" onChanged={() => { void loadPurchases(); loadOverview(); }} />
+          {historyHasMore && <button disabled={historyLoading} onClick={() => void loadPurchases(purchases.length)} className="rounded-xl border border-line px-4 py-2 text-sm text-ink">Carregar mais compras</button>}
         </div>
       )}
 
@@ -615,7 +601,7 @@ export default function SupermercadoPage() {
 
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold text-muted uppercase tracking-wide">Preço de cada item</p>
-                {list.filter(i => i.checked).map(item => (
+                {list.filter(i => finishOperation?.checkedIds.includes(i.id)).map(item => (
                   <div key={item.id} className="flex items-center gap-2">
                     <span className="text-sm text-ink flex-1 truncate">{item.name} <span className="text-subtle">({item.quantity})</span></span>
                     <input type="number" step="0.01" min="0" required
@@ -630,6 +616,7 @@ export default function SupermercadoPage() {
                 Total: {fmt(finishTotal)}
               </div>
 
+              {finishError && <p role="alert" className="text-sm text-red-ink">{finishError}</p>}
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowFinish(false)} className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
                 <button type="submit" disabled={finishing || !finishAllFilled} className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">{finishing ? "..." : "Finalizar"}</button>
@@ -656,15 +643,15 @@ export default function SupermercadoPage() {
                 <p className="text-xs font-semibold text-muted uppercase tracking-wide">Itens comprados</p>
                 {purchaseForm.items.map((item, i) => (
                   <div key={i} className="grid grid-cols-12 gap-2 items-start">
-                    <input value={item.productName} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], productName: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
+                    <input required maxLength={160} value={item.productName} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], productName: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
                       placeholder="Produto" className="col-span-12 sm:col-span-4 w-full border border-line rounded-xl px-3 py-2 text-xs outline-none" />
                     <select value={item.category} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], category: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
                       className="col-span-6 sm:col-span-3 w-full border border-line rounded-xl px-2 py-2 text-xs outline-none bg-surface">
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <input type="number" step="0.01" value={item.price} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], price: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
+                    <input required type="number" step="0.01" min="0" value={item.price} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], price: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
                       placeholder="R$" className="col-span-3 sm:col-span-2 w-full border border-line rounded-xl px-2 py-2 text-xs outline-none" />
-                    <input type="number" value={item.quantity} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], quantity: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
+                    <input required type="number" step="any" min="0.000001" value={item.quantity} onChange={e => { const its = [...purchaseForm.items]; its[i] = { ...its[i], quantity: e.target.value }; setPurchaseForm(f => ({ ...f, items: its })); }}
                       placeholder="Qtd" className="col-span-2 w-full border border-line rounded-xl px-2 py-2 text-xs outline-none" />
                     <button type="button" onClick={() => setPurchaseForm(f => ({ ...f, items: f.items.filter((_, j) => j !== i) }))}
                       className="col-span-1 text-red-400 hover:text-red-ink text-sm py-2">✕</button>
@@ -675,7 +662,7 @@ export default function SupermercadoPage() {
               </div>
 
               <div className="text-right text-sm font-semibold text-ink">
-                Total: {fmt(purchaseForm.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.quantity) || 1), 0))}
+                Total: {fmt(purchaseForm.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (Number(i.quantity) || 0), 0))}
               </div>
 
               {purchaseError && (

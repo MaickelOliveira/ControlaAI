@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { AIResult } from "./ai-processor";
 import type { User } from "./users";
 import {
@@ -13,7 +14,7 @@ import { createAppointment } from "./agenda";
 import { createReminder, updateReminder, type Reminder } from "./reminders";
 import { appointmentReminderAt, formatReminderOffset } from "./appointment-reminders";
 import { todayStrBR, spToUTC } from "./date-br";
-import { findOrCreateStore, addPurchase, finalizePurchaseFromChecked, setPurchaseFinanceId, type GroceryPurchaseItem } from "./grocery";
+import { findOrCreateStore, saveGroceryPurchase, finalizePurchaseFromChecked, getCheckedShoppingItems, type GroceryPurchaseItem } from "./grocery";
 import { createEmployee, getEmployeesByUser } from "./employees";
 import { createCustomer, getCustomersByUser } from "./customers";
 import { createContact, getContactsByUser } from "./contacts";
@@ -21,7 +22,6 @@ import { createVehicle, FUEL_TYPE_LABEL, type FuelType } from "./vehicles";
 import {
   replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyContactCreated, replyGoalCreated, replyReminderSet,
 } from "./bot-replies";
-import { addFinance } from "./finances";
 import { getPhonesForUser } from "./wpp-phone-links";
 import { phoneVariants } from "./conversations";
 import { isAllDayAgendaText } from "./agenda-all-day";
@@ -106,6 +106,22 @@ export type FlowDef = {
 };
 
 const MAX_ASK = 2; // 3 tentativas no total por slot (índice 0, 1, 2)
+
+function isGroceryCommit(intent: SlotFillIntent): boolean {
+  return intent === "grocery_purchase" || intent === "grocery_purchase_finish";
+}
+/** Retain the original key and items until the committed purchase is confirmed. */
+async function finalizeGrocerySnapshot(intent: SlotFillIntent, draft: Draft, ctx: SlotCtx, originalText: string, batchDrafts?: Draft[]): Promise<string> {
+  const flow = FLOWS[intent];
+  if (!flow) throw Error("Fluxo de compra indisponível.");
+  const drafts = batchDrafts ?? [draft];
+  await setPendingAction(ctx.phone, { type: "slot_fill", userId: ctx.userId, intent, draft, missing: [], asked: 0, mode: ctx.mode, originalText,
+    ...(batchDrafts ? { batchDrafts, batchMissing: batchDrafts.map(() => []), batchIndex: 0 } : {}) });
+  const replies = [];
+  for (const ready of drafts) replies.push(await flow.finalize(ready, ctx));
+  await clearPendingAction(ctx.phone);
+  return batchDrafts ? joinBatchReplies(replies, ctx) : replies[0];
+}
 
 const CANCEL_RE = /^(cancela(r)?|deixa( pra l[áa])?|esquece|para|sair|nada|desisto|n[ãa]o quero|olvida|salir|no quiero)\b/i;
 const SKIP_RE = /^(tanto faz|pode ser|voc[êe] escolhe|padr[ãa]o|qualquer|sei l[áa]|como quiser|me da igual|puede ser|elige t[uú]|cualquiera)\b/i;
@@ -250,6 +266,7 @@ export async function beginBatchSlotFill(
   const missing = drafts.map(draft => flow.missing(draft, ctx));
   const first = missing.findIndex(queue => queue.length > 0);
   if (first < 0) {
+    if (isGroceryCommit(intent)) return { reply: await finalizeGrocerySnapshot(intent, drafts[0], ctx, originalText, drafts) };
     await clearPendingAction(ctx.phone);
     const replies = [];
     for (const draft of drafts) replies.push(await flow.finalize(draft, ctx));
@@ -309,6 +326,7 @@ async function runBatchSlotFillTurn(
 
   const next = missing.findIndex((candidate, candidateIndex) => candidateIndex >= index && candidate.length > 0);
   if (next < 0) {
+    if (isGroceryCommit(pending.intent)) return { reply: await finalizeGrocerySnapshot(pending.intent, drafts[0], ctx, pending.originalText, drafts), fallThrough: false };
     await clearPendingAction(ctx.phone);
     const replies = [];
     for (const completeDraft of drafts) replies.push(await flow.finalize(completeDraft, ctx));
@@ -338,6 +356,7 @@ export async function beginSlotFill(
   const queue = flow.missing(draft, ctx);
 
   if (queue.length === 0) {
+    if (isGroceryCommit(intent)) return { reply: await finalizeGrocerySnapshot(intent, draft, ctx, originalText) };
     await clearPendingAction(ctx.phone);
     return { reply: await flow.finalize(draft, ctx) };
   }
@@ -355,6 +374,13 @@ export async function runSlotFillTurn(
   text: string,
   ctx: SlotCtx
 ): Promise<{ reply?: string; fallThrough: boolean }> {
+  if (!pending.missing.length && isGroceryCommit(pending.intent)) {
+    if (isCancelWord(text)) {
+      await clearPendingAction(ctx.phone);
+      return { reply: localized(ctx, "Interrompi esta tentativa. Confira o histórico: uma compra já concluída continua registrada.", "Detuve este intento. Consulta el historial: una compra completada permanece registrada."), fallThrough: false };
+    }
+    return { reply: await finalizeGrocerySnapshot(pending.intent, pending.draft, ctx, pending.originalText, pending.batchDrafts), fallThrough: false };
+  }
   if (pending.batchDrafts?.length) return runBatchSlotFillTurn(pending, text, ctx);
   const flow = FLOWS[pending.intent];
   if (!flow) { await clearPendingAction(ctx.phone); return { reply: undefined, fallThrough: true }; }
@@ -394,6 +420,7 @@ export async function runSlotFillTurn(
   await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
 
   if (queue.length === 0) {
+    if (isGroceryCommit(pending.intent)) return { reply: await finalizeGrocerySnapshot(pending.intent, draft, ctx, pending.originalText), fallThrough: false };
     await clearPendingAction(ctx.phone);
     return { reply: await flow.finalize(draft, ctx), fallThrough: false };
   }
@@ -1302,6 +1329,7 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
     seed(ai) {
       const g = ai.grocery;
       return {
+        operationKey: randomUUID(),
         storeName: g?.storeName,
         date: g?.date,
         items: g?.items?.length ? g.items.map(i => ({
@@ -1343,7 +1371,7 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
       const store = await findOrCreateStore(ctx.userId, (draft.storeName as string) || "Não informado");
       const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
       const purchaseDate = (draft.date as string) || todayStrBR();
-      const purchase = await addPurchase({
+      const purchase = await saveGroceryPurchase({
         userId: ctx.userId,
         storeId: store.id,
         storeName: store.name,
@@ -1351,18 +1379,7 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
         items,
         total,
         source: "whatsapp_text",
-      });
-      // Compra registrava no histórico do Supermercado mas nunca aparecia em
-      // Finanças — mesmo gap já corrigido em finalizePurchaseFromChecked e no
-      // fluxo de foto de cupom fiscal, faltava só aqui (compra completa via
-      // texto, "comprei no Assaí: arroz 25...").
-      if (total > 0) {
-        const finance = await addFinance({
-          userId: ctx.userId, type: "expense", amount: total, category: "Alimentação",
-          description: `Compra no ${store.name}`, date: purchaseDate, mode: ctx.mode, source: "whatsapp", registeredBy: ctx.phone,
-        });
-        await setPurchaseFinanceId(purchase.id, ctx.userId, finance.id);
-      }
+      }, { mode: ctx.mode, source: "whatsapp", registeredBy: ctx.phone }, undefined, { key: `text:${String(draft.operationKey || (draft.operationKey = randomUUID()))}` });
       return replyGroceryPurchaseSaved(purchase, ctx.user.locale);
     },
 
@@ -1374,7 +1391,12 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
   grocery_purchase_finish: {
     seed(ai) {
       const g = ai.grocery;
-      return { storeName: g?.storeName, total: g?.total } satisfies Draft;
+      return {
+        operationKey: randomUUID(), storeName: g?.storeName, total: g?.total } satisfies Draft;
+    },
+
+    async prepare(draft, ctx) {
+      draft.checkedIds = (await getCheckedShoppingItems(ctx.userId)).map(item => item.id);
     },
 
     missing(draft) {
@@ -1405,6 +1427,7 @@ ${vehicle.mode === "business" ? "🏢 Empresa" : "👤 Pessoal"}`;
     async finalize(draft, ctx) {
       const result = await finalizePurchaseFromChecked(
         ctx.userId, ctx.mode, draft.storeName as string, draft.total as number, ctx.phone,
+        undefined, undefined, "whatsapp_quick", { key: `text-list:${String(draft.operationKey)}`, checkedIds: draft.checkedIds as string[] },
       );
       if (!result) return localized(ctx,
         "❓ Sua lista de compras não tem nenhum item marcado. Marca o que você já comprou (ex: _\"comprei o arroz\"_) e chama de novo.",
