@@ -20,7 +20,7 @@ try{
  await db.exec('create role workspace_migrator nologin nosuperuser createrole bypassrls;alter schema public owner to workspace_migrator;alter schema open_finance owner to workspace_migrator;');
  for(const row of (await db.query("select n.nspname,c.relname,c.relkind from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','open_finance') and c.relkind in ('r','v')")).rows)await db.exec(`alter ${row.relkind==='v'?'view':'table'} ${row.nspname}.${row.relname} owner to workspace_migrator`);
  for(const row of (await db.query("select p.oid::regprocedure::text signature from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','open_finance')")).rows)await db.exec(`alter function ${row.signature} owner to workspace_migrator`);
- await db.exec('set role workspace_migrator');await db.exec(await sql('../migrations/20261011160000_companies.sql'));await db.exec(await sql('../migrations/20261011170000_open_finance_companies.sql'));await owner();
+ await db.exec('set role workspace_migrator');await db.exec(await sql('../migrations/20261011160000_companies.sql'));await db.exec(await sql('../migrations/20261011170000_open_finance_companies.sql'));await db.exec(await sql('../migrations/20261012000000_bank_identity.sql'));await owner();
 
  await db.exec('alter table public.users enable row level security;alter table public.wpp_phone_links enable row level security;');
  const ca=(await db.query('select id from companies where user_id=$1 and is_default',[a])).rows[0].id;
@@ -44,7 +44,7 @@ try{
  await owner();await db.query('update open_finance.user_access set next_sync_claim_at=null where user_id=$1',[a]);await service();
  const next=await rpc('zelo_of_claim',[a,'business']);
  await rpc('zelo_of_commit_page',[a,'business',next.id,next.lease_token,JSON.stringify({movements:[{resource_external_id:'company-two-bank',resource_type:'account',external_id:'expense-two',description:'Pharmacy',transaction_date:'2026-10-11',amount:'50',currency:'BRL',direction:'debit',classification:'purchase'}]}),null,'[]']);
- const report=await rpc('zelo_of_report',[a,'business','2026-10-01','2026-10-31',null]);assert.equal(report.movements.length,1);
+ const report=await rpc('zelo_of_report',[a,'business','2026-10-01','2026-10-31',null]);assert.equal(report.movements.length,1);assert.equal(report.movements[0].institution_id,'20000000-0000-4000-8000-000000000001');
  await rpc('zelo_of_set_movement_category',[a,'business',report.movements[0].id,'Saúde']);
  await headers(a,ca);assert.equal((await rpc('zelo_of_report',[a,'business','2026-10-01','2026-10-31',null])).movements.length,0);
  await headers(a,c2);

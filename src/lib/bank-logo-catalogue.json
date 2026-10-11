@@ -1,0 +1,842 @@
+{
+  "b397dd9c-62b2-4632-bce7-85f56666c083": {
+    "name": "BTG Banking",
+    "url": "https://banking-public-prd.s3.sa-east-1.amazonaws.com/open-finance/logo/btgbanking/btgbanking.svg"
+  },
+  "8dd11bd5-165e-4662-9eaa-112ef0d499c0": {
+    "name": "Banco XP S.A.",
+    "url": "https://openbanking-redirect.xpi.com.br/assets/xpi.svg"
+  },
+  "bfd95599-61c0-45ca-90cb-5d6e71d4cf9a": {
+    "name": "Banco Safra",
+    "url": "https://www.safra.com.br/shared/assets/img/safra-of.svg"
+  },
+  "2caec6e4-9ee2-402d-ad73-465198bd9250": {
+    "name": "BTG Investimentos",
+    "url": "https://banking-public-prd.s3.sa-east-1.amazonaws.com/open-finance/logo/btginvestimentos/btginvestimentos.svg"
+  },
+  "612da9a3-ee82-4f9e-9919-fa8ba88800f9": {
+    "name": "Banco PAN",
+    "url": "https://www.bancopan.com.br/content/dam/documentos/outros-produtos/open-banking/logo_pan_openbanking.svg"
+  },
+  "a0fe7f9c-91b4-4eab-a0fe-77eb55037d33": {
+    "name": "Banco RCI - Brasil",
+    "url": "https://my.mobilize-fs.com.br//newsletter/images/OpenBanking-Logo-BancoRCI.svg"
+  },
+  "aaacb9cf-e8c3-402b-93b8-cf4d3e2ec497": {
+    "name": "Banco Santander Pessoa Física",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "d0056aca-6180-4ae4-95fa-2e30a08b4a9a": {
+    "name": "Banco XP S.A. (XP Empresas)",
+    "url": "https://openbanking-redirect.xpi.com.br/assets/xp_empresas.svg"
+  },
+  "8d92e794-7e32-43d2-a80e-8e19c3931bf4": {
+    "name": "Banco XP S.A. (Rico)",
+    "url": "https://openbanking-redirect.xpi.com.br/assets/rico.svg"
+  },
+  "cc26199f-4949-4efd-9e1e-f21a34fd0239": {
+    "name": "Banco Bmg S.A",
+    "url": "https://www.bancobmg.com.br/data/files/8C/A2/7F/0A/FBA318104A94D208970BE9C2/bmg_open_finance.svg"
+  },
+  "401eed26-3e2c-49c4-b5a7-7cbb5d6bfc38": {
+    "name": "BNDES",
+    "url": "https://www.bndes.gov.br/arquivos/openbanking/BNDES_arquivo_marca.svg"
+  },
+  "702595cb-d881-40b7-8ba7-17db7843f499": {
+    "name": "BOCOM BBM",
+    "url": "https://www.bocombbm.com.br/bbm-content./uploads/2023/10/logo-512x512-com-90px-de-espacamento-da-borda.svg"
+  },
+  "2cac58c2-f9e5-48a3-b981-7263a0641645": {
+    "name": "Banco Sofisa S.A.",
+    "url": "https://www.sofisa.com.br/openbanking/logo_sofisa.svg"
+  },
+  "75db457a-612d-4d62-b557-ba9d32b05216": {
+    "name": "Banco do Brasil",
+    "url": "https://www.bb.com.br/docs/pub/inst/img/LogoBB.svg"
+  },
+  "6370a748-6bda-4a37-9e88-5e68cc4cf100": {
+    "name": "Banco do Nordeste do Brasil S.A.",
+    "url": "https://consentimento.openfinance.bnb.gov.br/logo_bnb.svg"
+  },
+  "2d641a88-4441-44d9-b39a-a864d1ce8890": {
+    "name": "BTG Empresas",
+    "url": "https://banking-public-prd.s3.sa-east-1.amazonaws.com/open-finance/logo/btgempresas/btgempresas.svg"
+  },
+  "770f6211-dbd4-4c84-b6b1-9104b4a99359": {
+    "name": "Banco Santander Pessoa Jurídica",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "95793a20-8c97-4ee3-8685-a62b175bf4e9": {
+    "name": "Bradescard",
+    "url": "https://banco.bradesco/open-finance/logo/icones_vetorial-pf.svg"
+  },
+  "439a9b5c-2cfb-4e57-b60b-20eea83899ca": {
+    "name": "Bradesco Pessoa Física",
+    "url": "https://banco.bradesco/open-finance/logo/icones_vetorial-pf.svg"
+  },
+  "87f64a5a-474c-4189-80a0-d3cd55718223": {
+    "name": "Clear Corretora - Nativo",
+    "url": "https://openbanking-redirect.xpi.com.br/assets/clear-nativo.svg"
+  },
+  "165dda80-d894-4a0a-82c6-1b06d7485bf5": {
+    "name": "Credicard",
+    "url": "https://www.itau.com.br/media/dam/m/355722921baa017d/original/Credicard.svg"
+  },
+  "88dc57a4-1dab-4493-8b02-b8f0c15a2d89": {
+    "name": "Banrisul",
+    "url": "https://banrisul.com.br/bob/data/Simbolo-Banrisul.svg"
+  },
+  "4461caea-0ec0-4f90-a3f6-016d17b62f55": {
+    "name": "CIELO",
+    "url": "https://www.cielo.com.br/assets_cielo/logo_footer_cielo.svg"
+  },
+  "66d1ea35-f2eb-4e76-a6b3-477369064045": {
+    "name": "Credi Nissan",
+    "url": "https://my.mobilize-fs.com.br//newsletter/images/OpenBanking-Logo-CrediNissan.svg"
+  },
+  "a23ae936-13c2-4220-b20b-bcd8753b2619": {
+    "name": "CITI",
+    "url": "https://corporateportal.brazil.citibank.com/resources-responsive/img/Citi_Blue-RedArc_RGB.svg"
+  },
+  "0e3b4087-7b5e-4d27-ad8f-06acab7b0b73": {
+    "name": "Empréstimo Sim",
+    "url": "https://emprestimosim.com.br/assets/images/logo-sim-symbol-obk.svg"
+  },
+  "1085e482-4aad-4761-9515-35f364f8f5f3": {
+    "name": "Bradesco Financiamentos",
+    "url": "https://openbanking.losango.com.br/Openbanking/logo/bradesco-bbf.svg"
+  },
+  "221601a9-6e70-4698-9ea3-1bb28ceb4269": {
+    "name": "CAIXA",
+    "url": "https://consentimento.openbanking.caixa.gov.br/assets/images/logomarca_caixa.svg"
+  },
+  "f569b097-e5a5-4996-b20d-7ff524287da2": {
+    "name": "GERU SCD",
+    "url": "https://s3.amazonaws.com/prd.asset.platform.open-co.com.br/logo.512x512.svg"
+  },
+  "242885d5-30a1-4e0c-aac4-627d4a1af77b": {
+    "name": "Bradesco Cartões PJ",
+    "url": "https://banco.bradesco/open-finance/logo/icones_vetorial-pf.svg"
+  },
+  "c6b15844-e748-4408-abb6-e71fd59d71c5": {
+    "name": "Bradesco Pessoa Jurídica",
+    "url": "https://banco.bradesco/open-finance/logo/icones_vetorial-pj.svg"
+  },
+  "1daa59f5-920c-4a51-a6ec-3dffdc9682a9": {
+    "name": "Citibank Distribuidora De TVM",
+    "url": "https://corporateportal.brazil.citibank.com/resources-responsive/img/Citi_Blue-RedArc_RGB.svg"
+  },
+  "f78a4da9-7060-43da-a774-9613103415f7": {
+    "name": "Citibank N.A.",
+    "url": "https://corporateportal.brazil.citibank.com/resources-responsive/img/Citi_Blue-RedArc_RGB.svg"
+  },
+  "d3d5e2a1-5448-4d04-ad40-a63003f07e62": {
+    "name": "Citigroup Global Markets Brasil CCTVM",
+    "url": "https://corporateportal.brazil.citibank.com/resources-responsive/img/Citi_Blue-RedArc_RGB.svg"
+  },
+  "d2194006-7f15-4356-a689-9b66009fee1a": {
+    "name": "Investimentos BB",
+    "url": "https://www.bb.com.br/docs/pub/inst/img/Investimentos_Logo.svg"
+  },
+  "68308291-ec0d-4398-83ce-68b6b1087e49": {
+    "name": "Itaú",
+    "url": "https://www.itau.com.br/media/dam/m/4ee2c952e1fa91a2/original/Novo_itau.svg"
+  },
+  "6b3e8b90-8c15-49d4-90c4-bb3e87de2f90": {
+    "name": "Losango",
+    "url": "https://openbanking.losango.com.br/Openbanking/logo/losango.svg"
+  },
+  "d28dfafa-41d6-426d-a8d7-5df28db17139": {
+    "name": "Ourocard",
+    "url": "https://www.bb.com.br/docs/pub/inst/img/Ourocard.svg"
+  },
+  "756b9782-d9d4-4f9b-9756-997eba0e2cbd": {
+    "name": "PicPay",
+    "url": "https://picpay.s3.sa-east-1.amazonaws.com/openbanking/picpay-logo-icon-pf.svg"
+  },
+  "4095c8fe-55d9-4596-a62a-c3bcc04a85db": {
+    "name": "Méliuz",
+    "url": "https://staticz.com.br/app/img/strapi/Logo_Meliuz_ee53a8ed76.svg"
+  },
+  "06c19499-3412-4125-84b7-d0fbc98b5019": {
+    "name": "Nubank",
+    "url": "https://nuapp.nubank.com.br/open-banking/logo.svg"
+  },
+  "7c85a529-958f-4065-bf0d-edf00800b675": {
+    "name": "Olé Consignado",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/img-ole-obk/21-08-11_220517_P_logo-ole-open-banking.svg"
+  },
+  "be927760-d679-4c60-b5af-de2db2fa7bd6": {
+    "name": "PicPay Negócios",
+    "url": "https://picpay.s3.sa-east-1.amazonaws.com/openbanking/logo-picpay-empresas.svg"
+  },
+  "ba49bb87-33cb-4f97-b819-b7b8fac06166": {
+    "name": "Getnet",
+    "url": "https://site.getnet.com.br/wp-content/uploads/2021/07/logo_reduzido_getnet.svg"
+  },
+  "cd82fa8e-a62c-4873-abb1-a6b3be9bae26": {
+    "name": "Hipercard",
+    "url": "https://www.itau.com.br/media/dam/m/73230f2ae856f7f0/original/Hipercard.svg"
+  },
+  "8cdad2fd-c8d5-42c0-9a00-f0f6826470d2": {
+    "name": "InfinitePay",
+    "url": "https://auth.infinitepay.io/images/logo.svg"
+  },
+  "a9a63c7c-8a64-41f6-b419-0cfe3579343b": {
+    "name": "Iniciador",
+    "url": "https://iniciador.com.br/static/images/logo.svg"
+  },
+  "8197a3c9-11ad-4cfd-9bbf-4d6ad5d51f83": {
+    "name": "Iti",
+    "url": "https://www.itau.com.br/media/dam/m/3d24ac79b5b4fd5c/original/Iti.svg"
+  },
+  "8b11c686-57bf-4000-94c8-e950ae4d7410": {
+    "name": "Klavi",
+    "url": "https://cdn.klavi.ai/static/header/logo.svg"
+  },
+  "9326f9b2-ae57-42c4-a0d9-acc4ba434696": {
+    "name": "Mercado Pago",
+    "url": "https://http2.mlstatic.com/open-banking/assets/logo.svg"
+  },
+  "f90732bc-7eb7-4d8f-8e4e-913583d95b6c": {
+    "name": "Mobilize Financial Services",
+    "url": "https://my.mobilize-fs.com.br//newsletter/images/m-mobilize-financial-services-logotype-rgb-orange-black-v21-1_adobe_express.svg"
+  },
+  "e4b221b8-f418-480f-9f07-538b2793b612": {
+    "name": "Player’s Bank",
+    "url": "https://www.itau.com.br/media/dam/m/509ff415966a54da/original/Playersbank.svg"
+  },
+  "7c6748a1-2be0-4593-a769-77feb406b3a0": {
+    "name": "Itaú Empresas",
+    "url": "https://www.itau.com.br/media/dam/m/4ee2c952e1fa91a2/original/Novo_itau.svg"
+  },
+  "53870d50-ca83-406b-bf09-bf16d75bf632": {
+    "name": "Santander Financiamentos",
+    "url": "https://www.cliente.santanderfinanciamentos.com.br/portalcliente/logo1.svg"
+  },
+  "319b8d3c-ab1d-4c6a-bd6f-4b94faf4beed": {
+    "name": "Uber Conta by Digio",
+    "url": "https://ubercontabrasil.com.br/uploads/logo_7eff0b9c69.svg"
+  },
+  "8eac3daa-0648-45bd-9147-955aa31e8aa8": {
+    "name": "BBC Digital",
+    "url": "https://correspondente.bancobbcdigital.com.br/Sites/WebAutorizador_Principal/App_Themes/BBC/bbc.svg"
+  },
+  "19c5b000-f36d-4dee-ab65-6de9527fbf3b": {
+    "name": "Santander Corretora Institucional",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "f8338227-7036-41b6-a2ef-3dcacdda609a": {
+    "name": "Santander Corretora PessoaFísica(Legado)",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "b124508c-8b6f-4b4e-a10e-42920ae18a05": {
+    "name": "Santander Crédito Imobiliário Pessoas",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "d0a262b8-e097-4e53-b5c1-7c26d064afbd": {
+    "name": "Crefisa",
+    "url": "https://www.crefisa.com.br/wp-content/uploads/2019/05/Logo.svg"
+  },
+  "158dfa02-fa59-4177-9bfb-b614220dd721": {
+    "name": "RecargaPay",
+    "url": "https://cnt.recarga.com/assets/open-finance/recargapay-color.svg"
+  },
+  "168b09d3-54b2-440e-aae0-5548279ee516": {
+    "name": "Rede",
+    "url": "https://www.itau.com.br/media/dam/m/3ac924f51ddf48dd/original/Rede.svg"
+  },
+  "fde63db6-f775-44d3-ad88-406a1fb0a48d": {
+    "name": "Safra Empresas",
+    "url": "https://www.safra.com.br/shared/assets/img/safra-of.svg"
+  },
+  "98a03835-414b-45fb-af81-ca27f080ee62": {
+    "name": "Safra Financeira Veículos",
+    "url": "https://www.safra.com.br/shared/assets/img/safra-financeira-of.svg"
+  },
+  "75d4f12d-56ff-4059-9608-b403bc0ccd4b": {
+    "name": "Santander Corretora",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "c2d48e71-07af-4442-8c7d-c82d0eb45e5f": {
+    "name": "Sicoob",
+    "url": "https://sicoob-openbanking.s3.sa-east-1.amazonaws.com/icone-sicoob.svg"
+  },
+  "6c8b9aed-8e24-4ad6-985f-213623a23be3": {
+    "name": "Sicredi",
+    "url": "https://www.sicredi.com.br/openbanking/app/assets/images/shared/logo/logo_sicredi_512.svg"
+  },
+  "646b2dc7-3a9e-4d2e-9ded-665e7150d529": {
+    "name": "Unicred",
+    "url": "https://unicred.com.br/site/logo_unicred_vertical-margem90px.svg"
+  },
+  "95b355de-fd37-4004-b726-0624ea736056": {
+    "name": "Volvo Car Financial Services",
+    "url": "https://www.cliente.financiamentovolvocar.com.br/portalclientevolvo/logo-volvo.svg"
+  },
+  "49179827-aab5-42db-9ecb-9991faa32595": {
+    "name": "Santander Cartões Pessoa Jurídica",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "c0523b75-d0f2-4811-a0e9-5d89ef80beba": {
+    "name": "Santander Crédito Imobiliário Empresas",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "10987c3d-7f6a-4a54-a25d-9eb3e2ab30bf": {
+    "name": "modalmais Trader",
+    "url": "https://openbanking-redirect.xpi.com.br/assets/modalmais.svg"
+  },
+  "965a0520-a103-495b-86c1-7e6b4cc4e1f2": {
+    "name": "banco BV",
+    "url": "https://www.bv.com.br/ng15-open-base-recepcao-jornada/assets/images/logo-bv.svg"
+  },
+  "ba185564-2e26-420e-b6bb-af5bc7102480": {
+    "name": "next",
+    "url": "https://next.me/_/assets/images/openbanking/logo_next_verde.svg"
+  },
+  "f9cabb03-876d-4eea-974c-0d8ce4bd4860": {
+    "name": "banco Digio",
+    "url": "https://static.digio.com.br/media/logo_81e95ae2ab.svg"
+  },
+  "22edf759-2e70-4ed3-a720-6baf7e5dafd4": {
+    "name": "99Pay",
+    "url": "https://s3-us01.didiglobal.com/silver-bullet-img/2024-12-10/m3zOgV/openfinance.svg"
+  },
+  "9f4d9ea6-5e08-4bc8-9544-421b6f04e441": {
+    "name": "Atlanta",
+    "url": "https://app.open.bankly.com.br/assets/Logos/AtlantaMarketing-Logo.svg"
+  },
+  "acc11cea-cd64-47e8-9af0-f9d40368cf2a": {
+    "name": "Azimut Brasil",
+    "url": "https://openbanking-redirect.xpi.com.br/assets/azimutbrasil.svg"
+  },
+  "74f9cbfb-1016-4558-a78c-5a55814ce52a": {
+    "name": "Woop",
+    "url": "https://www.sicredi.com.br/openbanking/app/assets/images/shared/logo/Woop_logo_512.svg"
+  },
+  "0334b3ad-d466-4a5d-bb88-fa12caff07bb": {
+    "name": "Clear Corretora",
+    "url": "https://openbanking-redirect.xpi.com.br/assets/clear-nativo.svg"
+  },
+  "80a8f94c-6c7b-4731-9611-952f3bdfd00c": {
+    "name": "Íon",
+    "url": "https://www.itau.com.br/media/dam/m/29448110f8750b19/original/ion.svg"
+  },
+  "73d83598-24e2-47f2-98c6-ab17ef051eb0": {
+    "name": "6P Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/6PBank.svg"
+  },
+  "54ced90c-2b25-4364-8cf3-28f286559235": {
+    "name": "ASA Sociedade Credito Fina Invest. S.A.",
+    "url": "https://www.asa.com.br/openfinance/logo-asa-openfinance.svg"
+  },
+  "a970eb6c-ad58-4ca8-b0aa-2dc5fc7f5a5d": {
+    "name": "Apex",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Apex.svg"
+  },
+  "b7d12369-40cc-4aa1-af18-e963ca2f0585": {
+    "name": "Axiis Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Axiis.svg"
+  },
+  "2379d0f6-f238-4855-b914-a82265922691": {
+    "name": "Itaú BBA",
+    "url": "https://www.itau.com.br/media/dam/m/732cc5b0ed00322f/original/Itau-BBA.svg"
+  },
+  "283ed41d-7844-4151-8036-1b5ce76eb6fc": {
+    "name": "Ágora Investimentos",
+    "url": "https://www.agorainvest.com.br/images/OpenFinance/agora.svg"
+  },
+  "4831632d-07f1-472a-a402-ecc4f37b5727": {
+    "name": "banco BV - Corporate",
+    "url": "https://www.bv.com.br/ng15-open-base-recepcao-jornada/assets/images/logo-bv.svg"
+  },
+  "534cb72a-c838-4a05-ba1b-92b9d961f9a4": {
+    "name": "Belvo",
+    "url": "https://statics.belvo.io/marketing/belvo_symbol_blue_background.svg"
+  },
+  "e69c25b5-c63a-4c25-8564-81f57436481c": {
+    "name": "CAIXA Tem",
+    "url": "https://ativosdigitais.caixa.gov.br/logo/logomarca_caixatem1.svg"
+  },
+  "eff8c8e5-f8f2-43ab-8b15-2b1bcc517e5e": {
+    "name": "CEAPE BANK",
+    "url": "https://ceape-public-s3-files.s3.sa-east-1.amazonaws.com/assets/images/LOGO_CEAPEBANK.svg"
+  },
+  "17a729fb-97f2-450f-90f6-b4d918e47e4a": {
+    "name": "CRB Money",
+    "url": "https://openfinance.iholdbank.digital/logos/crb.svg"
+  },
+  "3eebd1f2-b00c-4824-b2c0-b84850c22861": {
+    "name": "Cartão Atacadão",
+    "url": "https://storage.googleapis.com/cms-portalpublico-atc-prd/sites/e36dfc59-favicon-atacadao.svg"
+  },
+  "d1d16ab0-8353-4d9a-be25-d2d03412cd18": {
+    "name": "Cartão Carrefour",
+    "url": "https://storage.googleapis.com/cms-portalpublico-csf-prd/sites/9abef274-favicon-carrefour-solucoes-financeiras.svg"
+  },
+  "5681c2ff-fcca-475e-a925-95d5cb4f16e0": {
+    "name": "Cartão Luiza",
+    "url": "https://www.itau.com.br/media/dam/m/f07000821f90d00/original/Cartao-Luiza.svg"
+  },
+  "9453be3f-6269-4639-9459-eee8583a6ac0": {
+    "name": "Cartão Sam´s Club",
+    "url": "https://storage.googleapis.com/cms-portalpublico-sams-prd/sites/227a213e-favicon-sams-club.svg"
+  },
+  "11579ff9-89cd-4f71-ac13-2885c36b6977": {
+    "name": "Concept",
+    "url": "https://app.open.bankly.com.br/assets/Logos/ConceptCards-Logo.svg"
+  },
+  "f2d8fb8a-9fa7-4810-8acb-f9e1cfe5319d": {
+    "name": "Conta Universal",
+    "url": "https://openfinance.iholdbank.digital/logos/universal.svg"
+  },
+  "8ae59467-fb86-4565-933b-47baf22c4b36": {
+    "name": "Credicard",
+    "url": "https://www.itau.com.br/media/dam/m/355722921baa017d/original/Credicard.svg"
+  },
+  "6ec597a9-facd-4513-b168-7b8358314c06": {
+    "name": "Banco BRB",
+    "url": "https://auth-obk.brb.com.br/openbanking/v1/logo/brb.svg"
+  },
+  "10efab32-f7f1-41de-84b3-6c7607041474": {
+    "name": "Banco Guanabara",
+    "url": "https://www.bancoguanabara.com.br/logo/logo_new3.svg"
+  },
+  "d58911b5-9c4c-4570-ba32-d0bd0dbc2816": {
+    "name": "Banco Mercantil",
+    "url": "https://www.bancomercantil.com.br/imagens/openbanking/mercantil.svg"
+  },
+  "6a0ec228-70b7-4292-9e64-8fa731b2a730": {
+    "name": "C6 Bank",
+    "url": "https://cdn.c6bank.com.br/open-banking/c6bank-logo.svg"
+  },
+  "a9395de2-1a63-46d8-b68e-90843cac23ae": {
+    "name": "Casas Bahia Pay",
+    "url": "https://assets.banqi.com/openfinance/icone_principal.svg"
+  },
+  "15cacddd-d0f2-4f1e-8baf-85d20eb42b44": {
+    "name": "Contabilizei",
+    "url": "https://9f131fea.contabilizei.com.br/public/favicon.svg"
+  },
+  "fcef8e3a-1a48-4a43-9946-0737b029c0c5": {
+    "name": "Banco Inter PF",
+    "url": "https://marketing.bancointer.com.br/arquivos/images/app-icon.svg"
+  },
+  "efcd384a-81ed-4ac4-baab-e2236132ed59": {
+    "name": "Banco Inter PJ",
+    "url": "https://marketing.bancointer.com.br/arquivos/images/app-icon.svg"
+  },
+  "d04956a5-368a-4c23-bb5d-e7f0c3c8976d": {
+    "name": "Conta Bemol",
+    "url": "https://statics.contabemol.com.br/images/contabemol/emails/Sem_fundo_Azul_Versao_reduzida.svg"
+  },
+  "4fcc30cb-9c9f-4786-9be1-ae9dd7b32db0": {
+    "name": "DMX",
+    "url": "https://app.open.bankly.com.br/assets/Logos/DmxComunicacao-Logo.svg"
+  },
+  "21233a1d-ba8a-4916-a519-05848ddb5f72": {
+    "name": "Dezbrazil",
+    "url": "https://app.open.bankly.com.br/assets/Logos/DezBrazil-Logo.svg"
+  },
+  "8dafea3a-1df0-4f26-b04d-1d63ba56d5e4": {
+    "name": "ESBank",
+    "url": "https://openfinance.iholdbank.digital/logos/esbank.svg"
+  },
+  "b2b5e5f0-c2c1-4dc8-a564-f80d33e824cb": {
+    "name": "Ease Bankly",
+    "url": "https://app.open.bankly.com.br/assets/Logos/EaseBankly-Logo.svg"
+  },
+  "fa0a5316-4ff5-40ca-87ad-3854edc47895": {
+    "name": "Exclusive",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Exclusive-Logo.svg"
+  },
+  "e8a21bb7-fa64-496f-b4ad-1ecde2bc5d15": {
+    "name": "Facio via Cumbuca",
+    "url": "https://facio.com.br/facio-cumbuca.svg"
+  },
+  "536b7629-4378-4dcb-a745-555b86000a72": {
+    "name": "Genius",
+    "url": "https://app.open.bankly.com.br/assets/Logos/GeniusCard-Logo.svg"
+  },
+  "ae18b422-c1d1-4de9-be9a-88b1d9b1089a": {
+    "name": "Get Conta by Getnet",
+    "url": "https://app-getnetbrasil-content.getnet.com.br/backend/open-finance/account/getnet-logo.svg"
+  },
+  "002d6d88-6c13-48c5-9f70-3a936efd5ffe": {
+    "name": "Giffty",
+    "url": "https://app.open.bankly.com.br/assets/Logos/GifttyPay-Logo.svg"
+  },
+  "415e92b1-28f2-4a2c-95bc-bcf98118e636": {
+    "name": "Gift Premium",
+    "url": "https://app.open.bankly.com.br/assets/Logos/GiftPremium-Logo.svg"
+  },
+  "029eb00e-dc50-4aae-8fda-52a0ff598c71": {
+    "name": "Glorya",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Glorya-Logo.svg"
+  },
+  "fccabf9f-2f96-4689-89f5-4bd26e8ee01d": {
+    "name": "GoalBox",
+    "url": "https://app.open.bankly.com.br/assets/Logos/GoalBoxCard-Logo.svg"
+  },
+  "afdf21b0-924d-4a96-86b5-66c5eacaa621": {
+    "name": "Gold Pass",
+    "url": "https://app.open.bankly.com.br/assets/Logos/GoldPass-Logo.svg"
+  },
+  "8fb01b71-262b-49e6-b608-6c7062e1f317": {
+    "name": "H+ plus",
+    "url": "https://app.open.bankly.com.br/assets/Logos/HMaisPlus-Logo.svg"
+  },
+  "fa0e1a2f-d89d-4e68-ad96-570de59702a3": {
+    "name": "HausBank",
+    "url": "https://openfinance.iholdbank.digital/logos/haus.svg"
+  },
+  "2239bcff-58db-4b43-a47d-0d91201bcf62": {
+    "name": "Hipercard",
+    "url": "https://www.itau.com.br/media/dam/m/73230f2ae856f7f0/original/Hipercard.svg"
+  },
+  "b4ddedea-9fec-4b5a-9655-4f5326930327": {
+    "name": "Hyak Bank",
+    "url": "https://openfinance.iholdbank.digital/logos/hyak.svg"
+  },
+  "1371af86-f46a-4a28-a954-1ee7c8d6f965": {
+    "name": "Hyperlocal",
+    "url": "https://banking.hyperlocal.com.br/favicon.svg"
+  },
+  "c77302e3-36f7-489c-ba6a-eaf88107fdea": {
+    "name": "Ibanx",
+    "url": "https://app.open.bankly.com.br/assets/Logos/IBanx-Logo.svg"
+  },
+  "ba2b0ca3-d5c6-4c42-91a1-eb31f5fe01ac": {
+    "name": "IlevaCard",
+    "url": "https://app.open.bankly.com.br/assets/Logos/IlevaCard-Logo.svg"
+  },
+  "c002faf0-e6ba-439a-8079-3299c0026e05": {
+    "name": "EQI",
+    "url": "https://banking-public-prd.s3.sa-east-1.amazonaws.com/open-finance/institutions/c002faf0-e6ba-439a-8079-3299c0026e05.svg"
+  },
+  "895826af-c01b-4805-8a90-e0aea0f6f909": {
+    "name": "Ella Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Ella.svg"
+  },
+  "0563afc4-967f-4ca1-bc03-8b541ea4ab6b": {
+    "name": "GS3",
+    "url": "https://gs3.com.br/wp-content/uploads/2025/01/gs3-512x512-green.svg"
+  },
+  "9c6d71aa-1106-4e25-a2ac-9203898117b8": {
+    "name": "Health Cash",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/HealthCash.svg"
+  },
+  "bb544a2d-1bcc-4c51-8003-a9f99f7f81aa": {
+    "name": "Hiperbanco",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Hiperbanco.svg"
+  },
+  "048d5f5c-21ac-4626-9ffc-758bc4b22614": {
+    "name": "Shopee Vendedor",
+    "url": "https://deo.shopeemobile.com/shopee/shopee-shopeepayfe-live-br/wallet/shopee_logo.svg"
+  },
+  "ca530b71-0e3c-41d0-ae45-7f8836a08a97": {
+    "name": "Finnet",
+    "url": "https://open-finance-dev.finnet.com.br/finnet-openfinance.svg"
+  },
+  "786ee549-f23a-4ac1-90da-1eecae2d873d": {
+    "name": "Impact Bank",
+    "url": "https://app.impactmap.com.br/divulgacao_usuarios/logo_impact.svg"
+  },
+  "9f4b8b36-e7ab-49ae-81bc-091571c385be": {
+    "name": "Incentivale",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Incentivale-Logo.svg"
+  },
+  "83e6c237-d043-4268-9f7f-3604ef37a9ca": {
+    "name": "Inova",
+    "url": "https://app.open.bankly.com.br/assets/Logos/InovaSolucoes-Logo.svg"
+  },
+  "497accee-16a6-4daa-84a1-83eb8f46fed0": {
+    "name": "Iti",
+    "url": "https://www.itau.com.br/media/dam/m/3d24ac79b5b4fd5c/original/Iti.svg"
+  },
+  "6a17fb3f-72de-4666-ace3-62ca5ad48276": {
+    "name": "JoyCard",
+    "url": "https://app.open.bankly.com.br/assets/Logos/JoyCard-Logo.svg"
+  },
+  "91690835-55cc-4f6a-8141-6c7cabd385cf": {
+    "name": "KINVO",
+    "url": "https://banking-public-prd.s3.sa-east-1.amazonaws.com/open-finance/institutions/91690835-55cc-4f6a-8141-6c7cabd385cf.svg"
+  },
+  "e2ab6f1b-68a5-465c-96b6-e5de924ff199": {
+    "name": "Lemon",
+    "url": "https://app.open.bankly.com.br/assets/Logos/LemonPay-Logo.svg"
+  },
+  "3633d3ba-449e-4682-ac61-33dec307f40f": {
+    "name": "Lemon",
+    "url": "https://framerusercontent.com/assets/7W3dLoV66pPPa9eAokKsBwSwNw.svg"
+  },
+  "82214028-091f-4016-9551-aba0c6fc2d23": {
+    "name": "MOTTU",
+    "url": "https://image-app.mottu.com.br/open-finance/Logo_Mottu.svg"
+  },
+  "97c8e8f3-cd4b-4d8d-95a4-da25cfe36cb4": {
+    "name": "Mark Up",
+    "url": "https://app.open.bankly.com.br/assets/Logos/MarkUp-Logo.svg"
+  },
+  "62d9d43b-d323-45db-a6e6-7c19ad5265fd": {
+    "name": "Meu Premio",
+    "url": "https://app.open.bankly.com.br/assets/Logos/MeuPremio-Logo.svg"
+  },
+  "de61a3b4-77fa-4ba3-b683-b93f969e7ba2": {
+    "name": "Meu Premio 360",
+    "url": "https://app.open.bankly.com.br/assets/Logos/MeuPremioConquiste-Logo.svg"
+  },
+  "7a7a9a8d-f086-44b6-b81e-215d516c27c1": {
+    "name": "Midway",
+    "url": "https://openfinance.midway.com.br/midway.svg"
+  },
+  "778319f3-7593-45ec-a029-8eadbf8ceef7": {
+    "name": "Monte Bravo",
+    "url": "https://openfinance-redirect-montebravo.xpi.com.br/assets/montebravo.svg"
+  },
+  "8513070c-4575-4883-a929-243f08883a91": {
+    "name": "Moovi",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Moovi-Logo.svg"
+  },
+  "99103542-8524-4301-b52b-e2f91e513e32": {
+    "name": "Multipremium",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Multipremium-Logo.svg"
+  },
+  "6be5ae3a-d6fb-42a7-b2be-383e6a34c0b5": {
+    "name": "Nação BRB FLA",
+    "url": "https://novo.brb.com.br/wp-content/uploads/2025/07/brb-preto-1.svg"
+  },
+  "6043c568-5ecb-4ee1-a01a-92ad3baf3d05": {
+    "name": "Necton",
+    "url": "https://banking-public-prd.s3.sa-east-1.amazonaws.com/open-finance/logo/necton/Necto+logo+Open+Finance.svg"
+  },
+  "3f15766b-4fc1-4d22-b6ee-5eb05d6cec8f": {
+    "name": "Neon",
+    "url": "https://opbk-brasil.s3.sa-east-1.amazonaws.com/neon/logo.svg"
+  },
+  "b99e96e6-4092-42d0-babc-0a1da68b3668": {
+    "name": "Infinia",
+    "url": "https://whitelabeljourney.s3.us-east-1.amazonaws.com/infinia/infinia-logo.svg"
+  },
+  "969e8463-c8e5-4074-b467-0b7f1fbe6a28": {
+    "name": "Itaucard",
+    "url": "https://www.itau.com.br/media/dam/m/525c782f2035ba0e/original/Itaucard.svg"
+  },
+  "c2429506-312c-43ab-87b6-6d6e70dac915": {
+    "name": "LINA Open X",
+    "url": "https://s3.amazonaws.com/plugcrm-app/663131e9d7958a000e0eb44d/instance_file/68e6e7f5a8291e0014d28aa5.svg"
+  },
+  "1c3689a6-6a01-4cea-922f-e555b79dc5a9": {
+    "name": "Lothus",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/Lothus.svg"
+  },
+  "d7d9ad8d-468c-48a6-ae89-ff7cdcb8a7d7": {
+    "name": "Meirelles",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/BSP.svg"
+  },
+  "be5d6358-cdbb-47c5-93ff-cb999d992a9a": {
+    "name": "Itaú Emps",
+    "url": "https://www.itau.com.br/media/dam/m/76348de88374de24/original/IU_LOGO_POS_HEX_512X512.svg"
+  },
+  "e988e664-e042-43dd-a9d4-3a109da46881": {
+    "name": "MaisTODOS",
+    "url": "https://assets.empresas.maistodos.com.br/images/open-finance-logo.svg"
+  },
+  "3152143f-b681-4453-8d99-929de29e24c4": {
+    "name": "Omnion",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Omnion-Logo.svg"
+  },
+  "61d4f3a6-1c6a-4a9b-9928-712d645cabeb": {
+    "name": "Onn Marketing",
+    "url": "https://app.open.bankly.com.br/assets/Logos/OnnMarketing-Logo.svg"
+  },
+  "bf91adbc-18aa-4098-a0b7-a4141120d28c": {
+    "name": "P2x",
+    "url": "https://app.open.bankly.com.br/assets/Logos/P2xWinner-Logo.svg"
+  },
+  "538b3860-b8fc-4ec2-97ad-c0c9f89208f5": {
+    "name": "POWPAY",
+    "url": "https://assets.powpay.com/logo/yellow.svg"
+  },
+  "246a04bb-7c5d-494c-9386-116d1bdb2330": {
+    "name": "PayCard",
+    "url": "https://app.open.bankly.com.br/assets/Logos/PayCard-Logo.svg"
+  },
+  "c7db52ec-88c7-4b75-9f6d-58f105ecd611": {
+    "name": "Pocket",
+    "url": "https://app.open.bankly.com.br/assets/Logos/PocketCard-Logo.svg"
+  },
+  "3e7b5a81-ecbd-444e-8495-50ea7b954e0e": {
+    "name": "Porto Bank",
+    "url": "https://www.itau.com.br/media/dam/m/5f8441fa0f040c89/original/Porto-Bank_Descritivo_RGB_V_Color-1.svg"
+  },
+  "5c18edb3-6b99-487a-a2fd-17b7c9d8d7a4": {
+    "name": "Prix",
+    "url": "https://app.open.bankly.com.br/assets/Logos/PrixCard-Logo.svg"
+  },
+  "1480e9bd-0273-4cfb-9504-4bc54f3eb602": {
+    "name": "Pulse",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Pulse-Logo.svg"
+  },
+  "fa0b8ff7-f06a-43e8-bb62-5997772a6287": {
+    "name": "Realize",
+    "url": "https://http-oof-realize.s3.sa-east-1.amazonaws.com/Logo_Realize_512x512.svg"
+  },
+  "34bbd098-abe2-48f0-aef4-d6e62dea186b": {
+    "name": "RelacionaMais",
+    "url": "https://app.open.bankly.com.br/assets/Logos/RelacionaMais-Logo.svg"
+  },
+  "3e3d765a-9ddc-48ba-96b4-120eca8bc047": {
+    "name": "Santander Cartões Pessoa Física",
+    "url": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg"
+  },
+  "b35f5047-eaae-47ee-9e66-4ceab834b2fe": {
+    "name": "Shopee",
+    "url": "https://deo.shopeemobile.com/shopee/shopee-shopeepayfe-live-br/wallet/shopee_logo.svg"
+  },
+  "fde44b90-953c-458c-90b2-3230cd101a0e": {
+    "name": "Ovni",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Ovni.svg"
+  },
+  "649ffe9a-503d-4635-a0fd-41f4b5135b6c": {
+    "name": "PagBank",
+    "url": "https://openfinance.api.pagseguro.uol.com.br/img/logo_pagbank.svg"
+  },
+  "88d1cadd-caf0-4769-affe-b34e6abd8b7e": {
+    "name": "PagueVeloz (Serasa)",
+    "url": "https://www.pagueveloz.com.br/Content/Img/logo.svg"
+  },
+  "10b4f3da-e04e-4904-9988-e93c8f141ab1": {
+    "name": "QI SCD",
+    "url": "https://storage.googleapis.com/qitech-website-documents/qi_logo_blue.svg"
+  },
+  "cf9e5ee8-c035-4c88-b0d2-70ad026342d7": {
+    "name": "QI SCD S.A.",
+    "url": "https://storage.googleapis.com/qitech-website-documents/qi_logo_blue.svg"
+  },
+  "22abeef9-e5a9-42c3-a9de-80bfa5727522": {
+    "name": "Rede",
+    "url": "https://www.itau.com.br/media/dam/m/3ac924f51ddf48dd/original/Rede.svg"
+  },
+  "8c0a010e-91f9-449a-8d98-afe14ab8e388": {
+    "name": "Resolve Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Resolve.svg"
+  },
+  "bfa9bfae-6d24-4884-b6c2-44fc3455945d": {
+    "name": "Rhiza Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Rhiza.svg"
+  },
+  "8715351a-6fa9-460f-89fe-1ab5e47c2397": {
+    "name": "Pluggy",
+    "url": "https://cdn.pluggy.ai/assets/pluggy/isotype.svg"
+  },
+  "fe293821-e59f-4136-a541-bafea1915612": {
+    "name": "Porto Bank PJ",
+    "url": "https://www.itau.com.br/media/dam/m/5f8441fa0f040c89/original/Porto-Bank_Descritivo_RGB_V_Color-1.svg"
+  },
+  "4ea37e4f-3dbf-4dba-b29d-280b52305e25": {
+    "name": "Smart",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Smart-Logo.svg"
+  },
+  "3bf239d5-a15b-4db4-9e58-a8b01efa9173": {
+    "name": "Spin",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Spin-Logo.svg"
+  },
+  "28a4be57-98da-45c5-9626-21f94a5db0ab": {
+    "name": "Suppero",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Suppero-Logo.svg"
+  },
+  "fd5d855f-f915-435e-8f9a-c9a8e0005ce7": {
+    "name": "Tokpay",
+    "url": "https://app.open.bankly.com.br/assets/Logos/TokPay-Logo.svg"
+  },
+  "801f69dd-4410-4133-81a1-a7de3171eeb2": {
+    "name": "Unique",
+    "url": "https://app.open.bankly.com.br/assets/Logos/Unique-Logo.svg"
+  },
+  "45dc7a2e-a2f5-46d8-9eb4-6afac3c0d9c2": {
+    "name": "WHG",
+    "url": "https://openfinance-redirect-whg.xpi.com.br/assets/whg.svg"
+  },
+  "5b7db62e-2206-4a9b-98b1-44939f4f742f": {
+    "name": "iHold",
+    "url": "https://openfinance.iholdbank.digital/logos/ihold.svg"
+  },
+  "95243f9f-cb24-4613-9cc1-d5b3f46e0647": {
+    "name": "BANCO DE LA NACION ARGENTINA",
+    "url": "https://qr-h.cornerpix.com.br/public/images/logo_banco_nacional_argentina.svg"
+  },
+  "95cb95df-b43b-4efa-b3ec-77ab3b92f683": {
+    "name": "BPO Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/BPO.svg"
+  },
+  "68a85005-2ffa-44ac-97df-3838b5545add": {
+    "name": "CAIXA - clientes sem conta",
+    "url": "https://consentimento.openbanking.caixa.gov.br/assets/images/logomarca_caixa.svg"
+  },
+  "ecc27af0-7bed-4172-9bce-6ccaa9016b95": {
+    "name": "Cumbuca",
+    "url": "https://assets.cumbuca.com/cumbuca-icon-v2.svg"
+  },
+  "77f28126-03fa-48fa-9ae6-0f3d2995b99c": {
+    "name": "EMCASH",
+    "url": "https://emcash-templates.s3.us-east-2.amazonaws.com/imgs/emcash_fundobranco.svg"
+  },
+  "759feeba-2c5e-41b9-81dc-f68d65f69087": {
+    "name": "Hyundai Financiamentos",
+    "url": "https://detigxafctvwc.cloudfront.net/financiamentos/Logo_Hyundai.svg"
+  },
+  "70f015c6-3b82-4130-960b-2dd713c30978": {
+    "name": "Imobi Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Imobi.svg"
+  },
+  "37c33803-d50b-4308-a5d9-4abc540b9813": {
+    "name": "Nitybank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Nity.svg"
+  },
+  "1ddc397d-26ef-4afe-b93a-f62502c3789f": {
+    "name": "Rapidium Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Rapidum.svg"
+  },
+  "f3f557bd-6465-4c36-9acc-a27f721236d4": {
+    "name": "Simpbank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Simp.svg"
+  },
+  "b909f992-301e-455d-a694-e4e806663350": {
+    "name": "Snob Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Snob.svg"
+  },
+  "5fa770ea-0c96-4e25-b65c-67030e5d1ce5": {
+    "name": "Uze",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Uze.svg"
+  },
+  "639427b7-dd89-48f2-ba8f-f41078c9f628": {
+    "name": "Won Bank",
+    "url": "https://storage.googleapis.com/openfinance-client-logo/openfinance-client-logo-atualizado/Won.svg"
+  },
+  "0ff2d23d-792c-4398-a404-005313b556c1": {
+    "name": "Agibank",
+    "url": "https://agibank.com.br/logo.svg"
+  },
+  "def470e9-791a-4dfc-adfd-b4da58e01180": {
+    "name": "Celcoin Baas",
+    "url": "https://www.celcoin.com.br/wp-content/uploads/2026/02/avatars-1.svg"
+  },
+  "9e9b21d0-4ba4-4450-97c0-f68ed588a3a2": {
+    "name": "B3 Instituição de Pagamento",
+    "url": "https://www.b3.com.br/data/files/2B/C1/DB/A6/CC0509105FE89209AC094EA8/B3IP_Logoo.svg"
+  },
+  "e1e1e985-1d74-42fb-8dc5-f4377f0f460e": {
+    "name": "SEMEC BANK",
+    "url": "https://openfinance.iholdbank.digital/logos/semec.svg"
+  },
+  "a56e9c89-012a-4197-b0e3-ff37a1b07031": {
+    "name": "Stone e Ton",
+    "url": "https://public-assets.stone.com.br/openfinance/stone-logo.svg"
+  },
+  "39ee59cc-07fd-48d0-b795-e582895908c4": {
+    "name": "Fixxbank",
+    "url": "https://openfinance.iholdbank.digital/logos/fixx.svg"
+  }
+}

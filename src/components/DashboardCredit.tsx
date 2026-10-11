@@ -1,3 +1,4 @@
+import BankLogo from "./BankLogo";
 import Link from "next/link";
 import {bankMoney,type BankOverview} from "@/lib/open-finance-display";
 import UiIcon from "./UiIcon";
@@ -8,7 +9,7 @@ export default function DashboardCredit({overview}:{overview:BankOverview|null})
     {lines.length?lines.slice(0,3).map((line,index)=>{
       const resource=overview!.resources.find(r=>r.id===line.resource_id),bank=overview!.connections.find(c=>c.id===resource?.connection_id);
       return <div key={line.id} className={index===0?"z-credit-card":"mt-3 border-t border-line pt-3"}>
-        <p className="text-[11px]">{bank?.institution_name??"Cartão"} · {line.line_name||"Linha de crédito"}</p>
+        <p className="flex items-center gap-2 text-[11px]"><BankLogo institutionId={bank?.institution_id} size={30}/><span>{bank?.institution_name??"Cartão"} · {line.line_name||"Linha de crédito"}</span></p>
         <strong className={index===0?undefined:"mt-1 block text-lg font-semibold"}>{bankMoney(line.available_amount,line.currency)}</strong>
         <small className="text-[10px]">{line.consolidation_type??"Disponível nesta linha"}</small>
       </div>;

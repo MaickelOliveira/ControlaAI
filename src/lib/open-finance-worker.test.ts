@@ -37,3 +37,26 @@ it("does not let cancellation failures stop public synchronization",async()=>{
   const stop=startOpenFinanceWorker();await vi.advanceTimersByTimeAsync(21000);stop();
   expect(m.retirement).toHaveBeenCalledTimes(1);expect(m.sync).toHaveBeenCalled();vi.restoreAllMocks();
 });
+it("checks both platforms promptly and makes at most four idle scope requests per minute",async()=>{
+  vi.useFakeTimers();m.publicEnabled.mockReturnValue(true);vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","true");
+  m.rpc.mockResolvedValue({data:null});
+  const stop=startOpenFinanceWorker();await vi.advanceTimersByTimeAsync(59_000);stop();
+  const scopeCalls=m.rpc.mock.calls.filter(([operation])=>operation==="zelo_of_worker_scope");
+  expect(scopeCalls).toHaveLength(4);expect(scopeCalls.slice(0,2).map(([,args])=>args.p_mode)).toEqual(["personal","business"]);
+  expect(vi.getTimerCount()).toBe(0);
+});
+it("keeps the short interval while a platform has queued work",async()=>{
+  vi.useFakeTimers();m.publicEnabled.mockReturnValue(true);vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","true");
+  m.rpc.mockImplementation(async(name:string,args:{p_mode:string})=>({data:name==="zelo_of_worker_scope"?{userId:id,mode:args.p_mode,environment:"production"}:0}));
+  const stop=startOpenFinanceWorker();await vi.advanceTimersByTimeAsync(6_000);stop();
+  expect(m.sync).toHaveBeenCalledTimes(4);
+});
+it("backs off repeated storage failures without stopping cancellation or exposing error payloads",async()=>{
+  vi.useFakeTimers();const errorLog=vi.spyOn(console,"error").mockImplementation(()=>{});
+  m.publicEnabled.mockReturnValue(true);m.retirementEnabled.mockReturnValue(true);m.retirement.mockResolvedValue("idle");vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","true");
+  m.rpc.mockResolvedValue({error:{message:"private database error"}});
+  const stop=startOpenFinanceWorker();await vi.advanceTimersByTimeAsync(89_000);stop();
+  expect(m.rpc.mock.calls.filter(([name])=>name==="zelo_of_worker_scope")).toHaveLength(4);
+  expect(m.retirement).toHaveBeenCalledTimes(3);expect(errorLog).toHaveBeenCalledTimes(2);
+  expect(JSON.stringify(errorLog.mock.calls)).not.toContain("private database error");vi.restoreAllMocks();
+});
