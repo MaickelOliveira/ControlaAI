@@ -1,7 +1,11 @@
-- [ ] Normalização com previsão explícita e parcelas observadas; testar datas inválidas, moedas e ausência de vencimento.
-- [ ] Persistência de snapshot e pagamentos de fatura; testar páginas, revogação, duas identidades/modos e grants.
-- [ ] Fila sincroniza novos produtos nos cartões atuais/novos e após atualização; testar retomada sem download por pergunta.
-- [ ] Agenda compartilhada e próximos pagamentos/resumos com resultados unificados; testar duplicidade e cobertura.
-- [ ] Avisos por telefone autorizado, revalidação, privacidade e entrega idempotente; testar falha incerta e mudança de vínculo.
-- [ ] Interface Contas mostra previsões/parcelas com linguagem correta; preservar funções existentes.
-- [ ] Revisão, verificações completas, CI, implantação, migração e evidência visual oficial.
+- [x] Normalização com previsão explícita e parcelas observadas; testar datas inválidas, moedas e ausência de vencimento.
+- [x] Persistência de snapshot e pagamentos de fatura; testar páginas, revogação, duas identidades/modos e grants.
+- [x] Fila sincroniza novos produtos nos cartões atuais/novos e após atualização; testar retomada sem download por pergunta.
+- [x] Agenda compartilhada e próximos pagamentos/resumos com resultados unificados; testar duplicidade e cobertura.
+- [x] Avisos por telefone autorizado, revalidação, privacidade e entrega idempotente; testar falha incerta e mudança de vínculo.
+- [x] Interface Contas mostra previsões/parcelas com linguagem correta; preservar funções existentes.
+- [x] Revisão independente aprovada e regressões de titular/modo/telefone/identidade verificadas.
+- [ ] Verificações finais completas, CI, implantação, migração e evidência visual oficial.
+
+- [x] Pedido de fatura via IA do painel/WhatsApp, escolha de cartão/mês, PDF privado com cobertura e gates atuais.
+- [x] Procedimento de retorno preservando dados e recibos.

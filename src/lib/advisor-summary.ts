@@ -114,8 +114,8 @@ export function replyAdvisorSummary(
   forecasts.forEach(forecast => {
     message += `\n${modeLabel(forecast.mode, locale)}`;
     message += locale === "es"
-      ? `\n• Saldo del período hasta ahora: ${formatCurrency(forecast.currentBalance)}\n• Saldo previsto: *${formatCurrency(forecast.projectedBalance)}*`
-      : `\n• Saldo do período até agora: ${formatCurrency(forecast.currentBalance)}\n• Saldo previsto: *${formatCurrency(forecast.projectedBalance)}*`;
+      ? `\n• Resultado del período hasta ahora: ${formatCurrency(forecast.currentBalance)}\n• Resultado previsto: *${formatCurrency(forecast.projectedBalance)}*`
+      : `\n• Resultado do período até agora: ${formatCurrency(forecast.currentBalance)}\n• Resultado previsto: *${formatCurrency(forecast.projectedBalance)}*`;
   });
 
   if (finances.some(item => !item.dueDate)) {

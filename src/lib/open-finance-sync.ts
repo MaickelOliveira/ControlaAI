@@ -4,6 +4,7 @@ import type { OpenFinanceScope } from "./open-finance-access";
 import { normalizeBills, normalizeCredit, normalizeLimits, normalizeMovements, normalizeReserves, normalizeResource, RESOURCE_FAMILIES, type ResourceFamily } from "./open-finance-normalize";
 import { polpObject, polpProductionPage, polpProductionRequest, polpExternalId, polpUuid, type PolpObject } from "./polp-production";
 import type { BankJobSpec } from "./open-finance-webhook";
+import {normalizeCardSchedules,normalizeBillPayments} from "./open-finance-schedule-normalize";
 
 const productFor = (family:ResourceFamily) => family==="accounts"?"ACCOUNT":family==="credit-cards"?"CREDIT_CARD_ACCOUNT":family==="loans"||family==="financings"?"CREDIT_OPERATIONS":"INVESTMENTS";
 function catalogJobs(consentId:string,products:unknown): BankJobSpec[] {
@@ -42,9 +43,11 @@ async function resourcePage(job:PolpObject) {
   const family=String(job.family) as ResourceFamily;
   if(!RESOURCE_FAMILIES.includes(family))throw new Error("INVALID_JOB");
   const target=polpExternalId(job.external_resource_id), kind=String(job.kind);
-  const path=kind==="catalog"?`/consents/${polpUuid(job.external_consent_id)}/${family}`:kind==="transactions"?`/${family}/${target}/transactions`:kind==="bills"?`/credit-cards/${target}/bills`:kind==="reserves"?`/accounts/${target}/reserved-balances`:null;
+  const window=polpObject(job.filter_window) as Record<string,string>;
+  const billId=kind==="bill-transactions"?polpExternalId(window.billId):null;
+  const path=kind==="catalog"?`/consents/${polpUuid(job.external_consent_id)}/${family}`:kind==="transactions"?`/${family}/${target}/transactions`:kind==="bills"?`/credit-cards/${target}/bills`:kind==="reserves"?`/accounts/${target}/reserved-balances`:kind==="recurrings"||kind==="installments"?`/credit-cards/${target}/${kind}`:billId?`/bills/${billId}/transactions`:null;
   if(!path)throw new Error("INVALID_JOB");
-  const page=await polpProductionPage(path,job.cursor==null?null:String(job.cursor),polpObject(job.filter_window) as Record<string,string>);
+  const page=await polpProductionPage(path,job.cursor==null?null:String(job.cursor),billId?{}:window);
   const rows:Record<string,PolpObject[]>={},children:Array<BankJobSpec&{initial_only?:boolean}>=[];
   if(kind==="catalog") {
     rows.resources=[];rows.limits=[];rows.credit=[];
@@ -52,12 +55,19 @@ async function resourcePage(job:PolpObject) {
       if(row.consent_id!=null && row.consent_id!==job.external_consent_id)throw new Error("CONSENT_IDENTITY_MISMATCH");
       const resource=normalizeResource(family,row);rows.resources.push(resource);
       const child=(kind:BankJobSpec["kind"],initialOnly=false)=>children.push({kind,family,external_resource_id:String(resource.external_id),window:{},initial_only:initialOnly});
-      if(family==="credit-cards"){rows.limits.push(...normalizeLimits(row));child("bills",true);child("transactions",true);}
+      if(family==="credit-cards"){rows.limits.push(...normalizeLimits(row));child("bills",true);child("transactions",true);child("recurrings",true);child("installments",true);}
       else if(family==="loans"||family==="financings")rows.credit.push(normalizeCredit(family,row));
       else {child("transactions",true);if(family==="accounts"&&row.balance&&polpObject(row.balance).has_reserved_balance===true)child("reserves");}
     }
-  }else if(kind==="transactions")rows.movements=normalizeMovements(family,target,page.data);
-  else if(kind==="bills")rows.bills=normalizeBills(target,page.data);
+  }else if(kind==="transactions"||kind==="bill-transactions"){
+    const data=billId?page.data.map(row=>{if(row.bill_id!=null&&row.bill_id!==billId)throw Error("BILL_IDENTITY_MISMATCH");return {...row,bill_id:billId};}):page.data;
+    rows.movements=normalizeMovements(family,target,data);
+    if(kind==="transactions"&&family==="credit-cards"&&!page.nextCursor)for(const kind of ["recurrings","installments","bills"] as const)children.push({kind,family,external_resource_id:target,window:{}});
+  }else if(kind==="bills"){
+    rows.bills=normalizeBills(target,page.data).map((bill,i)=>({...bill,...normalizeBillPayments(page.data[i],bill.currency as string|null)}));
+    const recent=new Date();recent.setUTCFullYear(recent.getUTCFullYear()-1);
+    for(const bill of rows.bills)if(typeof bill.due_date==="string"&&bill.due_date>=recent.toISOString().slice(0,10))children.push({kind:"bill-transactions",family:"credit-cards",external_resource_id:target,window:{billId:String(bill.external_id)},initial_only:bill.due_date<new Date(Date.now()-62*86400000).toISOString().slice(0,10)});
+  }else if(kind==="recurrings"||kind==="installments")rows.schedules=normalizeCardSchedules(kind,page.data);
   else rows.resources=normalizeReserves(target,page.data);
   return {rows,nextCursor:page.nextCursor,children};
 }

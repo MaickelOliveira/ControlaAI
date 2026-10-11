@@ -39,7 +39,9 @@ export function normalizeCardSchedules(kind:"recurrings"|"installments",rows:Pol
     if(kind==="recurrings"&&(typeof row.regularityScore!=="number"||row.regularityScore<0||row.regularityScore>1))throw Error("INVALID_SCHEDULE");
     // The installments API does not provide currency or a next due date.
     const currency=kind==="recurrings"?"BRL":null;
-    const key=createHash("sha256").update(JSON.stringify([kind,row.description.trim().toLowerCase(),row.currency??null,value,period,total,kind==="recurrings"?first:transactions[0]])).digest("hex");
+    // Independent clusters may share merchant/date/amount. Observed transaction
+    // identities distinguish them; SQL preserves identity as history changes.
+    const key=createHash("sha256").update(JSON.stringify([kind,[...transactions].sort()])).digest("hex");
     if(keys.has(key))throw Error("DUPLICATE_SCHEDULE");keys.add(key);
     return {source_key:key,kind:kind==="recurrings"?"recurring":"installment",description:row.description.trim(),amount:value,currency,original_currency:kind==="recurrings"?row.currency:null,period_months:period,expected_day:kind==="recurrings"?integer(row.expectedDay,1,31):null,first_occurrence_date:first,last_occurrence_date:last,due_date:due,regularity_score:kind==="recurrings"?row.regularityScore:null,total_installments:total,observed_installments:observed,observed_transactions:transactions};
   });

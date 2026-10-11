@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
 import { addFinance, deleteFinance, getFinancesByUser, isPostedFinance, type Finance } from "./finances";
 import type { InvoiceTransaction } from "./invoice-import";
+import { getPhoneAccess } from "./wpp-phone-links";
 import { withRetry } from "./retry";
 
 const TZ = "America/Sao_Paulo";
@@ -363,11 +364,12 @@ export async function upsertImportedInstallmentSchedules(options: {
   return result;
 }
 
-export async function getRecurringByUser(userId: string, mode?: string, status?: string): Promise<RecurringTransaction[]> {
-  let query = getSupabase().from("recurring_transactions").select("*").eq("user_id", userId);
+export async function getRecurringByUser(userId: string, mode?: string, status?: string,strict=false): Promise<RecurringTransaction[]> {
+  let query = getSupabase().from("recurring_transactions").select("*",strict?{count:"exact"}:undefined).eq("user_id", userId);
   if (mode) query = query.eq("mode", mode);
   if (status) query = query.eq("status", status);
-  const { data, error } = await query;
+  const { data, error,count } = await query;
+  if(strict&&(error||!Array.isArray(data)||count==null||data.length!==count))throw Error("RECURRING_READ_UNAVAILABLE");
   if (error) { console.error("[recurring] getRecurringByUser erro:", error.message); return []; }
   return (data as Row[]).map(fromRow);
 }
@@ -403,11 +405,17 @@ export async function confirmRecurring(
   id: string,
   userId: string,
   expectedDueDate?: string,
+  phone?: string,
 ): Promise<{ updated: RecurringTransaction; finance: Awaited<ReturnType<typeof addFinance>>; alreadyPosted: boolean } | null> {
   const { data: current, error: readError } = await getSupabase().from("recurring_transactions").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
   if (readError || !current) return null;
   const rec = fromRow(current as Row);
   if (rec.status !== "active" || (expectedDueDate && rec.nextDueDate !== expectedDueDate)) return null;
+
+  if (phone) {
+    const access = await getPhoneAccess(userId, phone);
+    if (access !== "both" && access !== rec.mode) return null;
+  }
 
   const importedInstallment = rec.recurrenceType === "installment" && Boolean(purchaseDateFromDescription(rec.description));
   const accountingDate = importedInstallment ? rec.nextDueDate : todaySP();

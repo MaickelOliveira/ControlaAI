@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { polpExternalId, polpObject, polpUuid } from "./polp-production";
 import { RESOURCE_FAMILIES, sourceDate, type ResourceFamily } from "./open-finance-normalize";
 
-export type BankJobSpec = { kind: "consent" | "catalog" | "transactions" | "bills" | "reserves"; family: ResourceFamily | "consents"; external_resource_id: string; window: Record<string,string> };
+export type BankJobSpec = { kind: "consent" | "catalog" | "transactions" | "bills" | "reserves" | "recurrings" | "installments" | "bill-transactions"; family: ResourceFamily | "consents"; external_resource_id: string; window: Record<string,string> };
 export function verifyBankWebhook(raw: Uint8Array, signature: string | null, secret: string | undefined): boolean {
   if (!secret || !signature || !/^sha256=[a-f0-9]{64}$/i.test(signature)) return false;
   const expected = createHmac("sha256",secret).update(raw).digest();

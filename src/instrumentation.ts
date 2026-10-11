@@ -105,6 +105,8 @@ export async function register() {
       // ── Notificações de recorrentes/parcelas às 9h SP ──
       const hourSP = Number(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }));
       if (hourSP === 9) {
+        try { const {runBankDueNotices}=await import("./lib/open-finance-notices");await runBankDueNotices(); }
+        catch { console.error("[cron] Avisos bancários temporariamente indisponíveis"); }
         try {
           const recurringModule = await import("./lib/recurring").catch(() => null);
           const usersModule = await import("./lib/users").catch(() => null);
@@ -136,12 +138,15 @@ export async function register() {
                 || rec.paidInstallments !== queuedRec.paidInstallments) continue;
               const user = await getUserById(rec.userId);
               if (!user || !usersModule.hasAccess(user)) continue;
-              const phones = (await getPhonesForUser(user.id)).map(link => link.phone);
+              const phones = (await getPhonesForUser(user.id)).filter(link=>link.access===rec.mode||link.access==="both").map(link=>link.phone);
               const msg = buildRecurringNotification(rec, user.locale);
               const dueDateStr = new Date(rec.nextDueDate + "T12:00:00").toLocaleDateString("pt-BR");
               const params = { descricao: rec.description, valor: formatCurrency(rec.amount), data: dueDateStr };
               for (const phone of phones) {
-                const ok = await sendReminderTemplate(phone, "cbr_recorrente", msg, params, user.locale);
+                const freshUser=await getUserById(rec.userId);
+                const access=await phoneLinksModule.getPhoneAccess(rec.userId,phone);
+                if(!freshUser||!usersModule.hasAccess(freshUser)||(access!==rec.mode&&access!=="both"))continue;
+                const ok = await sendReminderTemplate(phone, "cbr_recorrente", msg, params, freshUser.locale,{privateFinancial:true});
                 if (ok) {
                   await markNotified(rec.id);
                   await setPendingAction(phone, {

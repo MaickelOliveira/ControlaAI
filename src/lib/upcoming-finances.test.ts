@@ -89,13 +89,13 @@ describe("upcoming finances", () => {
     const pt = replyUpcomingFinances(items, "expense", [forecast], "setembro de 2026", "2026-09-06", "pt-BR");
     expect(pt).toContain("2 despesas para pagar");
     expect(pt).toContain("Total a pagar");
-    expect(pt).toContain("Saldo previsto");
+    expect(pt).toContain("Resultado previsto");
     expect(pt).toContain("pendência sem data");
 
     const es = replyUpcomingFinances(items, "expense", [forecast], "septiembre de 2026", "2026-09-06", "es");
     expect(es).toContain("2 gastos por pagar");
     expect(es).toContain("Total por pagar");
-    expect(es).toContain("Saldo previsto");
+    expect(es).toContain("Resultado previsto");
     expect(es).toContain("pendiente sin fecha");
   });
 });
