@@ -4,6 +4,8 @@ import { downloadMedia, verifyToken, verifySignature } from "@/lib/waba";
 import { transcribeAudio } from "@/lib/ai-processor";
 import { getConfig } from "@/lib/whatsapp-config";
 import { alreadyProcessed } from "@/lib/webhook-dedup";
+import { beginWhatsAppActivity, type WhatsAppActivityLease } from "@/lib/whatsapp-activity";
+import { parseCreditPixAnswer } from "@/lib/credit-pix-question";
 import { getUserIdByPhone } from "@/lib/wpp-phone-links";
 
 /** Verificação do webhook exigida pela Meta ao cadastrar a URL no Business
@@ -29,6 +31,7 @@ type WabaMessage = {
   audio?: { id: string };
   document?: { id: string; caption?: string; filename?: string };
   button?: { text: string; payload: string };
+  interactive?: { button_reply?: { id: string; title: string } };
 };
 
 /** A Graph API aceitar o envio (HTTP 2xx, sem erro no corpo) não garante
@@ -86,9 +89,17 @@ export async function POST(req: NextRequest) {
     const contact = value?.contacts?.[0];
     const contactName = contact?.profile?.name as string | undefined;
 
-    // Responde a Meta já — o processamento roda em background, sem bloquear
-    // o ACK (ver comentário de alreadyProcessed acima).
-    processMessages(messages, contactName).catch(e => console.error("[webhook/waba] erro no processamento em background:", e));
+    // Registra atividade antes do ACK e da mídia. Se falhar, a Meta pode
+    // tentar novamente; dedup e processamento só começam após todas as leases.
+    const receivedAt=Date.now();
+    const leases: Array<WhatsAppActivityLease | undefined> = [];
+    try {
+      for (const msg of messages) leases.push(msg.from && /^\d{8,20}$/.test(msg.from.replace(/\D/g,"")) ? await beginWhatsAppActivity(msg.from,"inbound") : undefined);
+    } catch {
+      await Promise.allSettled(leases.map(lease=>lease?.finish()));
+      return NextResponse.json({error:"Temporariamente indisponível"},{status:503});
+    }
+    processMessages(messages, contactName, leases, receivedAt).catch(e => console.error("[webhook/waba] erro no processamento em background:", e));
 
     return NextResponse.json({ ok: true });
   } catch (e) {
@@ -97,8 +108,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function processMessages(messages: WabaMessage[], contactName?: string) {
-  for (const msg of messages) {
+async function processMessages(messages: WabaMessage[], contactName?: string, leases: Array<WhatsAppActivityLease | undefined> = [], receivedAt=Date.now()) {
+  for (const [index,msg] of messages.entries()) {
+   try {
     if (await alreadyProcessed(msg.id)) { console.log(`[webhook/waba] msg=${msg.id} já processada, ignorando reentrega`); continue; }
 
     const from = (msg.from || "").replace(/\D/g, "");
@@ -107,12 +119,19 @@ async function processMessages(messages: WabaMessage[], contactName?: string) {
     if (msg.type === "text") {
       const text = msg.text?.body?.trim();
       if (!text) continue;
-      await handleIncomingMessage({ from, text, contactName });
+      await handleIncomingMessage({ channel:"waba", receivedAt, from, text, contactName });
+      continue;
+    }
+
+    if (msg.type === "interactive" && msg.interactive?.button_reply) {
+      const reply=msg.interactive.button_reply;
+      const creditPixAnswer=parseCreditPixAnswer(reply.id);
+      await handleIncomingMessage({channel:"waba", receivedAt,from,text:reply.title,contactName,...(creditPixAnswer?{creditPixAnswer}:{})});
       continue;
     }
 
     if (msg.type === "button" && msg.button?.text) {
-      await handleIncomingMessage({ from, text: msg.button.text, contactName });
+      await handleIncomingMessage({ channel:"waba", receivedAt, from, text: msg.button.text, contactName });
       continue;
     }
 
@@ -122,7 +141,7 @@ async function processMessages(messages: WabaMessage[], contactName?: string) {
       const userId = await getUserIdByPhone(from).catch(() => null);
       const transcript = await transcribeAudio(media.buffer, media.mimeType, userId || undefined).catch(() => null);
       if (!transcript) continue;
-      await handleIncomingMessage({ from, text: transcript, contactName });
+      await handleIncomingMessage({ channel:"waba", receivedAt, from, text: transcript, contactName });
       continue;
     }
 
@@ -132,7 +151,7 @@ async function processMessages(messages: WabaMessage[], contactName?: string) {
       const media = await downloadMedia(mediaField.id);
       if (!media) continue;
       await handleIncomingMessage({
-        from,
+        channel:"waba", receivedAt, from,
         text: "",
         contactName,
         isFileMessage: true,
@@ -142,5 +161,6 @@ async function processMessages(messages: WabaMessage[], contactName?: string) {
         fileName: mediaField.filename || `arquivo_${Date.now()}`,
       });
     }
+   } catch { console.error("[webhook/waba] Processamento da mensagem não concluído"); } finally { await leases[index]?.finish().catch(()=>{}); }
   }
 }

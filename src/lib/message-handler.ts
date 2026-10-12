@@ -975,6 +975,9 @@ export type IncomingMessage = {
   from: string;
   text: string;
   contactName?: string;
+  channel?: "waba"|"evolution";
+  receivedAt?: number;
+  creditPixAnswer?: {questionId:string;confirmed:boolean};
   isFileMessage?: boolean;
   fileBuffer?: Buffer;
   fileMimeType?: string;
@@ -983,6 +986,11 @@ export type IncomingMessage = {
 };
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
+  if(msg.creditPixAnswer){
+    const {answerCreditPixQuestion}=await import("./credit-pix-whatsapp");
+    await addMessage(msg.from,{role:"user",content:msg.text,ts:msg.receivedAt??Date.now(),channel:msg.channel,privateFinancial:true});
+    await answerCreditPixQuestion(msg.from,msg.creditPixAnswer);return;
+  }
   return runWithVirtualAgentReply(msg.from,()=>withWhatsAppCompany(msg,handleMessageWithAgent));
 }
 
@@ -993,7 +1001,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     let messageText = msg.text;
 
     if (from) {
-      await addMessage(from, { role: "user", content: messageText || (msg.isFileMessage ? "[Arquivo]" : ""), ts: Date.now() }, { contactName: msg.contactName });
+      await addMessage(from, { role: "user", content: messageText || (msg.isFileMessage ? "[Arquivo]" : ""), ts:msg.receivedAt??Date.now(),...(msg.channel?{channel:msg.channel}:{}) }, { contactName: msg.contactName });
     }
 
     // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──

@@ -198,3 +198,18 @@ export async function checkConnection(): Promise<"CONNECTED" | "DISCONNECTED" | 
     return res.ok ? "CONNECTED" : "DISCONNECTED";
   } catch { return "UNKNOWN"; }
 }
+
+/** Free-form reply buttons only; the caller owns the verified window and reservation. */
+export async function sendCreditPixButtons(to:string,questionId:string,message:string):Promise<boolean>{
+ if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(questionId)||message.length>1024)return false;
+ const config=await getConfig(),pnid=config.waba?.phoneNumberId,token=config.waba?.accessToken;
+ if(config.provider!=="waba"||!pnid||!token)return false;
+ try{
+  const res=await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pnid}/messages`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
+   body:JSON.stringify({messaging_product:"whatsapp",to:normalizeWhatsAppPhone(to),type:"interactive",interactive:{type:"button",body:{text:message},action:{buttons:[
+    {type:"reply",reply:{id:`zelo-credit-pix:${questionId}:yes`,title:"Sim, foi do cartão"}},
+    {type:"reply",reply:{id:`zelo-credit-pix:${questionId}:no`,title:"Não, são diferentes"}}
+   ]}}}),signal:AbortSignal.timeout(15_000)});
+  const result=await res.json().catch(()=>null);return res.ok&&Array.isArray(result?.messages)&&typeof result.messages[0]?.id==="string"&&result.messages[0].id.trim().length>0&&!result?.error;
+ }catch{return false;}
+}

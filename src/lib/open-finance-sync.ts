@@ -80,6 +80,11 @@ export async function runBankSyncPage(scope:OpenFinanceScope):Promise<"idle"|"pr
   try {
     const result=job.kind==="consent"?await consentPage(scope,job):await resourcePage(job);
     await openFinanceRpc(scope,"zelo_of_commit_page",{p_job:id,p_lease:lease,p_rows:result.rows,p_next:result.nextCursor,p_children:result.children});
+    // Queue preparation is optional and must not fail an already committed bank page.
+    if(process.env.OPEN_FINANCE_CREDIT_PIX_QUESTIONS_ENABLED==="true" && (job.kind==="transactions"||job.kind==="bill-transactions")) {
+      const {prepareCreditPixQuestions}=await import("./credit-pix-whatsapp");
+      await prepareCreditPixQuestions(scope).catch(()=>{});
+    }
     return "processed";
   }catch(error){
     const code=error instanceof Error&&/^[A-Z0-9_]{1,80}$/.test(error.message)?error.message:"OF_SYNC_FAILED";
