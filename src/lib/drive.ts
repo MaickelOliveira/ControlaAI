@@ -92,7 +92,7 @@ export async function getFiles(userId: string, folderId?: string): Promise<Drive
   if (folderId === "root") query = query.is("folder_id", null);
   else if (folderId !== undefined) query = query.eq("folder_id", folderId);
   const { data, error } = await query;
-  if (error) { console.error("[drive] getFiles erro:", error.message); return []; }
+  if (error) { console.error("[drive] getFiles erro:"); return []; }
   return (data as FileRow[]).map(fileFromRow);
 }
 

@@ -42,7 +42,7 @@ export async function getContactsByUser(userId: string, status?: ContactStatus):
   let query = getSupabase().from("contacts").select("*").eq("user_id", userId);
   if (status) query = query.eq("status", status);
   const { data, error } = await query;
-  if (error) { console.error("[contacts] getContactsByUser erro:", error.message); return []; }
+  if (error) { console.error("[contacts] getContactsByUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 

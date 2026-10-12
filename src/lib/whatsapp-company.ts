@@ -25,7 +25,7 @@ export function contextualCompanyUser(user: User): User {
   } : {}) };
 }
 function activate(userId: string, company: Company, mode: "personal" | "business", access: string, archivedCompanyIds:string[]=[]) {
-  setCompanyContext({ userId, companyId: company.id, mode, archivedCompanyIds, allowBusiness: access !== "personal", companyName: company.name,
+  setCompanyContext({ userId, companyId: company.id, mode, archivedCompanyIds, allowBusiness: access !== "personal", allowPersonal: access !== "business", companyName: company.name,
     customCategoriesExpense: company.customCategoriesExpense, customCategoriesIncome: company.customCategoriesIncome });
 }
 /** Selection belongs to this verified participant; web selection is independent. */

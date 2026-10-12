@@ -9,7 +9,7 @@ export default function DashboardErrorPt({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[dashboard] erro de página:", error.message, error.stack);
+    console.error("[dashboard] erro de página:");
   }, [error]);
 
   return (
@@ -20,7 +20,7 @@ export default function DashboardErrorPt({
         Ocorreu um erro nesta página. Tenta novamente ou recarrega a plataforma.
       </p>
       <p className="text-xs text-subtle mb-5 max-w-lg font-mono bg-surface-muted border border-line rounded-xl px-3 py-2">
-        {error.message || String(error)}
+        {error.digest ? `Referência: ${error.digest}` : "Tente novamente em instantes."}
       </p>
       <button
         onClick={reset}

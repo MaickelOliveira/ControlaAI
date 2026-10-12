@@ -3774,8 +3774,8 @@ async function tryOpenAIForTestUser<T>(
 
   try {
     return { ok: true, value: await run() };
-  } catch (error) {
-    console.error(`[ai-processor] OpenAI falhou em ${operation}; usando Gemini:`, String(error));
+  } catch {
+    console.error("[ai-processor] OpenAI indisponível; usando Gemini");
     return { ok: false };
   }
 }
@@ -3992,8 +3992,8 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
     const parsed = normalizeAIResult(message, JSON.parse(text) as AIResult, ctx);
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
-  } catch (e) {
-    console.error("[ai-processor] Erro Gemini:", String(e));
+  } catch  {
+    console.error("[ai-processor] Erro Gemini:");
     return { intent: "unknown", confidence: 0 };
   }
 
@@ -4117,8 +4117,8 @@ async function splitWebSearchBatches(query: string): Promise<string[]> {
       batches.push(`${request}: ${items.slice(i, i + WEB_SEARCH_BATCH_SIZE).join(", ")}`);
     }
     return batches;
-  } catch (error) {
-    console.error("[ai-processor] Erro ao dividir pesquisa em lotes:", String(error));
+  } catch {
+    console.error("[ai-processor] Erro ao dividir pesquisa em lotes:");
     return [query];
   }
 }
@@ -4274,15 +4274,15 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
     const answer = result.response.text().trim();
     const sources = groundedSources(result);
     if (!isUsableWebSearchAnswer(answer) || !sources.length || (rideDetails && !hasIndividualRides(answer, rideDate))) {
-      console.error(`[ai-processor] Pesquisa web sem lista confirmada (consulta de ${query.length} caracteres)`);
+      console.error("[ai-processor] Pesquisa web sem lista confirmada (consulta de caracteres)");
       return rideDetails ? rideListingUnavailable(query, rideDate, sources, locale) : failure;
     }
 
     const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
     const sourceList = sources.map((source, index) => `${index + 1}. ${source.title}: ${source.url}`).join("\n");
     return `${answer}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
-  } catch (error) {
-    console.error("[ai-processor] Erro na pesquisa web:", String(error));
+  } catch {
+    console.error("[ai-processor] Erro na pesquisa web:");
     return rideDetails ? rideListingUnavailable(query, rideDate, [], locale) : failure;
   }
 }
@@ -4320,8 +4320,8 @@ export async function readImageText(
       { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
     ]);
     return clean(result.response.text());
-  } catch (error) {
-    console.error("[ai-processor] Erro ao ler texto da imagem:", String(error));
+  } catch {
+    console.error("[ai-processor] Erro ao ler texto da imagem:");
     return null;
   }
 }
@@ -4370,8 +4370,8 @@ export async function identifyImageSubject(
     const subject = result.response.text().trim().replace(/^['"]|['"]$/g, "");
     if (!subject || /^NAO_IDENTIFICADO$/i.test(subject)) return null;
     return subject.slice(0, 240);
-  } catch (error) {
-    console.error("[ai-processor] Erro ao identificar imagem:", String(error));
+  } catch {
+    console.error("[ai-processor] Erro ao identificar imagem:");
     return null;
   }
 }
@@ -4436,8 +4436,8 @@ Instruções:
     if (!text) return null;
     if (/\b(suporte|support|soporte)\b/i.test(text)) return text;
     return `${text}\n\n${supportInsidePlatformLine(locale)}`;
-  } catch (e) {
-    console.error("[ai-processor] Erro generateFallbackResponse:", e);
+  } catch  {
+    console.error("[ai-processor] Erro generateFallbackResponse:");
     return null;
   }
 }
@@ -4504,8 +4504,8 @@ Instruções:
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
     return result.response.text().trim();
-  } catch (e) {
-    console.error("[ai-processor] Erro generateAnalysisResponse:", e);
+  } catch  {
+    console.error("[ai-processor] Erro generateAnalysisResponse:");
     return "❌ Não consegui gerar a análise agora. Tente novamente.";
   }
 }
@@ -4937,8 +4937,8 @@ Retorne APENAS JSON:
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     return normalizeFinancialTransactionListExtraction(JSON.parse(text), hoje);
-  } catch (error) {
-    console.error("[ai-processor] Erro extractFinancialTransactionsFromDocument:", error);
+  } catch {
+    console.error("[ai-processor] Erro extractFinancialTransactionsFromDocument:");
     return null;
   }
 }
@@ -5036,8 +5036,8 @@ Retorne APENAS JSON válido, sem markdown.`;
     const parsed = JSON.parse(text);
 
     return normalizeFinancialDocumentExtraction(parsed, hoje);
-  } catch (e) {
-    console.error("[ai-processor] Erro extractFinanceFromDocument:", e);
+  } catch  {
+    console.error("[ai-processor] Erro extractFinanceFromDocument:");
     return null;
   }
 }
@@ -5307,7 +5307,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
       throw new Error("A resposta marcou o arquivo como fatura, mas não trouxe compras válidas");
     } catch (error) {
       lastError = error;
-      console.error(`[ai-processor] Erro extractInvoiceTransactions (tentativa ${attempt}/2):`, error);
+      console.error("[ai-processor] Erro extractInvoiceTransactions (tentativa /2):");
     }
   }
 
@@ -5430,8 +5430,8 @@ Retorne APENAS JSON válido, sem markdown.`;
     const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
     return normalizeReceipt(parsed);
-  } catch (e) {
-    console.error("[ai-processor] Erro extractGroceryReceiptItems:", e);
+  } catch  {
+    console.error("[ai-processor] Erro extractGroceryReceiptItems:");
     return null;
   }
 }
@@ -5466,8 +5466,8 @@ export async function transcribeAudio(
       },
     ]);
     return result.response.text().trim() || null;
-  } catch (e) {
-    console.error("[ai-processor] Erro transcrição:", e);
+  } catch  {
+    console.error("[ai-processor] Erro transcrição:");
     return null;
   }
 }

@@ -20,7 +20,10 @@ vi.mock("./open-finance-http", () => ({
 vi.mock("./whatsapp-activity", () => ({ claimWhatsAppQuestion: m.claim }));
 vi.mock("./waba", () => ({ sendCreditPixButtons: m.send }));
 vi.mock("./whatsapp", () => ({ sendText: m.text, sendCreditPixButtons: m.send }));
-vi.mock("./conversations", () => ({ addMessage: m.history, getAiPaused: m.paused, phoneVariants: (phone: string) => [phone.replace(/\D/g, "")] }));
+vi.mock("./conversations", async importOriginal => {
+  const actual = await importOriginal<typeof import("./conversations")>();
+  return { addMessage: m.history, getAiPaused: m.paused, phoneVariants: actual.phoneVariants };
+});
 
 import { answerCreditPixQuestion, parseCreditPixAnswer, runCreditPixQuestions } from "./credit-pix-whatsapp";
 
@@ -173,8 +176,33 @@ describe("quiet, private credit Pix delivery", () => {
     await runCreditPixQuestions(); expect(m.claim).not.toHaveBeenCalled(); expect(m.send).not.toHaveBeenCalled();
   });
   it("rejects a linked delegate even when the number has both-mode permission", async () => {
-    m.links.mockResolvedValue([{ ...link(), relation: "contador" }]);
+    m.user.mockResolvedValue({ ...user(), phone: "5511999990002" });
     await runCreditPixQuestions(); expect(m.claim).not.toHaveBeenCalled(); expect(m.send).not.toHaveBeenCalled();
+  });
+  it.each(["Titular", "Eu", "Dono", "contador"])("a delegate cannot elevate by naming their relation %s", async relation => {
+    m.user.mockResolvedValue({ ...user(), phone: "5511999990002" });
+    m.links.mockResolvedValue([{ ...link(), relation }]);
+    expect(await runCreditPixQuestions()).toBe(0);
+    expect(m.claim).not.toHaveBeenCalled(); expect(m.send).not.toHaveBeenCalled();
+  });
+  it.each(["contador", "Esposa", undefined])("the verified registered holder remains authorized with cosmetic relation %j", async relation => {
+    m.links.mockResolvedValue([{ ...link(), relation }]);
+    expect(await runCreditPixQuestions()).toBe(1);
+    expect(m.send).toHaveBeenCalledWith(PHONE, QUESTION, expect.any(String));
+  });
+  it("accepts an existing Brazilian legacy phone alias for the registered holder", async () => {
+    m.user.mockResolvedValue({ ...user(), phone: "+55 (11) 99999-0000" });
+    m.links.mockResolvedValue([{ ...link(), phone: "551199990000", relation: "Outro" }]);
+    expect(await runCreditPixQuestions()).toBe(1);
+    expect(m.send).toHaveBeenCalledWith("551199990000", QUESTION, expect.any(String));
+  });
+  it.each([undefined, "", "341999990000"])("fails closed for missing or foreign registered ownership %j", async phone => {
+    m.user.mockResolvedValue({ ...user(), phone });
+    expect(await runCreditPixQuestions()).toBe(0); expect(m.send).not.toHaveBeenCalled();
+  });
+  it("fails closed for a phone link attached to another owner", async () => {
+    m.links.mockResolvedValue([{ ...link(), userId: OTHER }]);
+    expect(await runCreditPixQuestions()).toBe(0); expect(m.send).not.toHaveBeenCalled();
   });
   it.each([
     { userId: OTHER, mode: "personal", environment: "production" },
@@ -189,6 +217,11 @@ describe("quiet, private credit Pix delivery", () => {
     m.links.mockResolvedValue([{ ...link(), activeWorkspaceMode: "business", activeCompanyId: OTHER }]);
     m.scope.mockResolvedValue({ userId: USER, mode: "business", environment: "production", companyId: COMPANY });
     await runCreditPixQuestions(); expect(m.claim).not.toHaveBeenCalled(); expect(m.send).not.toHaveBeenCalled();
+  });
+  it("rechecks registered ownership after arming, before exposing financial facts", async () => {
+    hooks[ARM] = () => { m.user.mockResolvedValue({ ...user(), phone: "5511999990002" }); return true; };
+    expect(await runCreditPixQuestions()).toBe(0); expect(m.send).not.toHaveBeenCalled();
+    expect(calls(FINISH).at(-1)?.[1]).toEqual(expect.objectContaining({ p_status: "pending" }));
   });
   it("rechecks the holder link after arming, before sending financial facts", async () => {
     hooks[ARM] = () => { m.links.mockResolvedValue([]); return true; };
@@ -210,12 +243,23 @@ describe("answering as the currently authorized holder", () => {
     expect(calls(ANSWER)).toHaveLength(0);
   });
   it("does not mutate for a delegate or a disabled Open Finance scope", async () => {
+    m.user.mockResolvedValue({ ...user(), phone: "5511999990002" });
+    await answerCreditPixQuestion(PHONE, { questionId: QUESTION, confirmed: true });
+    expect(calls(ANSWER)).toHaveLength(0);
+    m.user.mockResolvedValue(user()); m.links.mockResolvedValue([link()]); m.scope.mockResolvedValue(null);
+    await answerCreditPixQuestion(PHONE, { questionId: QUESTION, confirmed: true });
+    expect(calls(ANSWER)).toHaveLength(0);
+  });
+  it("ignores an owner cosmetic relationship while answering", async () => {
     m.links.mockResolvedValue([{ ...link(), relation: "contador" }]);
-    await answerCreditPixQuestion(PHONE, { questionId: QUESTION, confirmed: true });
-    expect(calls(ANSWER)).toHaveLength(0);
-    m.links.mockResolvedValue([link()]); m.scope.mockResolvedValue(null);
-    await answerCreditPixQuestion(PHONE, { questionId: QUESTION, confirmed: true });
-    expect(calls(ANSWER)).toHaveLength(0);
+    expect(await answerCreditPixQuestion(PHONE, { questionId: QUESTION, confirmed: true })).toBe(true);
+    expect(calls(ANSWER)).toHaveLength(1);
+  });
+  it("a self-declared Titular delegate cannot confirm bank facts", async () => {
+    m.user.mockResolvedValue({ ...user(), phone: "5511999990002" });
+    m.links.mockResolvedValue([{ ...link(), relation: "Titular" }]);
+    expect(await answerCreditPixQuestion(PHONE, { questionId: QUESTION, confirmed: true })).toBe(false);
+    expect(calls(ANSWER)).toHaveLength(0); expect(m.text).not.toHaveBeenCalled();
   });
   it("does not treat a string confirmation as a typed boolean", async () => {
     await answerCreditPixQuestion(PHONE, { questionId: QUESTION, confirmed: "true" as unknown as boolean });

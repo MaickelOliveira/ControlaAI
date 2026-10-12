@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
-import { getBillingWebhookById, updateBillingWebhook, deleteBillingWebhook, evaluateBillingWebhook } from "@/lib/billing-webhooks";
+import { getBillingWebhookById, updateBillingWebhook, deleteBillingWebhook, evaluateBillingWebhook, billingWebhookAdminView, billingWebhookAdminResult } from "@/lib/billing-webhooks";
 
 type Params = Promise<{ id: string }>;
 
@@ -21,13 +21,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
     let payload: unknown;
     try { payload = JSON.parse(body.payload); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
     const result = await evaluateBillingWebhook(cfg, payload, true);
-    return NextResponse.json(result);
+    return NextResponse.json(billingWebhookAdminResult(result, cfg));
   }
 
   const { secretValue, ...rest } = body;
   const patch = { ...rest, ...(secretValue !== undefined ? { secretValue: !isMasked(secretValue) && secretValue ? secretValue : undefined } : {}) };
   const cfg = await updateBillingWebhook(id, patch);
-  return cfg ? NextResponse.json(cfg) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
+  return cfg ? NextResponse.json(billingWebhookAdminView(cfg)) : NextResponse.json({ error: "Não encontrado" }, { status: 404 });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Params }) {

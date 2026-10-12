@@ -129,5 +129,5 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível concluir esta ação." }, { status: 400 }); }
+  } catch { return NextResponse.json({ error: "Não foi possível concluir esta ação. Confira os dados e tente novamente." }, { status: 400 }); }
 }

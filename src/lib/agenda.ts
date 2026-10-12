@@ -115,9 +115,9 @@ export async function createAppointment(data: Omit<Appointment, "id" | "createdA
       calendarEventId = googleEvent.calendarEventId;
       googleCalendarId = googleEvent.googleCalendarId;
       meetLink = googleEvent.meetLink;
-    } catch (error) {
+    } catch {
       googleSyncFailed = true;
-      console.error("[agenda] falha ao sincronizar criação com Google Calendar:", error);
+      console.error("[agenda] falha ao sincronizar criação com Google Calendar:");
     }
   }
   const row = {
@@ -135,7 +135,7 @@ export async function createAppointment(data: Omit<Appointment, "id" | "createdA
 
 export async function getAppointments(userId: string): Promise<Appointment[]> {
   const { data, error } = await getSupabase().from("appointments").select("*").eq("user_id", userId).neq("status", "cancelled");
-  if (error) { console.error("[agenda] getAppointments erro:", error.message); return []; }
+  if (error) { console.error("[agenda] getAppointments erro:"); return []; }
   return (data as Row[]).map(fromRow).sort((a, b) => a.startAt.localeCompare(b.startAt));
 }
 
@@ -171,8 +171,8 @@ export async function updateAppointment(
           repeat: next.repeat,
         });
       }
-    } catch (error) {
-      console.error("[agenda] falha ao sincronizar alteração com Google Calendar:", error);
+    } catch {
+      console.error("[agenda] falha ao sincronizar alteração com Google Calendar:");
     }
   }
   const { data, error } = await getSupabase().from("appointments").update(toRowPatch(patch)).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
@@ -185,8 +185,8 @@ export async function deleteAppointment(id: string, userId: string): Promise<boo
   if (current?.calendarEventId) {
     try {
       await deleteGoogleCalendarEvent(userId, current.calendarEventId, current.googleCalendarId);
-    } catch (error) {
-      console.error("[agenda] falha ao excluir evento no Google Calendar:", error);
+    } catch {
+      console.error("[agenda] falha ao excluir evento no Google Calendar:");
     }
   }
   const { error, count } = await getSupabase().from("appointments").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);

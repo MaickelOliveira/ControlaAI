@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof SupportImageError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("[support] Falha ao enviar mensagem do administrador:", error);
+    console.error("[support] Falha ao enviar mensagem do administrador:");
     return NextResponse.json({ error: "Não foi possível enviar a mensagem agora. Tente novamente." }, { status: 500 });
   }
 }

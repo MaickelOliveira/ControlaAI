@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { getConfig } from "@/lib/whatsapp-config";
 import { normalizeWhatsAppPhone } from "@/lib/phone";
+import { readBankBody } from "./open-finance-body";
 
 // v19.0 expirou em 21/05/2026. Mantemos a integração da Cloud API na versão
 // estável atual para que envios de texto, template e mídia continuem ativos.
@@ -56,10 +57,10 @@ export async function sendText(to: string, message: string, countryIso?: string)
     // A Graph API pode devolver HTTP 2xx com um erro no corpo (ex: janela de
     // 24h fechada) — checar só res.ok não é suficiente.
     const ok = res.ok && !data?.error;
-    if (!ok) console.error(`[waba] sendText falhou: ${data?.error?.message || res.status}`);
+    if (!ok) console.error("[waba] sendText falhou:");
     return ok;
-  } catch (e) {
-    console.error("[waba] sendText erro:", e);
+  } catch  {
+    console.error("[waba] sendText erro:");
     return false;
   }
 }
@@ -91,11 +92,11 @@ export async function sendTemplate(to: string, templateName: string, languageCod
     });
     const data = await res.json().catch(() => null) as { error?: { message?: string }; messages?: Array<{ id?: string }> } | null;
     const ok = res.ok && !data?.error;
-    if (!ok) console.error(`[waba] sendTemplate(${templateName}) falhou: ${data?.error?.message || res.status}`);
-    return { ok, error: ok ? undefined : (data?.error?.message || `HTTP ${res.status}`), messageId: data?.messages?.[0]?.id };
-  } catch (e) {
-    console.error("[waba] sendTemplate erro:", e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    if (!ok) console.error("[waba] sendTemplate() falhou:");
+    return { ok, error: ok ? undefined : `HTTP ${res.status}`, messageId: data?.messages?.[0]?.id };
+  } catch  {
+    console.error("[waba] sendTemplate erro:");
+    return { ok: false, error: "WABA_REQUEST_FAILED" };
   }
 }
 
@@ -127,7 +128,7 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
     });
     const uploadData = await uploadRes.json().catch(() => null) as { id?: string; error?: { message?: string } } | null;
     if (!uploadRes.ok || !uploadData?.id) {
-      console.error(`[waba] upload de mídia falhou: ${uploadData?.error?.message || uploadRes.status}`);
+      console.error("[waba] upload de mídia falhou:");
       return false;
     }
 
@@ -149,10 +150,10 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
     });
     const sendData = await sendRes.json().catch(() => null) as { error?: { message?: string } } | null;
     const ok = sendRes.ok && !sendData?.error;
-    if (!ok) console.error(`[waba] sendFile falhou: ${sendData?.error?.message || sendRes.status}`);
+    if (!ok) console.error("[waba] sendFile falhou:");
     return ok;
-  } catch (e) {
-    console.error("[waba] sendFile erro:", e);
+  } catch  {
+    console.error("[waba] sendFile erro:");
     return false;
   }
 }
@@ -161,24 +162,28 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
  *  temporária e depois o arquivo em si (2 chamadas, ambas com Bearer). */
 export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
   const token = await accessToken();
-  if (!token) return null;
+  if (!token || !/^\d{1,40}$/.test(mediaId)) return null;
   try {
     const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(15_000),
+      redirect: "error",
     });
     if (!metaRes.ok) return null;
-    const meta = await metaRes.json() as { url?: string; mime_type?: string };
-    if (!meta.url) return null;
+    const meta = JSON.parse((await readBankBody(metaRes, 64 * 1024)).toString("utf8")) as { url?: string; mime_type?: string };
+    if (typeof meta.url !== "string") return null;
+    const mediaUrl = new URL(meta.url);
+    if (mediaUrl.protocol !== "https:" || mediaUrl.username || mediaUrl.password || (mediaUrl.port && mediaUrl.port !== "443") || !["fbsbx.com", "fbcdn.net", "facebook.com"].some(host => mediaUrl.hostname === host || mediaUrl.hostname.endsWith(`.${host}`))) return null;
     const fileRes = await fetch(meta.url, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(30_000),
+      redirect: "error",
     });
     if (!fileRes.ok) return null;
-    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    const buffer = await readBankBody(fileRes, 20 * 1024 * 1024);
     return { buffer, mimeType: meta.mime_type || "application/octet-stream" };
-  } catch (e) {
-    console.error("[waba] downloadMedia erro:", e);
+  } catch  {
+    console.error("[waba] downloadMedia erro:");
     return null;
   }
 }

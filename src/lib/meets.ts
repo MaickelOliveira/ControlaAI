@@ -67,7 +67,7 @@ export async function createMeet(data: Omit<Meet, "id" | "createdAt">): Promise<
 
 export async function getMeetsByUser(userId: string): Promise<Meet[]> {
   const { data, error } = await getSupabase().from("meets").select("*").eq("user_id", userId).neq("status", "cancelled");
-  if (error) { console.error("[meets] getMeetsByUser erro:", error.message); return []; }
+  if (error) { console.error("[meets] getMeetsByUser erro:"); return []; }
   return (data as Row[]).map(fromRow).sort((a, b) => a.startAt.localeCompare(b.startAt));
 }
 

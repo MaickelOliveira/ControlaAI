@@ -48,7 +48,7 @@ export function replyFinanceRegistered(f: Finance, balance: number, locale?: str
   return `${verbo}. ${emoji} *${formatCurrency(f.amount)}* — ${categoria} (${tipo})\n📝 ${f.description}\n📅 ${dateStr}\n\n${saldoLbl} ${modeLabel}: *${formatCurrency(balance)}*`;
 }
 
-export function replyBalance(personal: { income: number; expense: number; balance: number }, business?: { income: number; expense: number; balance: number }, personName?: string, periodLabel?: string, locale?: string): string {
+export function replyBalance(personal: { income: number; expense: number; balance: number } | null, business?: { income: number; expense: number; balance: number }, personName?: string, periodLabel?: string, locale?: string): string {
   const period = periodLabel || new Date().toLocaleDateString(dateLocale(locale), { month: "long", year: "numeric" });
   const intro = isEs(locale)
     ? (personName ? `Aquí está el resumen de ${period}, ${personName}:\n\n` : `Aquí está el resumen de ${period}:\n\n`)
@@ -59,13 +59,15 @@ export function replyBalance(personal: { income: number; expense: number; balanc
   const pessoalLbl = isEs(locale) ? "Personal" : "Pessoal";
 
   let msg = intro;
-  msg += `👤 *${pessoalLbl}*\n`;
-  msg += `  ${receitasLbl}: ${formatCurrency(personal.income)}\n`;
-  msg += `  ${despesasLbl}: ${formatCurrency(personal.expense)}\n`;
-  msg += `  ${saldoLbl}: ${formatCurrency(personal.balance)}\n`;
+  if (personal) {
+    msg += `👤 *${pessoalLbl}*\n`;
+    msg += `  ${receitasLbl}: ${formatCurrency(personal.income)}\n`;
+    msg += `  ${despesasLbl}: ${formatCurrency(personal.expense)}\n`;
+    msg += `  ${saldoLbl}: ${formatCurrency(personal.balance)}\n`;
+  }
 
   if (business) {
-    msg += `\n🏢 *Empresa*\n`;
+    msg += `${personal ? "\n" : ""}🏢 *Empresa*\n`;
     msg += `  ${receitasLbl}: ${formatCurrency(business.income)}\n`;
     msg += `  ${despesasLbl}: ${formatCurrency(business.expense)}\n`;
     msg += `  ${saldoLbl}: ${formatCurrency(business.balance)}\n`;

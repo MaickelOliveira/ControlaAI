@@ -4,6 +4,7 @@ import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, 
 import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
 import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
 import {initialLinkIdentity,isAccountHolderRelation,nextLinkRelation} from "./wpp-link-identity";
+import {isRegisteredAccountHolderPhone} from "./wpp-holder-authorization";
 import {withWhatsAppCompany,contextualCompanyUser,switchPhoneCompanyMode} from "./whatsapp-company";
 import {multiCompanyEnabled} from "./companies";
 import { getUserIdByPhone, linkPhone, setPhoneName, findPhoneByName, setPhoneRelation, findPhoneByRelation, setPhoneAccess, getPhoneAccess, countPhonesForUser, getPhonesForUser } from "@/lib/wpp-phone-links";
@@ -767,8 +768,8 @@ async function performAddMeet(appt: Appointment, userId: string, from: string, l
     await wppSend(from, localized(locale,
       `✅ *Meet adicionado!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${result.meetLink}`,
       `✅ *¡Meet añadido!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${result.meetLink}`));
-  } catch (e) {
-    console.error("[agenda_add_meet]", e);
+  } catch {
+    console.error("[agenda_add_meet]");
     await wppSend(from, localized(locale,
       "❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.",
       "❌ No pude crear el Google Meet. Comprueba en Configuración que tu cuenta de Google siga conectada."));
@@ -1062,8 +1063,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             if (await prepareFinancialTransactionListImport({
               from, buffer, mimeType, caption, originalName, user: fileUser,
             })) return;
-          } catch (error) {
-            console.error("[webhook] erro ao extrair lista financeira da imagem:", error);
+          } catch {
+            console.error("[webhook] erro ao extrair lista financeira da imagem:");
           }
         }
 
@@ -1163,8 +1164,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               }
               return;
             }
-          } catch (e) {
-            console.error("[webhook] erro ao extrair fatura:", e);
+          } catch {
+            console.error("[webhook] erro ao extrair fatura:");
             // Uma imagem sem legenda pode ser qualquer coisa. Se o leitor de
             // fatura falhar nela, volta ao menu de imagem em vez de afirmar
             // incorretamente que era uma fatura quebrada.
@@ -1222,8 +1223,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               await wppSend(from, `🧾 *Compra registrada — ${store.name}!*\n\n${itemsList}\n\n💰 Total: ${formatCurrency(receipt.total)}${receiptAccountLine}\n📊 Saldo: ${formatCurrency(bal.balance)}\n\n_💾 Quer guardar a foto do cupom no Drive? (sim/não)_`);
               return;
             }
-          } catch (e) {
-            console.error("[webhook] erro ao extrair cupom de mercado:", e);
+          } catch {
+            console.error("[webhook] erro ao extrair cupom de mercado:");
           }
         }
 
@@ -1231,8 +1232,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           // Tenta extrair dados financeiros do documento/foto via Gemini Vision
           try {
             if (await registerFinanceDocumentFromMedia({ from, buffer, mimeType, caption, user: fileUser })) return;
-          } catch (e) {
-            console.error("[webhook] erro ao extrair finanças do documento:", e);
+          } catch {
+            console.error("[webhook] erro ao extrair finanças do documento:");
           }
           // Imagem sem legenda: tenta registrar direto (cupom, comprovante). Só
           // pergunta a ação se não for documento financeiro.
@@ -1270,7 +1271,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const contentHint = hasSaveIntent ? undefined : caption;
           const { folder: suggestedFolder, keywords, suggestedName } = await categorizeDriveFile(buffer, mimeType, originalName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"], contentHint, fileUser.id);
           const targetFolder = await getFolderByName(fileUser.id, suggestedFolder);
-          const savedFile = await saveFile({
+          await saveFile({
             userId: fileUser.id,
             folderId: targetFolder?.id ?? null,
             originalName: suggestedName,
@@ -1281,12 +1282,12 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             source: "whatsapp",
             buffer,
           });
-          console.log(`[drive] arquivo salvo: ${savedFile.id} | ${suggestedName} | pasta=${suggestedFolder}`);
+          console.log("[drive] Arquivo salvo");
           await wppSend(from, replyFileSaved(suggestedName, suggestedFolder, fileUser.locale));
           // Só repassa à IA se a legenda tem conteúdo além do comando de salvar
           if (caption && !hasSaveIntent) messageText = caption;
-        } catch (e) {
-          console.error("[drive] erro ao salvar arquivo:", e);
+        } catch {
+          console.error("[drive] erro ao salvar arquivo:");
           await wppSend(from, localized(fileUser.locale, "❌ Não consegui salvar o arquivo. Tente novamente.", "❌ No pude guardar el archivo. Inténtalo de nuevo."));
         }
       }
@@ -1418,6 +1419,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     const speaker=(await getPhonesForUser(user.id)).find(person=>phoneMatches(person.phone,from));
     if(speaker)setVirtualAgentIdentity(isAccountHolderRelation(speaker.relation)?user.name:(speaker.name||""),user.locale);
     const mode: "personal" | "business" = phoneAccess === "both" ? user.activeMode : phoneAccess;
+    const allowsFinanceMode = (target: unknown) => phoneAccess === "both" || target === mode;
+    const financeSearchMode = phoneAccess === "both" ? null : mode;
     const now = nowBR(); // horário de Brasília/São Paulo
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
@@ -1451,6 +1454,12 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     //    "Vincular mais um número" do painel usa (generateWppVerifyCode). ──
     const linkCodeCmdMatch = /(?:vincular|conectar).*n[uú]mero|n[uú]mero.*(?:vincular|conectar)|c[oó]digo de (?:vincula[çc][ãa]o|vinculaci[oó]n|conexi[oó]n)/i.test(messageText.trim());
     if (linkCodeCmdMatch) {
+      if (!isRegisteredAccountHolderPhone(user.phone, from)) {
+        await wppSend(from, localized(user.locale,
+          "Somente o titular pode gerar o código para vincular outra pessoa. Gere pelo painel da Zelo ou pelo WhatsApp cadastrado do titular.",
+          "Solo el titular puede generar el código para vincular a otra persona. Hazlo desde Zelo o desde el WhatsApp registrado del titular."));
+        return;
+      }
       const linkedCount = await countPhonesForUser(user.id);
       const max = getMaxWppPhones(user);
       if (linkedCount >= max) {
@@ -1525,7 +1534,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (choice < 0) {
           const normalizedChoice = messageText.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
           const otherMode = pending.mode === "business" ? "personal" : "business";
-          const otherAccounts = await getManualAccountsByUser(user.id, otherMode);
+          const otherAccounts = allowsFinanceMode(otherMode) ? await getManualAccountsByUser(user.id, otherMode) : [];
           const otherMatches = normalizedChoice.length >= 3
             ? otherAccounts.filter(account => {
                 const name = account.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
@@ -1704,7 +1713,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       if (pending.action === "edit_finances") {
         const updated = [];
         for (const financeId of pending.financeIds ?? []) {
-          const item = await updateFinance(financeId, user.id, { employeeId: chosen?.id ?? null });
+          const item = await updateFinance(financeId, user.id, { employeeId: chosen?.id ?? null }, financeSearchMode ?? undefined);
           if (item) updated.push(item);
         }
         await wppSend(from, updated.length
@@ -1746,7 +1755,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       });
       let changed = 0;
       for (const financeId of pending.financeIds) {
-        if (await updateFinance(financeId, user.id, { employeeId: employee.id })) changed++;
+        if (await updateFinance(financeId, user.id, { employeeId: employee.id }, financeSearchMode ?? undefined)) changed++;
       }
       await wppSend(from, localized(user.locale,
         `✅ Funcionário *${employee.name}* cadastrado com salário de ${formatCurrency(employee.salary)} e vinculado a ${changed === 1 ? "este pagamento" : `${changed} pagamentos`}.`,
@@ -1819,8 +1828,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           if (await registerFinanceDocumentFromMedia({
             from, buffer, mimeType: pending.mimeType, caption: messageText, user,
           })) return;
-        } catch (error) {
-          console.error("[webhook] erro ao registrar comprovante da imagem pendente:", error);
+        } catch {
+          console.error("[webhook] erro ao registrar comprovante da imagem pendente:");
         }
         await wppSend(from, localized(user.locale,
           "❓ Não consegui identificar os dados da compra nessa imagem. Envie uma foto mais nítida, mostrando valor, data e as informações do parcelamento.",
@@ -2001,17 +2010,17 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         await wppSend(from, localized(user.locale,
           `✅ *${imported.length} movimentações registradas separadamente!*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`,
           `✅ *¡${imported.length} movimientos registrados por separado!*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`));
-      } catch (error) {
-        await Promise.all(importedFinanceIds.map(id => deleteFinance(id, user.id).catch(rollbackError => {
-          console.error("[webhook] erro ao desfazer movimentação da imagem:", rollbackError);
+      } catch {
+        await Promise.all(importedFinanceIds.map(id => deleteFinance(id, user.id).catch(() => {
+          console.error("[webhook] erro ao desfazer movimentação da imagem:");
         })));
         if (newlyCreatedAccountId) {
-          await deleteAccount(newlyCreatedAccountId, user.id).catch(rollbackError => {
-            console.error("[webhook] erro ao desfazer conta da imagem:", rollbackError);
+          await deleteAccount(newlyCreatedAccountId, user.id).catch(() => {
+            console.error("[webhook] erro ao desfazer conta da imagem:");
           });
         }
         await clearPendingAction(from);
-        console.error("[webhook] erro ao importar movimentações da imagem:", error);
+        console.error("[webhook] erro ao importar movimentações da imagem:");
         await wppSend(from, localized(user.locale,
           "❌ Não consegui gravar a lista inteira. Nenhuma movimentação do lote e nenhuma conta nova foram mantidas; tente novamente.",
           "❌ No pude guardar la lista completa. No se mantuvo ningún movimiento del lote ni ninguna cuenta nueva; inténtalo de nuevo."));
@@ -2033,7 +2042,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             // "Categoria - Descrição - Data"), então só reaproveita a IA pra pasta/keywords.
             const { folder: suggestedFolder, keywords } = await categorizeDriveFile(buffer, pending.mimeType, pending.suggestedName, folderNames.length ? folderNames : ["Documentos","Comprovantes","Contratos","Fotos","Outros"], undefined, user.id);
             const targetFolder = await getFolderByName(user.id, suggestedFolder);
-            const savedFile = await saveFile({
+            await saveFile({
               userId: user.id,
               folderId: targetFolder?.id ?? null,
               originalName: pending.suggestedName,
@@ -2044,10 +2053,10 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               source: "whatsapp",
               buffer,
             });
-            console.log(`[drive] comprovante salvo: ${savedFile.id} | ${pending.suggestedName} | pasta=${suggestedFolder}`);
+            console.log("[drive] Arquivo salvo");
             await wppSend(from, replyFileSaved(pending.suggestedName, suggestedFolder, user.locale));
-          } catch (e) {
-            console.error("[drive] erro ao salvar comprovante:", e);
+          } catch {
+            console.error("[drive] erro ao salvar comprovante:");
             await wppSend(from, localized(user.locale, "❌ Não consegui guardar o comprovante. Tente novamente.", "❌ No pude guardar el comprobante. Inténtalo de nuevo."));
           }
         } else {
@@ -2187,19 +2196,19 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               ? `\n💳 ${installmentTracking.created + installmentTracking.advanced} compra(s) parcelada(s) acompanhada(s); a próxima parcela ficou pendente.`
               : "";
             await wppSend(from, `✅ *${imported.length} lançamento(s) importado(s) da fatura!*${accountLabel}\n\n📅 Compras registradas na competência ${String(competenceMonth).padStart(2, "0")}/${competenceYear}.${dueLabel}${installmentLabel}\n📊 Saldo acumulado: ${formatCurrency(bal.balance)}`);
-          } catch (error) {
+          } catch {
             // A conta identificada no PDF e os lançamentos formam uma única
             // conclusão para o usuário. Se o lote falhar, remove a conta que
             // acabou de ser criada para não deixar um destino vazio/fantasma.
-            await Promise.all(importedFinanceIds.map(id => deleteFinance(id, user.id).catch(rollbackError => {
-              console.error("[webhook] erro ao desfazer lançamento da fatura:", rollbackError);
+            await Promise.all(importedFinanceIds.map(id => deleteFinance(id, user.id).catch(() => {
+              console.error("[webhook] erro ao desfazer lançamento da fatura:");
             })));
             if (newlyCreatedAccountId) {
-              await deleteAccount(newlyCreatedAccountId, user.id).catch(rollbackError => {
-                console.error("[webhook] erro ao desfazer conta da fatura:", rollbackError);
+              await deleteAccount(newlyCreatedAccountId, user.id).catch(() => {
+                console.error("[webhook] erro ao desfazer conta da fatura:");
               });
             }
-            console.error("[webhook] erro ao importar fatura:", error);
+            console.error("[webhook] erro ao importar fatura:");
             await wppSend(from, "❌ Não consegui gravar a fatura inteira. Nenhum lançamento foi confirmado e nenhuma conta nova foi mantida; tente novamente.");
           }
         } else {
@@ -2420,6 +2429,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // ── Confirmação de "apagar todo o histórico" (ação irreversível — exige
     // uma frase exata, não um "sim" qualquer, pra reduzir confirmação acidental) ──
     if (pending?.type === "confirm_clear_history" && pending.userId === user.id) {
+      if (!allowsFinanceMode(pending.mode)) {
+        await clearPendingAction(from);
+        await wppSend(from, replyModeAccessDenied(mode, user.locale));
+        return;
+      }
       const confirmationText = messageText.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const confirmed = confirmationText === "apagar tudo" || confirmationText === "borrar todo";
       await clearPendingAction(from);
@@ -2445,6 +2459,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
     // ── Seleção de lançamento financeiro (editar/excluir com múltiplos resultados) ──
     if (pending?.type === "finance_select" && pending.userId === user.id) {
+      if (pending.candidates.some(candidate => !allowsFinanceMode(candidate.mode)) || (pending.patch?.mode && !allowsFinanceMode(pending.patch.mode))) {
+        await clearPendingAction(from);
+        await wppSend(from, replyModeAccessDenied(mode, user.locale));
+        return;
+      }
       const hasPatch = !!(pending.patch && Object.keys(pending.patch).length > 0);
 
       // Já sabemos QUAIS lançamentos (etapa anterior já escolheu 1 ou
@@ -2453,6 +2472,10 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       // todos os candidatos guardados.
       if (pending.action === "edit" && !hasPatch && pending.awaitingPatch) {
         const patch = parseFinancePatchFromText(messageText);
+        if (patch.mode && !allowsFinanceMode(patch.mode)) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          return;
+        }
         let changedAccountName: string | undefined;
         let changedEmployeeName: string | undefined;
         let clearedEmployee = false;
@@ -2522,7 +2545,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         await clearPendingAction(from);
         const updatedItems = [];
         for (const c of pending.candidates) {
-          const updated = await updateFinance(c.id, user.id, patch as Parameters<typeof updateFinance>[2]);
+          const updated = await updateFinance(c.id, user.id, patch as Parameters<typeof updateFinance>[2], financeSearchMode ?? undefined);
           if (updated) updatedItems.push(updated);
         }
         if (updatedItems.length > 0) {
@@ -2567,7 +2590,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (pending.action === "edit" && hasPatch) {
           const updatedItems = [];
           for (const c of chosen) {
-            const updated = await updateFinance(c.id, user.id, pending.patch as Parameters<typeof updateFinance>[2]);
+            const updated = await updateFinance(c.id, user.id, pending.patch as Parameters<typeof updateFinance>[2], financeSearchMode ?? undefined);
             if (updated) updatedItems.push(updated);
           }
           if (updatedItems.length > 0) {
@@ -2583,7 +2606,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         } else if (pending.action === "delete") {
           let deletedCount = 0;
           for (const c of chosen) {
-            if (await deleteFinance(c.id, user.id)) deletedCount++;
+            if (await deleteFinance(c.id, user.id, financeSearchMode ?? undefined)) deletedCount++;
           }
           if (deletedCount > 0) {
             const delBal = await getBalance(user.id, chosen[0].mode as "personal" | "business", year, month);
@@ -2637,8 +2660,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               meetLink = r.meetLink;
               calendarEventId = r.calendarEventId;
               googleCalendarId = r.googleCalendarId;
-            } catch (e) {
-              console.error("[meet_confirm]", e);
+            } catch {
+              console.error("[meet_confirm]");
               failedMeetLinks++;
             }
           }
@@ -2899,7 +2922,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
       }
     }
-    console.log(`[bot] ${user.name} | intent=${ai.intent} | confidence=${ai.confidence} | mode=${mode}`);
+    console.log("[bot] Intenção processada");
 
     // "Paguei o aluguel" costuma chegar como um novo lançamento financeiro,
     // mas pode ser a baixa de uma recorrência que vence hoje. Fazemos essa
@@ -2913,6 +2936,10 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const settlement = settlementItems[0];
         const keyword = settlement?.description?.trim() || settledReference.keyword;
         const settlementMode = (settlement?.mode || ai.mode || mode) as "personal" | "business";
+        if (!allowsFinanceMode(settlementMode)) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          return;
+        }
         const matches = await findDueRecurringMatches(user.id, {
           keyword,
           mode: settlementMode,
@@ -3279,8 +3306,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "finance_edit": {
         const keyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
-        console.log(`[bot] finance_edit keyword="${keyword}" hasAmount=${!!ai.finance?.amount} hasCategory=${!!ai.finance?.category}`);
+        console.log("[bot] Consulta de alteração financeira");
         const lastBatch = ai.lastFinanceReference ? await getLastFinanceBatch(from) : null;
+        if ((lastBatch && !allowsFinanceMode(lastBatch.mode)) || (ai.mode && !allowsFinanceMode(ai.mode)) || (ai.finance?.mode && !allowsFinanceMode(ai.finance.mode))) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale)); break;
+        }
 
         const editPatch: Record<string, unknown> = {};
         if (ai.finance?.amount && ai.finance.amount > 0) editPatch.amount = ai.finance.amount;
@@ -3288,6 +3318,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (ai.finance?.date) editPatch.date = ai.finance.date;
         if (ai.finance?.type) editPatch.type = ai.finance.type;
         const destinationMode = ai.finance?.newMode || parseFinanceDestinationMode(messageText);
+        if (destinationMode && !allowsFinanceMode(destinationMode)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
         if (destinationMode) editPatch.mode = destinationMode;
         if (ai.newDescription) editPatch.description = ai.newDescription;
         // Correção "isso na verdade é a receber/a pagar" num lançamento já
@@ -3390,7 +3421,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             : [lastBatch.items[lastBatch.items.length - 1]];
           const updatedItems = [];
           for (const item of targets) {
-            const updated = await updateFinance(item.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
+            const updated = await updateFinance(item.id, user.id, editPatch as Parameters<typeof updateFinance>[2], financeSearchMode ?? undefined);
             if (updated) updatedItems.push(updated);
           }
           if (updatedItems.length > 0) {
@@ -3417,10 +3448,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         // (1 ou vários) de uma vez, sem precisar buscar por nome.
         if (ai.bulkCorrectLastBatch && Object.keys(editPatch).length > 0) {
           const bulkBatch = lastBatch ?? await getLastFinanceBatch(from);
+          if (bulkBatch && !allowsFinanceMode(bulkBatch.mode)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
           if (bulkBatch && bulkBatch.items.length > 0) {
             const updatedItems = [];
             for (const item of bulkBatch.items) {
-              const updated = await updateFinance(item.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
+              const updated = await updateFinance(item.id, user.id, editPatch as Parameters<typeof updateFinance>[2], financeSearchMode ?? undefined);
               if (updated) updatedItems.push(updated);
             }
             if (updatedItems.length > 0) {
@@ -3439,19 +3471,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           // fluxo normal abaixo (busca por keyword / lista do mês).
         }
 
-        // Busca em TODOS os modos (null) para não perder lançamentos de outro modo
-        let editCandidates = keyword ? await findFinanceByDescription(user.id, null, keyword) : [];
+        // Both-mode participants retain cross-mode search; restricted numbers
+        // may neither receive nor mutate records from the other mode.
+        let editCandidates = keyword ? (await findFinanceByDescription(user.id, financeSearchMode, keyword)).filter(item => allowsFinanceMode(item.mode)) : [];
         // Fallback: tenta buscar sem acentos e sem espaços extras
         if (keyword && !editCandidates.length) {
           const normalizedKeyword = keyword.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-          editCandidates = await findFinanceByDescription(user.id, null, normalizedKeyword);
+          editCandidates = (await findFinanceByDescription(user.id, financeSearchMode, normalizedKeyword)).filter(item => allowsFinanceMode(item.mode));
         }
-        console.log(`[bot] finance_edit encontrados por palavra-chave=${editCandidates.length}`);
+        console.log("[bot] Consulta de alteração financeira");
 
         // Achou exatamente 1 pela palavra-chave e já sabemos o que mudar → aplica direto
         if (keyword && editCandidates.length === 1 && Object.keys(editPatch).length > 0) {
           const editTarget = editCandidates[0];
-          const updated = await updateFinance(editTarget.id, user.id, editPatch as Parameters<typeof updateFinance>[2]);
+          const updated = await updateFinance(editTarget.id, user.id, editPatch as Parameters<typeof updateFinance>[2], financeSearchMode ?? undefined);
           if (updated) {
             const bal = await getBalance(user.id, updated.mode as "personal" | "business", year, month);
             const modeLabel = updated.mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
@@ -3491,7 +3524,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         // Sem palavra-chave, ou palavra-chave não achou nada → lista todos os
         // lançamentos do mês vigente pra escolher, em vez de um beco sem saída
         const [editMonthFrom, editMonthTo] = monthBounds(year, month);
-        const recentCandidates = await getFinancesInRange(user.id, undefined, editMonthFrom, editMonthTo);
+        const recentCandidates = (await getFinancesInRange(user.id, financeSearchMode ?? undefined, editMonthFrom, editMonthTo)).filter(item => allowsFinanceMode(item.mode));
         if (!recentCandidates.length) {
           await wppSend(from, `❓ Não encontrei nenhum lançamento esse mês${keyword ? ` com *"${keyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
           break;
@@ -3510,18 +3543,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "finance_delete": {
+        if ((ai.mode && !allowsFinanceMode(ai.mode)) || (ai.finance?.mode && !allowsFinanceMode(ai.finance.mode))) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
         const delKeyword = ai.keyword || ai.finance?.description || ai.finance?.category || "";
-        console.log(`[bot] finance_delete keyword="${delKeyword}"`);
+        console.log("[bot] Consulta de exclusão financeira");
 
         // Pedido curto e genérico ("apaga isso", "apaga esses lançamentos")
         // logo depois de um registro — apaga TODOS os lançamentos daquele
         // registro (1 ou vários) de uma vez, sem precisar buscar por nome.
         if (ai.bulkCorrectLastBatch) {
           const lastBatch = await getLastFinanceBatch(from);
+          if (lastBatch && !allowsFinanceMode(lastBatch.mode)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
           if (lastBatch && lastBatch.items.length > 0) {
             let deletedCount = 0;
             for (const item of lastBatch.items) {
-              if (await deleteFinance(item.id, user.id)) deletedCount++;
+              if (await deleteFinance(item.id, user.id, financeSearchMode ?? undefined)) deletedCount++;
             }
             if (deletedCount > 0) {
               const delBal = await getBalance(user.id, lastBatch.mode, year, month);
@@ -3539,13 +3574,13 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           // fluxo normal abaixo (busca por keyword / lista do mês).
         }
 
-        const delCandidates = delKeyword ? await findFinanceByDescription(user.id, null, delKeyword) : [];
-        console.log(`[bot] finance_delete encontrados por palavra-chave=${delCandidates.length}`);
+        const delCandidates = delKeyword ? (await findFinanceByDescription(user.id, financeSearchMode, delKeyword)).filter(item => allowsFinanceMode(item.mode)) : [];
+        console.log("[bot] Consulta de exclusão financeira");
 
         // Achou exatamente 1 pela palavra-chave → exclui direto (fluxo rápido)
         if (delKeyword && delCandidates.length === 1) {
           const delTarget = delCandidates[0];
-          const delOk = await deleteFinance(delTarget.id, user.id);
+          const delOk = await deleteFinance(delTarget.id, user.id, financeSearchMode ?? undefined);
           if (delOk) {
             const delBal = await getBalance(user.id, delTarget.mode as "personal" | "business", year, month);
             await wppSend(from, `🗑️ *Lançamento excluído!*\n\n❌ ${delTarget.description} — ${formatCurrency(delTarget.amount)}\n📅 ${new Date(delTarget.date + "T12:00:00").toLocaleDateString("pt-BR")}\n${modeLabelFull(delTarget.mode)}\n\n📊 Saldo: ${formatCurrency(delBal.balance)}`);
@@ -3570,7 +3605,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         // Sem palavra-chave, ou palavra-chave não achou nada → lista todos os
         // lançamentos do mês vigente pra escolher, em vez de um beco sem saída
         const [delMonthFrom, delMonthTo] = monthBounds(year, month);
-        const recentCandidates = await getFinancesInRange(user.id, undefined, delMonthFrom, delMonthTo);
+        const recentCandidates = (await getFinancesInRange(user.id, financeSearchMode ?? undefined, delMonthFrom, delMonthTo)).filter(item => allowsFinanceMode(item.mode));
         if (!recentCandidates.length) {
           await wppSend(from, `❓ Não encontrei nenhum lançamento esse mês${delKeyword ? ` com *"${delKeyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
           break;
@@ -3672,7 +3707,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           break;
         }
         const target = pendingItems[0];
-        const confirmed = await updateFinance(target.id, user.id, { status: "posted" });
+        const confirmed = await updateFinance(target.id, user.id, { status: "posted" }, financeSearchMode ?? undefined);
         if (confirmed) {
           const bal = await getBalance(user.id, confirmed.mode, year, month);
           await wppSend(from, localized(user.locale,
@@ -3746,8 +3781,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             ? `${user.locale === "es" ? "🏦 Cuenta" : "🏦 Conta"}: *${accountFilter.name}*\n\n${finalMsg}`
             : finalMsg;
           await wppSendLong(from, withAccount);
-        } catch (detailErr) {
-          console.error("[finance_detail]", detailErr);
+        } catch {
+          console.error("[finance_detail]");
           await wppSend(from, "❌ Não consegui gerar o extrato. Tente novamente.");
         }
         break;
@@ -3894,8 +3929,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             await wppSend(from, replyPersonNotFound(ai.personName, user.locale));
             break;
           }
-          const personal = await getBalanceInRange(user.id, "personal", pFrom, pTo, personPhone);
-          const business = await getBalanceInRange(user.id, "business", pFrom, pTo, personPhone);
+          const personal = allowsFinanceMode("personal") ? await getBalanceInRange(user.id, "personal", pFrom, pTo, personPhone) : null;
+          const business = allowsFinanceMode("business") ? await getBalanceInRange(user.id, "business", pFrom, pTo, personPhone) : undefined;
           await wppSend(from, replyBalance(personal, business, ai.personName, periodLabel, user.locale));
           break;
         }
@@ -3906,8 +3941,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           await wppSend(from, `🏦 *${accountFilter.name}* — ${periodLabel}\n\n💰 ${language ? "Ingresos" : "Receitas"}: *${formatCurrency(income)}*\n💸 ${language ? "Gastos" : "Despesas"}: *${formatCurrency(expense)}*\n📊 ${language ? "Saldo" : "Saldo"}: *${formatCurrency(income - expense)}*`);
           break;
         }
-        const personal = await getBalanceInRange(user.id, "personal", pFrom, pTo);
-        const business = await getBalanceInRange(user.id, "business", pFrom, pTo);
+        const personal = allowsFinanceMode("personal") ? await getBalanceInRange(user.id, "personal", pFrom, pTo) : null;
+        const business = allowsFinanceMode("business") ? await getBalanceInRange(user.id, "business", pFrom, pTo) : undefined;
         await wppSend(from, replyBalance(personal, business, undefined, periodLabel, user.locale));
         break;
       }
@@ -5321,6 +5356,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           break;
         }
 
+        if (!allowsFinanceMode(clearMode)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
         const count = await countFinances(user.id, clearMode, clearType);
         if (count === 0) {
           await wppSend(from, user.locale === "es" ? "No encontré ningún movimiento para borrar en ese modo." : "Não encontrei nenhum lançamento pra apagar nesse modo.");
@@ -5352,8 +5388,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (lower.includes("ajuda") || lower.includes("ayuda") || lower === "help" || lower === "?") {
           await wppSendLong(from, replyHelp(user.locale));
         } else if (lower.includes("saldo") || lower.includes("resumo") || lower.includes("resumen")) {
-          const personal = await getBalance(user.id, "personal", year, month);
-          const business = await getBalance(user.id, "business", year, month);
+          const personal = allowsFinanceMode("personal") ? await getBalance(user.id, "personal", year, month) : null;
+          const business = allowsFinanceMode("business") ? await getBalance(user.id, "business", year, month) : undefined;
           await wppSend(from, replyBalance(personal, business, undefined, undefined, user.locale));
         } else if (lower.includes("extrato") || lower.includes("extracto") || lower.includes("ultimos")) {
           const [monthFrom, monthTo] = monthBounds(year, month);
@@ -5383,8 +5419,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     }
 
     return;
-  } catch (e) {
-    console.error("[message-handler]", e);
+  } catch {
+    console.error("[message-handler]");
     if (from) {
       if (!responseLocale) {
         try { responseLocale = (await getUserByWppPhone(from))?.locale; } catch { /* usa o DDI abaixo */ }

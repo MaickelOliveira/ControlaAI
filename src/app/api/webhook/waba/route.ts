@@ -7,6 +7,7 @@ import { alreadyProcessed } from "@/lib/webhook-dedup";
 import { beginWhatsAppActivity, type WhatsAppActivityLease } from "@/lib/whatsapp-activity";
 import { parseCreditPixAnswer } from "@/lib/credit-pix-question";
 import { getUserIdByPhone } from "@/lib/wpp-phone-links";
+import { readBankBody } from "@/lib/open-finance-body";
 
 /** Verificação do webhook exigida pela Meta ao cadastrar a URL no Business
  *  Manager — responde o hub.challenge em texto puro (não JSON) quando o
@@ -48,7 +49,10 @@ type WabaStatus = {
 
 export async function POST(req: NextRequest) {
   try {
-    const rawBody = await req.text();
+    const signature = req.headers.get("x-hub-signature-256");
+    if (!signature || !/^sha256=[a-f0-9]{64}$/i.test(signature)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     // Sem App Secret configurado, bloqueia — quem descobre essa URL sem
     // isso configurado conseguiria forjar "mensagens" em nome de qualquer
@@ -59,7 +63,10 @@ export async function POST(req: NextRequest) {
       console.error("[webhook/waba] App Secret não configurado — requisição rejeitada. Configure em Admin → WhatsApp.");
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    if (!(await verifySignature(rawBody, req.headers.get("x-hub-signature-256")))) {
+    let rawBody: string;
+    try { rawBody = (await readBankBody(req, 1_048_576)).toString("utf8"); }
+    catch { return NextResponse.json({ error: "Corpo inválido ou grande demais" }, { status: 413 }); }
+    if (!(await verifySignature(rawBody, signature))) {
       console.error("[webhook/waba] assinatura inválida — requisição rejeitada");
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -76,11 +83,9 @@ export async function POST(req: NextRequest) {
       const statuses = value?.statuses as WabaStatus[] | undefined;
       for (const st of statuses || []) {
         if (st.status === "failed") {
-          const err = st.errors?.[0];
-          const paraMasked = st.recipient_id ? `***${st.recipient_id.slice(-4)}` : "?";
-          console.error(`[webhook/waba] entrega falhou — msg=${st.id} para=${paraMasked}: ${err?.title || ""} ${err?.message || ""} ${err?.error_data?.details || ""}`.trim());
+          console.error("[webhook/waba] Falha na entrega");
         } else {
-          console.log(`[webhook/waba] status msg=${st.id} → ${st.status}`);
+          console.log("[webhook/waba] Atualização de status recebida");
         }
       }
       return NextResponse.json({ ok: true }); // status update, não mensagem
@@ -99,11 +104,11 @@ export async function POST(req: NextRequest) {
       await Promise.allSettled(leases.map(lease=>lease?.finish()));
       return NextResponse.json({error:"Temporariamente indisponível"},{status:503});
     }
-    processMessages(messages, contactName, leases, receivedAt).catch(e => console.error("[webhook/waba] erro no processamento em background:", e));
+    processMessages(messages, contactName, leases, receivedAt).catch(() => console.error("[webhook/waba] erro no processamento em background:"));
 
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error("[webhook/waba]", e);
+  } catch  {
+    console.error("[webhook/waba]");
     return NextResponse.json({ ok: true });
   }
 }
@@ -111,7 +116,7 @@ export async function POST(req: NextRequest) {
 async function processMessages(messages: WabaMessage[], contactName?: string, leases: Array<WhatsAppActivityLease | undefined> = [], receivedAt=Date.now()) {
   for (const [index,msg] of messages.entries()) {
    try {
-    if (await alreadyProcessed(msg.id)) { console.log(`[webhook/waba] msg=${msg.id} já processada, ignorando reentrega`); continue; }
+    if (await alreadyProcessed(msg.id)) { console.log("[webhook/waba] Reentrega já processada"); continue; }
 
     const from = (msg.from || "").replace(/\D/g, "");
     if (!from) continue;

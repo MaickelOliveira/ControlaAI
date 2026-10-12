@@ -80,7 +80,7 @@ async function fetchPublic(url: string, maxBytes: number): Promise<{ data: Buffe
       }
       return { data: Buffer.concat(parts), url, type: response.headers.get("content-type")?.split(";")[0].toLowerCase() ?? "" };
     }
-  } catch (error) { console.warn("[web-image-search] fonte inacessível:", String(error)); }
+  } catch  { console.warn("[web-image-search] fonte inacessível:"); }
   return null;
 }
 
@@ -171,8 +171,8 @@ export async function findPublicProductImage(request: PublicImageRequest): Promi
       return { result: { title: candidate.title, pageUrl: candidate.pageUrl, image: image.data, mimeType: image.type }, pageUrl: candidate.pageUrl };
     }
     return { pageUrl: candidates[0]?.pageUrl ?? known?.pageUrl };
-  } catch (error) {
-    console.error("[web-image-search] pesquisa de imagem falhou:", String(error));
+  } catch {
+    console.error("[web-image-search] pesquisa de imagem falhou:");
     return { pageUrl: known?.pageUrl };
   }
 }

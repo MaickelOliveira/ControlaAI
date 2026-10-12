@@ -48,3 +48,35 @@ it("lets the database inherit an invoice's company from its authorized parent ac
  expect(JSON.parse(result.init.body as string).company_id).toBeNull();
  expect(new Headers(result.init.headers).get("x-zelo-company")).toBe(scope.companyId);
 });
+it("limits business-only reads to business rows even with a personal or unfiltered query",()=>{
+ for(const table of ["finances","accounts","card_invoices"]){
+  const result=scopeCompanyRequest(new URL(`https://db.test/rest/v1/${table}?mode=eq.personal`),{method:"GET"},{...scope,allowPersonal:false});
+  expect(result.url.searchParams.get("and")??"").not.toContain("mode.eq.personal");
+  expect(result.url.searchParams.get("and")??"").not.toContain("company_id.is.null");
+  expect(result.url.searchParams.get("company_id")??result.url.searchParams.get("and")).toContain(scope.companyId);
+ }
+});
+it("applies the business restriction atomically to stale ID-based edits and deletions",()=>{
+ for(const method of ["PATCH","DELETE"]){
+  const result=scopeCompanyRequest(new URL("https://db.test/rest/v1/finances?id=eq.personal-record"),{method,...(method==="PATCH"?{body:JSON.stringify({amount:80})}:{})},{...scope,allowPersonal:false});
+  expect(result.url.searchParams.get("and")).toBe(`(and(mode.eq.business,company_id.eq.${scope.companyId}))`);
+  expect(result.url.searchParams.get("id")).toBe("eq.personal-record");
+ }
+});
+it("rejects explicit personal writes and inserts that would use the personal database default",()=>{
+ const restricted={...scope,allowPersonal:false};
+ const url=new URL("https://db.test/rest/v1/finances");
+ for(const mode of [undefined,"personal"]){
+  expect(()=>scopeCompanyRequest(url,{method:"POST",body:JSON.stringify({amount:50,mode})},restricted)).toThrow("COMPANY_ACCESS_DENIED");
+ }
+ expect(()=>scopeCompanyRequest(url,{method:"PATCH",body:JSON.stringify({mode:"personal"})},restricted)).toThrow("COMPANY_ACCESS_DENIED");
+ const own=scopeCompanyRequest(url,{method:"POST",body:JSON.stringify({amount:50,mode:"business"})},restricted);
+ expect(JSON.parse(own.init.body as string)).toMatchObject({mode:"business",company_id:scope.companyId});
+});
+it("fails closed for an impossible or wholly denied workspace without changing default permissions",()=>{
+ const url=new URL("https://db.test/rest/v1/drive_files");
+ expect(()=>scopeCompanyRequest(url,{method:"GET"},{...scope,mode:"personal",allowPersonal:false})).toThrow("COMPANY_ACCESS_DENIED");
+ expect(()=>scopeCompanyRequest(url,{method:"GET"},{...scope,allowPersonal:false,allowBusiness:false})).toThrow("COMPANY_ACCESS_DENIED");
+ const personal=scopeCompanyRequest(new URL("https://db.test/rest/v1/finances"),{method:"GET"},{...scope,mode:"personal",allowBusiness:false});
+ expect(personal.url.searchParams.get("and")).toBe("(and(mode.eq.personal,company_id.is.null))");
+});

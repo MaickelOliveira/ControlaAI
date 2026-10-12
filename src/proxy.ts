@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { isSameOrigin } from "./lib/request-origin";
 
 // Cópia própria da verificação de JWT (não dá pra importar auth.ts aqui —
 // esse arquivo roda no Edge Runtime, que não tem acesso a fs, e auth.ts
@@ -26,6 +27,16 @@ async function getRole(token?: string): Promise<string | null> {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Session API writes are accepted only from the same website. Webhooks and
+  // cron authenticate independently through their signatures/service secrets.
+  if (pathname.startsWith("/api/") && !/^\/api\/(?:webhook|cron)(?:\/|$)/.test(pathname)) {
+    const expectedOrigin = process.env.APP_ORIGIN || process.env.OPEN_FINANCE_APP_ORIGIN;
+    if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && ((process.env.NODE_ENV === "production" && !expectedOrigin) || !isSameOrigin(req,expectedOrigin))) {
+      return NextResponse.json({error:"Origem não autorizada"},{status:403,headers:{"Cache-Control":"private, no-store"}});
+    }
+    return NextResponse.next();
+  }
 
   // Lê os dois cookies independentemente
   const clientToken = req.cookies.get(CLIENT_COOKIE)?.value;
@@ -58,10 +69,8 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Não deixa admin já logado ver /admin/login
-  if (pathname === "/admin/login" && adminRole === "admin") {
-    return NextResponse.redirect(new URL("/admin", req.url));
-  }
+  // Admin credential changes revoke sessions in the API guard. Keep login
+  // reachable even when a browser still carries an old, correctly signed JWT.
 
   // ── Não deixa cliente já logado ver /login ou /cadastro (nas 3 versões
   // de idioma) — agora que o dashboard traduzido existe (Fase 2), manda
@@ -80,5 +89,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/es", "/pt", "/admin/:path*", "/dashboard/:path*", "/es/dashboard/:path*", "/pt/dashboard/:path*", "/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"],
+  matcher: ["/api/:path*", "/", "/es", "/pt", "/admin/:path*", "/dashboard/:path*", "/es/dashboard/:path*", "/pt/dashboard/:path*", "/login", "/cadastro", "/es/login", "/es/cadastro", "/pt/login", "/pt/cadastro"],
 };

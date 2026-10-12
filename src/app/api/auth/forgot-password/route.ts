@@ -24,10 +24,10 @@ export async function POST(req: NextRequest) {
     requestId = reset.id;
     try {
       await sendPasswordResetEmail({ email: user.email, name: user.name, code: reset.code, resetId: reset.id, locale: user.locale });
-    } catch (error) {
+    } catch {
       await invalidatePasswordResetCode(reset.id);
       requestId = randomUUID();
-      console.error(error);
+      console.error("[app/api/auth/forgot-password/route] Falha na operação");
     }
   }
   const delay = 350 - (Date.now() - startedAt);

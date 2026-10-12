@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
-import { getBillingWebhooks, createBillingWebhook, BILLING_WEBHOOK_PRESETS } from "@/lib/billing-webhooks";
+import { getBillingWebhooks, createBillingWebhook, BILLING_WEBHOOK_PRESETS, billingWebhookAdminView } from "@/lib/billing-webhooks";
 
 const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
 
@@ -8,7 +8,7 @@ export async function GET() {
   const session = await getAdminSession();
   if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const configs = (await getBillingWebhooks()).map(c => ({ ...c, secretValue: c.secretValue ? "••••••••" : "" }));
+  const configs = (await getBillingWebhooks()).map(billingWebhookAdminView);
   return NextResponse.json({ configs, presets: BILLING_WEBHOOK_PRESETS });
 }
 
@@ -35,5 +35,5 @@ export async function POST(req: NextRequest) {
     localePath: localePath || undefined,
     localeMap: localeMap && typeof localeMap === "object" ? localeMap : undefined,
   });
-  return NextResponse.json(cfg, { status: 201 });
+  return NextResponse.json(billingWebhookAdminView(cfg), { status: 201 });
 }

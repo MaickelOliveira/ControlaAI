@@ -84,7 +84,7 @@ function toRowPatch(patch: Partial<Omit<User, "id" | "createdAt">>): Record<stri
 
 export async function getUsers(): Promise<User[]> {
   const { data, error } = await getSupabase().from("users").select("*");
-  if (error) { console.error("[users] getUsers erro:", error.message); return []; }
+  if (error) { console.error("[users] getUsers erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 

@@ -91,12 +91,12 @@ export async function sendMetaConversion(input: MetaConversionInput) {
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) {
-      console.error(`[meta-capi] evento rejeitado com status ${response.status}`);
+      console.error("[meta-capi] evento rejeitado com status");
       return { sent: false as const, reason: "rejected" as const };
     }
     return { sent: true as const };
-  } catch (error) {
-    console.error("[meta-capi] falha ao enviar evento", error instanceof Error ? error.message : "erro desconhecido");
+  } catch {
+    console.error("[meta-capi] falha ao enviar evento");
     return { sent: false as const, reason: "network_error" as const };
   }
 }

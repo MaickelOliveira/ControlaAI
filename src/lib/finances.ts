@@ -167,7 +167,7 @@ async function load(userId?: string, filters: { mode?: FinanceMode; registeredBy
   if (filters.from) query = query.gte("date", filters.from);
   if (filters.to) query = query.lte("date", filters.to);
   const { data, error } = await query;
-  if (error) { console.error("[finances] load erro:", error.message); return []; }
+  if (error) { console.error("[finances] load erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 
@@ -224,7 +224,7 @@ export async function getFinancesSummaryByAllUsers(): Promise<Map<string, { coun
     .select("user_id, created_at")
     .order("created_at", { ascending: false });
   const summary = new Map<string, { count: number; latestCreatedAt: string }>();
-  if (error) { console.error("[finances] getFinancesSummaryByAllUsers erro:", error.message); return summary; }
+  if (error) { console.error("[finances] getFinancesSummaryByAllUsers erro:"); return summary; }
   for (const row of data as { user_id: string; created_at: string }[]) {
     const existing = summary.get(row.user_id);
     if (existing) existing.count += 1;
@@ -415,8 +415,10 @@ export async function getDailyTotals(userId: string, mode: FinanceMode, days = 3
     .map(([date, vals]) => ({ date, ...vals }));
 }
 
-export async function deleteFinance(id: string, userId: string): Promise<boolean> {
-  const { error, count } = await getSupabase().from("finances").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
+export async function deleteFinance(id: string, userId: string, allowedMode?: FinanceMode): Promise<boolean> {
+  let query = getSupabase().from("finances").delete({ count: "exact" }).eq("id", id).eq("user_id", userId);
+  if (allowedMode) query = query.eq("mode", allowedMode);
+  const { error, count } = await query;
   return !error && !!count && count > 0;
 }
 
@@ -441,7 +443,7 @@ export async function deleteAllFinances(userId: string, mode: FinanceMode | "bot
   if (mode !== "both") query = query.eq("mode", mode);
   if (type) query = query.eq("type", type);
   const { error, count } = await query;
-  if (error) { console.error("[finances] deleteAllFinances falhou:", error.message); return 0; }
+  if (error) { console.error("[finances] deleteAllFinances falhou:"); return 0; }
   return count ?? 0;
 }
 
@@ -451,7 +453,8 @@ export type FinanceUpdatePatch = Partial<Pick<Finance, "amount" | "category" | "
   employeeId?: string | null;
 };
 
-export async function updateFinance(id: string, userId: string, patch: FinanceUpdatePatch): Promise<Finance | null> {
+export async function updateFinance(id: string, userId: string, patch: FinanceUpdatePatch, allowedMode?: FinanceMode): Promise<Finance | null> {
+  if (allowedMode && patch.mode !== undefined && patch.mode !== allowedMode) return null;
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
   if (patch.category !== undefined) rowPatch.category = patch.category;
@@ -464,7 +467,9 @@ export async function updateFinance(id: string, userId: string, patch: FinanceUp
   if (patch.accountId !== undefined) rowPatch.account_id = patch.accountId;
   if (patch.cardInvoiceId !== undefined) rowPatch.card_invoice_id = patch.cardInvoiceId;
   if (patch.employeeId !== undefined) rowPatch.employee_id = patch.employeeId;
-  const { data, error } = await getSupabase().from("finances").update(rowPatch).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+  let query = getSupabase().from("finances").update(rowPatch).eq("id", id).eq("user_id", userId);
+  if (allowedMode) query = query.eq("mode", allowedMode);
+  const { data, error } = await query.select("*").maybeSingle();
   if (error || !data) return null;
   return fromRow(data as Row);
 }
@@ -743,7 +748,7 @@ export async function getInvoiceDuplicateFlags(
 
 export async function findFinanceByDescription(userId: string, mode: FinanceMode | null, keyword: string, limit = 5): Promise<Finance[]> {
   const lower = keyword.toLowerCase();
-  return (await load(userId))
+  return (await load(userId, { mode: mode ?? undefined }))
     .filter(f => (mode === null || f.mode === mode) && (
       f.description.toLowerCase().includes(lower) ||
       f.category.toLowerCase().includes(lower)
@@ -779,7 +784,7 @@ export async function autoPostPendingFinances(todayStr: string): Promise<Finance
     .eq("auto_post", true)
     .lte("date", todayStr)
     .select("*");
-  if (error) { console.error("[finances] autoPostPendingFinances erro:", error.message); return []; }
+  if (error) { console.error("[finances] autoPostPendingFinances erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 

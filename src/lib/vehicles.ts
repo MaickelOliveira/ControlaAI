@@ -63,7 +63,7 @@ export async function getVehiclesByUser(userId: string, mode?: VehicleMode): Pro
   let query = getSupabase().from("vehicles").select("*").eq("user_id", userId);
   if (mode) query = query.eq("mode", mode);
   const { data, error } = await query;
-  if (error) { console.error("[vehicles] getVehiclesByUser erro:", error.message); return []; }
+  if (error) { console.error("[vehicles] getVehiclesByUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 

@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
       googleCalendarId,
     });
     return NextResponse.json(meet, { status: 201 });
-  } catch (e) {
-    console.error("[meets POST]", e);
+  } catch  {
+    console.error("[meets POST]");
     return NextResponse.json({ error: "Erro ao criar reunião no Google Calendar" }, { status: 500 });
   }
 }

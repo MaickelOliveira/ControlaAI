@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only",()=>({}));
+
 const m = vi.hoisted(() => ({ config: vi.fn(), fetch: vi.fn() }));
 vi.mock("./whatsapp-config", () => ({ getConfig: m.config }));
 import { sendCreditPixButtons } from "./waba";

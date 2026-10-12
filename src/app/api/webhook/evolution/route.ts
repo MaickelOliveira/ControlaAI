@@ -5,6 +5,7 @@ import { getBase64FromMediaMessage } from "@/lib/evolution";
 import { transcribeAudio } from "@/lib/ai-processor";
 import { getConfig } from "@/lib/whatsapp-config";
 import { getUserIdByPhone } from "@/lib/wpp-phone-links";
+import { readBankBody } from "@/lib/open-finance-body";
 
 type EvolutionMessageData = {
   key?: { remoteJid?: string; remoteJidAlt?: string; senderPn?: string; fromMe?: boolean; id?: string };
@@ -41,7 +42,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = await req.json().catch(() => null);
+    let rawBody: string;
+    try { rawBody = (await readBankBody(req, 20 * 1_048_576)).toString("utf8"); }
+    catch { return NextResponse.json({ error: "Corpo inválido ou grande demais" }, { status: 413 }); }
+    let body;
+    try { body = JSON.parse(rawBody); } catch { body = null; }
     if (!body) return NextResponse.json({ ok: true });
 
     const event = String(body.event ?? "").toLowerCase().replace(/\./g, "_");
@@ -70,7 +75,7 @@ export async function POST(req: NextRequest) {
         // pessoa (vinculação errada, ou mensagem atribuída a ninguém). Mais
         // seguro ignorar essa mensagem; o Baileys costuma resolver o @lid
         // pro número real numa próxima mensagem do mesmo contato.
-        console.warn(`[webhook/evolution] contato chegou como @lid sem número real disponível (***${remoteJid.slice(-8)}) — mensagem ignorada`);
+        console.warn("[webhook/evolution] contato chegou como @lid sem número real disponível (***) — mensagem ignorada");
         return NextResponse.json({ ok: true });
       }
     }
@@ -134,8 +139,8 @@ export async function POST(req: NextRequest) {
       fileName: `arquivo_${Date.now()}`,
     });
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error("[webhook/evolution]", e);
+  } catch  {
+    console.error("[webhook/evolution]");
     return NextResponse.json({ ok: true });
   }
 }
