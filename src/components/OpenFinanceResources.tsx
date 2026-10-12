@@ -2,20 +2,23 @@ import BankLogo from "./BankLogo";
 import { bankMoney, bankDate, bankResourceName, type BankOverview, type BankResource } from "@/lib/open-finance-display";
 import { groupBankResources } from "@/lib/open-finance-grouping";
 import { canDisconnectBank } from "@/lib/open-finance-connection-actions";
+import { hasZeroBankDebt } from "@/lib/bank-debt";
+import { headlineCardLimit } from "@/lib/bank-card-limit";
 import OpenFinanceIcon from "./OpenFinanceIcon";
 
 const labels = { account: "Conta bancária", card: "Cartão de crédito", investment: "Investimento", loan: "Empréstimo", financing: "Financiamento", reserve: "Reserva de saldo" };
 
 function Product({ resource, data, mode }: { resource: BankResource; data: BankOverview; mode: "personal" | "business" }) {
   const limits = data.limits.filter(l => l.resource_id === resource.id);
+  const headline = headlineCardLimit(limits);
   const bills = data.bills.filter(b => b.resource_id === resource.id).sort((a, b) => (b.due_date ?? "").localeCompare(a.due_date ?? ""));
   const schedules = data.agenda?.items.filter(i => i.resource_id === resource.id && i.kind !== "bill") ?? [];
   const credit = data.credit.find(c => c.resource_id === resource.id);
   const isDebt = resource.resource_type === "loan" || resource.resource_type === "financing";
-  const value = resource.resource_type === "card" ? bankMoney(limits[0]?.available_amount, limits[0]?.currency)
+  const value = resource.resource_type === "card" ? bankMoney(headline?.available_amount, headline?.currency)
     : resource.resource_type === "investment" ? bankMoney(resource.net_amount, resource.currency)
     : isDebt ? bankMoney(credit?.outstanding_amount, credit?.currency) : bankMoney(resource.available_amount, resource.currency);
-  const valueLabel = resource.resource_type === "card" ? `Disponível · ${limits[0]?.line_name || "Linha de crédito"}` : resource.resource_type === "investment" ? "Saldo líquido" : isDebt ? "Saldo devedor" : "Saldo disponível";
+  const valueLabel = resource.resource_type === "card" ? `Disponível · ${headline?.line_name || "Linha de crédito"}` : resource.resource_type === "investment" ? "Saldo líquido" : isDebt ? "Saldo devedor" : "Saldo disponível";
   const icon = resource.resource_type === "card" ? "card" : resource.resource_type === "investment" ? "chart" : "bank";
 
   return <details className={`z-bank-product ${isDebt ? "z-bank-debt" : "z-bank-tile"} z-bank-type-${resource.resource_type}`}>
@@ -50,10 +53,11 @@ function Product({ resource, data, mode }: { resource: BankResource; data: BankO
 
 export default function OpenFinanceResources({ data, mode, busy = false, onDisconnect }: { data: BankOverview; mode: "personal" | "business"; busy?: boolean; onDisconnect?: (id: string) => void }) {
   if (!data.resources.length) return <div className="rounded-2xl border border-dashed border-line bg-surface px-6 py-9 text-center"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-soft text-amber-ink"><OpenFinanceIcon name="bank" /></span><h3 className="mt-4 font-semibold">Seu próximo banco começa aqui</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">Autorize a conexão no aplicativo do banco. Ela aparece automaticamente na Zelo; os dados podem levar alguns minutos para chegar.</p></div>;
-  return <div className="space-y-4">{groupBankResources(data).map(bank => <article key={bank.id} aria-label={bank.name} className="z-bank-card">
+  return <div className="space-y-4">{groupBankResources({ ...data, resources: data.resources.filter(r => !hasZeroBankDebt(r, data)) }).map(bank => <article key={bank.id} aria-label={bank.name} className="z-bank-card">
     <header className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><BankLogo institutionId={bank.id} size={44}/><div><h3 className="text-base font-semibold">{bank.name}</h3><p className="mt-0.5 text-xs text-muted">{bank.resources.length} produto(s) · {mode === "personal" ? "Pessoa física" : "Pessoa jurídica"}</p></div></div>
       {onDisconnect && data.connections.filter(c => canDisconnectBank(c) && bank.resources.some(r => r.connection_id === c.id)).map((c, _, connections) => <button key={c.id} type="button" disabled={busy} onClick={() => onDisconnect(c.id)} aria-label={`Desconectar banco ${c.institution_name} · ${bankDate(c.created_at)}`} className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-muted hover:bg-red-soft hover:text-red-ink disabled:opacity-50">Desconectar{connections.length > 1 ? ` · ${bankDate(c.created_at)}` : ""}</button>)}
     </header>
+    {bank.resources.every(r => data.connections.some(c => c.id === r.connection_id && c.status !== "active")) && <p className="mt-3 rounded-xl bg-surface-muted p-3 text-xs leading-5 text-muted"><strong>Histórico · compartilhamento inativo.</strong> Os dados recebidos estão preservados. Para conectar novamente, use Conectar banco no modo e na empresa desejados e faça uma nova autorização.</p>}
     <div className="z-bank-products">{bank.resources.filter(r => r.resource_type !== "loan" && r.resource_type !== "financing").map(resource => <Product key={resource.id} resource={resource} data={data} mode={mode} />)}</div><div>{bank.resources.filter(r => r.resource_type === "loan" || r.resource_type === "financing").map(resource => <Product key={resource.id} resource={resource} data={data} mode={mode} />)}</div>
     <p className="mt-4 text-[11px] text-subtle">Saldo é dinheiro em conta. Crédito é o limite do cartão. Clique no produto para ver faturas e detalhes.</p>
   </article>)}</div>;

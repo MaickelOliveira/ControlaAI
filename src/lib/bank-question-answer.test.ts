@@ -64,3 +64,14 @@ describe("saved bank positions", () => {
     const card = answer(data, "Qual limite no cartão Nubank final 1234?"); expect(card).toContain("final 1234"); expect(card).not.toContain("5678");
   });
 });
+
+it("filters vehicle financing by purpose across banks and hides exact zero debts without hiding unknown values", () => {
+  const data = overview();
+  data.resources.push(resource("house", "si", "financing", "Imóvel residencial"), resource("zero", "si", "loan", "Quitado teste"), resource("unknown", "nu", "loan", "Sem posição teste"), resource("tiny", "nu", "loan", "Saldo pequeno teste"));
+  data.resources.find(r => r.id === "fin")!.name = "VEICULOS E UTILITARIOS LEVES - REVENDAS";
+  data.credit.push({ resource_id: "house", currency: "BRL", outstanding_amount: "55000", contract_amount: null, next_installment_amount: null, due_date: null }, { resource_id: "zero", currency: "BRL", outstanding_amount: "0.00000000", contract_amount: "2000", next_installment_amount: "100", due_date: null }, { resource_id: "tiny", currency: "BRL", outstanding_amount: "0.00000001", contract_amount: null, next_installment_amount: null, due_date: null });
+  const vehicle = formatBankQuestion(data, { kind: "financings", keyword: "carro", from: "2026-10-01", to: "2026-10-31" }, "Pessoal");
+  expect(vehicle).toContain("VEICULOS E UTILITARIOS"); expect(vehicle).toContain(bankMoney("8000.81", "BRL")); expect(vehicle).not.toContain("Imóvel residencial"); expect(vehicle).not.toContain("55.000");
+  const loans = answer(data, "Mostre meus empréstimos");
+  expect(loans).not.toContain("Quitado teste"); expect(loans).toContain("Sem posição teste"); expect(loans).toContain("Saldo pequeno teste");
+});

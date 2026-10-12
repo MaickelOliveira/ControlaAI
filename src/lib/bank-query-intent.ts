@@ -31,7 +31,7 @@ export function validateBankQuery(value: unknown): StructuredBankQuery | null {
     if (typeof raw.last4 !== "string" || !/^\d{4}$/.test(raw.last4)) return null;
     result.last4 = raw.last4;
   }
-  if (isBankPositionKind(result.kind) && (result.category || result.keyword)) return null;
+  if (isBankPositionKind(result.kind) && (result.category || (result.keyword && !["loans", "financings"].includes(result.kind)))) return null;
   if (["installments", "recurring"].includes(result.kind) && result.category) return null; // Schedule DTO has no authoritative category.
   if (["spending", "income", "transactions", "result"].includes(result.kind) && result.last4) return null; // Movement DTO has no card ID.
   if (result.source && !["spending", "income", "transactions", "result"].includes(result.kind)) return null;

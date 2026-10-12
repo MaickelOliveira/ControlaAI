@@ -3,7 +3,7 @@ import {descriptionExpenseCategory} from "./expense-category";
 
 export type BankCategory={name:string;source:"user"|"provider"|"description"|"default"|"excluded"};
 // Polp Celcoin taxonomy: https://polp.com.br/docs/celcoin/categories
-const expenseFamilies:Record<string,string>={FOOD_AND_DRINK:"Alimentação",TRANSPORTATION:"Transporte",MEDICAL:"Saúde",ENTERTAINMENT:"Lazer",TRAVEL:"Lazer",HOME_IMPROVEMENT:"Moradia",RENT_AND_UTILITIES:"Moradia",GENERAL_SERVICES:"Serviços",PERSONAL_CARE:"Serviços",BANK_FEES:"Serviços",GENERAL_MERCHANDISE:"Outros",GOVERNMENT_AND_NON_PROFIT:"Outros"};
+const expenseFamilies:Record<string,string>={FOOD_AND_DRINK:"Alimentação",TRANSPORTATION:"Transporte",MEDICAL:"Saúde",ENTERTAINMENT:"Lazer",TRAVEL:"Lazer",HOME_IMPROVEMENT:"Moradia",RENT_AND_UTILITIES:"Moradia",GENERAL_SERVICES:"Serviços",PERSONAL_CARE:"Serviços",BANK_FEES:"Encargos bancários",GENERAL_MERCHANDISE:"Outros",GOVERNMENT_AND_NON_PROFIT:"Outros"};
 const specific:Record<string,string>={GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES:"Vestuário",GENERAL_MERCHANDISE_ELECTRONICS:"Tecnologia",GENERAL_SERVICES_EDUCATION:"Educação",GENERAL_SERVICES_AUTOMOTIVE:"Transporte",GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT:"Impostos"};
 const incomeCategories:Record<string,string>={INCOME_SALARY:"Salário",INCOME_CONTRACTOR:"Freelance",INCOME_GIG_ECONOMY:"Serviços",INCOME_RENTAL:"Aluguel",INCOME_DIVIDENDS:"Investimentos",INCOME_INTEREST_EARNED:"Investimentos",INCOME_TAX_REFUND:"Reembolso"};
 
