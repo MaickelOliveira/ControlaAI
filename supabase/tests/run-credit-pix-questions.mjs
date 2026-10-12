@@ -158,6 +158,11 @@ try{
  }
  await root();await db.exec('begin');try{await db.query("update users set status='inactive' where id=$1",[owner]);await owned();assert.equal((await rpc('zelo_of_credit_pix_targets')).length,0,'inactive account has no targets');}finally{await db.exec('rollback');}
  await root();
+ for(const schema of ['public','open_finance']){
+  assert.equal((await db.query("select has_schema_privilege('zelo_of_workspace',$1,'CREATE') allowed",[schema])).rows[0].allowed,false,'temporary schema CREATE must be revoked after ownership transfer');
+  assert.equal((await db.query("select has_schema_privilege('zelo_of_workspace',$1,'USAGE') allowed",[schema])).rows[0].allowed,true,'existing runtime schema USAGE must remain');
+ }
+ assert.equal((await db.query("select exists(select 1 from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=current_user::regrole) member")).rows[0].member,false,'temporary migration-role membership must be revoked');
  const meta=(await db.query("select relrowsecurity rls,relforcerowsecurity forced from pg_class where oid='open_finance.credit_pix_questions'::regclass")).rows[0];assert.equal(meta.rls,true);assert.equal(meta.forced,true);
  const quotaSignature='open_finance.credit_pix_holder_busy(uuid,uuid)';
  const quota=(await db.query('select proconfig,prosecdef from pg_proc where oid=$1::regprocedure',[quotaSignature])).rows[0];assert.equal(quota.prosecdef,true);assert.ok(quota.proconfig.includes('row_security=off'));

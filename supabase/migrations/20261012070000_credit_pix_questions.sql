@@ -151,7 +151,7 @@ begin
  return result;
 end;$$;
 do $$begin execute format('grant zelo_of_workspace to %I',current_user);end;$$;
-grant create on schema public to zelo_of_workspace;
+grant create on schema public,open_finance to zelo_of_workspace;
 alter function open_finance.credit_pix_question_valid(uuid) owner to zelo_of_workspace;
 revoke all on function open_finance.credit_pix_recipient(text),open_finance.credit_pix_question_valid(uuid) from public,anon,authenticated,service_role;
 grant execute on function open_finance.credit_pix_recipient(text) to zelo_of_workspace;
@@ -175,6 +175,6 @@ revoke all on function public.zelo_of_answer_credit_pix_question(uuid,text,uuid,
 grant execute on function public.zelo_of_answer_credit_pix_question(uuid,text,uuid,text,boolean) to service_role;
 revoke all on function public.zelo_of_credit_pix_targets() from public,anon,authenticated;
 grant execute on function public.zelo_of_credit_pix_targets() to service_role;
-revoke create on schema public from zelo_of_workspace;
+revoke create on schema public,open_finance from zelo_of_workspace;
 do $$begin execute format('revoke zelo_of_workspace from %I',current_user);end;$$;
 commit;
