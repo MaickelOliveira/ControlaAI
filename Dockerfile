@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN npm install --global npm@11.8.0 --ignore-scripts
 
 FROM base AS deps

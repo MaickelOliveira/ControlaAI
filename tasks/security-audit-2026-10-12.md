@@ -15,6 +15,7 @@ Scope: authentication/authorization, client/company/linked-phone boundaries, pro
 - All session API writes require the configured public APP_ORIGIN (or existing Open Finance origin), independent of the container's internal URL. Service webhooks/cron retain their separate authentication. API responses use private no-store caching.
 - Migration 73000 makes legacy server-only table ACL/RLS reproducible, closes the publicly callable limiter RPC and denies default browser grants for future internal objects. Existing service/workspace grants and records are preserved.
 - sharp and source-map-js updated within existing ranges. npm 11.8.0 pinned; dependency scripts disabled, checkout token not persisted, CI checks credential patterns and unreviewed/expired dependency advisories.
+- Align CI and Docker on supported Node.js 24. The real Supabase transport regression failed under the former Node.js 20 CI runtime: the installed Supabase client requires Node.js 22 or newer. Node.js 20 is end-of-life. References: [Supabase Node.js support](https://github.com/supabase/supabase-js/blob/master/packages/core/supabase-js/README.md), [Node.js releases](https://nodejs.org/en/about/previous-releases).
 
 ## Evidence and limits
 
