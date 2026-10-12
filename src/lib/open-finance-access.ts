@@ -3,7 +3,7 @@ import {isSameOrigin} from "./request-origin";
 import { getSupabase } from "./supabase";
 import type { User } from "./users";
 import {multiCompanyEnabled,requireCompany,companyContextData} from "./companies";
-import {companyScopeFor} from "./company-context";
+import {companyScopeFor,isCompanyRequestContext} from "./company-context";
 
 export type OpenFinanceScope = { userId: string; mode: "personal" | "business"; environment: "production"; companyId?:string; companyName?:string };
 export type OpenFinanceIdentity = Pick<User, "id" | "email" | "plan" | "activeMode"> & Partial<Pick<User,"status">>;
@@ -49,6 +49,9 @@ export async function getOpenFinanceAccess(user: OpenFinanceIdentity, requestedM
       // Worker/webhook targets come from the database; web and WhatsApp use their verified context.
       const context=options.companyId===undefined?await companyScopeFor(user.id):undefined;
       if(mode==="business"&&context?.allowBusiness===false)return null;
+      // This request already checked the selected company against its owner.
+      // Explicit worker/WhatsApp scopes retain their separate database check.
+      if(context&&isCompanyRequestContext())return {userId:user.id,mode,environment:"production",companyId:context.companyId,companyName:context.companyName};
       const company=mode==="business"?await requireCompany(user.id,options.companyId??context?.companyId):(await companyContextData(user.id,options.companyId??context?.companyId,"personal")).company;
       return {userId:user.id,mode,environment:"production",companyId:company.id,companyName:company.name};
     }

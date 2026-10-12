@@ -8,9 +8,11 @@ import {createFinanceLedger,ledgerBalance} from "@/lib/finance-ledger";
 import {getPhonesForUser} from "@/lib/wpp-phone-links";
 import {getAccountsByUser} from "@/lib/accounts";
 import {identifyFinanceAuthors} from "@/lib/finance-attribution";
+import {runWithCompanyRequest} from "@/lib/company-context";
 export const dynamic="force-dynamic";
 const headers={"Cache-Control":"private, no-store"};
 export async function GET(request:Request){
+  return runWithCompanyRequest(async()=>{
   const auth=await getSessionWithUser();
   if(!auth||auth.session.role!=="client")return NextResponse.json({error:"Não autorizado"},{status:401,headers});
   const query=new URL(request.url).searchParams,mode=query.get("mode")??auth.user.activeMode;
@@ -29,4 +31,5 @@ export async function GET(request:Request){
   }catch{
     return NextResponse.json({error:"Não foi possível atualizar o extrato completo. Tente um período menor ou aguarde uma nova tentativa."},{status:503,headers});
   }
+  });
 }

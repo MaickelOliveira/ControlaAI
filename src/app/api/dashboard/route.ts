@@ -5,8 +5,10 @@ import { getPhonesForUser } from "@/lib/wpp-phone-links";
 import { getFinancesByUser, isPostedFinance, type Finance, type FinanceMode } from "@/lib/finances";
 import { getTasksByUser } from "@/lib/tasks";
 import {identifyFinanceAuthors} from "@/lib/finance-attribution";
+import {runWithCompanyRequest} from "@/lib/company-context";
 
 export async function GET() {
+  return runWithCompanyRequest(async()=>{
   const auth = await getSessionWithUser();
   if (!auth) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { user } = auth;
@@ -74,5 +76,6 @@ export async function GET() {
     business: { balance: businessBalance, dailyTotals: businessDailyTotals, expenseCategories: businessExpCategories },
     tasks: { pendingCount: pendingTasks.length, overdueCount: overdueTasks.length, recent: pendingTasks.slice(0, 5) },
     recentTransactions:identifyFinanceAuthors(recentTransactions,user,phoneLinks),
+  });
   });
 }
