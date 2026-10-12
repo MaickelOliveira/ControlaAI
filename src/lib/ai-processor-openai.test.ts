@@ -80,6 +80,33 @@ describe("AI provider routing", () => {
     expect(googleGenerateContent).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["Quanto ainda posso comprar usando meu Nubank?", "limits"],
+    ["Qual o total que devo de crédito contratado?", "loans"],
+    ["Me explica meus parcelamentos no cartão", "installments"],
+    ["Como estão minhas aplicações?", "investments"],
+    ["O que entrou na minha conta ontem?", "income"],
+  ])("preserves a model-interpreted banking capability for natural wording: %s", async (message, kind) => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: "bank_query", confidence: .95, bankQuery: { kind, bankName: "Nubank", userId: "other", total: 9999 } }) } });
+    const answer = await processMessage(message, context);
+    expect(answer).toMatchObject({ intent: "bank_query", bankQuery: { kind, bankName: "Nubank" } });
+    expect(answer.bankQuery).not.toHaveProperty("userId"); expect(answer.bankQuery).not.toHaveProperty("total");
+  });
+
+  it("keeps an explicitly requested merchant when the model drops it and returns a broad expense category", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: "finance_query", confidence: .95, category: "Alimentação" }) } });
+    const answer = await processMessage("quanto gastei com ze delivery esse mes", context);
+    expect(answer.keyword).toBe("ze delivery"); expect(answer.category).toBeUndefined();
+  });
+  it("routes merchant totals through all financial origins even if the model chooses supermarket history",async()=>{
+    process.env.OPENAI_TEST_USER_IDS="another-user";
+    googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"grocery_spend_query",confidence:.96,grocery:{storeName:"Amazonas",period:{from:"2026-09-01",to:"2026-09-30"}}})}});
+    const answer=await processMessage("quanto gastei no amazonas mes passado",context);
+    expect(answer.intent).toBe("finance_query"); expect(answer.keyword).toBe("amazonas"); expect(answer.period).toBeDefined();
+  });
+
   it("falls back to Gemini when OpenAI fails", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ error: { message: "falha simulada" } }, 401));
     globalThis.fetch = fetchMock as typeof fetch;

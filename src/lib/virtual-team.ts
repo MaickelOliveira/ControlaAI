@@ -15,7 +15,7 @@ export const VIRTUAL_TEAM = {
 export type VirtualAgent = (typeof VIRTUAL_TEAM)[keyof typeof VIRTUAL_TEAM];
 
 export function agentForIntent(intent:string):VirtualAgent {
-  if (/^(finance|balance|account|recurring|category)_/.test(intent)||/^(daily|weekly)_summary$/.test(intent)) return VIRTUAL_TEAM.finance;
+  if (/^(bank|finance|balance|account|recurring|category)_/.test(intent)||/^(daily|weekly)_summary$/.test(intent)) return VIRTUAL_TEAM.finance;
   if (/^(agenda|meet)_/.test(intent)) return VIRTUAL_TEAM.agenda;
   if (/^(customer|contact)_/.test(intent)) return VIRTUAL_TEAM.people;
   const prefix=intent.split("_")[0];

@@ -2,10 +2,10 @@ import { bankDate, bankMoney } from "./open-finance-display";
 export type BankAgendaItem={id:string;mode?:"personal"|"business";resource_id?:string;kind:"bill"|"recurring"|"installment";description:string;resource_name:string;institution_name:string;due_date:string|null;amount:string|null;currency:string|null;synced_at:string;payment_evidence?:boolean;payment_amount?:string|null;total_installments?:number|null;observed_installments?:number|null;regularity_score?:number|null};
 export type BankAgenda={items:BankAgendaItem[];incomplete:boolean};
 const safe=(text:string)=>text.replace(/[\r\n*`_~<>]/g," ").slice(0,180);
-export function collectBankAgenda(items:BankAgendaItem[],range:{from:string;to:string;includeUndated?:boolean;forNotification?:boolean;now?:string}):BankAgendaItem[]{
+export function collectBankAgenda(items:BankAgendaItem[],range:{from:string;to:string;includeUndated?:boolean;includeObservedInstallments?:boolean;forNotification?:boolean;now?:string}):BankAgendaItem[]{
   return items.filter(item=>{
     if(item.due_date?item.due_date<range.from||item.due_date>range.to:!range.includeUndated)return false;
-    if(item.kind==="installment"&&(item.observed_installments??0)>=(item.total_installments??0))return false;
+    if(!range.includeObservedInstallments&&item.kind==="installment"&&(item.observed_installments??0)>=(item.total_installments??0))return false;
     if(range.forNotification){
       const age=Date.parse(range.now??new Date().toISOString())-Date.parse(item.synced_at);
       if(!Number.isFinite(age)||age<0||age>36*3600000||!item.due_date||item.kind==="installment")return false;

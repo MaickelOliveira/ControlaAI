@@ -12,6 +12,10 @@ import {handleFiscalWhatsApp} from "@/lib/nfse-whatsapp";
 import {isFiscalCertificateQuestion} from "@/lib/nfse-guidance";
 import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "@/lib/open-finance-whatsapp";
+import {answerStructuredBankQuery} from "@/lib/structured-bank-query";
+import {connectedRecurringAppendix} from "@/lib/connected-recurring-query";
+import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
+import {isBankPositionQuestion} from "@/lib/bank-question-parser";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
@@ -2855,6 +2859,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       : classifiedAi;
     setVirtualAgentIntent(ai.intent);
 
+    // Read-only banking requests terminate before payment reconciliation and all mutations.
+    const structuredBankReply = await answerStructuredBankQuery(user, mode, phoneAccess, ai, todayStrBR());
+    if (structuredBankReply) { await wppSendLong(from, structuredBankReply, 3500, true); return; }
+    if (process.env.OPEN_FINANCE_WHATSAPP_ENABLED === "true" && isBankPositionQuestion(messageText)) {
+      setVirtualAgentIntent("bank_query"); await wppSend(from, BANK_QUERY_GUIDANCE); return;
+    }
+    const isReadOnlyIntent = [
+      "bank_query", "finance_query", "finance_upcoming", "daily_summary", "weekly_summary", "balance_query", "finance_detail", "finance_analysis",
+      "task_query", "reminder_list", "goal_query", "recurring_query", "agenda_list", "vehicle_query",
+      "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking", "grocery_last_purchase_query",
+      "grocery_history_query", "employee_list", "customer_list", "customer_query",
+      "contact_list", "contact_query", "account_list", "web_search",
+    ].includes(ai.intent);
+
     // Reconhece também a forma natural "no Nubank"/"en Caja", sem exigir
     // que a pessoa diga a palavra conta. Os nomes vêm das próprias contas do
     // cliente, portanto não há uma lista fixa de bancos nem adivinhação.
@@ -2879,7 +2897,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // conciliação antes de pedir valor/conta e só agimos com correspondência
     // única, vencida, do mesmo tipo e modo. Sem correspondência, o cadastro
     // normal segue inalterado.
-    const settledReference = getSettledFinanceReference(messageText);
+    const settledReference = isReadOnlyIntent ? null : getSettledFinanceReference(messageText);
     if (settledReference && ai.intent !== "finance_confirm_pending") {
       const settlementItems = ai.finances?.length ? ai.finances : ai.finance ? [ai.finance] : [];
       if (settlementItems.length <= 1) {
@@ -2960,14 +2978,6 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // Confiança baixa — pede esclarecimento antes de agir. Consultas são
     // seguras para executar e devem responder diretamente; pedir "confirma"
     // para uma simples pergunta de saldo soa robótico e não cria valor.
-    const isReadOnlyIntent = [
-      "finance_query", "finance_upcoming", "daily_summary", "weekly_summary", "balance_query", "finance_detail", "finance_analysis",
-      "task_query", "reminder_list", "goal_query", "recurring_query", "agenda_list", "vehicle_query",
-      "grocery_list_show", "grocery_spend_query", "grocery_price_compare", "grocery_store_ranking", "grocery_last_purchase_query",
-      "grocery_history_query", "employee_list", "customer_list", "customer_query",
-      "contact_list", "contact_query",
-      "account_list", "web_search",
-    ].includes(ai.intent);
     const shouldCollectMissingSlots = hasMissingSlotFields(ai, { user, userId: user.id, phone: from, mode });
     if (ai.confidence < 0.6 && ai.intent !== "unknown" && ai.intent !== "help" && !isReadOnlyIntent && !shouldCollectMissingSlots) {
       const details = ai.finance
@@ -4871,11 +4881,17 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "recurring_query": {
-        const recs = await getRecurringByUser(user.id, mode, "active");
+        const recurringMode = ai.mode ?? mode;
+        if ((recurringMode !== "personal" && recurringMode !== "business") || (phoneAccess !== "both" && phoneAccess !== recurringMode)) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale)); break;
+        }
+        const recs = await getRecurringByUser(user.id, recurringMode, "active", true);
+        const appendix = await connectedRecurringAppendix(user, recurringMode, ai, messageText, todayStrBR());
+        const sendRecurring = (reply: string) => wppSendLong(from, `${reply}${appendix ? `\n\n${appendix}` : ""}`, 3500, !!appendix);
         if (ai.installmentForecast) {
           const targetDate = ai.period?.to;
           if (!targetDate) {
-            await wppSend(from, localized(user.locale,
+            await sendRecurring(localized(user.locale,
               "❓ Até qual mês você quer saber quais parcelas terminam?",
               "❓ ¿Hasta qué mes quieres saber qué cuotas terminan?"));
             break;
@@ -4887,7 +4903,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             const lastDay = new Date(shifted.getFullYear(), shifted.getMonth() + 1, 0).getDate();
             return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
           };
-          const imported = await getImportedInstallmentStatuses(user.id, mode);
+          const imported = await getImportedInstallmentStatuses(user.id, recurringMode);
           // Importações novas também criam uma pendência recorrente real para
           // permitir "Pago" no painel/bot. Mantemos o fallback histórico para
           // lançamentos antigos, mas nunca contamos a mesma compra duas vezes.
@@ -4924,7 +4940,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             { month: "long", year: "numeric" },
           );
           if (!ending.length) {
-            await wppSend(from, localized(user.locale,
+            await sendRecurring(localized(user.locale,
               `Não encontrei parcelas cadastradas que terminem até *${targetLabel}*.`,
               `No encontré cuotas registradas que terminen hasta *${targetLabel}*.`));
             break;
@@ -4937,7 +4953,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             );
             return `• ${item.description} — ${item.current}/${item.total} · ${user.locale === "es" ? "termina" : "termina em"} ${endLabel} · ${formatCurrency(item.amount)}/${user.locale === "es" ? "mes" : "mês"}`;
           }).join("\n");
-          await wppSend(from, localized(user.locale,
+          await sendRecurring(localized(user.locale,
             `💳 *Parcelas que terminam até ${targetLabel}:*\n\n${lines}\n\n✅ Depois que todas terminarem, você deixará de pagar *${formatCurrency(monthlyRelief)} por mês*.`,
             `💳 *Cuotas que terminan hasta ${targetLabel}:*\n\n${lines}\n\n✅ Cuando todas terminen, dejarás de pagar *${formatCurrency(monthlyRelief)} por mes*.`));
           break;
@@ -4953,23 +4969,23 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             if (installment?.totalInstallments) {
               const remaining = Math.max(0, installment.totalInstallments - installment.paidInstallments);
               const next = Math.min(installment.totalInstallments, installment.paidInstallments + 1);
-              await wppSend(from, localized(user.locale,
+              await sendRecurring(localized(user.locale,
                 `💳 *${installment.description.split(" · compra em ")[0]}*: a próxima é a parcela *${next}/${installment.totalInstallments}* e faltam *${remaining} parcela(s)* para terminar.\n📅 Próximo vencimento: *${installment.nextDueDate.split("-").reverse().join("/")}*.`,
                 `💳 *${installment.description.split(" · compra em ")[0]}*: la próxima es la cuota *${next}/${installment.totalInstallments}* y faltan *${remaining} cuota(s)* para terminar.\n📅 Próximo vencimiento: *${installment.nextDueDate.split("-").reverse().join("/")}*.`));
               break;
             }
-            await wppSend(from, replyRecurringList(matchingRecurring, user.locale));
+            await sendRecurring(replyRecurringList(matchingRecurring, user.locale));
             break;
           }
-          const importedInstallment = await findImportedInstallmentStatus(user.id, mode, keyword);
+          const importedInstallment = await findImportedInstallmentStatus(user.id, recurringMode, keyword);
           if (importedInstallment) {
-            await wppSend(from, localized(user.locale,
+            await sendRecurring(localized(user.locale,
               `💳 *${importedInstallment.description}* está na parcela *${importedInstallment.current}/${importedInstallment.total}*.\n\nFaltam *${importedInstallment.remaining} parcela(s)* depois da atual.`,
               `💳 *${importedInstallment.description}* está en la cuota *${importedInstallment.current}/${importedInstallment.total}*.\n\nFaltan *${importedInstallment.remaining} cuota(s)* después de la actual.`));
             break;
           }
         }
-        await wppSend(from, replyRecurringList(recs, user.locale));
+        await sendRecurring(!recs.length && appendix ? "Nenhum recorrente ou parcelamento cadastrado manualmente neste modo." : replyRecurringList(recs, user.locale));
         break;
       }
 

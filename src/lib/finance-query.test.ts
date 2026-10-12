@@ -23,3 +23,17 @@ it("groups income as receipts instead of expenses",()=>{
   const answer=summarizeFinanceQuery(income,{from:"2026-09-01",to:"2026-09-30",type:"income",analysis:true},"personal");
   expect(answer).toContain("Receitas por categoria");expect(answer).toContain("Salário: R$ 500,00");expect(answer).not.toContain("Nenhuma despesa");
 });
+it("matches Zé Delivery with accents and bank separators without including another merchant",()=>{
+  const purchases=createFinanceLedger([], [
+    {...bank("ze1","31.25","debit","card","card_purchases"),description:"ZE*DELIVERY COMPRA"},
+    {...bank("ze2","12.50","debit","card","card_purchases"),description:"Zé Delivery"},
+    {...bank("other","99","debit","card","card_purchases"),description:"Outra loja"},
+  ], "personal");
+  const answer=summarizeFinanceQuery(purchases,{from:"2026-09-01",to:"2026-09-30",type:"expense",keywords:["ze delivery","zedelivery"]},"personal");
+  expect(answer).toContain("R$ 43,75"); expect(answer).toContain("Estabelecimento"); expect(answer).toContain("DELIVERY COMPRA"); expect(answer).not.toContain("Outra loja");
+});
+it("shows transfers, original currencies and unknown amounts in an extract without adding them to expense totals",()=>{
+  const movements=createFinanceLedger([], [bank("expense","45"),{...bank("transfer","120","debit","account","excluded"),description:"Transferência teste"},{...bank("dollars","15"),currency:"USD",description:"Compra em dólar"},{...bank("unknown","1"),amount:null,description:"Valor ausente"}],"personal");
+  const reply=summarizeFinanceQuery(movements,{from:"2026-09-01",to:"2026-09-30",type:"result",detail:true},"personal");
+  expect(reply).toContain("Saídas: R$ 45,00"); expect(reply).toContain("Transferência teste"); expect(reply).toContain("Compra em dólar"); expect(reply).toContain("Valor ausente · Não informado"); expect(reply).toContain("Fora do total"); expect(reply).not.toContain("Valor ausente · R$ 0,00");
+});

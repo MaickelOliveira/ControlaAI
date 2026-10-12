@@ -9,7 +9,7 @@ import {financeCoverageNotice} from "./finance-query";
 import {collectUpcomingFinanceItems,buildBalanceForecast} from "./upcoming-finances";
 import {collectBankAgenda,type BankAgenda} from "./open-finance-schedules";
 
-export async function readBankAgenda(user:OpenFinanceIdentity,mode:FinanceMode,range:{from:string;to:string;includeUndated?:boolean}):Promise<BankAgenda>{
+export async function readBankAgenda(user:OpenFinanceIdentity,mode:FinanceMode,range:{from:string;to:string;includeUndated?:boolean;includeObservedInstallments?:boolean}):Promise<BankAgenda>{
   const scope=await getOpenFinanceAccess(user,mode,{throwOnStorageError:true});
   if(!scope)return {items:[],incomplete:false};
   const result=await openFinanceRpc(scope,"zelo_of_agenda",{p_from:range.from,p_to:range.to,p_undated:range.includeUndated??false}) as BankAgenda;

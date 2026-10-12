@@ -1,0 +1,73 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+const m = vi.hoisted(() => ({ access: vi.fn(), rpc: vi.fn(), read: vi.fn() }));
+vi.mock("./open-finance-access", () => ({ getOpenFinanceAccess: m.access }));
+vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
+vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
+import { validateBankQuery } from "./bank-query-intent";
+import { answerStructuredBankQuery } from "./structured-bank-query";
+import { bankMoney } from "./open-finance-display";
+import type { AIResult } from "./ai-processor";
+const user = { id: "holder", email: "holder@example.test", plan: "business" as const, activeMode: "personal" as const, status: "active" as const };
+const overview = { connections: [{ id: "nu", institution_name: "Nubank", status: "active" }], resources: [{ id: "card", connection_id: "nu", resource_type: "card", name: "Platinum", identification_last4: "1234", synced_at: "2026-10-11" }], limits: [{ resource_id: "card", currency: "BRL", available_amount: "1234.56", total_amount: "2000", used_amount: "765.44" }], credit: [], bills: [], sync: [], agenda: { incomplete: false, items: [{ id: "purchase", kind: "installment", resource_id: "card", institution_name: "Nubank", resource_name: "Platinum", description: "Notebook teste", amount: "90.10", currency: "BRL", observed_installments: 12, total_installments: 12, due_date: null, synced_at: "2026-10-11" }] } };
+const ai = (bankQuery: unknown, extra = {}) => ({ intent: "bank_query", confidence: .95, bankQuery, ...extra }) as AIResult;
+beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED", "true"); m.access.mockResolvedValue({ userId: "holder", mode: "personal", environment: "production" }); m.rpc.mockResolvedValue(overview); });
+afterEach(() => vi.unstubAllEnvs());
+it.each([{ kind: "invented" }, { kind: "limits", bankName: 42 }, { kind: "loans", last4: "12" }, { kind: "spending", last4: "1234" }, { kind: "balances", category: "Lazer" }, { kind: "installments", category: "Alimentação" }, { kind: "recurring", category: "Serviços" }, { kind: "limits", source: "investment" }, { kind: "limits", bankName: "a".repeat(81) }])("rejects unsupported model arguments without broadening the query: %j", query => {
+  expect(validateBankQuery(query)).toBeNull();
+});
+it("returns only allowed fields; model-supplied totals and tenant identities never enter execution", () => {
+  expect(validateBankQuery({ kind: "limits", bankName: " Nubank ", userId: "other", companyId: "other", total: 999999 })).toEqual({ kind: "limits", bankName: "Nubank" });
+});
+it("executes a semantically interpreted card question against saved values", async () => {
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "limits", bankName: "Nubank" }), "2026-10-11");
+  expect(response).toContain(bankMoney("1234.56", "BRL")); expect(response).not.toContain("Você gastou"); expect(m.read).not.toHaveBeenCalled();
+});
+it("includes a fully observed installment without claiming it has been paid", async () => {
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }), "2026-10-11");
+  expect(response).toContain("Notebook teste"); expect(response).toContain("12/12"); expect(response).toContain("não confirmam pagamento"); expect(response).not.toContain("quitad"); expect(response).not.toContain("faltam 0");
+});
+it("keeps unknown currency and payment dates unknown", async () => {
+  m.rpc.mockResolvedValue({ ...overview, agenda: { ...overview.agenda, items: [{ ...overview.agenda.items[0], currency: null }] } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }), "2026-10-11");
+  expect(response).toContain("moeda não informada"); expect(response).not.toContain("R$"); expect(response).toContain("Vencimento não informado");
+});
+it.each([{ period: { from: "2026-09-01", to: "2026-09-30" } }, { period: { from: "2026-10-08", to: "2026-10-08" } }, { period: "invalid" }, { period: { from: "2026-02-30", to: "2026-03-01" } }, { confidence: .3 }, { mode: "business" }])("does not query storage for unsupported historical positions, bad dates, uncertain intent or denied mode: %j", async extra => {
+  const response = await answerStructuredBankQuery(user, "personal", "personal", ai({ kind: "limits" }, extra), "2026-10-11");
+  expect(response).toBeTruthy(); expect(m.rpc).not.toHaveBeenCalled();
+});
+it.each([["balances","450.20"],["loans","1200.10"],["financings","7000.40"],["investments","3100.50"],["bills","230.60"],["limits","1234.56"]])("executes the complete current-position capability matrix: %s",async(kind,amount)=>{
+  m.rpc.mockResolvedValue({...overview,
+    resources:[...overview.resources,
+      {id:"account",connection_id:"nu",resource_type:"account",name:"Conta teste",currency:"BRL",available_amount:"450.20"},
+      {id:"loan",connection_id:"nu",resource_type:"loan",name:"Crédito teste"},
+      {id:"fin",connection_id:"nu",resource_type:"financing",name:"Financiamento teste"},
+      {id:"invest",connection_id:"nu",resource_type:"investment",name:"Aplicação teste",currency:"BRL",net_amount:"3100.50",gross_amount:"3300",valuation_date:"2026-10-11"}],
+    credit:[{resource_id:"loan",currency:"BRL",outstanding_amount:"1200.10"},{resource_id:"fin",currency:"BRL",outstanding_amount:"7000.40"}],
+    bills:[{resource_id:"card",currency:"BRL",total_amount:"230.60",status:"unknown",due_date:"2026-10-20"}],
+  });
+  expect(await answerStructuredBankQuery(user,"personal","both",ai({kind,bankName:"Nubank"}),"2026-10-11")).toContain(bankMoney(amount,"BRL"));
+});
+it("preserves the selected authenticated company and ignores company identities in model output",async()=>{
+  m.access.mockResolvedValue({userId:"holder",mode:"business",companyId:"selected-company",companyName:"Empresa teste",environment:"production"});
+  const answer=await answerStructuredBankQuery(user,"business","both",ai({kind:"limits",companyId:"other-company"}),"2026-10-11");
+  expect(m.rpc.mock.calls[0][0].companyId).toBe("selected-company"); expect(answer).toContain("Empresa teste"); expect(answer).not.toContain("other-company");
+});
+it("does not discard a due-date period when bank schedules lack dates",async()=>{
+  const answer=await answerStructuredBankQuery(user,"personal","both",ai({kind:"installments"},{period:{from:"2026-10-12",to:"2026-10-18"}}),"2026-10-11");
+  expect(answer).toContain("sem vencimento"); expect(answer).not.toContain("Notebook teste");
+});
+it("filters transactions by bank, category and period, leaving unrelated banks and manual records out", async () => {
+  m.read.mockResolvedValue({ entries: [
+    { id: "nu", mode: "personal", source: "bank", included: true, type: "expense", date: "2026-09-15", category: "Alimentação", description: "Compra teste", amount: 51, bank: { institution_name: "Nubank", resource_type: "card" } },
+    { id: "si", mode: "personal", source: "bank", included: true, type: "expense", date: "2026-09-15", category: "Alimentação", description: "Outro banco", amount: 99, bank: { institution_name: "Sicredi", resource_type: "card" } },
+    { id: "manual", mode: "personal", source: "whatsapp", included: true, type: "expense", date: "2026-09-15", category: "Alimentação", description: "Manual", amount: 1000 },
+  ], bank: { overview, report: { sync_pending: false, missing_dates: 0, last_successful_sync_at: "2026-10-11" } } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "transactions", bankName: "Nubank", category: "Alimentação" }, { period: { from: "2026-09-01", to: "2026-09-30" } }), "2026-10-11");
+  expect(response).toContain(bankMoney("51", "BRL")); expect(response).toContain("Compra teste"); expect(response).not.toContain("Outro banco"); expect(response).not.toContain("Manual"); expect(m.read).toHaveBeenCalledWith(user, "personal", "2026-09-01", "2026-09-30");
+});
+it("returns an unavailable response rather than an empty bank result on storage failure", async () => {
+  m.rpc.mockRejectedValue(Error("private storage detail"));
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }), "2026-10-11");
+  expect(response).toContain("Não consegui"); expect(response).not.toContain("private storage detail"); expect(response).not.toContain("Nenhum");
+});
