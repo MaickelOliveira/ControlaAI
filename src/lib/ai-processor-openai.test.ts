@@ -106,6 +106,18 @@ describe("AI provider routing", () => {
     const answer=await processMessage("quanto gastei no amazonas mes passado",context);
     expect(answer.intent).toBe("finance_query"); expect(answer.keyword).toBe("amazonas"); expect(answer.period).toBeDefined();
   });
+  it.each([["Zé Delivery","Outros","Alimentação"],["Google*ADS","Moradia","Marketing"],["Facebook Serviços Online","Lazer","Marketing"],["Google Workspace","Moradia","Tecnologia"]])("corrects the model's automatic category for %s before storage",async(description,wrong,correct)=>{
+    process.env.OPENAI_TEST_USER_IDS="another-user";
+    googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"finance_register",confidence:.96,finance:{type:"expense",amount:50,description,category:wrong}})}});
+    const answer=await processMessage(`gastei 50 no ${description}`,context);
+    expect(answer.finance?.category).toBe(correct); expect(answer.finance?.amount).toBe(50);
+  });
+  it("uses the explicitly stated expense type before inferring its merchant category",async()=>{
+    process.env.OPENAI_TEST_USER_IDS="another-user";
+    googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"finance_register",confidence:.96,finance:{type:"income",amount:50,description:"Google Ads",category:"Moradia"}})}});
+    const answer=await processMessage("gastei 50 em Google Ads",context);
+    expect(answer.finance?.type).toBe("expense"); expect(answer.finance?.category).toBe("Marketing");
+  });
 
   it("falls back to Gemini when OpenAI fails", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ error: { message: "falha simulada" } }, 401));
