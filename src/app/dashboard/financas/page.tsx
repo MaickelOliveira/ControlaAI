@@ -10,6 +10,8 @@ import BankCategoryDialog from "@/components/BankCategoryDialog";
 import FinanceLedgerRows from "@/components/FinanceLedgerRows";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
+import FinanceBankSchedules from "@/components/FinanceBankSchedules";
+import {financeBankSchedules} from "@/lib/finance-bank-schedules";
 import {financeAccountOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
 import {ledgerCategoryGroups,ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 
@@ -418,6 +420,7 @@ function FinancasContent() {
 
   // Recs sorted: overdue first, then by nextDueDate
   const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
+  const bankSchedules=financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters);
 
   function recStatus(r: Recurring): { label: string; color: string } {
     if (r.nextDueDate < today) return { label: "Vencido", color: "bg-red-soft text-red-ink" };
@@ -472,6 +475,10 @@ function FinancasContent() {
           <p className="mt-1 text-[10px] text-muted">Acumulado de todas as contas registradas · saldo do banco em Contas</p>
         </div>
       </div>
+
+      {ledger?.bank&&<FinanceBankSchedules items={bankSchedules} overview={ledger.bank.overview}/>}
+      {ledger?.bank?.overview.agenda?.incomplete&&<p role="status" className="text-xs text-amber-ink">As recorrências bancárias podem estar incompletas: há dados em atualização ou indisponíveis.</p>}
+      {!!filters.categories.length&&!!ledger?.bank?.overview.agenda?.items.some(item=>item.kind!=="bill")&&<p className="text-xs text-subtle">As previsões bancárias não informam categoria e ficam fora deste filtro.</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         <div className="space-y-5 lg:col-span-2">

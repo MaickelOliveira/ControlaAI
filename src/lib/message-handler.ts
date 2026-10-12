@@ -14,6 +14,7 @@ import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "@/lib/open-finance-whatsapp";
 import {answerStructuredBankQuery} from "@/lib/structured-bank-query";
 import {connectedRecurringAppendix} from "@/lib/connected-recurring-query";
+import {recurringQueryKind} from "@/lib/recurring-query-kind";
 import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
@@ -4885,7 +4886,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if ((recurringMode !== "personal" && recurringMode !== "business") || (phoneAccess !== "both" && phoneAccess !== recurringMode)) {
           await wppSend(from, replyModeAccessDenied(mode, user.locale)); break;
         }
-        const recs = await getRecurringByUser(user.id, recurringMode, "active", true);
+        const requestedKind=recurringQueryKind(messageText);
+        const registered=await getRecurringByUser(user.id, recurringMode, "active", true);
+        const recs=registered.filter(item=>(!requestedKind||item.recurrenceType===requestedKind)&&(ai.installmentForecast||(!ai.period?.from||item.nextDueDate>=ai.period.from)&&(!ai.period?.to||item.nextDueDate<=ai.period.to)));
         const appendix = await connectedRecurringAppendix(user, recurringMode, ai, messageText, todayStrBR());
         const sendRecurring = (reply: string) => wppSendLong(from, `${reply}${appendix ? `\n\n${appendix}` : ""}`, 3500, !!appendix);
         if (ai.installmentForecast) {
