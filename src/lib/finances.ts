@@ -42,11 +42,11 @@ export function parseFinanceDestinationMode(text: string): FinanceMode | null {
 export const CATEGORIES_EXPENSE = [
   "Alimentação", "Transporte", "Moradia", "Saúde", "Educação",
   "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Encargos bancários",
-  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência",
+  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência", "Empréstimos", "Inteligência Artificial",
 ];
 export const CATEGORIES_INCOME = [
   "Salário", "Freelance", "Vendas", "Investimentos", "Aluguel",
-  "Serviços", "Reembolso", "Outros", "Transferência",
+  "Serviços", "Reembolso", "Outros", "Transferência", "Empréstimos", "Rendimentos",
 ];
 
 // Traduções apenas de EXIBIÇÃO das categorias padrão (mesma ordem/índice de
@@ -58,20 +58,20 @@ export const CATEGORIES_INCOME = [
 const CATEGORIES_EXPENSE_ES = [
   "Alimentación", "Transporte", "Vivienda", "Salud", "Educación",
   "Ocio", "Ropa", "Tecnología", "Servicios", "Impuestos", "Cargos bancarios",
-  "Empleados", "Marketing", "Proveedores", "Otros", "Transferencia",
+  "Empleados", "Marketing", "Proveedores", "Otros", "Transferencia", "Préstamos", "Inteligencia Artificial",
 ];
 const CATEGORIES_EXPENSE_PTPT = [
   "Alimentação", "Transporte", "Habitação", "Saúde", "Educação",
   "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Encargos bancários",
-  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência",
+  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência", "Empréstimos", "Inteligência Artificial",
 ];
 const CATEGORIES_INCOME_ES = [
   "Salario", "Freelance", "Ventas", "Inversiones", "Alquiler",
-  "Servicios", "Reembolso", "Otros", "Transferencia",
+  "Servicios", "Reembolso", "Otros", "Transferencia", "Préstamos", "Rendimientos",
 ];
 const CATEGORIES_INCOME_PTPT = [
   "Salário", "Freelance", "Vendas", "Investimentos", "Renda",
-  "Serviços", "Reembolso", "Outros", "Transferência",
+  "Serviços", "Reembolso", "Outros", "Transferência", "Empréstimos", "Rendimentos",
 ];
 
 export function translateCategory(category: string, type: FinanceType, locale?: string): string {

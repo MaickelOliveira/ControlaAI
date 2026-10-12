@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import MetaTracking from "@/components/MetaTracking";
 import "./globals.css";
 import {themeInitScript} from "@/lib/theme";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = localFont({ src: "./fonts/inter-latin.woff2", weight: "100 900", style: "normal", display: "swap", fallback: ["Arial", "sans-serif"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://zelogestaointeligente.com.br"),

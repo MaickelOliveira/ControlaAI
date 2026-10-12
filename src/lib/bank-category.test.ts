@@ -72,7 +72,7 @@ it("combines bank categories with WhatsApp categories in charts without editing 
 });
 it("groups IOF, card interest and bank-fee enrichment into banking charges, keeping received interest as investments",()=>{
  for(const extra of [{description:"IOF"},{description:"Juros do cartão"},{source_category:"BANK_FEES_OTHER",description:"Cobrança"}]) expect(entry(extra).category).toBe("Encargos bancários");
- expect(entry({description:"Juros recebidos",direction:"credit",kind:"credits",source_category:"INCOME_INTEREST_EARNED"}).category).toBe("Investimentos");
+ expect(entry({description:"Juros recebidos",direction:"credit",kind:"credits",source_category:"INCOME_INTEREST_EARNED"}).category).toBe("Rendimentos");
 });
 
 it("recognizes service receipts with aesthetic/service evidence without guessing every Pix is revenue",()=>{
