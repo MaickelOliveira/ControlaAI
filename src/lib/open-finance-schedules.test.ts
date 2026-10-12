@@ -41,3 +41,8 @@ it("does not notify stale estimates, but keeps incomplete bank data distinguisha
   expect(collectBankAgenda([item],{from:"2026-10-10",to:"2026-10-10",forNotification:true,now:"2026-10-10T12:00:00Z"})).toEqual([]);
   expect(formatBankAgenda([],true)).toContain("incompleta");
 });
+
+it("formats bank forecasts in separate readable blocks and trims meaningless decimal zeros without assuming a currency",()=>{
+ const reply=formatBankAgenda([{id:"p",kind:"installment",description:"Compra teste",resource_name:"Gold",institution_name:"Banco teste",due_date:null,amount:"74.79000000",currency:null,synced_at:"2026-10-11",observed_installments:2,total_installments:10}]);
+ expect(reply).toContain("\n\n*1. Compra teste*\n");expect(reply).toContain("74,79 (moeda não informada)");expect(reply).not.toContain("74.79000000");expect(reply).not.toContain("R$");
+});

@@ -1,8 +1,8 @@
 import type {BankMovement} from "./open-finance-report";
 import type {BankFinancialData} from "./open-finance-report";
 import {bankCategory,type BankCategory} from "./bank-category";
-export type FinanceLedgerData={finances:LedgerEntry[];balance:{income:number;expense:number;balance:number};totalBalance:{income:number;expense:number;balance:number};bank:BankFinancialData|null};
-export type RecordedFinance = {id:string;type:string;amount:number;category:string;description:string;date:string;mode:string;source?:"whatsapp"|"web";status?:string;createdAt?:string;registeredByName?:string};
+export type FinanceLedgerData={finances:LedgerEntry[];balance:{income:number;expense:number;balance:number};totalBalance:{income:number;expense:number;balance:number};bank:BankFinancialData|null;accounts?:Array<{id:string;name:string;type:"bank"|"credit_card"}>};
+export type RecordedFinance = {id:string;type:string;amount:number;category:string;description:string;date:string;mode:string;source?:"whatsapp"|"web";status?:string;createdAt?:string;registeredByName?:string;accountId?:string};
 export type LedgerEntry = Omit<RecordedFinance,"source"> & {source:"whatsapp"|"web"|"bank";included:boolean;possibleDuplicate:boolean;bank?:BankMovement;categorySource?:BankCategory["source"]};
 export function ledgerAmount(value:string|null):number|null {
   if(value===null||! /^-?\d{1,16}(\.\d{1,8})?$/.test(value))return null;
@@ -47,4 +47,10 @@ export function ledgerExpenseGroups(entries:readonly LedgerEntry[],groupBy:"orig
     totals.set(name,(totals.get(name)??0)+Math.round(entry.amount*100));
   }
   return [...totals].map(([name,cents])=>({name,value:cents/100}));
+}
+
+export function ledgerCategoryGroups(entries:readonly LedgerEntry[],type:"income"|"expense") {
+ const totals=new Map<string,number>();
+ for(const entry of entries)if(entry.included&&entry.status!=="pending"&&entry.type===type)totals.set(entry.category,(totals.get(entry.category)??0)+Math.round(entry.amount*100));
+ return [...totals].map(([name,cents])=>({name,value:cents/100})).sort((a,b)=>b.value-a.value);
 }

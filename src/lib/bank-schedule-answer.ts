@@ -1,4 +1,4 @@
-import { bankDate, bankMoney } from "./open-finance-display";
+import { bankDate, bankMoney, bankAmountWithoutCurrency } from "./open-finance-display";
 import type { BankAgenda } from "./open-finance-schedules";
 import { bankAmountTotals } from "./bank-question-answer";
 const safe = (text: string) => text.replace(/[\r\n*`_~<>]/g, " ").slice(0, 180);
@@ -13,7 +13,7 @@ export function formatBankSchedules(agenda: BankAgenda, kind: "installments" | "
   for (const [name, rows] of groups) {
     result += `\n\n*${safe(name)}* · ${rows.length} compra(s)/cobrança(s) recebida(s)\n`;
     result += rows.slice(0, 10).map(item => {
-      const value = item.currency ? bankMoney(item.amount, item.currency) : `${item.amount ?? "Valor não informado"} (moeda não informada)`;
+      const value = item.currency ? bankMoney(item.amount, item.currency) : `${bankAmountWithoutCurrency(item.amount)} (moeda não informada)`;
       const observations = kind === "installments" ? `\n${item.observed_installments ?? "?"}/${item.total_installments ?? "?"} parcelas observadas; não confirmam pagamento.` : "\nCobrança recorrente estimada pelo banco.";
       return `• ${safe(item.description)} · ${safe(item.resource_name)}\n${value}${kind === "installments" ? "/parcela" : ""}${observations}\n${item.due_date ? `Vencimento informado: ${bankDate(item.due_date)}` : "Vencimento não informado"} · recebido em ${bankDate(item.synced_at)}.`;
     }).join("\n\n");

@@ -170,7 +170,7 @@ function SidebarContent({
       <div className="z-sidebar-brand">
         <Image src="/brand/zelo-wordmark.png" alt="Zelo" width={640} height={302} className="z-wordmark z-wordmark-primary" priority />
           <Image src="/brand/zelo-wordmark-light.png" alt="Zelo" width={640} height={302} className="z-wordmark z-wordmark-on-dark" priority />
-        <p className="text-subtle text-[10px] mt-2">Gestão inteligente</p>
+        <p className="text-subtle text-[10px] mt-2">Gestão Inteligente</p>
       </div>
 
       {/* Navigation */}

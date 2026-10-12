@@ -9,7 +9,9 @@ import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
 import BankCategoryDialog from "@/components/BankCategoryDialog";
 import FinanceLedgerRows from "@/components/FinanceLedgerRows";
 import {useBankUpdates} from "@/components/useBankUpdates";
-import {ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
+import FinanceCategorySummary from "@/components/FinanceCategorySummary";
+import {financeAccountOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
+import {ledgerCategoryGroups,ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 
 type Finance = LedgerEntry;
 type Balance = { income: number; expense: number; balance: number };
@@ -92,6 +94,7 @@ function FinancasContent() {
   },[mode,filters.from,filters.to]);
   const {data:ledger,setData:setLedger,error:ledgerError}=useBankUpdates(loader,!!mode);
   const finances=useMemo(()=>ledger?.finances??[],[ledger]);
+  const accountOptions=useMemo(()=>financeAccountOptions(ledger),[ledger]);
   const totalBalance:Balance=ledger?.totalBalance??{income:0,expense:0,balance:0};
 
   const [bankCategoryTarget,setBankCategoryTarget]=useState<LedgerEntry|null>(null);
@@ -382,6 +385,7 @@ function FinancasContent() {
   // catTotals somava tudo sem filtro de data enquanto o saldo usado como
   // denominador era só do mês atual).
   const filteredFinances = useMemo(() => finances.filter(f => {
+    if(!matchesFinanceAccount(f,filters.account))return false;
     if (filters.type !== "all" && f.type !== filters.type) return false;
     if (filters.categories.length > 0 && !filters.categories.includes(f.category)) return false;
     if (filters.search.trim() && !f.description.toLowerCase().includes(filters.search.trim().toLowerCase())) return false;
@@ -389,6 +393,7 @@ function FinancasContent() {
   }), [finances, filters]);
 
   const filteredRecs = useMemo(() => recs.filter(r => {
+    if(filters.account&&filters.account!=="unlinked")return false; // Recurring registrations have no account association.
     if (filters.from && r.nextDueDate < filters.from) return false;
     if (filters.to && r.nextDueDate > filters.to) return false;
     if (filters.type !== "all" && r.type !== filters.type) return false;
@@ -407,9 +412,7 @@ function FinancasContent() {
 
   const periodBalance = ledgerBalance(postedFinances);
 
-  const catTotals: Record<string, number> = {};
-  postedFinances.filter(f => f.type === "expense"&&f.included).forEach(f => { catTotals[f.category] = (catTotals[f.category] || 0) + f.amount; });
-  const topCats = Object.entries(catTotals).sort(([, a], [, b]) => b - a).slice(0, 5);
+  const expenseGroups=ledgerCategoryGroups(postedFinances,"expense"),incomeGroups=ledgerCategoryGroups(postedFinances,"income");
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
 
@@ -446,7 +449,7 @@ function FinancasContent() {
         </div>
       </div>
 
-      <FinanceFilterBar key={filters.search} categories={allCategories} value={filters} onChange={setFilters} />
+      <FinanceFilterBar key={filters.search} categories={allCategories} accounts={accountOptions} value={filters} onChange={next=>{setFilters(next);setSelectedIds(new Set());}} />
       {ledgerError&&<p role="alert" className="rounded-xl border border-line bg-amber-soft p-4 text-sm text-amber-ink">{ledgerError} O extrato pode estar desatualizado.</p>}
       {ledger?.bank&&<p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>Conta, cartão, WhatsApp e plataforma no mesmo extrato · Pessoal e Empresa separados.</span><span className="rounded-full bg-emerald-soft px-3 py-1 text-emerald-ink">Atualização automática</span></p>}
       {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-ink">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
@@ -466,46 +469,14 @@ function FinancasContent() {
         <div className={clsx("rounded-2xl p-5 shadow-sm", totalBalance.balance >= 0 ? "bg-amber-soft border border-line" : "bg-red-soft border border-line")}>
           <p className="text-xs text-amber-ink font-medium uppercase tracking-wide">Saldo registrado na Zelo</p>
           <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(totalBalance.balance):"—"}</p>
-          <p className="mt-1 text-[10px] text-muted">Acumulado dos registros · saldo do banco em Contas</p>
+          <p className="mt-1 text-[10px] text-muted">Acumulado de todas as contas registradas · saldo do banco em Contas</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-        {/* Categorias */}
-        <div className="lg:col-span-2 bg-surface rounded-2xl border border-line shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-ink text-sm">📊 Despesas por Categoria</h3>
-            <button onClick={() => { setCatType("expense"); setCatName(""); setCatError(""); setShowCatModal(true); }}
-              className="text-xs text-amber-ink hover:text-amber-ink font-medium flex items-center gap-1 transition">
-              <span className="text-base leading-none">+</span> Categoria
-            </button>
-          </div>
-          {topCats.length === 0 ? (
-            <div className="text-center py-10 text-subtle">
-              <p className="text-3xl mb-2">📊</p>
-              <p className="text-sm">Sem despesas registradas</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {topCats.map(([cat, val]) => {
-                const maxCategory = Math.max(...topCats.map(([,value])=>Math.abs(value)));
-                const pctRaw = maxCategory > 0 ? (Math.abs(val) / maxCategory * 100) : 0;
-                const pct = Math.min(100, pctRaw).toFixed(0);
-                return (
-                  <div key={cat}>
-                    <div className="flex justify-between text-sm mb-1.5">
-                      <span className="text-muted font-medium">{cat}</span>
-                      <span className="font-semibold text-ink">{fmt(val)}</span>
-                    </div>
-                    <div className="h-2 bg-surface-muted rounded-full">
-                      <div className={clsx("h-2 rounded-full transition-all",val<0?"bg-emerald-500":"bg-amber-500")} style={{ width: `${pct}%` }} />
-                    </div>
-                    <p className="text-xs text-subtle mt-0.5 text-right">{val<0?"Estornos e ajustes líquidos":"Despesa líquida da categoria"}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <div className="space-y-5 lg:col-span-2">
+          <FinanceCategorySummary type="income" groups={incomeGroups} onAdd={()=>{setCatType("income");setCatName("");setCatError("");setShowCatModal(true);}}/>
+          <FinanceCategorySummary type="expense" groups={expenseGroups} onAdd={()=>{setCatType("expense");setCatName("");setCatError("");setShowCatModal(true);}}/>
         </div>
 
         {/* Extrato unificado */}
@@ -647,7 +618,7 @@ function FinancasContent() {
         </div>
       </div>
 
-      {ledger?.bank&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank}/>}
+      {ledger?.bank&&(!filters.account||filters.account.startsWith("bank:"))&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank} resourceId={filters.account?.slice(5)}/>}
 
       {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onClose={()=>setBankCategoryTarget(null)} onSaved={()=>{setBankCategoryTarget(null);setBanner("✅ Categoria salva. Os gráficos usam sua escolha.");loadAll(mode);}}/>}
 

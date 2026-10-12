@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { clsx } from "clsx";
+import type {FinanceAccountOption} from "@/lib/finance-account-filter";
 import { last3MonthsRange, monthRange } from "@/lib/calendar-range";
 
 export type FinanceFilters = {
@@ -9,6 +10,7 @@ export type FinanceFilters = {
   categories: string[]; // vazio = todas
   type: "all" | "income" | "expense";
   search: string;
+  account?: string;
 };
 
 type Preset = "this_month" | "last_month" | "last_3_months" | "custom";
@@ -35,9 +37,10 @@ export function defaultFilters(): FinanceFilters {
 }
 
 export default function FinanceFilterBar({
-  categories, value, onChange,
+  categories, value, onChange, accounts,
 }: {
   categories: string[];
+  accounts?: FinanceAccountOption[];
   value: FinanceFilters;
   onChange: (f: FinanceFilters) => void;
 }) {
@@ -136,6 +139,8 @@ export default function FinanceFilterBar({
           </>
         )}
       </div>
+
+      {accounts&&<label className="flex min-w-0 items-center gap-2 text-xs text-muted"><span>Conta</span><select aria-label="Conta ou cartão" value={value.account??""} onChange={e=>onChange({...value,account:e.target.value})} className="max-w-full rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink sm:max-w-72"><option value="">Todas as contas e cartões</option>{accounts.map(account=><option key={account.value} value={account.value}>{account.label}</option>)}</select></label>}
 
       {/* Busca */}
       <input value={searchInput} onChange={e => setSearchInput(e.target.value)}

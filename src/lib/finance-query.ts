@@ -19,13 +19,15 @@ export function summarizeFinanceQuery(entries:readonly LedgerEntry[],query:Finan
   if(query.keywords?.length)answer+=`\n\n🔎 Estabelecimento/busca: ${safe(query.keywords[0])}`;
   const byOrigin=new Map<string,number>();
   for(const e of selected){const name=e.source==="bank"?(e.bank?.resource_type==="card"?"Cartões":"Contas bancárias"):e.source==="whatsapp"?"WhatsApp":"Plataforma";byOrigin.set(name,(byOrigin.get(name)??0)+Math.round(e.amount*100));}
-  if(query.type!=="result"&&byOrigin.size)answer+=`\n\n*Por origem*\n${[...byOrigin].map(([name,cents])=>`• ${name}: ${money(cents/100)}`).join("\n")}`;
+
   if(query.analysis){
     const incomeGroups=new Map<string,number>();
     if(query.type==="income")for(const e of selected)incomeGroups.set(e.category,(incomeGroups.get(e.category)??0)+Math.round(e.amount*100));
     const groups=(query.type==="income"?[...incomeGroups].map(([name,cents])=>({name,value:cents/100})):ledgerExpenseGroups(selected,"category")).sort((a,b)=>b.value-a.value);
+    if(groups.length)answer=`🏆 *Maior categoria de ${query.type==="income"?"receitas":"gastos"}: ${safe(groups[0].name)}*\n*${money(groups[0].value)}*\n\n${answer}`;
     answer+=`\n\n*${query.type==="income"?"Receitas":"Gastos"} por categoria*\n${groups.slice(0,20).map(g=>`• ${safe(g.name)}: ${money(g.value)}`).join("\n")||`Nenhuma ${query.type==="income"?"receita":"despesa"} realizada no período.`}`;
   }
+  if(query.type!=="result"&&byOrigin.size)answer+=`\n\n*Por origem*\n${[...byOrigin].map(([name,cents])=>`• ${name}: ${money(cents/100)}`).join("\n")}`;
   if(query.detail||query.keywords?.length){
     const lines=scoped.slice(0,40).map((e,index)=>`*${index+1}. ${safe(e.description)}*\n💰 ${e.bank&&!e.included?bankMoney(e.bank.amount,e.bank.currency):money(e.amount)}\n📅 ${bankDate(e.date)} · ${safe(financeOrigin(e))}\n🏷️ ${safe(e.category)}${e.source!=="bank"&&e.registeredByName?`\n👤 Registrado por ${safe(e.registeredByName)}`:""}${!e.included?"\n⚠️ Fora do total (transferência/pagamento, moeda diferente ou valor não informado)":""}`);
     answer+=`\n\n*Movimentações encontradas (${scoped.length})*\n\n${lines.join("\n\n")||"Nenhum movimento recebido no período."}`;
