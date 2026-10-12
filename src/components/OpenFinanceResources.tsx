@@ -25,7 +25,7 @@ function Product({ resource, data, mode }: { resource: BankResource; data: BankO
     <summary>
       <span className={`z-bank-product-icon ${resource.resource_type === "card" ? "bg-amber-soft text-amber-ink" : "bg-surface-muted text-muted"}`}><OpenFinanceIcon name={icon} className="h-5 w-5" /></span>
       <span className="min-w-0"><strong>{bankResourceName(resource.name)}</strong><small>{labels[resource.resource_type]}{resource.identification_last4 ? ` · final ${resource.identification_last4}` : ""}</small></span>
-      <span className="z-bank-product-value"><small>{valueLabel}</small><strong>{value}</strong>{limits.length > 1 && <small>{limits.length} linhas · ver detalhes</small>}</span>
+      <span className="z-bank-product-value"><small>{valueLabel}</small><strong>{value}</strong>{resource.resource_type === "card" && !limits.length && <small>Aguardando limites do banco</small>}{limits.length > 1 && <small>{limits.length} linhas · ver detalhes</small>}</span>
       <span className="z-bank-chevron" aria-hidden="true">⌄</span>
     </summary>
     <div className="z-bank-product-details">

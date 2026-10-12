@@ -6,9 +6,15 @@ import type {BankOverview} from "@/lib/open-finance-display";
 const overview:BankOverview={connections:[{id:"c",institution_name:"Banco exemplo",status:"active",provider_status:null,scopes:[],consent_expires_at:null,revoked_at:null,last_successful_sync_at:null,created_at:"2026-10-10"}],resources:[{id:"card",connection_id:"c",resource_type:"card",name:"Cartão empresa",subtype:null,card_network:null,identification_last4:"1234",currency:"BRL",available_amount:null,gross_amount:null,net_amount:null,valuation_date:null,synced_at:"2026-10-10"}],limits:[{id:"line1",resource_id:"card",line_name:"Total",consolidation_type:"CONSOLIDADO",currency:"BRL",available_amount:"500",used_amount:"500",total_amount:"1000",is_flexible:false},{id:"line2",resource_id:"card",line_name:"Compras",consolidation_type:"COMPARTILHADO",currency:"BRL",available_amount:"500",used_amount:"500",total_amount:"1000",is_flexible:false}],bills:[],credit:[],sync:[]};
 it("shows each shared credit line without manufacturing a combined available limit",()=>{
   const html=renderToStaticMarkup(React.createElement(DashboardCredit,{overview})).replace(/\s/g," ");
-  expect(html).toContain("Total");expect(html).toContain("Compras");expect(html).toContain("R$ 500,00");expect(html).not.toContain("R$ 1.000,00");expect(html).toContain("sem somar");
+  expect(html).toContain("Total");expect(html).toContain("Compras");expect(html).toContain("R$ 500,00");expect(html).not.toContain("Total disponível: R$ 1.000,00");expect(html).toContain("sem somar");
 });
 it("does not display zero credit when the bank did not provide a limit",()=>{
   const html=renderToStaticMarkup(React.createElement(DashboardCredit,{overview:{...overview,limits:[]}}));
   expect(html).toContain("não enviou limites");expect(html).not.toContain("R$ 0,00");
+});
+
+it("renders every branded card as an accessible selectable face with a detail panel",()=>{
+ const data={...overview,resources:[...overview.resources,{...overview.resources[0],id:"second",name:"Outro cartão",connection_id:overview.resources[0].connection_id}],limits:overview.limits};
+ const html=renderToStaticMarkup(React.createElement(DashboardCredit,{overview:data}));
+ expect(html).toContain('class="z-credit-fan"');expect(html).toContain('aria-label="Seus cartões"');expect(html.match(/class="z-credit-face /g)).toHaveLength(2);expect(html).toContain('aria-pressed="true"');expect(html).toContain("Limites e faturas");
 });
