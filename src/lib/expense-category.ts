@@ -1,7 +1,10 @@
 import { normalizeMerchantText as normalize } from "./merchant-text";
 import type { AIResult, FinanceData } from "./ai-processor";
 const rules: Array<[RegExp, string]> = [
-  [/\b(?:iof|juros\s+(?:bancarios|do\s+cartao|de\s+mora|mora|rotativo|sobre\s+(?:saldo|emprestimo|financiamento))|encargos\s+(?:bancarios|financeiros)|tarifa\s+(?:bancaria|do\s+banco)|anuidade\s+(?:do\s+cartao|diferenciada|cartao))\b|^juros$/, "Encargos bancários"],
+  [/\b(?:iof|juros\s+(?:bancarios|do\s+(?:cartao|emprestimo|financiamento)|de\s+mora|mora|rotativo|sobre\s+(?:saldo|emprestimo|financiamento))|encargos\s+(?:bancarios|financeiros)|tarifa\s+(?:bancaria|do\s+banco)|anuidade\s+(?:do\s+cartao|diferenciada|cartao))\b|^juros$/, "Encargos bancários"],
+  [/\b(?:emprestimos?|consignado|credito\s+(?:pessoal|facil\s+mobi))\b/, "Empréstimos"],
+  [/\b(?:mensalidade\s+escolar|faculdade|universidade|curso|alura|udemy|coursera)\b/, "Educação"],
+  [/\b(?:chat\s*gpt|open\s*ai|anthropic|google\s*gemini|perplexity)\b|^claude(?:\s+(?:ai|pro|sub))?$|\b(?:assinatura|subscription)\s+(?:do\s+)?claude\b/, "Inteligência Artificial"],
   [/\b(?:google\s*ads|google\s*adwords|facebook(?:\s+servicos\s+online|\s+ads)?|facebk|meta\s+ads|anuncios|publicidade|trafego\s+pago)\b/, "Marketing"],
   [/\b(?:delivery|zedelivery|ze\s+delivery|ifood|rappi|uber\s*eats|supermercado|mercearia|restaurante|padaria|refeicao|lanchonete|muffato|assai|atacadao|carrefour|pao\s+de\s+acucar|mercado(?!\s+(?:pago|livre)))\b/, "Alimentação"],
   [/\b(?:google\s*(?:cloud|workspace|one|drive|gsuite)|aws|amazon\s+web\s+services|microsoft\s*(?:365|azure)|adobe|canva)\b/, "Tecnologia"],
@@ -9,7 +12,6 @@ const rules: Array<[RegExp, string]> = [
   [/\bgoogle\b(?!\s*(?:pay|pays|pagamentos))/, "Serviços"],
   [/\b(?:uber|99app|combustivel|gasolina|etanol|estacionamento|pedagio|posto\s+(?:de\s+)?combustivel)\b/, "Transporte"],
   [/\b(?:farmacia|drogaria|drogasil|droga\s*raia|drogaria\s*pacheco|hospital|dentista|clinica\s+medica)\b/, "Saúde"],
-  [/\b(?:mensalidade\s+escolar|faculdade|universidade|curso|alura|udemy|coursera)\b/, "Educação"],
   [/\b(?:renner|riachuelo|vestuario|roupas|calcados)\b/, "Vestuário"],
   [/\b(?:darf|das\s+mei|iptu|ipva|tributo|imposto)\b/, "Impostos"],
   [/\b(?:aluguel|condominio|energia\s+eletrica|conta\s+de\s+agua|saneamento)\b/, "Moradia"],
@@ -22,6 +24,15 @@ export function descriptionExpenseCategory(description: string): string | null {
   // Marketplace/payment brands alone do not identify what was purchased.
   if (/\b(?:facebook\s*marketplace|meta\s*pay)\b/.test(text)) return null;
   return rules.find(([pattern]) => pattern.test(text))?.[1] ?? null;
+}
+
+/** Received principal and yield have distinct purposes; a redemption is not all yield. */
+export function descriptionIncomeCategory(description: string): string | null {
+  const text = normalize(description);
+  if (/\b(?:resgate|reembolso|restituicao|transferencia)\b/.test(text)) return null;
+  if (/\b(?:rendimentos?|dividendos?|juros\s+(?:recebidos?|sobre\s+capital\s+proprio)|jcp)\b/.test(text)) return "Rendimentos";
+  if (/\b(?:emprestimos?|consignado|credito\s+(?:pessoal|facil\s+mobi))\b/.test(text)) return "Empréstimos";
+  return null;
 }
 
 /** Respect a category expressly named by the person, including custom categories. */
@@ -48,8 +59,9 @@ export function normalizeExpenseCategories(message: string, result: AIResult): A
     const current = typeof finance.category === "string" ? finance.category.trim() : "";
     const missing = !current || /^(sem categoria|uncategorized|nao categorizado)$/.test(normalize(current));
     const description = typeof finance.description === "string" ? finance.description : "";
-    if (finance.type !== "expense" || hasExplicitExpenseCategory(message, current, description, batch)) return missing ? { ...finance, category: "Outros" } : finance;
-    const category = descriptionExpenseCategory(description) ?? (missing ? "Outros" : current);
+    if (hasExplicitExpenseCategory(message, current, description, batch)) return missing ? { ...finance, category: "Outros" } : finance;
+    const inferred = finance.type === "expense" ? descriptionExpenseCategory(description) : finance.type === "income" ? descriptionIncomeCategory(description) : null;
+    const category = inferred ?? (missing ? "Outros" : current);
     return category === finance.category ? finance : { ...finance, category };
   };
   return { ...result, ...(result.finance ? { finance: normalizeFinance(result.finance) } : {}), ...(result.finances ? { finances: result.finances.map(normalizeFinance) } : {}) };
