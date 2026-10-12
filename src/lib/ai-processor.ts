@@ -3,6 +3,7 @@ import { getConfig } from "./whatsapp-config";
 import {virtualAgentPrompt} from "./virtual-agent-replies";
 import {validateBankQuery, type StructuredBankQuery} from "./bank-query-intent";
 import {descriptionExpenseCategory, normalizeExpenseCategories} from "./expense-category";
+import {categoryDetailQuestion} from "./category-detail-question";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode, explicitMerchantInQuestion } from "./finances";
@@ -2267,7 +2268,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_upcoming: listar valores que AINDA precisam ser pagos ou recebidos, com vencimentos e previsão de saldo ("quais são as próximas despesas para pagar esse mês?", "que contas tenho a pagar?", "o que vence esta semana?", "próximas receitas a receber", em espanhol: "gastos por pagar", "cuentas pendientes", "ingresos por cobrar"). Use "financeType": "expense" para contas/despesas a pagar e "income" para receitas/valores a receber. Não confunda com finance_query: finance_query resume o que JÁ aconteceu; finance_upcoming mostra pendências, parcelas e recorrentes que AINDA vão impactar o saldo. Se o usuário especificar empresa ou pessoal, inclua "mode". Se mencionar período diferente do mês atual, use "period" com os valores pré-calculados.
 - weekly_summary: briefing geral quando a pessoa disser "resumo da semana", "resumo semanal", "resumen de la semana" ou equivalente. Esta intenção reúne compromissos/reuniões, contas a pagar, valores a receber e previsão de saldo; NÃO use finance_query, pois um simples resumo de dinheiro está incompleto. Se disser explicitamente "resumo financeiro da semana", aí use finance_query. Para semana passada ou outra semana, inclua "period" com os valores pré-calculados.
 - daily_summary: o mesmo briefing geral para "resumo do dia", "resumo de hoje", "resumen del día" ou equivalente: compromissos/reuniões, contas a pagar, valores a receber e previsão de saldo daquele dia. NÃO use finance_query. Se pedir outro dia (ontem/amanhã/data), inclua "period" com from e to iguais à data correta do calendário.
-- finance_detail: extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. O sistema sempre acrescenta numa seção separada as despesas/receitas futuras, recorrentes e pendentes do período, sem misturá-las ao total já realizado. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Se o usuário pedir um item específico numa continuação (ex: "e meu aluguel?"), mantenha o tipo e modo do extrato anterior e use "keyword": "aluguel". Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa", "cria uma planilha", "manda minha planilha", "quero uma planilha das entradas/saídas", "envia o extrato", "me manda um relatório". ⚠️ O sistema não gera arquivo de planilha (.xlsx/.csv) — quando o pedido usar a palavra "planilha", ainda assim use finance_detail (o sistema manda a lista de lançamentos em texto), NUNCA responda how_to/unknown só porque a palavra usada foi "planilha" em vez de "extrato". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
+- finance_detail: Pedidos como "me descreve o que tem em Outros", "lista os lançamentos de Alimentação" ou "detalha essa categoria" consultam registros próprios: retorne category e period, sem uma definição genérica e sem converter a categoria em keyword de estabelecimento. Perguntas "o que é a categoria Outros?" continuam how_to. extrato DETALHADO do mês atual (ou do período pedido), listando cada lançamento por categoria. O sistema sempre acrescenta numa seção separada as despesas/receitas futuras, recorrentes e pendentes do período, sem misturá-las ao total já realizado. Inclua "financeType": se a mensagem contém "receitas", "entradas", "recebimentos", "income" → financeType: "income"; se contém "despesas", "gastos", "saídas", "expense" → financeType: "expense"; se não especificado → financeType: "expense" (padrão). Se o usuário pedir um item específico numa continuação (ex: "e meu aluguel?"), mantenha o tipo e modo do extrato anterior e use "keyword": "aluguel". Exemplos de ativadores: "extrato detalhado", "lista todas as despesas", "detalhe dos gastos", "extrato de despesas do mês", "extrato de receitas", "lista todas as receitas", "extrato detalhado empresa", "extrato receitas empresa", "cria uma planilha", "manda minha planilha", "quero uma planilha das entradas/saídas", "envia o extrato", "me manda um relatório". ⚠️ O sistema não gera arquivo de planilha (.xlsx/.csv) — quando o pedido usar a palavra "planilha", ainda assim use finance_detail (o sistema manda a lista de lançamentos em texto), NUNCA responda how_to/unknown só porque a palavra usada foi "planilha" em vez de "extrato". Se mencionar "empresa" ou "empresarial" inclua mode: "business"; se mencionar "pessoal" inclua mode: "personal". Se mencionar um período diferente do mês atual (ex: "extrato do mês passado", "extrato detalhado da semana passada"), inclua "period" com os valores pré-calculados no topo do prompt.
 - balance_query: saldo atual ("qual meu saldo", "quanto tenho"). Aplica-se a mesma regra de "personName", "category" e "period" do finance_query quando a pergunta cita outra pessoa, uma categoria específica, ou um período diferente do mês atual.
 - finance_confirm_pending: confirmar/antecipar um lançamento AGENDADO (data futura, ainda não contabilizado) antes da data chegar sozinha ("já paguei aquela conta que agendei", "confirma o pagamento do aluguel que tá agendado", "antecipa o lançamento de X"). Use "keyword" com o termo de busca do lançamento.
 - finance_analysis: análise de padrões de gasto ("no que eu gastei mais", "onde estou gastando mais", "quais meus maiores gastos", "me ajude a economizar", "dicas para guardar dinheiro", "análise dos meus gastos", "onde estou perdendo dinheiro", "como posso gastar menos", "resumo por categoria", "em que categoria gasto mais"). Se mencionar período diferente do mês atual (ex: "no que gastei mais mês passado"), inclua "period" com os valores pré-calculados no topo do prompt.
@@ -3775,7 +3776,19 @@ async function tryOpenAIForTestUser<T>(
   }
 }
 
-function normalizeAIResult(message: string, result: AIResult): AIResult {
+function explicitCategoryDetailResult(message:string,ctx?:AiContext):AIResult|null {
+ const expense=[...CATEGORIES_EXPENSE,...(ctx?.user.customCategoriesExpense??[])],income=[...CATEGORIES_INCOME,...(ctx?.user.customCategoriesIncome??[])];
+ const category=categoryDetailQuestion(message,[...expense,...income]);
+ if(!category)return null;
+ const financeType=income.includes(category)&&!expense.includes(category)?"income":expense.includes(category)&&!income.includes(category)?"expense":undefined;
+ const text=normalizeCapabilityText(message);
+ const mode:UserMode|undefined=/\b(?:empresa|empresarial|negocio)\b/.test(text)?"business":/\b(?:pessoal|personal)\b/.test(text)?"personal":undefined;
+ return {intent:"finance_detail",confidence:1,category,...(financeType?{financeType}:{}),...(mode?{mode}:{})};
+}
+
+function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): AIResult {
+  const categoryDetail=explicitCategoryDetailResult(message,ctx);
+  if(categoryDetail&&["how_to","unknown","finance_query","finance_detail"].includes(result.intent))result={...result,...categoryDetail,keyword:undefined,response:undefined};
   if (result.intent === "bank_query") return withExplicitRelativePeriod(message, { ...result, bankQuery: validateBankQuery(result.bankQuery) ?? undefined });
   const merchant = explicitMerchantInQuestion(message);
   if (merchant && result.intent === "grocery_spend_query") result = { ...result, intent: "finance_query", keyword: merchant, period: result.grocery?.period ?? result.period, category: undefined, financeType: "expense" };
@@ -3851,7 +3864,7 @@ function getExplicitIntentFallback(message: string, ctx?: AiContext): AIResult |
   const explicitRecurringQuery = getExplicitRecurringQueryResult(message);
   if (explicitRecurringQuery) return explicitRecurringQuery;
 
-  const explicitFinanceDetail = getExplicitFinanceDetailResult(message, ctx?.history);
+  const explicitFinanceDetail = explicitCategoryDetailResult(message,ctx) ?? getExplicitFinanceDetailResult(message, ctx?.history);
   if (explicitFinanceDetail) return withExplicitRelativePeriod(message, explicitFinanceDetail);
 
   const explicitConfirmPending = getExplicitFinanceConfirmPendingResult(message);
@@ -3924,7 +3937,7 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
     }),
   );
   if (openAIAttempt.ok) {
-    const parsed = normalizeAIResult(message, openAIAttempt.value);
+    const parsed = normalizeAIResult(message, openAIAttempt.value, ctx);
     console.log(`[ai-processor] provider=openai intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   }
@@ -3967,7 +3980,7 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
     const text = result.response.text().trim()
       .replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    const parsed = normalizeAIResult(message, JSON.parse(text) as AIResult);
+    const parsed = normalizeAIResult(message, JSON.parse(text) as AIResult, ctx);
     console.log(`[ai-processor] intent=${parsed.intent} confidence=${parsed.confidence}`);
     return parsed;
   } catch (e) {
@@ -4034,6 +4047,7 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
 
   // Preserve os dados extraídos pelos comandos existentes quando IA e regra
   // concordam; a IA resolve as frases que as regras não cobrem.
+  if (explicit?.intent === "finance_detail" && explicit.category && modeled.intent === "finance_detail") return {...modeled,...explicit,mode:explicit.mode??modeled.mode,period:explicit.period??modeled.period,keyword:undefined,response:undefined};
   if (explicit?.intent === modeled.intent) return explicit;
   // Regras que representam limites da plataforma devem prevalecer.
   if (explicit?.intent === "how_to" && explicit.response) return explicit;

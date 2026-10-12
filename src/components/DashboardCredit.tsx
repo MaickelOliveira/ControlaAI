@@ -14,7 +14,7 @@ export default function DashboardCredit({overview}:{overview:BankOverview|null})
       return <div key={resource.id} className={index===0?"z-credit-card":"mt-3 border-t border-line pt-3"}>
         <p className="flex items-center gap-2 text-[11px]"><BankLogo institutionId={bank?.institution_id} size={30}/><span>{bank?.institution_name??"Cartão"} · {resource.name}{resource.identification_last4?` · final ${resource.identification_last4}`:""}</span></p>
         <strong className={index===0?undefined:"mt-1 block text-lg font-semibold"}>{bankMoney(line?.available_amount,line?.currency)}</strong>
-        <small className="block text-[10px]">{line?.line_name||"O banco ainda não enviou limites"}{line?.consolidation_type?` · ${line.consolidation_type}`:""}{historical?" · Histórico, sem atualização":""}</small>
+        <small className="block text-[10px]">{line?line.line_name||"Linha do cartão":"O banco ainda não enviou limites"}{line?.consolidation_type?` · ${line.consolidation_type}`:""}{historical?" · Histórico, sem atualização":""}</small>
         {lines.length>1&&<details className="mt-2 text-[10px]"><summary className="cursor-pointer">Ver {lines.length} linhas de crédito</summary><div className="mt-2 space-y-2">{lines.map(other=><p key={other.id}>{other.line_name||"Linha de crédito"} · {bankMoney(other.available_amount,other.currency)}{other.consolidation_type?` · ${other.consolidation_type}`:""}</p>)}</div></details>}
       </div>;
     })}</div>:<div className="z-empty">Conecte seus cartões para acompanhar o crédito disponível.</div>}

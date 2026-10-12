@@ -18,7 +18,7 @@ export function bankCategory(movement:BankMovement):BankCategory {
   if(provider)return {name:provider,source:"provider"};
   const description=movement.description.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
   const name=income?
-    /\b(?:salario|folha de pagamento)\b/.test(description)?"Salário":/\b(?:reembolso|restituicao)\b/.test(description)?"Reembolso":undefined:
+    /\b(?:salario|folha de pagamento)\b/.test(description)?"Salário":/\b(?:reembolso|restituicao)\b/.test(description)?"Reembolso":/\b(?:servicos?\s+(?:prestados?|executados?)|estetica|salao\s+de\s+beleza|barbearia|consultoria)\b/.test(description)?"Serviços":undefined:
     undefined;
   return name?{name,source:"description"}:{name:"Outros",source:"default"};
 }

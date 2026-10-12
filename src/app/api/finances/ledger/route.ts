@@ -6,6 +6,7 @@ import {bankPeriod} from "@/lib/open-finance-report";
 import {readBankLedger} from "@/lib/finance-ledger-storage";
 import {createFinanceLedger,ledgerBalance} from "@/lib/finance-ledger";
 import {getPhonesForUser} from "@/lib/wpp-phone-links";
+import {getAccountsByUser} from "@/lib/accounts";
 import {identifyFinanceAuthors} from "@/lib/finance-attribution";
 export const dynamic="force-dynamic";
 const headers={"Cache-Control":"private, no-store"};
@@ -21,10 +22,10 @@ export async function GET(request:Request){
   try{
     const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
     if(scope){try{bankPeriod(period.from,period.to);}catch{return NextResponse.json({error:"Para incluir os bancos, escolha um período de até 366 dias."},{status:400,headers});}}
-    const [records,allRecords,bank,participants]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode,period.from,period.to),getFinancesInRangeStrict(auth.user.id,mode),scope?readBankLedger(scope,period):null,getPhonesForUser(auth.user.id)]);
+    const [records,allRecords,bank,participants,accounts]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode,period.from,period.to),getFinancesInRangeStrict(auth.user.id,mode),scope?readBankLedger(scope,period):null,getPhonesForUser(auth.user.id),getAccountsByUser(auth.user.id,mode)]);
     const totalBalance=calculateFinanceBalance(allRecords);
-    const finances=createFinanceLedger(identifyFinanceAuthors(records,auth.user,participants).map(({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName})=>({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName})),bank?.report.movements??[],mode);
-    return NextResponse.json({finances,balance:ledgerBalance(finances),totalBalance,bank},{headers});
+    const finances=createFinanceLedger(identifyFinanceAuthors(records,auth.user,participants).map(({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})=>({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})),bank?.report.movements??[],mode);
+    return NextResponse.json({finances,balance:ledgerBalance(finances),totalBalance,bank,accounts:accounts.map(({id,name,type})=>({id,name,type}))},{headers});
   }catch{
     return NextResponse.json({error:"Não foi possível atualizar o extrato completo. Tente um período menor ou aguarde uma nova tentativa."},{status:503,headers});
   }
