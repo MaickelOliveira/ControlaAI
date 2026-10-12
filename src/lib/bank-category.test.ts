@@ -76,9 +76,9 @@ it("groups IOF, card interest and bank-fee enrichment into banking charges, keep
 });
 
 it("recognizes service receipts with aesthetic/service evidence without guessing every Pix is revenue",()=>{
- expect(entry({description:"Pix recebido - Eva Santos Estética",direction:"credit",kind:"credits",source_category:null}).category).toBe("Serviços");
+ expect(entry({description:"Pix recebido - Estética Bela Teste",direction:"credit",kind:"credits",source_category:null}).category).toBe("Serviços");
  expect(entry({description:"Pix recebido - pessoa teste",direction:"credit",kind:"credits",source_category:null}).category).toBe("Outros");
  expect(entry({description:"Reembolso de estética",direction:"credit",kind:"credits",source_category:"INCOME_TAX_REFUND"}).category).toBe("Reembolso");
  expect(entry({description:"Transferência estética",direction:"credit",kind:"excluded",classification:"transfer"}).included).toBe(false);
- expect(entry({description:"Pix recebido - Eva Santos Estética",direction:"credit",kind:"credits",user_category:"Vendas"}).category).toBe("Vendas");
+ expect(entry({description:"Pix recebido - Estética Bela Teste",direction:"credit",kind:"credits",user_category:"Vendas"}).category).toBe("Vendas");
 });
