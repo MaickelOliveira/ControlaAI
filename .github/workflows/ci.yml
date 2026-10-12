@@ -44,3 +44,51 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  publish-image:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Build without production credentials
+        env:
+          ZELO_IMAGE: ghcr.io/maickeloliveira/controlaai
+          ZELO_REVISION: ${{ github.sha }}
+        run: |
+          docker build --pull --platform linux/amd64 \
+            --label org.opencontainers.image.source=https://github.com/MaickelOliveira/ControlaAI \
+            --label "org.opencontainers.image.revision=$ZELO_REVISION" \
+            --tag "$ZELO_IMAGE:$ZELO_REVISION" .
+
+      - name: Verify image without runtime secrets
+        env:
+          ZELO_IMAGE: ghcr.io/maickeloliveira/controlaai
+          ZELO_REVISION: ${{ github.sha }}
+        run: |
+          docker run --detach --name zelo-image-check --publish 127.0.0.1:4080:80 "$ZELO_IMAGE:$ZELO_REVISION"
+          trap 'docker rm --force zelo-image-check >/dev/null' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4080/login; then break; fi
+            sleep 1
+          done
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:4080/login)" = 200
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:4080/api/me)" = 401
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://127.0.0.1:4080/api/finances)" = 403
+
+      - name: Publish verified image
+        env:
+          ZELO_IMAGE: ghcr.io/maickeloliveira/controlaai
+          ZELO_REVISION: ${{ github.sha }}
+          ZELO_REGISTRY_USER: ${{ github.actor }}
+          ZELO_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$ZELO_REGISTRY_TOKEN" | docker login ghcr.io --username "$ZELO_REGISTRY_USER" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          docker push "$ZELO_IMAGE:$ZELO_REVISION"
