@@ -27,6 +27,7 @@ Testes de reprodução antes da lógica; 850,16 no cartão + 821,48 no Pix passa
 - Dois revisores independentes aprovaram após corrigir o valor mostrado ao abrir pelo Pix e exigir as datas da tela na confirmação sob lock.
 - Navegador com dados fictícios: seleção e aceite explícitos, botão bloqueado antes de confirmar, valor correto pelos dois lados, tema claro/escuro e largura 390 sem rolagem horizontal. Mensagens locais de depuração causadas pela extensão cz-shortcut-listen e pela CSP do desenvolvimento; nenhuma proteção de produção foi enfraquecida. Prévia removida do código entregue.
 - 1.357 testes passaram; 15 testes opcionais anteriores permanecem ignorados. Lint sem erros, com dois avisos anteriores; compilação de produção passou.
+- A compilação remota também identificou o carregador Google da fonte Plus Jakarta Sans nas três páginas públicas. A mesma fonte Latin já emitida pela compilação foi incluída localmente (27.272 bytes, SHA256 cd8db90cd950e26bc8761f65d323588bd5cd112d326d6d322bc7c8ea86771215), com OFL oficial; eixo variável/pesos e caracteres PT/ES conferidos por fontkit e revisão independente. Nenhum carregador Google permanece no código.
 - Nenhuma dependência nova. Auditoria de produção mantém cinco avisos anteriores (três altos, dois moderados), sem alteração no lockfile; alcance e tratamento separados em dependency-audit-followup.md.
 
 ## Próxima entrega: pergunta pendente no WhatsApp
