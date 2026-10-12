@@ -41,3 +41,9 @@ it("attaches a separate category line to the preceding item in a batch",()=>{
   const original={intent:"finance_register",confidence:1,finances:[result("Google Ads","Moradia").finance!,result("Zé Delivery","Evento empresa").finance!]} as AIResult;
   expect(normalizeExpenseCategories("gastei 50 no Google Ads\n30 no Zé Delivery\nCategoria: Evento empresa",original).finances?.map(item=>item.category)).toEqual(["Marketing","Evento empresa"]);
 });
+it.each(["IOF", "Juros do cartão", "Tarifa bancária", "Anuidade do cartão", "Encargos financeiros"])("categorizes banking charges independently: %s",description=>{
+  expect(descriptionExpenseCategory(description)).toBe("Encargos bancários");
+  expect(normalizeExpenseCategories(`paguei 50 de ${description}`,result(description,"Outros")).finance?.category).toBe("Encargos bancários");
+});
+
+it.each([["Compra parcelada sem juros — Drogasil", "Saúde"],["Google Ads sem juros", "Marketing"]])("does not turn a purchase without interest into bank charges: %s",(description,category)=>expect(descriptionExpenseCategory(description)).toBe(category));

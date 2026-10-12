@@ -71,3 +71,11 @@ it("returns an unavailable response rather than an empty bank result on storage 
   const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }), "2026-10-11");
   expect(response).toContain("Não consegui"); expect(response).not.toContain("private storage detail"); expect(response).not.toContain("Nenhum");
 });
+
+it("validates and executes a financing purpose filter instead of broadening it to every debt",async()=>{
+ expect(validateBankQuery({kind:"financings",keyword:"carro"})).toEqual({kind:"financings",keyword:"carro"});
+ expect(validateBankQuery({kind:"limits",keyword:"carro"})).toBeNull();
+ m.rpc.mockResolvedValue({...overview,resources:[{id:"car",connection_id:"nu",resource_type:"financing",name:"Veículos e utilitários"},{id:"house",connection_id:"nu",resource_type:"financing",name:"Imóvel residencial"}],credit:[{resource_id:"car",currency:"BRL",outstanding_amount:"6789.12"},{resource_id:"house",currency:"BRL",outstanding_amount:"44444"}]});
+ const response=await answerStructuredBankQuery(user,"personal","both",ai({kind:"financings",keyword:"carro"}),"2026-10-11");
+ expect(response).toContain(bankMoney("6789.12","BRL"));expect(response).not.toContain("Imóvel residencial");
+});

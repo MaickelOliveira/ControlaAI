@@ -1,5 +1,6 @@
 import { bankDate, bankMoney, bankResourceName, type BankOverview, type BankResource } from "./open-finance-display";
 import { normalizeBankText, type BankQuestion } from "./bank-question-parser";
+import { hasZeroBankDebt, matchesBankDebtPurpose } from "./bank-debt";
 const safe = (text: string) => text.replace(/[\r\n*`_~<>]/g, " ").slice(0, 180);
 const canonicalBank = (text: string) => normalizeBankText(text).replace(/^banco /, "").replace(/ (?:pessoa fisica|pessoa juridica|pf|pj)$/, "");
 const includesName = (text: string, name: string) => ` ${normalizeBankText(text)} `.includes(` ${name} `);
@@ -58,9 +59,11 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   let omitted = false;
   const blocks = groups.map(group => {
     const wanted = { loans: "loan", financings: "financing", limits: "card", balances: "account", investments: "investment", bills: "card", spending: "account" }[question.kind];
-    const resources = group.resources.filter(r => r.resource_type === wanted);
+    const candidates = group.resources.filter(r => r.resource_type === wanted && (!debt || matchesBankDebtPurpose(r, question.keyword)));
+    const resources = candidates.filter(r => !debt || !hasZeroBankDebt(r, data));
+    const hiddenZero = candidates.length - resources.length;
     const lines: string[] = [];
-    const bankAmounts: Amount[] = [];
+    const bankAmounts: Amount[] = candidates.filter(r => debt && hasZeroBankDebt(r, data)).map(r => ({ amount: "0", currency: data.credit.find(c => c.resource_id === r.id)?.currency }));
     for (const resource of resources) {
       const name = `${safe(bankResourceName(resource.name))}${resource.identification_last4 ? ` · final ${safe(resource.identification_last4)}` : ""}`;
       if (debt) {
@@ -83,13 +86,14 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
         for (const bill of bills) lines.push(`${name} · Vencimento: ${bankDate(bill.due_date)}\nTotal: ${bankMoney(bill.total_amount, bill.currency)} · Mínimo: ${bankMoney(bill.minimum_payment_amount, bill.currency)} · Pagamento: ${bill.status === "unknown" ? "não informado" : safe(bill.status)}`);
       }
     }
-    if (!resources.length) incomplete = true;
+    if (!candidates.length) incomplete = true;
     received.push(...bankAmounts);
     omitted ||= lines.length > 10;
     const dates = [...new Set(resources.map(r => r.synced_at?.slice(0, 10)).filter(Boolean))].sort();
-    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n${lines.slice(0, 10).join("\n\n") || `O banco ainda não informou ${labels[question.kind].toLowerCase()}.`}${bankAmounts.length ? `\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${bankDate(dates[0])}${dates.length > 1 ? ` a ${bankDate(dates.at(-1))}` : ""}.` : ""}`;
+    const empty = hiddenZero ? "Não há saldo devedor pendente nos contratos recebidos." : question.keyword ? `Nenhum contrato correspondente a ${safe(question.keyword)} nos dados recebidos.` : `O banco ainda não informou ${labels[question.kind].toLowerCase()}.`;
+    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${bankAmounts.length && resources.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${bankDate(dates[0])}${dates.length > 1 ? ` a ${bankDate(dates.at(-1))}` : ""}.` : ""}`;
   });
-  let result = `${labels[question.kind]} recebidos · ${safe(modeLabel)}\n\n${blocks.join("\n\n")}`;
+  let result = `${labels[question.kind]} recebidos · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
   if (debt || question.kind === "balances") result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
   if (question.kind === "limits") result += "\n\nLinhas e limites compartilhados não são somados. Crédito disponível não é saldo em conta.";
   result += "\nValores não informados permanecem desconhecidos. Posição conforme os dados recebidos de cada banco; ausência de dados não confirma valor zero.";

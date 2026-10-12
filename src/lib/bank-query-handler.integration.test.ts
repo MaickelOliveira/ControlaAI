@@ -53,3 +53,10 @@ it.each([["zelo quanto eu tenho de emprestimo?", "1200.10"], ["quanto eu tenho d
   const response = m.send.mock.calls.map(call => call[1]).join("\n");
   expect(response).toContain(bankMoney(amount, "BRL")); expect(response).toContain("*Ana*"); expect(response).toContain("*Rita*"); expect(response).toContain("Nubank"); expect(response).not.toContain("Você gastou"); expect(m.process).not.toHaveBeenCalled();
 });
+
+it("answers the remaining car financing through saved debt rather than the monthly payable forecast",async()=>{
+ m.rpc.mockResolvedValue({connections:[{id:"si",institution_name:"Sicredi",status:"active"}],resources:[{id:"car",connection_id:"si",resource_type:"financing",name:"VEICULOS E UTILITARIOS LEVES - REVENDAS",synced_at:"2026-10-11"},{id:"house",connection_id:"si",resource_type:"financing",name:"Habitação"}],credit:[{resource_id:"car",currency:"BRL",outstanding_amount:"7654.32",contract_amount:"18000",next_installment_amount:"450"},{resource_id:"house",currency:"BRL",outstanding_amount:"55555"}],limits:[],bills:[],sync:[]});
+ await handleIncomingMessage({from:"5511999990000",text:"quanto falta pra min pagar do carro"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain(bankMoney("7654.32","BRL")); expect(response).toContain("Saldo devedor"); expect(response).not.toContain("Habitação"); expect(response).not.toContain("Previsão para"); expect(m.process).not.toHaveBeenCalled(); expect(m.confirm).not.toHaveBeenCalled();
+});

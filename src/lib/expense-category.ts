@@ -1,6 +1,7 @@
 import { normalizeMerchantText as normalize } from "./merchant-text";
 import type { AIResult, FinanceData } from "./ai-processor";
 const rules: Array<[RegExp, string]> = [
+  [/\b(?:iof|juros\s+(?:bancarios|do\s+cartao|de\s+mora|mora|rotativo|sobre\s+(?:saldo|emprestimo|financiamento))|encargos\s+(?:bancarios|financeiros)|tarifa\s+(?:bancaria|do\s+banco)|anuidade\s+(?:do\s+cartao|diferenciada|cartao))\b|^juros$/, "Encargos bancários"],
   [/\b(?:google\s*ads|google\s*adwords|facebook(?:\s+servicos\s+online|\s+ads)?|facebk|meta\s+ads|anuncios|publicidade|trafego\s+pago)\b/, "Marketing"],
   [/\b(?:delivery|zedelivery|ze\s+delivery|ifood|rappi|uber\s*eats|supermercado|mercearia|restaurante|padaria|refeicao|lanchonete|muffato|assai|atacadao|carrefour|pao\s+de\s+acucar|mercado(?!\s+(?:pago|livre)))\b/, "Alimentação"],
   [/\b(?:google\s*(?:cloud|workspace|one|drive|gsuite)|aws|amazon\s+web\s+services|microsoft\s*(?:365|azure)|adobe|canva)\b/, "Tecnologia"],
@@ -12,12 +13,12 @@ const rules: Array<[RegExp, string]> = [
   [/\b(?:renner|riachuelo|vestuario|roupas|calcados)\b/, "Vestuário"],
   [/\b(?:darf|das\s+mei|iptu|ipva|tributo|imposto)\b/, "Impostos"],
   [/\b(?:aluguel|condominio|energia\s+eletrica|conta\s+de\s+agua|saneamento)\b/, "Moradia"],
-  [/\b(?:tarifa\s+bancaria|juros\s+bancarios|internet|telefonia|assinatura\s+cloud)\b/, "Serviços"],
+  [/\b(?:internet|telefonia|assinatura\s+cloud)\b/, "Serviços"],
 ];
 
 /** Specific merchant/purpose evidence can correct coarse bank/model suggestions. */
 export function descriptionExpenseCategory(description: string): string | null {
-  const text = normalize(description);
+  const text = normalize(description).replace(/\bsem juros\b/g, " ");
   // Marketplace/payment brands alone do not identify what was purchased.
   if (/\b(?:facebook\s*marketplace|meta\s*pay)\b/.test(text)) return null;
   return rules.find(([pattern]) => pattern.test(text))?.[1] ?? null;

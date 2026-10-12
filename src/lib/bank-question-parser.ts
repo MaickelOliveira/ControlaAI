@@ -6,6 +6,7 @@ export type BankQuestion = {
   bankName?: string;
   last4?: string;
   explicitBank?: boolean;
+  keyword?: string;
 };
 
 export const normalizeBankText = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -42,12 +43,22 @@ const positionPatterns: Array<{ kind: BankQuestion["kind"]; pattern: RegExp }> =
   { kind: "bills", pattern: /^(?:quais (?:sao )?(?:as )?(?:minhas )?faturas|(?:me )?mostre (?:as )?(?:minhas )?faturas|qual (?:e )?(?:o )?valor (?:da|das) (?:minha |minhas )?faturas?|quanto (?:e |esta )?(?:a )?(?:minha )?fatura)(.*)$/ },
 ];
 
+function remainingFinancing(text: string): Pick<BankQuestion, "kind" | "keyword" | "bankName" | "last4"> | null {
+  const match = text.match(/^(?:quanto (?:ainda )?falta (?:pra |para )?(?:(?:min|mim|eu) )?(?:pagar|quitar)|quanto (?:eu )?(?:ainda )?(?:devo|estou devendo)) (?:do |da |no |na |o |a )?(?:financiamento (?:do |da )?)?(?:meu |minha )?(carro|veiculo|automovel|moto|motocicleta|casa|imovel|habitacao)(.*)$/);
+  if (!match || mutation.test(text.replace(/\bpagar\b/, ""))) return null;
+  const filter = bankFilter(match[2]);
+  return filter ? { kind: "financings", keyword: match[1], ...filter } : null;
+}
+
 /** Only read-only questions enter this path. Unrecognized filters are never discarded. */
 export function parseBankQuestion(question: string, today: string): BankQuestion | null {
   let text = normalizeBankText(question);
-  if (text.length > 500 || mutation.test(text)) return null;
+  if (text.length > 500) return null;
   text = queryText(question);
   if (/\b(empresa|empresarial|pessoal|familia|ontem|hoje|semana|ano|com|ifood|categoria)\b/.test(text)) return null;
+  const payoff = remainingFinancing(text);
+  if (payoff && !/\b(mes|ontem|ano|anterior|passad\w*|(?:19|20)\d{2})\b/.test(text.replace(/\bfinal \d{4}\b/g, ""))) return { ...payoff, ...monthPeriod(today, false) };
+  if (mutation.test(text)) return null;
   if (/^(?:quanto (?:eu )?gastei|quanto gastamos)/.test(text)) {
     const period = monthPeriod(today, /mes (passado|anterior)/.test(text));
     const suffix = text.replace(/^(?:quanto (?:eu )?gastei|quanto gastamos)/, "").replace(/ (?:no )?(?:mes passado|mes anterior|este mes|nesse mes|neste mes)$/, "");
@@ -72,6 +83,7 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
 /** Protect unsupported bank-position questions from being answered as ordinary expenses. */
 export function isBankPositionQuestion(question: string): boolean {
   const text = queryText(question);
+  if (remainingFinancing(text)) return true;
   return /^(?:qual|quais|quanto|quantos|como|mostre|me mostre|meus|minhas)\b/.test(text)
     && (/\b(?:emprestimos?|financiamentos?|investimentos?|limites?|credito|faturas?)\b/.test(text) || (/\bsaldos?\b/.test(text) && /\b(?:bancos?|bancarias?)\b/.test(text)))
     && !mutation.test(text) && !/\b(?:gastei|gastamos|gastos)\b/.test(text);

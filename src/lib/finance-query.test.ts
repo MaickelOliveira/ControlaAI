@@ -35,5 +35,9 @@ it("matches Zé Delivery with accents and bank separators without including anot
 it("shows transfers, original currencies and unknown amounts in an extract without adding them to expense totals",()=>{
   const movements=createFinanceLedger([], [bank("expense","45"),{...bank("transfer","120","debit","account","excluded"),description:"Transferência teste"},{...bank("dollars","15"),currency:"USD",description:"Compra em dólar"},{...bank("unknown","1"),amount:null,description:"Valor ausente"}],"personal");
   const reply=summarizeFinanceQuery(movements,{from:"2026-09-01",to:"2026-09-30",type:"result",detail:true},"personal");
-  expect(reply).toContain("Saídas: R$ 45,00"); expect(reply).toContain("Transferência teste"); expect(reply).toContain("Compra em dólar"); expect(reply).toContain("Valor ausente · Não informado"); expect(reply).toContain("Fora do total"); expect(reply).not.toContain("Valor ausente · R$ 0,00");
+  expect(reply).toContain("Saídas: R$ 45,00"); expect(reply).toContain("Transferência teste"); expect(reply).toContain("Compra em dólar"); expect(reply).toMatch(/Valor ausente[^\n]*\n[^\n]*Não informado/); expect(reply).toContain("Fora do total");
+});
+it("organizes a merchant answer into total, period, origins and separate purchases with blank lines",()=>{
+  const reply=summarizeFinanceQuery(createFinanceLedger([], [{...bank("ze","43.75","debit","card","card_purchases"),description:"Zé Delivery"}],"personal"),{from:"2026-09-01",to:"2026-09-30",type:"expense",keywords:["ze delivery"]},"personal");
+  expect(reply).toMatch(/^💸 \*Você gastou R\$ 43,75\*/); expect(reply).toContain("\n\n📅"); expect(reply).toContain("\n\n*Por origem*\n"); expect(reply).toContain("\n\n*Movimentações encontradas (1)*\n\n"); expect(reply).toContain("*1. Zé Delivery*\n💰 R$ 43,75\n"); expect(reply).toContain("🏷️ Alimentação");
 });

@@ -70,3 +70,7 @@ it("combines bank categories with WhatsApp categories in charts without editing 
  const entries=createFinanceLedger([{id:"manual",type:"expense",amount:5,category:"Alimentação",description:"Almoço",date:"2026-10-10",mode:"business",source:"whatsapp"}], [{...movement,source_category:"FOOD_AND_DRINK_GROCERIES"}],"business");
  expect(ledgerExpenseGroups(entries,"category")).toEqual([{name:"Alimentação",value:35}]);
 });
+it("groups IOF, card interest and bank-fee enrichment into banking charges, keeping received interest as investments",()=>{
+ for(const extra of [{description:"IOF"},{description:"Juros do cartão"},{source_category:"BANK_FEES_OTHER",description:"Cobrança"}]) expect(entry(extra).category).toBe("Encargos bancários");
+ expect(entry({description:"Juros recebidos",direction:"credit",kind:"credits",source_category:"INCOME_INTEREST_EARNED"}).category).toBe("Investimentos");
+});

@@ -41,7 +41,7 @@ export function parseFinanceDestinationMode(text: string): FinanceMode | null {
 
 export const CATEGORIES_EXPENSE = [
   "Alimentação", "Transporte", "Moradia", "Saúde", "Educação",
-  "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos",
+  "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Encargos bancários",
   "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência",
 ];
 export const CATEGORIES_INCOME = [
@@ -57,12 +57,12 @@ export const CATEGORIES_INCOME = [
 // traduzir — mantém como o usuário cadastrou.
 const CATEGORIES_EXPENSE_ES = [
   "Alimentación", "Transporte", "Vivienda", "Salud", "Educación",
-  "Ocio", "Ropa", "Tecnología", "Servicios", "Impuestos",
+  "Ocio", "Ropa", "Tecnología", "Servicios", "Impuestos", "Cargos bancarios",
   "Empleados", "Marketing", "Proveedores", "Otros", "Transferencia",
 ];
 const CATEGORIES_EXPENSE_PTPT = [
   "Alimentação", "Transporte", "Habitação", "Saúde", "Educação",
-  "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos",
+  "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Encargos bancários",
   "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência",
 ];
 const CATEGORIES_INCOME_ES = [
