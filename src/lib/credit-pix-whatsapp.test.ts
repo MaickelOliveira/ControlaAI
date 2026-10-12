@@ -111,6 +111,12 @@ describe("quiet, private credit Pix delivery", () => {
     expect(calls(FINISH).at(-1)?.[1]).toEqual(expect.objectContaining({ p_user: USER, p_mode: "personal", p_question: QUESTION, p_token: TOKEN, p_status: "asked" }));
     expect(m.finish).toHaveBeenCalledTimes(1);
   });
+  it("asks the holder to confirm the same payment and the extra card charges", async () => {
+    await runCreditPixQuestions();
+    const body=m.send.mock.calls[0][2];
+    expect(body).toContain("é só de juros e taxas?");
+    expect(body).toContain("somente se for o mesmo pagamento");
+  });
   it("does not claim a question or send when the conversation is busy/closed", async () => {
     m.claim.mockResolvedValue(null);
     expect(await runCreditPixQuestions()).toBe(0);

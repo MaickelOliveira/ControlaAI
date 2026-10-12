@@ -23,7 +23,7 @@ const currency=(value:unknown)=>{
 function text(q:Record<string,unknown>,workspace:string){
  const date=typeof q.date==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(q.date)?q.date.split("-").reverse().join("/"):"";
  if(!date)throw Error("OF_QUESTION_INVALID");
- return `Uma conferência rápida · ${workspace}\n\nVocê pegou dinheiro do cartão, pelo Pix, para fazer esse pagamento?\n\n${label(q.bank)} · ${date}\nPagamento: ${label(q.paymentName)}\nPix: *${currency(q.paymentAmount)}*\nCobrança no cartão: *${currency(q.gross)}*\nDiferença: *${currency(q.charges)}* de juros/taxas.\n\nAo confirmar, o gasto será contado uma vez e os juros/taxas separados. Isso não paga nem reduz sua dívida no cartão.\n\nUse os botões abaixo. Se forem pagamentos diferentes, escolha “Não”.`;
+ return `Uma conferência rápida · ${workspace}\n\nVocê pegou dinheiro do cartão, pelo Pix, para fazer esse pagamento?\n\n${label(q.bank)} · ${date}\nPagamento: ${label(q.paymentName)}\nPix: *${currency(q.paymentAmount)}*\nCobrança no cartão: *${currency(q.gross)}*\nO valor a mais de *${currency(q.charges)}* é só de juros e taxas?\n\nAo confirmar, o gasto será contado uma vez e os juros/taxas separados. Isso não paga nem reduz sua dívida no cartão.\n\nMarque “Sim” somente se for o mesmo pagamento e o valor a mais for de juros/taxas. Se forem pagamentos diferentes, escolha “Não”.`;
 }
 async function allowed(phone:string,expectedUser?:string,expectedMode?:string,expectedCompany?:string|null){
  const userId=await getUserIdByPhone(phone);
