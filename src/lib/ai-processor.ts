@@ -2,6 +2,7 @@ import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } f
 import { getConfig } from "./whatsapp-config";
 import {virtualAgentPrompt} from "./virtual-agent-replies";
 import {validateBankQuery, type StructuredBankQuery} from "./bank-query-intent";
+import {descriptionExpenseCategory, normalizeExpenseCategories} from "./expense-category";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode, explicitMerchantInQuestion } from "./finances";
@@ -600,6 +601,8 @@ function categoryForNaturalFinance(description: string, type: "income" | "expens
     if (/\binvest\b/.test(normalized)) return "Investimentos";
     return "Outros";
   }
+  const merchant = descriptionExpenseCategory(description);
+  if (merchant) return merchant;
   if (/\baluguel|alquiler|casa|moradia|condominio\b/.test(normalized)) return "Moradia";
   if (/\bmercado|comida|almoco|jantar|ifood|rappi|restaurante\b/.test(normalized)) return "Alimentação";
   if (/\bfarmacia|remedio|medicamento|consulta|saude\b/.test(normalized)) return "Saúde";
@@ -3777,13 +3780,14 @@ function normalizeAIResult(message: string, result: AIResult): AIResult {
   const merchant = explicitMerchantInQuestion(message);
   if (merchant && result.intent === "grocery_spend_query") result = { ...result, intent: "finance_query", keyword: merchant, period: result.grocery?.period ?? result.period, category: undefined, financeType: "expense" };
   if (merchant && ["finance_query", "finance_detail", "finance_analysis"].includes(result.intent)) result = { ...result, keyword: merchant, category: undefined };
-  return withExplicitAgendaAllDay(message, withExplicitFinanceAccount(message, normalizeActionReminder(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
+  const normalized = withExplicitAgendaAllDay(message, withExplicitFinanceAccount(message, normalizeActionReminder(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
     message,
     withExplicitFinanceType(
       message,
       withExplicitRelativePeriod(message, result),
     ),
   )))));
+  return normalizeExpenseCategories(message, normalized);
 }
 
 function getExplicitIntentFallback(message: string, ctx?: AiContext): AIResult | null {

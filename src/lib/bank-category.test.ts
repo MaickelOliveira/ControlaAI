@@ -4,6 +4,27 @@ import type {BankMovement} from "./open-finance-report";
 const movement:BankMovement={id:"test",resource_name:"Conta",institution_name:"Banco teste",resource_type:"account",date:"2026-10-10",description:"Pix enviado - pessoa",amount:"30.00",currency:"BRL",direction:"debit",classification:"unknown",kind:"account_debits",bill_month:null,installment_number:null,installment_count:null};
 function entry(extra:Partial<BankMovement>){return createFinanceLedger([],[{...movement,...extra}],"business")[0];}
 it.each([
+ ["Zé Delivery", "GENERAL_MERCHANDISE_OTHER", "Alimentação"],
+ ["Zé Delivery", "ENTERTAINMENT", "Alimentação"],
+ ["Compra delivery", "GENERAL_SERVICES", "Alimentação"],
+ ["GOOGLE *ADS", "HOME_IMPROVEMENT", "Marketing"],
+ ["GOOGLE *Serviços", "HOME_IMPROVEMENT", "Serviços"],
+ ["Google Workspace", "HOME_IMPROVEMENT", "Tecnologia"],
+ ["FACEBK *123456", "ENTERTAINMENT", "Marketing"],
+ ["Facebook Serviços Online", "ENTERTAINMENT", "Marketing"],
+ ["Uber Eats", "TRANSPORTATION", "Alimentação"],
+ ["Drogasil", "GENERAL_MERCHANDISE", "Saúde"],
+ ["DARF", "RENT_AND_UTILITIES", "Impostos"],
+])("corrects a bank suggestion using the identifiable merchant %s",(description,source_category,category)=>{
+ const result=entry({description,source_category});expect(result.category).toBe(category);expect(result.categorySource).toBe("description");
+ expect(result.amount).toBe(30);expect(result.included).toBe(true);
+});
+it("preserves a chosen category, transfers and income even when a merchant matches",()=>{
+ expect(entry({description:"Zé Delivery",user_category:"Evento empresa",source_category:"FOOD_AND_DRINK"}).category).toBe("Evento empresa");
+ expect(entry({description:"Facebook",kind:"excluded",classification:"bill_payment"}).included).toBe(false);
+ expect(entry({description:"Google",direction:"credit",kind:"credits",source_category:"INCOME_SALARY"}).category).toBe("Salário");
+});
+it.each([
  ["FOOD_AND_DRINK_GROCERIES","Alimentação"],
  ["TRANSPORTATION_GAS","Transporte"],
  ["MEDICAL_PHARMACIES_AND_SUPPLEMENTS","Saúde"],
