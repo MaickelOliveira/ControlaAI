@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from "vitest";
 vi.mock("server-only",()=>({}));
 const rpc=vi.hoisted(()=>vi.fn());vi.mock("./open-finance-http",()=>({openFinanceRpc:rpc}));
-import {readBankLedger} from "./finance-ledger-storage";
+import {readBankLedger,readBankOverview} from "./finance-ledger-storage";
 const scope={userId:"user",mode:"business" as const,environment:"production" as const};
 beforeEach(()=>{rpc.mockReset();});
 it("includes account movements beyond the first report page",async()=>{
@@ -15,4 +15,47 @@ it("refuses a repeated cursor instead of claiming a complete ledger",async()=>{
 it("keeps an intermediate storage error visible instead of returning a partial total",async()=>{
  rpc.mockImplementation(async(_s,op,p)=>{if(op==="zelo_of_overview")return {};if(p.p_after)throw Error("OFFLINE");return {movements:[{id:"first"}],next:"second"};});
  await expect(readBankLedger(scope,{from:"2026-10-01",to:"2026-10-31"})).rejects.toThrow("OFFLINE");
+});
+
+it("shares only a still-pending bank overview for simultaneous period reads",async()=>{
+ let finish!:(value:unknown)=>void;
+ const overview=new Promise(resolve=>{finish=resolve;});
+ rpc.mockImplementation(async(_s,operation)=>operation==="zelo_of_overview"?overview:{movements:[],next:null});
+ const first=readBankLedger(scope,{from:"2026-10-01",to:"2026-10-31"});
+ const second=readBankLedger(scope,{from:"2026-09-01",to:"2026-09-30"});
+ const overviewCalls=rpc.mock.calls.filter(c=>c[1]==="zelo_of_overview").length,reportCalls=rpc.mock.calls.filter(c=>c[1]==="zelo_of_report").length;
+ finish({connections:[]});await Promise.all([first,second]);
+ expect(overviewCalls).toBe(1);expect(reportCalls).toBe(2);
+});
+
+it("never combines overviews of different owners, companies or modes",async()=>{
+ let finish!:(value:unknown)=>void;const pending=new Promise(resolve=>{finish=resolve;});
+ rpc.mockImplementation(()=>pending);
+ const scopes=[{...scope,userId:"owner-a",companyId:"a"},{...scope,userId:"owner-b",companyId:"a"},{...scope,userId:"owner-a",companyId:"b"},{...scope,userId:"owner-a",companyId:"a",mode:"personal" as const}];
+ const reads=scopes.map(s=>readBankOverview(s));const calls=rpc.mock.calls.length;
+ finish({connections:[]});await Promise.all(reads);
+ expect(calls).toBe(4);
+});
+
+it("reads fresh data after completion and does not let a consumer mutate another response",async()=>{
+ rpc.mockResolvedValue({connections:[{id:"first"}]});
+ const first=readBankOverview(scope),second=readBankOverview(scope);
+ const [a,b]=await Promise.all([first,second]);a.connections[0].id="changed-by-consumer";
+ expect(b.connections[0].id).toBe("first");expect(rpc).toHaveBeenCalledTimes(1);
+ rpc.mockResolvedValue({connections:[{id:"updated"}]});
+ expect((await readBankOverview(scope)).connections[0].id).toBe("updated");expect(rpc).toHaveBeenCalledTimes(2);
+});
+
+it("clears a failed overview so a later request can recover",async()=>{
+ rpc.mockRejectedValue(Error("OF_STORAGE_ERROR"));
+ const failures=await Promise.allSettled([readBankOverview(scope),readBankOverview(scope)]);
+ expect(failures.every(f=>f.status==="rejected")).toBe(true);expect(rpc).toHaveBeenCalledTimes(1);
+ rpc.mockResolvedValue({connections:[]});await expect(readBankOverview(scope)).resolves.toEqual({connections:[]});
+ expect(rpc).toHaveBeenCalledTimes(2);
+});
+
+it("rejects missing company scope before joining a shared read",async()=>{
+ vi.stubEnv("MULTI_COMPANY_ENABLED","true");
+ try{await expect(readBankOverview(scope)).rejects.toThrow("OF_COMPANY_SCOPE_MISSING");expect(rpc).not.toHaveBeenCalled();}
+ finally{vi.unstubAllEnvs();}
 });
