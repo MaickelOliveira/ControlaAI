@@ -59,6 +59,9 @@ try{
  for(const file of ['20261009193000_open_finance_storage','20261009213000_open_finance_server_access','20261009220000_open_finance_consents','20261009230000_open_finance_sync_queue','20261009234000_open_finance_report','20261010185000_open_finance_categories','20261010230000_open_finance_public','20261011030000_open_finance_notifications','20261011090000_open_finance_connection_management','20261011093000_open_finance_subscription_retirement','20261011110000_open_finance_archive_history','20261011160000_companies','20261011170000_open_finance_companies','20261011210000_nfse_preparation','20261012000000_bank_identity','20261012010000_company_archive','20261012020000_finance_account_filter','20261012030000_bank_workspace_reconnect','20261012040000_preserve_bank_movement_facts','20261012050000_credit_funded_payments','20261012060000_whatsapp_quiet_activity'])await db.exec(await sql('../migrations/'+file+'.sql'));
  if(process.argv.includes('--before-queue'))console.log('RED setup: explicitly testing the pre-queue schema through 60000.');
  else try{await db.exec(await sql('../migrations/20261012070000_credit_pix_questions.sql'));}catch(error){if(error.code!=='ENOENT')throw error;console.log('RED setup: migration absent; checking queue RPCs against schema through 60000.');}
+ if(!process.argv.includes('--before-queue')){
+  try{await db.exec(await sql('../migrations/20261012071000_credit_pix_question_completion.sql'));}catch(error){if(error.code!=='ENOENT')throw error;console.log('RED maintenance setup: 71000 absent; checking completion against the existing queue.');}
+ }
  company=(await db.query('select id from companies where user_id=$1 and is_default',[owner])).rows[0].id;
  otherCompany=(await db.query("insert into companies(user_id,name) values($1,'Second fixture company') returning id",[owner])).rows[0].id;
  foreignCompany=(await db.query('select id from companies where user_id=$1 and is_default',[other])).rows[0].id;
@@ -88,6 +91,26 @@ try{
  }
  await reset();const distant=await makePair();await root();await db.query("update open_finance.movements set transaction_date=current_date-3 where id=$1",[distant.payment]);await owned();assert.equal(await prepare(),0,'payment outside two days does not match');
  console.log('PASS: unknown, excluded, old, wrong-currency and non-cent facts stay unqueued');
+ // A holder may answer in Finanças instead of clicking the WhatsApp button.
+ // Housekeeping only closes the question; it must not perform reconciliation.
+ await reset();const platform=await prepared();await asked(platform.q);
+ await rpc('zelo_of_confirm_credit_pix',[owner,'business',platform.pair.credit,platform.pair.payment,'850.16','821.48','28.68',true,day,day]);
+ const platformFacts=await raw();await root();const platformLinks=(await db.query('select * from open_finance.credit_pix_links order by id')).rows;await owned();
+ await rpc('zelo_of_credit_pix_targets');assert.equal((await row(platform.q.id)).status,'confirmed','platform confirmation completes the outstanding WhatsApp question');
+ assert.deepEqual(await raw(),platformFacts,'completion housekeeping leaves bank facts intact');await root();assert.deepEqual((await db.query('select * from open_finance.credit_pix_links order by id')).rows,platformLinks,'completion housekeeping does not insert, undo or modify financial links');await owned();
+ console.log('PASS: a platform-confirmed pair closes its asked question without financial writes');
+
+ await reset();const unanswered=await prepared();await asked(unanswered.q);
+ await root();await db.query("update open_finance.credit_pix_questions set attempted_at=now()-interval '8 days' where id=$1",[unanswered.q.id]);await owned();
+ const nextOwn=await makePair();assert.equal(await prepare(),1);const nextForeign=await makePair({user:other,workspace:foreignCompany});assert.equal(await prepare(other),1);await owned();
+ const laterQuestions=await questions(),ownId=laterQuestions.find(item=>item.credit_movement===nextOwn.credit).id,foreignId=laterQuestions.find(item=>item.credit_movement===nextForeign.credit).id;
+ const unansweredFacts=await raw();assert.equal(await linkCount(),0);const afterExpiry=await rpc('zelo_of_credit_pix_targets');
+ assert.equal((await row(unanswered.q.id)).status,'stale','asked questions expire after seven unanswered days');
+ assert.ok(afterExpiry.some(item=>item.id===ownId),'the old unanswered question no longer blocks its holder');assert.ok(afterExpiry.some(item=>item.id===foreignId),'another eligible holder remains dispatchable');
+ assert.equal(await linkCount(),0);assert.deepEqual(await raw(),unansweredFacts,'expiry changes only question metadata');
+ await root();await db.query("update open_finance.credit_pix_questions set created_at=now()-interval '8 days' where id=$1",[ownId]);await owned();await rpc('zelo_of_credit_pix_targets');assert.equal((await row(ownId)).status,'pending','waiting for an open window does not expire a question never sent');
+ console.log('PASS: unanswered asked questions expire without expiring unsent pending questions');
+
 
  await reset();let {q}=await prepared();const beforeNo=await raw();await asked(q);await answer(q.id,false);assert.equal((await row(q.id)).status,'rejected');assert.equal(await linkCount(),0);assert.deepEqual(await raw(),beforeNo);assert.equal(await total(),167164);await answer(q.id,false);assert.equal(await prepare(),0,'rejected credit never generates the same prompt again');
  await denied(()=>answer(q.id,true));assert.equal(await linkCount(),0,'a later yes cannot reverse an explicit rejection');

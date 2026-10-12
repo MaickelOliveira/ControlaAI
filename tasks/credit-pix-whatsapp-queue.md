@@ -33,3 +33,5 @@ Aplicar primeiro `20261012060000_whatsapp_quiet_activity.sql` e `20261012070000_
 Rollback operacional: definir a flag como `false` e reiniciar o serviço; a fila, os fatos bancários e as confirmações anteriores são preservados. Não apagar tabelas de histórico. Reservas de atividade expiram; a liberação usa o nonce exato, sem limpar o processamento de outra mensagem.
 
 A API só permite observar mensagens recebidas. A reserva é revalidada imediatamente antes do envio; os botões com ID próprio impedem que uma resposta sobre outro assunto confirme esta operação.
+
+Conferência final: a pergunta também pede confirmação explícita dos juros/taxas. A migração 71000 encerra a pergunta quando o mesmo par já foi confirmado pela plataforma e expira somente perguntas enviadas há sete dias, preservando indefinidamente as que ainda aguardam a janela. Validação adicional: 13 blocos SQL e 47 testes do módulo; fatos bancários e vínculos financeiros permanecem inalterados pela manutenção da fila.
