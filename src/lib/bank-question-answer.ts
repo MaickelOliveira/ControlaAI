@@ -11,7 +11,7 @@ export function matchingBankNames(names: string[], requested: string, exactOnly 
 type Amount = { amount: string | number | null | undefined; currency: string | null | undefined };
 
 /** The database stores decimal amounts with eight places. Never sum through floating point. */
-function totals(values: Amount[], incomplete: boolean): string[] {
+export function bankAmountTotals(values: Amount[], incomplete: boolean): string[] {
   const amounts = new Map<string, bigint>();
   let missing = false;
   for (const value of values) {
@@ -87,10 +87,10 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     received.push(...bankAmounts);
     omitted ||= lines.length > 10;
     const dates = [...new Set(resources.map(r => r.synced_at?.slice(0, 10)).filter(Boolean))].sort();
-    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n${lines.slice(0, 10).join("\n\n") || `O banco ainda não informou ${labels[question.kind].toLowerCase()}.`}${bankAmounts.length ? `\n${totals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${bankDate(dates[0])}${dates.length > 1 ? ` a ${bankDate(dates.at(-1))}` : ""}.` : ""}`;
+    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n${lines.slice(0, 10).join("\n\n") || `O banco ainda não informou ${labels[question.kind].toLowerCase()}.`}${bankAmounts.length ? `\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${bankDate(dates[0])}${dates.length > 1 ? ` a ${bankDate(dates.at(-1))}` : ""}.` : ""}`;
   });
   let result = `${labels[question.kind]} recebidos · ${safe(modeLabel)}\n\n${blocks.join("\n\n")}`;
-  if (debt || question.kind === "balances") result += `\n\n${totals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
+  if (debt || question.kind === "balances") result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
   if (question.kind === "limits") result += "\n\nLinhas e limites compartilhados não são somados. Crédito disponível não é saldo em conta.";
   result += "\nValores não informados permanecem desconhecidos. Posição conforme os dados recebidos de cada banco; ausência de dados não confirma valor zero.";
   if (data.truncated) result += " Consulta parcial: há dados além do limite recebido; consulte Contas.";

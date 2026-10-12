@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ access: vi.fn(), rpc: vi.fn(), read: vi.fn() }));
 vi.mock("./open-finance-access", () => ({ getOpenFinanceAccess: m.access, canEnrollOpenFinance: () => true }));
 vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
-import { answerBankWhatsAppMessage } from "./open-finance-whatsapp";
+import { answerBankWhatsAppMessage, answerConnectedFinanceQuery } from "./open-finance-whatsapp";
 import { bankMoney, type BankOverview } from "./open-finance-display";
 import type { User } from "./users";
 const user = { id: "holder", email: "holder@example.test", name: "Maickel", plan: "business", status: "active", activeMode: "personal" } as User;
@@ -54,4 +54,14 @@ it("filters last-month Nubank card purchases and excludes other banks and manual
 it("does not turn supermarket spending into Mercado Pago bank spending", async () => {
   m.read.mockResolvedValue({ entries: [], bank: { overview: { connections: [{ institution_name: "Mercado Pago" }] } } });
   expect(await answerBankWhatsAppMessage(user, "personal", "both", "Quanto gastei no mercado mês passado?", "2026-10-11")).toBeNull();
+});
+it("searches Amazonas in every connected bank and in recorded origins instead of querying one account or one category",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"nu",mode:"personal",source:"bank",included:true,type:"expense",date:"2026-10-02",category:"Outros",description:"AMAZONAS MERCAD LOJA",amount:24,bank:{institution_name:"Nubank",resource_type:"card"}},
+    {id:"si",mode:"personal",source:"bank",included:true,type:"expense",date:"2026-10-03",category:"Alimentação",description:"Mercado Amazonas",amount:36,bank:{institution_name:"Sicredi",resource_type:"account"}},
+    {id:"manual",mode:"personal",source:"whatsapp",included:true,type:"expense",date:"2026-10-04",category:"Outros",description:"Amazonas",amount:10},
+    {id:"other",mode:"personal",source:"bank",included:true,type:"expense",date:"2026-10-03",category:"Alimentação",description:"Mercado diferente",amount:500,bank:{institution_name:"Sicredi",resource_type:"card"}},
+  ],bank:{overview:{connections:[...data.connections,{institution_name:"Sicredi"}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-11"}}});
+  const response=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,keyword:"Amazonas"},["2026-10-01","2026-10-31"],"quanto gastei no amazonas");
+  expect(response).toContain(bankMoney("70","BRL")); expect(response).toContain("Nubank"); expect(response).toContain("Sicredi"); expect(response).toContain("WhatsApp"); expect(response).not.toContain("Mercado diferente");
 });

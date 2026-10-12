@@ -1,9 +1,10 @@
 import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
 import {virtualAgentPrompt} from "./virtual-agent-replies";
+import {validateBankQuery, type StructuredBankQuery} from "./bank-query-intent";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
-import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } from "./finances";
+import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode, explicitMerchantInQuestion } from "./finances";
 import { GROCERY_CATEGORIES, type GroceryCategory } from "./grocery";
 import { isAllDayAgendaText } from "./agenda-all-day";
 import {
@@ -29,6 +30,7 @@ import {
 export type Intent =
   | "finance_register"
   | "finance_query"
+  | "bank_query"
   | "finance_upcoming"
   | "finance_edit"
   | "finance_delete"
@@ -369,6 +371,7 @@ export type AIResult = {
   period?: { from?: string; to?: string }; // intervalo de datas (YYYY-MM-DD) para finance_query/finance_upcoming/balance_query/finance_detail/finance_analysis quando o período não é o mês atual (ex: "mês passado", "semana passada")
   /** recurring_query: pergunta quanto de parcelas deixa de pagar até uma data. */
   installmentForecast?: boolean;
+  bankQuery?: StructuredBankQuery;
   response?: string; // resposta direta para how_to
   // finance_edit/finance_delete: true quando o pedido é sobre o(s)
   // lançamento(s) que acabaram de ser registrados (mensagem curta, sem
@@ -862,7 +865,7 @@ function withExplicitRelativePeriod(message: string, result: AIResult, anchor: D
     return { ...result, grocery: { ...(result.grocery ?? {}), period } };
   }
   const periodIntents: Intent[] = [
-    "finance_query", "finance_upcoming", "daily_summary", "weekly_summary",
+    "bank_query", "finance_query", "finance_upcoming", "daily_summary", "weekly_summary",
     "balance_query", "finance_detail", "finance_analysis",
   ];
   return periodIntents.includes(result.intent) ? { ...result, period } : result;
@@ -2248,6 +2251,7 @@ Palavras como “ayuda”, “soporte”, “qué puedes hacer” e “instrucci
 ⚠️ CONTINUAÇÃO DE AÇÃO: quando a mensagem vier no formato "Pedido original" + "Informação complementar", una todas as partes como um único comando. A informação complementar responde à pergunta feita pelo sistema; preserve a intenção original e complete somente os campos novos.
 
 INTENÇÕES POSSÍVEIS:
+- bank_query: CONSULTAR dados já recebidos dos bancos. Use para saldo disponível bancário, limite/crédito disponível/total/utilizado do cartão, empréstimos, financiamentos, investimentos, faturas e movimentos especificamente bancários. Interprete linguagem natural, sinônimos, abreviações e pequenos erros de escrita ("quanto ainda posso comprar no Nubank?" = limits; "quanto estou devendo nos empréstimos?" = loans; "minhas aplicações" = investments). Inclua bankQuery com SOMENTE filtros: kind (balances, limits, loans, financings, investments, bills, installments, recurring, spending, income, transactions, result), bankName quando o banco for citado, last4 quando final do cartão for citado, source (card/account) SOMENTE para spending/income/transactions/result, keyword para estabelecimento/compra e category somente para categorias genéricas. Inclua mode e period no nível principal se explícitos; copie as datas pré-calculadas. Nunca inclua valores, respostas calculadas, userId/companyId ou endereços. Sem banco citado, não invente um nome: consultar todos os bancos do modo/empresa selecionados. Posições são atuais; se o cliente pedir posição histórica mantenha period para o sistema explicar a limitação. Para parcelas/recorrentes SEM banco/cartão específico use recurring_query (une cadastros manuais e bancos); com banco/cartão use bank_query installments/recurring. Gastos gerais ou por estabelecimento SEM filtro de banco continuam finance_query e incluem plataforma/WhatsApp/bancos. Não responda how_to com números inventados e não confunda saldo do banco, crédito disponível, compras, faturas ou saldo devedor. Se pedir informação bancária que não esteja nestes tipos (ex: taxa do contrato), use bank_query sem kind e deixe o sistema explicar o que há disponível. Pedidos de registro, pagamento, edição e exclusão mantêm suas intenções de ação; bank_query é somente leitura.
 - finance_register: registrar um ou VÁRIOS gastos/receitas. Se a mensagem listar múltiplos lançamentos, use o campo "finances" (array) em vez de "finance" (singular). Se mencionar uma conta manual ("no Nubank", "en la cuenta Caja"), preencha finance.accountHint com o nome. Em pagamento/gasto de funcionário, use categoria "Funcionários" e, quando a pessoa disser o nome do colaborador, preencha finance.employeeName (ex.: "paguei 700 para a funcionária Luana" → employeeName "Luana").
 - finance_edit: alterar/corrigir um lançamento existente ("errei o valor", "corrija o gasto de X", "muda o valor de X para Y"). Também pode TROCAR A CONTA MANUAL do lançamento (ex: "mude esse último para Inter", "troque a conta desse gasto para Nubank", "cambia el último movimiento a Caja"): nesse caso use "finance.accountHint" com SOMENTE o nome da conta de destino e marque "lastFinanceReference": "last" quando o usuário disser "último", "esse gasto", "esse lançamento" ou "o que acabei de lançar". Para trocar o funcionário vinculado (ex.: "não é Rafael, é Luana"), use finance.employeeName "Luana" e lastFinanceReference "last"; para remover somente o vínculo sem apagar o gasto, use finance.clearEmployee true. Use "lastFinanceReference": "batch" apenas quando ele pedir explicitamente todos/os últimos lançamentos no plural. Se o usuário quiser RENOMEAR a descrição (ex: "muda a descrição do ifood para almoço com cliente", "corrige o nome do lançamento X para Y"), use "newDescription" com o novo texto — NÃO confundir com "keyword"/"finance.description", que são o termo de busca do lançamento original. Se o usuário quiser MOVER o lançamento entre pessoal e empresa (ex: "muda para a conta da empresa", "passe as contas de água para o empresarial", "pasa a la cuenta personal"), use "finance.newMode" com o DESTINO ("business" ou "personal"); "finance.mode" nunca representa o destino da mudança. Se o usuário quiser corrigir um lançamento que foi contabilizado por engano como já recebido/pago, dizendo que na verdade ainda está "a receber"/"a pagar"/"é recebimento futuro" (ex: "lança como a receber", "isso ainda não recebi, marca como pendente"), inclua "finance.pending": true — o sistema tira o valor do saldo sem apagar o lançamento. Se o usuário disser que o TIPO está errado — era despesa, não receita, ou vice-versa (ex: "isso é despesa, não receita", "errei, é gasto"), inclua "finance.type" com o tipo certo ("income" ou "expense"). Use "keyword" com o termo de busca de qual lançamento (se o histórico da conversa deixar claro qual foi, reaproveite a descrição/nome citado ali).
   ⚠️ CORREÇÃO EM LOTE do que acabou de ser registrado: se a mensagem for uma correção CURTA e GENÉRICA, sem citar a descrição de um lançamento específico, logo depois de você (o assistente) ter confirmado um registro — de 1 lançamento OU de vários de uma vez (ex: usuário registrou várias despesas e depois manda só "tá errado, são despesas", "errei, isso tudo é receita", "na verdade é a receber", "muda pra despesa") — marque "bulkCorrectLastBatch": true e preencha em "finance" SOMENTE os campos que mudaram (type e/ou pending e/ou category — o que a mensagem indicar). NÃO invente "keyword" nesse caso (deixe vazio) — o sistema já sabe aplicar a correção em cima do que foi registrado por último, um ou vários, sem precisar buscar por nome. Só use isso quando o histórico deixar claro que a mensagem é sobre o registro mais recente, não sobre um lançamento antigo específico.
@@ -2255,7 +2259,7 @@ INTENÇÕES POSSÍVEIS:
 - finance_query: perguntar sobre saldo, extrato, gastos totais do mês ("quanto gastei", "resumo do mês", "extrato"). ⚠️ Se a pergunta mencionar o NOME de uma pessoa específica em vez de "eu" (ex: "quanto a Ana gastou esse mês", "quanto o Gabriel gastou", "gastos do João", "extrato da Maria"), inclua "personName" com esse nome (ex: "Ana", "Gabriel", "João", "Maria"). ⚠️ Se em vez de um nome a pergunta citar um VÍNCULO familiar/social ("quanto minha esposa gastou", "quanto meu filho gastou", "gastos do meu sócio"), inclua "personName" com a palavra do vínculo em si (ex: "esposa", "filho", "sócio"), NÃO invente um nome próprio. Isso é usado em contas compartilhadas por várias pessoas da família/equipe, cada uma com seu próprio número de WhatsApp vinculado (identificadas por nome OU por vínculo cadastrado), para filtrar só os gastos registrados por aquela pessoa.
   ⚠️ DISTINÇÃO IMPORTANTE — categoria genérica vs comerciante/app específico:
   • CATEGORIA/ASSUNTO amplo (ex: "quanto gastei com comida", "gastos com transporte", "quanto gastei de mercado"): inclua "category" com o nome EXATO de uma das categorias listadas em CATEGORIAS DE DESPESA/RECEITA (no início da mensagem) (ex: "comida"/"mercado"/"restaurante" → "Alimentação"; "uber"/"gasolina"/"combustível" → "Transporte").
-  • COMERCIANTE/APP/MARCA específico (ex: "quanto gastei com ifood", "gastos no aiqfome", "quanto gastei no 99", "gasto com uber eats", "quanto gastei na farmácia X"): inclua "keyword" com o nome do comerciante (NÃO use "category" nesse caso — a descrição do lançamento pode estar abreviada, ex: "IFD" em vez de "iFood", e o sistema já sabe expandir essas variantes a partir do "keyword").
+  • COMERCIANTE/APP/MARCA específico (ex: "quanto gastei com ifood", "quanto gastei com Zé Delivery este mês", "gastos no aiqfome", "quanto gastei no 99", "gasto com uber eats", "quanto gastei na farmácia X"): inclua "keyword" com o nome do comerciante (NÃO use "category" nesse caso — a descrição pode ter acentos ou estar abreviada, ex: "ZE*DELIVERY", "IFD"; o sistema expande variantes). Preserve sempre o estabelecimento citado, mesmo que a categoria cadastrada esteja errada.
   Em ambos os casos, inclua "financeType" com "expense" ou "income" conforme o verbo da REGRA CRÍTICA abaixo (padrão "expense"). ⚠️ Se a pergunta mencionar um PERÍODO diferente do mês atual (ex: "mês passado", "semana passada", "essa semana", "primeira semana do mês", "esse ano"), inclua "period" usando EXATAMENTE os valores da lista de períodos pré-calculados no início de cada mensagem — NUNCA calcule essas datas você mesmo. Sem período mencionado, não inclua "period" (o sistema usa o mês atual por padrão).
 - finance_upcoming: listar valores que AINDA precisam ser pagos ou recebidos, com vencimentos e previsão de saldo ("quais são as próximas despesas para pagar esse mês?", "que contas tenho a pagar?", "o que vence esta semana?", "próximas receitas a receber", em espanhol: "gastos por pagar", "cuentas pendientes", "ingresos por cobrar"). Use "financeType": "expense" para contas/despesas a pagar e "income" para receitas/valores a receber. Não confunda com finance_query: finance_query resume o que JÁ aconteceu; finance_upcoming mostra pendências, parcelas e recorrentes que AINDA vão impactar o saldo. Se o usuário especificar empresa ou pessoal, inclua "mode". Se mencionar período diferente do mês atual, use "period" com os valores pré-calculados.
 - weekly_summary: briefing geral quando a pessoa disser "resumo da semana", "resumo semanal", "resumen de la semana" ou equivalente. Esta intenção reúne compromissos/reuniões, contas a pagar, valores a receber e previsão de saldo; NÃO use finance_query, pois um simples resumo de dinheiro está incompleto. Se disser explicitamente "resumo financeiro da semana", aí use finance_query. Para semana passada ou outra semana, inclua "period" com os valores pré-calculados.
@@ -3769,6 +3773,10 @@ async function tryOpenAIForTestUser<T>(
 }
 
 function normalizeAIResult(message: string, result: AIResult): AIResult {
+  if (result.intent === "bank_query") return withExplicitRelativePeriod(message, { ...result, bankQuery: validateBankQuery(result.bankQuery) ?? undefined });
+  const merchant = explicitMerchantInQuestion(message);
+  if (merchant && result.intent === "grocery_spend_query") result = { ...result, intent: "finance_query", keyword: merchant, period: result.grocery?.period ?? result.period, category: undefined, financeType: "expense" };
+  if (merchant && ["finance_query", "finance_detail", "finance_analysis"].includes(result.intent)) result = { ...result, keyword: merchant, category: undefined };
   return withExplicitAgendaAllDay(message, withExplicitFinanceAccount(message, normalizeActionReminder(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
     message,
     withExplicitFinanceType(

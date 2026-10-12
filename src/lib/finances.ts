@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
 import { getSupabase } from "./supabase";
+import { normalizeMerchantText, merchantDescriptionMatchesTerms } from "./merchant-text";
+export { merchantDescriptionMatchesTerms } from "./merchant-text";
 
 export type FinanceType = "income" | "expense";
 export type FinanceMode = "personal" | "business";
@@ -300,21 +302,22 @@ export async function getCategoryTotal(userId: string, mode: FinanceMode, type: 
 const MERCHANT_ALIASES: Record<string, string[]> = {
   ifood: ["ifood", "ifd", "i food"],
   amazonas: ["amazonas mercad", "mercado amazonas", "amazonas mercado", "amazonas"],
-  zedelivery: ["ze delivery", "zedelivery"],
+  zedelivery: ["ze delivery", "zedelivery", "ze delivey"],
   aiqfome: ["aiqfome", "aiq fome", "ai que fome", "aiquefome"],
   "99food": ["99food", "99 food", "99app", "app 99"],
   rappi: ["rappi"],
   ubereats: ["uber eats", "ubereats"],
 };
 
-function normalizeMerchantText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
+
+/** Preserve a merchant explicitly named in a spending question even if the model drops its filter. */
+export function explicitMerchantInQuestion(message: string): string | null {
+  const text = normalizeMerchantText(message);
+  if (!/\b(gastei|gastamos|gastos|compras|extrato)\b/.test(text)) return null;
+  for (const [name, variants] of Object.entries(MERCHANT_ALIASES)) {
+    if (variants.some(variant => ` ${text} `.includes(` ${normalizeMerchantText(variant)} `))) return name === "amazonas" ? "amazonas" : variants[0];
+  }
+  return null;
 }
 
 /** Expande um termo de busca digitado pelo usuário pras variantes conhecidas
@@ -332,12 +335,6 @@ export function expandMerchantAliases(term: string): string[] {
   return [rawLower];
 }
 
-/** Compara comerciante sem depender de acento, caixa ou separadores do
- * extrato ("Zé Delivery", "ZE*DELIVERY" e "ze delivery" são equivalentes). */
-export function merchantDescriptionMatchesTerms(description: string, terms: readonly string[]): boolean {
-  const normalizedDescription = normalizeMerchantText(description);
-  return terms.some(term => normalizedDescription.includes(normalizeMerchantText(term)));
-}
 
 /** Soma os lançamentos cuja descrição bate com algum dos termos (busca OR,
  *  case-insensitive) dentro de um intervalo de datas — usado em perguntas

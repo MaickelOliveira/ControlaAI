@@ -6,6 +6,7 @@ import {readUnifiedFinances} from "./unified-finances";
 import {summarizeFinanceQuery,financeCoverageNotice,type FinanceQuery} from "./finance-query";
 import {answerBankQuestion,parseBankQuestion} from "./open-finance-question";
 import {isBankPositionQuestion} from "./bank-question-parser";
+import {BANK_QUERY_GUIDANCE} from "./bank-query-intent";
 import {expandMerchantAliases,getPendingFinances} from "./finances";
 import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
@@ -29,7 +30,8 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const question=message.replace(/\b(?:(?:da|na|de|em|do) (?:minha |meu |modo )?|modo )?(?:empresa|empresarial|empresariais|pessoal|pessoais|pf|pj)\b/gi,"").replace(/\s+/g," ").trim();
   const parsed=parseBankQuestion(question,today);
   if(parsed?.kind==="spending"&&!parsed.bankName)return null;
-  if(!parsed)return positionQuestion?"Consigo consultar os dados atuais recebidos dos bancos, por modo e empresa. Exemplos: ‘quanto tenho de empréstimos em cada banco’, ‘qual meu limite disponível no cartão Nubank’ e ‘mostre meus financiamentos’. Informe o banco se quiser filtrar. Para uma fatura de outro mês, peça ‘envie a fatura do Nubank de setembro’. Não vou substituir esse pedido por um resumo de gastos.":null;
+  // Historical positions cannot be resolved from the current DTO. Other wording reaches the model's typed bank query.
+  if(!parsed)return positionQuestion&&/\b(mes|ontem|anterior|passad\w*|era|tinha|(?:19|20)\d{2})\b/.test(text)?`Consigo consultar os dados atuais recebidos dos bancos. ${BANK_QUERY_GUIDANCE}`:null;
   const reply=await answerBankQuestion(user,requested,question,today);
   return reply??(parsed.kind==="spending"?null:"A consulta bancária não está disponível nesse modo. Confira seu plano e a conexão em Contas; nenhum valor foi calculado.");
 }

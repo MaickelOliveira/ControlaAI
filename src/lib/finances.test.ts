@@ -66,7 +66,7 @@ describe("expandMerchantAliases", () => {
   });
 
   it("recognizes Zé Delivery with or without accent", () => {
-    expect(expandMerchantAliases("Zé Delivery")).toEqual(["ze delivery", "zedelivery"]);
+    expect(expandMerchantAliases("Zé Delivery")).toEqual(["ze delivery", "zedelivery", "ze delivey"]);
     expect(merchantDescriptionMatchesTerms("Pg *Zé Delivery", expandMerchantAliases("ze delivery"))).toBe(true);
   });
 });
