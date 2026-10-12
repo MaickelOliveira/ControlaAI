@@ -3,13 +3,13 @@ import { bankMoney, bankDate, bankResourceName, type BankOverview, type BankReso
 import { groupBankResources } from "@/lib/open-finance-grouping";
 import { canDisconnectBank } from "@/lib/open-finance-connection-actions";
 import { hasZeroBankDebt } from "@/lib/bank-debt";
-import { headlineCardLimit } from "@/lib/bank-card-limit";
+import { displayCardLimits, headlineCardLimit } from "@/lib/bank-card-limit";
 import OpenFinanceIcon from "./OpenFinanceIcon";
 
 const labels = { account: "Conta bancária", card: "Cartão de crédito", investment: "Investimento", loan: "Empréstimo", financing: "Financiamento", reserve: "Reserva de saldo" };
 
 function Product({ resource, data, mode }: { resource: BankResource; data: BankOverview; mode: "personal" | "business" }) {
-  const limits = data.limits.filter(l => l.resource_id === resource.id);
+  const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id));
   const headline = headlineCardLimit(limits);
   const bills = data.bills.filter(b => b.resource_id === resource.id).sort((a, b) => (b.due_date ?? "").localeCompare(a.due_date ?? ""));
   const schedules = data.agenda?.items.filter(i => i.resource_id === resource.id && i.kind !== "bill") ?? [];
@@ -35,6 +35,7 @@ function Product({ resource, data, mode }: { resource: BankResource; data: BankO
         {limits.map(limit => <div key={limit.id} className="rounded-xl border border-line bg-surface p-4">
           <p className="text-xs font-medium text-muted">{limit.line_name || "Linha de crédito"}{limit.consolidation_type ? ` · ${limit.consolidation_type}` : ""}</p>
           <dl className="mt-3 space-y-3 text-xs">{([["Disponível",limit.available_amount],["Total",limit.total_amount],["Utilizado",limit.used_amount]] as const).map(([label,amount])=><div key={label} className="flex flex-wrap justify-between gap-2"><dt className="text-muted">{label}</dt><dd className="font-semibold text-ink">{bankMoney(amount,limit.currency)}</dd></div>)}</dl>
+          {limit.displayCount > 1 && <p className="mt-3 text-xs text-muted">{limit.displayCount} registros iguais do banco · exibidos uma vez.</p>}
           {limit.is_flexible && <p className="mt-3 text-xs text-muted">Limite flexível, sujeito à análise do banco.</p>}
         </div>)}
         {limits.length > 1 && <p className="text-xs text-muted">Cada linha mantém seu limite. Limites compartilhados não são somados.</p>}

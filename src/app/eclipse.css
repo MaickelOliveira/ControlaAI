@@ -113,7 +113,7 @@
 .z-eclipse-stat strong {font-size:clamp(16px,1.6vw,24px);font-weight:550;letter-spacing:-.04em;overflow-wrap:anywhere;}
 .z-eclipse-stat small {display:block;font-size:9px;color:#abaca7;margin-top:6px;line-height:1.5;}
 .z-eclipse-focus .z-chart-empty {padding:60px 15px;color:#b7b8b6;text-align:center;font-size:13px;}
-.z-eclipse-secondary {display:grid;grid-template-columns:.85fr 1.15fr;gap:18px;margin-top:18px;}
+.z-eclipse-secondary {display:grid;grid-template-columns:.85fr 1.15fr;gap:18px;margin-top:18px;align-items:start;}
 .z-eclipse-rail {display:flex;flex-direction:column;gap:18px;}
 .z-credit-card {background:linear-gradient(115deg,#f7edda,#edcf87);color:#292319;border:1px solid #f0ddae;border-radius:20px;padding:20px;position:relative;overflow:hidden;}
 .z-credit-card:after {content:"";position:absolute;right:-40px;bottom:-20px;width:110px;height:140px;transform:rotate(40deg);border:12px solid #d49f30aa;border-radius:60px;pointer-events:none;}
@@ -252,9 +252,10 @@
 @media(max-width:767px) {.z-topbar {flex-wrap:wrap;}.z-topbar .z-search {flex-basis:100%;}.z-header-preferences {width:100%;gap:10px;}.z-header-preferences .z-mode-control {flex:1;min-width:0;}.z-header-preferences .z-mode-selector button {padding:10px 8px;}.z-header-preferences .z-theme-toggle {flex:1;}.z-header-preferences .z-theme-toggle button {flex:1;justify-content:center;padding:10px 7px;}.z-header-preferences .z-theme-toggle span {display:inline;}.z-dashboard-controls .z-topbar {flex-wrap:wrap;}.z-dashboard-actions .z-date-pill {display:none;}.z-dashboard-actions .z-primary {padding:12px 13px;}.z-dashboard-header {gap:14px;}.zelo-app .support-bubble-label {display:none;}}
 
 /* Bank faces overlap; native buttons keep every card accessible by touch/keyboard. */
-.z-credit-deck-viewport {max-height:440px;overflow:auto;padding:14px 7px 16px;scrollbar-width:thin;}
-.z-credit-fan {position:relative;margin:0 3px;}
-.z-credit-face {position:absolute;top:calc(var(--card-index)*44px);left:0;width:100%;height:180px;z-index:calc(var(--card-index) + 1);border:1px solid #ffffff32;border-radius:19px;padding:13px 16px;text-align:left;display:flex;flex-direction:column;color:white;box-shadow:0 9px 24px #00000038;transform:rotate(var(--card-angle));transform-origin:center bottom;transition:transform .24s ease,box-shadow .24s ease;overflow:hidden;isolation:isolate;}
+.z-credit-deck-viewport {max-height:464px;overflow:auto;padding:14px 7px 16px;scrollbar-width:thin;}
+.z-credit-fan {position:relative;margin:0 3px;display:flex;flex-direction:column;}
+.z-credit-face {position:relative;margin-top:-10px;flex-shrink:0;width:100%;height:56px;z-index:calc(var(--card-index) + 1);border:1px solid #ffffff32;border-radius:19px;padding:13px 16px;text-align:left;display:flex;flex-direction:column;color:white;box-shadow:0 9px 24px #00000038;transform:none;transition:height .24s ease,transform .24s ease,box-shadow .24s ease;overflow:hidden;isolation:isolate;}
+.z-credit-face:first-child {margin-top:0;}
 .z-credit-face:after {content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 100% 15%,#ffffff24,transparent 65%),linear-gradient(130deg,transparent 66%,#ffffff0e 66%,#ffffff0e 72%,transparent 72%);pointer-events:none;}
 .z-credit-face-gold {background:linear-gradient(130deg,#f2e1b4,#d9b85e);color:#292319;}
 .z-credit-face-nu {background:linear-gradient(130deg,#8d22dc,#49108d);}
@@ -264,7 +265,7 @@
 .z-credit-face-inter {background:linear-gradient(130deg,#ff922a,#dc5716);}
 .z-credit-face-renner {background:linear-gradient(130deg,#cb3242,#781a30);}
 .z-credit-face-realize {background:linear-gradient(130deg,#493e36,#151415);}
-.z-credit-face-bank {display:flex;align-items:center;gap:8px;font-weight:600;font-size:11px;min-width:0;}
+.z-credit-face-bank {display:flex;align-items:center;gap:8px;font-weight:600;font-size:12px;min-width:0;}
 .z-credit-face-bank>span:nth-child(2) {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .z-credit-face-value {display:block;margin-top:13px;}
 .z-credit-face-value small {display:block;font-size:10px;opacity:.8;}
@@ -272,12 +273,12 @@
 .z-credit-face-line {font-size:9px;opacity:.83;line-height:1.3;margin-top:5px;}
 .z-credit-face-footer {display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;font-size:9px;opacity:.9;}
 .z-credit-face-footer>span:first-child {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.z-credit-face[aria-pressed=true] {border-color:#f6d477;z-index:90;transform:translateY(-6px) rotate(0);}
-.zelo-app .z-credit-face {transition:transform .24s ease,box-shadow .24s ease;}
-.z-credit-face:focus-visible {outline:3px solid #edc660;outline-offset:2px;z-index:100;transform:translateY(-10px) rotate(0) scale(1.025);}
-@media(hover:hover) {.z-credit-face:hover {z-index:100;transform:translateY(-10px) rotate(0) scale(1.025);box-shadow:0 18px 32px #00000050;}}
+.z-credit-face[aria-pressed=true] {height:196px;border-color:#f6d477;z-index:90;transform:translateY(-4px);}
+.zelo-app .z-credit-face {transition:height .24s ease,transform .24s ease,box-shadow .24s ease;}
+.z-credit-face:focus-visible {height:196px;outline:3px solid #edc660;outline-offset:2px;z-index:100;transform:translateY(-8px);}
+@media(hover:hover) {.z-credit-face:hover {height:196px;z-index:100;transform:translateY(-8px);box-shadow:0 18px 32px #00000050;}}
 .z-credit-card-picker {display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 15px;}
-.z-credit-card-picker button {font-size:9px;border:1px solid var(--z-line);border-radius:8px;padding:6px 8px;color:var(--z-muted);background:var(--z-surface-muted);}
+.z-credit-card-picker button {font-size:11px;border:1px solid var(--z-line);border-radius:10px;padding:8px 10px;color:var(--z-muted);background:var(--z-surface-muted);}
 .z-credit-card-picker button[aria-pressed=true] {background:var(--z-amber-soft);color:var(--z-ink);border-color:#c9a54880;}
 .z-credit-selected {border-top:1px solid var(--z-line);padding-top:14px;}
 .z-bank-tile>summary {height:214px;align-content:start;grid-template-rows:minmax(42px,auto) 1fr;}

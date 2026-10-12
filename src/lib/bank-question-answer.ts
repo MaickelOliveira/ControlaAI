@@ -1,3 +1,4 @@
+import { displayCardLimits } from "./bank-card-limit";
 import { bankDate, bankMoney, bankResourceName, type BankOverview, type BankResource } from "./open-finance-display";
 import { normalizeBankText, type BankQuestion } from "./bank-question-parser";
 import { hasZeroBankDebt, matchesBankDebtPurpose } from "./bank-debt";
@@ -72,7 +73,7 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
         bankAmounts.push(amount);
         lines.push(`${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · Próxima parcela: ${bankMoney(detail?.next_installment_amount, detail?.currency)}\nVencimento final: ${bankDate(detail?.due_date)}`);
       } else if (question.kind === "limits") {
-        const limits = data.limits.filter(l => l.resource_id === resource.id);
+        const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id));
         if (!limits.length) lines.push(`${name} · Limite não informado pelo banco.`);
         for (const limit of limits) lines.push(`${name} · ${safe(limit.line_name ?? "Linha de crédito")}${limit.consolidation_type ? ` · ${safe(limit.consolidation_type)}` : ""}\nDisponível: ${bankMoney(limit.available_amount, limit.currency)}\nTotal: ${bankMoney(limit.total_amount, limit.currency)} · Utilizado: ${bankMoney(limit.used_amount, limit.currency)}`);
       } else if (question.kind === "balances") {
