@@ -66,7 +66,7 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
       await setPendingAction(msg.from, { type: "company_selection", userId: user!.id,
         ...(resume ? { resume: { text: resume.text, isFileMessage: resume.isFileMessage, fileMimeType: resume.fileMimeType,
           fileName: resume.fileName, contactName: resume.contactName, fileBase64: resume.fileBuffer?.toString("base64") } } : {}) });
-      await addMessage(msg.from, { role: "user", content: msg.text || "[Arquivo]", ts: Date.now() });
+      await addMessage(msg.from, { role: "user", content: msg.text || "[Arquivo]", ts:msg.receivedAt??Date.now(),channel:msg.channel });
       await sendText(msg.from, `${es ? "¿Qué empresa quieres usar?" : "Qual empresa você quer usar?"}\n\n${companies.map((company, index) => `${index + 1}. ${company.name}`).join("\n")}\n\n${es ? "Responde con el nombre o número." : "Responda com o nome ou número."}`);
     }
     if (createCommand) {

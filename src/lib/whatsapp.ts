@@ -4,6 +4,11 @@ import * as waba from "@/lib/waba";
 import { addMessage, hasOpenCustomerServiceWindow } from "@/lib/conversations";
 import {decorateVirtualAgentReply} from "./virtual-agent-replies";
 
+async function outgoingActivity(to:string){
+ if(process.env.OPEN_FINANCE_CREDIT_PIX_QUESTIONS_ENABLED!=="true")return {finish:async()=>{}};
+ const {beginWhatsAppActivity}=await import("./whatsapp-activity");return beginWhatsAppActivity(to,"notice");
+}
+
 /** Facade agnóstica de provider — dezenas de call-sites no bot (switch de
  *  intenções em message-handler.ts) usam só sendText/sendFile e não
  *  precisam saber se o provider ativo é Evolution ou WABA. Toda resposta
@@ -119,11 +124,14 @@ export function localizedTemplateParams(base: WhatsAppTemplateBase, params: Reco
 }
 
 export async function sendText(to: string, message: string, options?:{privateFinancial?:boolean}): Promise<boolean> {
+  const activity=await outgoingActivity(to);
+  try {
   message=decorateVirtualAgentReply(to,message);
   const provider = (await getConfig()).provider;
   const ok = provider === "waba" ? await waba.sendText(to, message) : await evolution.sendText(to, message);
   if (ok) await addMessage(to, { role: "assistant", content: message, ts: Date.now(), ...(options?.privateFinancial?{privateFinancial:true}:{}) });
   return ok;
+  } finally { await activity.finish().catch(()=>{}); }
 }
 
 /** Lembretes são proativos, mas podem cair dentro de uma janela de atendimento
@@ -181,6 +189,8 @@ export function buildReminderTemplateDispatch(input: {
 }
 
 export async function sendReminderTemplate(to: string, templateName: WhatsAppTemplateBase, renderedText: string, params: Record<string, string>, locale?: string,options?:{privateFinancial?:boolean}): Promise<boolean> {
+  const activity=await outgoingActivity(to);
+  try {
   const provider = (await getConfig()).provider;
   let ok: boolean;
   if (provider === "waba") {
@@ -217,6 +227,7 @@ export async function sendReminderTemplate(to: string, templateName: WhatsAppTem
   }
   if (ok) await addMessage(to, { role: "assistant", content: renderedText, ts: Date.now(),...(options?.privateFinancial?{privateFinancial:true}:{}) });
   return ok;
+  } finally { await activity.finish().catch(()=>{}); }
 }
 
 /** Boas-vindas de conta paga recém-criada (ver billing-webhooks.ts) — não
@@ -253,6 +264,8 @@ export async function sendWelcomeTemplate(to: string, locale?: string): Promise<
 }
 
 export async function sendFile(to: string, fileBuffer: Buffer, filename: string, mimeType: string, caption?: string,options?:{privateFinancial?:boolean}): Promise<boolean> {
+  const activity=await outgoingActivity(to);
+  try {
   caption=decorateVirtualAgentReply(to,caption??"")||undefined;
   const provider = (await getConfig()).provider;
   const ok = provider === "waba"
@@ -263,6 +276,7 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
     await addMessage(to, { role: "assistant", content: caption ? `${label}\n${caption}` : label, ts: Date.now(),...(options?.privateFinancial?{privateFinancial:true}:{}) });
   }
   return ok;
+  } finally { await activity.finish().catch(()=>{}); }
 }
 
 export async function checkConnection(): Promise<"CONNECTED" | "DISCONNECTED" | "QRCODE" | "UNKNOWN"> {

@@ -37,6 +37,10 @@ export async function register() {
     acquiredTickCount += 1;
 
     try {
+      if(process.env.OPEN_FINANCE_CREDIT_PIX_QUESTIONS_ENABLED==="true"){
+        try { const {runCreditPixQuestions}=await import("./lib/credit-pix-whatsapp");await runCreditPixQuestions(); }
+        catch { console.error("[cron] Conferência bancária adiada"); }
+      }
       // ── Auto-posta lançamentos pendentes cuja data chegou ──
       if (runDateMaintenance) {
         try {
