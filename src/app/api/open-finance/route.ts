@@ -4,9 +4,11 @@ import { getOpenFinanceAccess,canEnrollOpenFinance } from "@/lib/open-finance-ac
 import { getSupabase } from "@/lib/supabase";
 import { isBankConnectReady } from "@/lib/open-finance-ready";
 import {openFinanceRpc} from "@/lib/open-finance-http";
+import {runWithCompanyRequest} from "@/lib/company-context";
 
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
+  return runWithCompanyRequest(async()=>{
   const auth = await getSessionWithUser();
   if (!auth || auth.session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   try {
@@ -27,4 +29,5 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json({ error: "Não foi possível consultar os bancos. Tente novamente." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
   }
+  });
 }

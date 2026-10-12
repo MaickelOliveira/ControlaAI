@@ -1,4 +1,5 @@
 import {beforeEach,expect,it,vi} from "vitest";
+vi.mock("server-only",()=>({}));
 const m=vi.hoisted(()=>({auth:vi.fn(),access:vi.fn(),records:vi.fn(),balance:vi.fn(),bank:vi.fn(),phones:vi.fn(),accounts:vi.fn()}));
 vi.mock("@/lib/auth",()=>({getSessionWithUser:m.auth}));
 vi.mock("@/lib/open-finance-access",()=>({getOpenFinanceAccess:m.access}));
