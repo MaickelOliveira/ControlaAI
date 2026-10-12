@@ -28,6 +28,11 @@ describe("real provider normalization", () => {
     const [movement] = normalizeMovements("credit-cards", "card", [{ id: "tx", credit_card_id: "card", transaction_date_time: "2026-09-30T23:45:00-03:00", bill_forecast_date: "2026-11", credit_debit_type: "CREDITO", transaction_type: "PAGAMENTO_FATURA", brazilian_amount: amount("123.45"), amount: amount("20", "USD"), charge_identificator: 2, charge_number: 5 }]);
     expect(movement).toMatchObject({ transaction_date: "2026-09-30", bill_month: "2026-11-01", classification: "bill_payment", original_amount: "20", original_currency: "USD", installment_number: 2, installment_count: 5 });
   });
+  it("distinguishes a supplied merchant name from a sparse generic fallback",()=>{
+    const source={id:"fixture",credit_card_id:"card",transaction_type:"COMPRA"};
+    expect(normalizeMovements("credit-cards","card",[{...source,transaction_name:"Mercado fictício"}])[0]).toMatchObject({description:"Mercado fictício",description_present:true});
+    expect(normalizeMovements("credit-cards","card",[{...source,transaction_name:"  "}])[0]).toMatchObject({description:"COMPRA",description_present:false});
+  });
   it("uses fund conversion date and never labels investment redemption as consumer income", () => {
     const [tx] = normalizeMovements("funds", "fund", [{ id: "fundtx", fund_id: "fund", transaction_conversion_date: "2026-10-01", type: "SAIDA", transaction_type: "RESGATE", transaction_net_value: amount("90"), transaction_gross_value: amount("100") }]);
     expect(tx).toMatchObject({ transaction_date: "2026-10-01", amount: "90", classification: "investment", direction: "unknown" });

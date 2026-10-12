@@ -1,0 +1,16 @@
+-- Sparse provider responses cannot erase known facts from a received movement.
+begin;
+set local lock_timeout='5s';
+set local statement_timeout='30s';
+do $$begin execute format('grant zelo_of_workspace to %I',current_user);end;$$;
+do $$
+declare definition text;
+old_clause text:=$old$description=excluded.description,transaction_date=excluded.transaction_date,transaction_time=excluded.transaction_time,bill_month=excluded.bill_month,bill_id=coalesce(excluded.bill_id,movements.bill_id),external_bill_id=coalesce(excluded.external_bill_id,movements.external_bill_id),amount=excluded.amount,currency=excluded.currency,original_amount=excluded.original_amount,original_currency=excluded.original_currency,direction=excluded.direction,classification=excluded.classification,source_type=excluded.source_type,source_category=excluded.source_category,installment_number=excluded.installment_number,installment_count=excluded.installment_count,source_updated_at=excluded.source_updated_at,synced_at=now(),updated_at=now()$old$;
+new_clause text:=$new$description=case when row->>'description_present'='false' then movements.description else coalesce(excluded.description,movements.description) end,transaction_date=coalesce(excluded.transaction_date,movements.transaction_date),transaction_time=coalesce(excluded.transaction_time,movements.transaction_time),bill_month=coalesce(excluded.bill_month,movements.bill_month),bill_id=coalesce(excluded.bill_id,movements.bill_id),external_bill_id=coalesce(excluded.external_bill_id,movements.external_bill_id),amount=case when excluded.amount is not null and excluded.currency is not null or movements.amount is null then excluded.amount else movements.amount end,currency=case when excluded.amount is not null and excluded.currency is not null or movements.amount is null then excluded.currency else movements.currency end,original_amount=case when excluded.original_amount is not null and excluded.original_currency is not null or movements.original_amount is null then excluded.original_amount else movements.original_amount end,original_currency=case when excluded.original_amount is not null and excluded.original_currency is not null or movements.original_amount is null then excluded.original_currency else movements.original_currency end,direction=case when excluded.direction='unknown' then movements.direction else excluded.direction end,classification=case when excluded.classification='unknown' then movements.classification else excluded.classification end,source_type=coalesce(excluded.source_type,movements.source_type),source_category=coalesce(excluded.source_category,movements.source_category),installment_number=coalesce(excluded.installment_number,movements.installment_number),installment_count=coalesce(excluded.installment_count,movements.installment_count),source_updated_at=coalesce(excluded.source_updated_at,movements.source_updated_at),synced_at=now(),updated_at=now()$new$;
+begin
+ select pg_get_functiondef('public.zelo_of_commit_page(uuid,text,uuid,uuid,jsonb,text,jsonb)'::regprocedure) into definition;
+ if position(old_clause in definition)=0 then raise exception 'OF_COMMIT_DEFINITION_CHANGED';end if;
+ execute replace(definition,old_clause,new_clause);
+end;$$;
+do $$begin execute format('revoke zelo_of_workspace from %I',current_user);end;$$;
+commit;
