@@ -14,6 +14,7 @@ vi.mock("./accounts", async original => ({ ...await original<typeof import("./ac
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
 import { handleIncomingMessage } from "./message-handler";
 import { bankMoney } from "./open-finance-display";
+import {getExplicitRecurringQueryResult} from "./ai-processor";
 const user = { id: "holder", name: "Ana Teste", email: "holder@example.test", plan: "business", status: "active", activeMode: "personal", locale: "pt-BR" };
 beforeEach(() => {
   vi.clearAllMocks(); vi.stubEnv("MULTI_COMPANY_ENABLED", "false"); vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED", "true");
@@ -48,6 +49,22 @@ it("includes bank installments when the manual recurring list is empty, retainin
   expect(m.send.mock.calls.every(call => call[2]?.privateFinancial)).toBe(true);
 });
 afterEach(() => vi.unstubAllEnvs());
+it("answers the exact reported parcelados phrase with manual and bank installments only",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+ const manual={id:"fixture-manual",description:"Parcela manual fictícia",type:"expense",amount:20,category:"Outros",recurrenceType:"installment",totalInstallments:10,paidInstallments:2,repeatUnit:"monthly",nextDueDate:"2026-11-10",status:"active",mode:"personal"};
+ m.recurring.mockResolvedValue([manual,{...manual,id:"subscription",description:"Assinatura manual fictícia",recurrenceType:"recurring"}]);
+ m.rpc.mockResolvedValue({incomplete:false,items:[{id:"fixture-bank",kind:"installment",resource_id:"card",description:"Parcela bancária fictícia",institution_name:"Banco fictício",resource_name:"Gold",amount:"49.90",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:12,observed_installments:2},{id:"subscription",kind:"recurring",description:"Assinatura bancária fictícia",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:"2026-11-10",synced_at:"2026-10-11"}]});
+ await handleIncomingMessage({from:"5511999990000",text:"o que tenho de parcelados"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Parcela manual fictícia");expect(response).toContain("Parcela bancária fictícia");expect(response).not.toContain("Assinatura manual fictícia");expect(response).not.toContain("Assinatura bancária fictícia");expect(m.confirm).not.toHaveBeenCalled();
+});
+it("does not count undated installments in a dated subscription-only query",async()=>{
+ m.process.mockResolvedValue({intent:"recurring_query",confidence:.95,period:{from:"2026-11-01",to:"2026-11-30"}});
+ m.rpc.mockResolvedValue({incomplete:false,items:[{id:"undated",kind:"installment",description:"Parcela não solicitada",institution_name:"Banco fictício",resource_name:"Gold",amount:"40",currency:"BRL",due_date:null,synced_at:"2026-10-11"},{id:"subscription",kind:"recurring",description:"Assinatura solicitada",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:"2026-11-10",synced_at:"2026-10-11"}]});
+ await handleIncomingMessage({from:"5511999990000",text:"quais assinaturas tenho em novembro"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Assinatura solicitada");expect(response).not.toContain("Parcela não solicitada");expect(response).not.toContain("sem vencimento informado ficaram fora");
+});
 it.each([["zelo quanto eu tenho de emprestimo?", "1200.10"], ["quanto eu tenho de credito disponivel no cartao nubank", "1245.92"]])("handles the real reported phrase through the complete bot without contacting a model: %s", async (text, amount) => {
   await handleIncomingMessage({ from: "5511999990000", text });
   const response = m.send.mock.calls.map(call => call[1]).join("\n");

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import {bankAmountWithoutCurrency} from "./open-finance-display";
+import { describe, expect, it, vi } from "vitest";
 import { bankMoney, matchesBank, bankDate, bankResourceName } from "./open-finance-display";
 describe("bank data display", () => {
   it("uses readable account names while preserving provider product names",()=>{
@@ -23,4 +24,9 @@ describe("bank data display", () => {
     expect(bankDate("2026-10-01")).toBe("01/10/2026");
     expect(bankDate(null)).toBe("Não informado");
   });
+});
+
+it("does not print a synthetic XXX currency code when currency was not reported",()=>{
+ const formatter=vi.spyOn(Intl.NumberFormat.prototype,"formatToParts").mockReturnValue([{type:"currency",value:"XXX"},{type:"literal",value:" "},{type:"integer",value:"49"},{type:"decimal",value:","},{type:"fraction",value:"90"}]);
+ try{expect(bankAmountWithoutCurrency("49.90")).toBe("49,90")}finally{formatter.mockRestore()}
 });

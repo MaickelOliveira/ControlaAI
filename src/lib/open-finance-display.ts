@@ -31,7 +31,7 @@ export function bankDate(value: string | null | undefined): string {
 /** Display a decimal without attaching a currency the bank did not supply. */
 export function bankAmountWithoutCurrency(value:string|number|null|undefined):string {
   const formatted=bankMoney(value,"XXX");
-  return formatted==="Não informado"?"Valor não informado":formatted.replace(/¤\s*/,"").trim();
+  return formatted==="Não informado"?"Valor não informado":formatted.replace(/(?:¤|XXX)\s*/g,"").trim();
 }
 export function matchesBank(bank: { name: string; organizationName?: string; parentOrganizationName?: string }, query: string): boolean {
   const normalize = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase().trim();

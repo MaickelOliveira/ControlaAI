@@ -3,7 +3,7 @@ import type { AIResult } from "./ai-processor";
 import { getOpenFinanceAccess, type OpenFinanceIdentity } from "./open-finance-access";
 import { readBankAgenda } from "./financial-agenda";
 import { formatBankSchedules } from "./bank-schedule-answer";
-import { normalizeBankText } from "./bank-question-parser";
+import {recurringQueryKind} from "./recurring-query-kind";
 import { expandMerchantAliases, merchantDescriptionMatchesTerms } from "./finances";
 
 /** Every manual recurring answer receives the same bank appendix, including empty/forecast branches. */
@@ -15,13 +15,13 @@ export async function connectedRecurringAppendix(user: OpenFinanceIdentity, mode
     const shift = (days: number) => new Date(Date.parse(`${today}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
     const agenda = await readBankAgenda(user, mode, { from: shift(-365), to: shift(365), includeUndated: true, includeObservedInstallments: true });
     const terms = ai.keyword ? expandMerchantAliases(ai.keyword) : null;
-    const selected = { ...agenda, items: agenda.items.filter(item => !terms || merchantDescriptionMatchesTerms(`${item.description} ${item.institution_name} ${item.resource_name}`, terms)) };
-    const text = normalizeBankText(message);
-    const installmentsOnly = /\b(parcel\w*|prestacoes?)\b/.test(text) && !/\b(recorrentes?|assinaturas?)\b/.test(text);
-    const recurringOnly = /\b(recorrentes?|assinaturas?)\b/.test(text) && !/\b(parcel\w*|prestacoes?)\b/.test(text);
+    const requestedKind=recurringQueryKind(message);
+    const matches=agenda.items.filter(item=>item.kind!=="bill"&&(!requestedKind||item.kind===requestedKind)&&(!terms||merchantDescriptionMatchesTerms(`${item.description} ${item.institution_name} ${item.resource_name}`,terms)));
+    const undated=ai.period?matches.filter(item=>item.kind!=="bill"&&!item.due_date).length:0;
+    const selected={...agenda,items:ai.period?matches.filter(item=>item.due_date&&(!ai.period?.from||item.due_date>=ai.period.from)&&(!ai.period?.to||item.due_date<=ai.period.to)):matches,incomplete:agenda.incomplete||undated>0};
     const label = mode === "business" ? `Empresa${scope.companyName ? ` · ${scope.companyName}` : ""}` : "Pessoal";
-    const result = [!recurringOnly ? formatBankSchedules(selected, "installments", label) : "", !installmentsOnly ? formatBankSchedules(selected, "recurring", label) : ""].filter(Boolean).join("\n\n");
-    return result + (ai.installmentForecast ? "\nNão projetei o mês de término dos parcelamentos bancários: parcelas observadas não identificam parcelas pagas nem datas futuras." : "");
+    const result = [requestedKind!=="recurring" ? formatBankSchedules(selected, "installments", label) : "", requestedKind!=="installment" ? formatBankSchedules(selected, "recurring", label) : ""].filter(Boolean).join("\n\n");
+    return result + (undated?`\n\n${undated} item(ns) sem vencimento informado ficaram fora do filtro de datas.`:"") + (ai.installmentForecast ? "\nNão projetei o mês de término dos parcelamentos bancários: parcelas observadas não identificam parcelas pagas nem datas futuras." : "");
   } catch {
     return "🏦 Não consegui consultar os parcelamentos/recorrentes dos bancos agora. A lista manual abaixo não representa todos os seus compromissos bancários; tente novamente em Contas.";
   }

@@ -870,7 +870,7 @@ function withExplicitRelativePeriod(message: string, result: AIResult, anchor: D
   }
   const periodIntents: Intent[] = [
     "bank_query", "finance_query", "finance_upcoming", "daily_summary", "weekly_summary",
-    "balance_query", "finance_detail", "finance_analysis",
+    "balance_query", "finance_detail", "finance_analysis", "recurring_query",
   ];
   return periodIntents.includes(result.intent) ? { ...result, period } : result;
 }
@@ -1184,7 +1184,7 @@ const PURCHASE_MONTHS: Record<string, number> = {
   novembro: 11, noviembre: 11, dezembro: 12, diciembre: 12,
 };
 
-function explicitPurchaseCalendarPeriod(message: string, anchor: Date): DatePeriod | null {
+function explicitPurchaseCalendarPeriod(message: string, anchor: Date, future = false): DatePeriod | null {
   const normalized = normalizeCapabilityText(message.trim());
   const pad = (value: number) => String(value).padStart(2, "0");
   const ymd = (year: number, month: number, day: number) => `${year}-${pad(month)}-${pad(day)}`;
@@ -1210,7 +1210,9 @@ function explicitPurchaseCalendarPeriod(message: string, anchor: Date): DatePeri
     const month = PURCHASE_MONTHS[namedMonth[1]];
     const year = namedMonth[2]
       ? Number(namedMonth[2])
-      : month <= anchor.getMonth() + 1 ? anchor.getFullYear() : anchor.getFullYear() - 1;
+      : future
+        ? month >= anchor.getMonth() + 1 ? anchor.getFullYear() : anchor.getFullYear() + 1
+        : month <= anchor.getMonth() + 1 ? anchor.getFullYear() : anchor.getFullYear() - 1;
     return { from: ymd(year, month, 1), to: ymd(year, month, new Date(year, month, 0).getDate()) };
   }
   const explicitYear = normalized.match(/\b(?:(?:no|do|em|del)\s+ano\s+(?:de\s+)?|(?:em|de|no|del)\s+)(20\d{2})\b/);
@@ -1427,6 +1429,8 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
  * que "consulta" não seja confundido com pesquisa na internet. */
 export function getExplicitRecurringQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
+  const mode:UserMode|undefined=/\b(?:empresa|empresarial|negocio)\b/.test(normalized)?"business":/\b(?:pessoal|personal)\b/.test(normalized)?"personal":undefined;
+  const scoped=(result:AIResult)=>withExplicitRelativePeriod(message,{...result,period:result.period??explicitPurchaseCalendarPeriod(message,anchor,true)??undefined,...(mode?{mode}:{})},anchor);
   const reliefQuestion = /\b(?:quanto|o\s+que|quais?|cuanto|que)\b[\s\S]*\b(?:me\s+livro|vou\s+me\s+livrar|deixo\s+de\s+pagar|libero|terminam|acabam|finalizam|me\s+libero|dejo\s+de\s+pagar|terminan|acaban)\b[\s\S]*\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b/.test(normalized)
     || /\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b[\s\S]*\b(?:terminam|acabam|finalizam|terminan|acaban)\b/.test(normalized);
   if (reliefQuestion) {
@@ -1444,20 +1448,20 @@ export function getExplicitRecurringQueryResult(message: string, anchor: Date = 
         to: `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
       };
     }
-    return { intent: "recurring_query", confidence: 1, installmentForecast: true, ...(period ? { period } : {}) };
+    return scoped({ intent: "recurring_query", confidence: 1, installmentForecast: true, ...(period ? { period } : {}) });
   }
   const remainingInstallments = normalized.match(/\bquantas?\s+(?:parcelas?|prestacoes?|cuotas?)\s+(?:ainda\s+)?(?:falta|faltam|resta|restam|faltan|quedan)\s+(?:da|do|de|del)\s+(.+?)[?!.]*$/);
   if (remainingInstallments?.[1]) {
-    return { intent: "recurring_query", confidence: 1, keyword: remainingInstallments[1].trim() };
+    return scoped({ intent: "recurring_query", confidence: 1, keyword: remainingInstallments[1].trim() });
   }
-  const subject = /\b(recurrentes?|recorrentes?|suscripci(?:on|ones)|assinaturas?|mensualidades?|cuotas?|parcelas?)\b/.test(normalized);
-  const query = /^(?:muestra|mostrar|lista|listar|consulta|consultar|busca|buscar|cuales?|que|mis|meus|minhas)\b/.test(normalized)
+  const subject = /\b(recurrentes?|recorrentes?|suscripci(?:on|ones)|assinaturas?|mensualidades?|cuotas?|parcelas?|parcelad[oa]s?|parcelamentos?|prestacoes?)\b/.test(normalized);
+  const query = /^(?:muestra|mostrar|mostre|me (?:mostra|mostre)|lista|listar|consulta|consultar|busca|buscar|cuales?|quais?|quanto|quantos|que|o que|mis|meus|minhas)\b/.test(normalized)
     || /\b(?:que|cuales?)\s+(?:cuotas?|parcelas?|suscripciones?)\b/.test(normalized);
-  const mutation = /\b(cancela|cancelar|elimina|eliminar|borra|borrar|cambia|cambiar|edita|editar|crea|crear|registra|registrar)\b/.test(normalized);
-  if (!subject || !query || mutation) return null;
+  const mutation = /\b(cancel\w*|elimin\w*|borr\w*|cambi\w*|edit\w*|cri[ae]\w*|crea\w*|registr\w*|anot\w*|exclu\w*|apag\w*)\b/.test(normalized);
+  if (!subject || !query || mutation || /\b(?:gastei|gastamos|paguei|recebi)\b/.test(normalized)) return null;
 
   const keyword = message.match(/\b(?:suscripci[oó]n|assinatura)\s+(?:de\s+)?(.+?)[?!.]*$/i)?.[1]?.trim();
-  return { intent: "recurring_query", confidence: 1, ...(keyword ? { keyword } : {}) };
+  return scoped({ intent: "recurring_query", confidence: 1, ...(keyword ? { keyword } : {}) });
 }
 
 /** Renomear documento é uma ação do Drive, mesmo quando o arquivo é uma
@@ -3790,6 +3794,11 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
   const categoryDetail=explicitCategoryDetailResult(message,ctx);
   if(categoryDetail&&["how_to","unknown","finance_query","finance_detail"].includes(result.intent))result={...result,...categoryDetail,keyword:undefined,response:undefined};
   if (result.intent === "bank_query") return withExplicitRelativePeriod(message, { ...result, bankQuery: validateBankQuery(result.bankQuery) ?? undefined });
+  const recurringQuery=getExplicitRecurringQueryResult(message);
+  if(recurringQuery&&["how_to","unknown","finance_query","finance_detail","recurring_query"].includes(result.intent)){
+    const keyword=recurringQuery.keyword??result.keyword;
+    result={...recurringQuery,mode:recurringQuery.mode??result.mode,period:recurringQuery.period??(result.intent==="recurring_query"?result.period:undefined),keyword:keyword&&/^(?:contas?|parcelad[oa]s?|parcelas?|recorrentes?|assinaturas?)$/i.test(keyword.trim())?undefined:keyword};
+  }
   const merchant = explicitMerchantInQuestion(message);
   if (merchant && result.intent === "grocery_spend_query") result = { ...result, intent: "finance_query", keyword: merchant, period: result.grocery?.period ?? result.period, category: undefined, financeType: "expense" };
   if (merchant && ["finance_query", "finance_detail", "finance_analysis"].includes(result.intent)) result = { ...result, keyword: merchant, category: undefined };
@@ -4048,6 +4057,7 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   // Preserve os dados extraídos pelos comandos existentes quando IA e regra
   // concordam; a IA resolve as frases que as regras não cobrem.
   if (explicit?.intent === "finance_detail" && explicit.category && modeled.intent === "finance_detail") return {...modeled,...explicit,mode:explicit.mode??modeled.mode,period:explicit.period??modeled.period,keyword:undefined,response:undefined};
+  if(explicit?.intent==="recurring_query"&&modeled.intent==="recurring_query")return {...modeled,...explicit,mode:explicit.mode??modeled.mode,period:explicit.period??modeled.period,keyword:explicit.keyword??modeled.keyword};
   if (explicit?.intent === modeled.intent) return explicit;
   // Regras que representam limites da plataforma devem prevalecer.
   if (explicit?.intent === "how_to" && explicit.response) return explicit;
