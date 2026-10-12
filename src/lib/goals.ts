@@ -45,7 +45,7 @@ export async function getGoalsByUser(userId: string, mode?: GoalMode): Promise<G
   let query = getSupabase().from("goals").select("*").eq("user_id", userId);
   if (mode) query = query.eq("mode", mode);
   const { data, error } = await query;
-  if (error) { console.error("[goals] getGoalsByUser erro:", error.message); return []; }
+  if (error) { console.error("[goals] getGoalsByUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 

@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBillingWebhookById, verifyBillingWebhookAuth, evaluateBillingWebhook, recordWebhookAttempt } from "@/lib/billing-webhooks";
+import { readBankBody } from "@/lib/open-finance-body";
 
 type Params = Promise<{ id: string }>;
-
-function maskEmail(email: string): string {
-  return email.replace(/^(.).*(@.*)$/, "$1***$2");
-}
 
 export async function POST(req: NextRequest, { params }: { params: Params }) {
   const { id } = await params;
@@ -13,9 +10,12 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   if (!cfg) return NextResponse.json({ ok: true }); // 200 sempre — não dar pista de config inválida pra fora
 
   let body: unknown = null;
-  try { body = await req.json(); } catch { body = null; }
+  let rawBody: string;
+  try { rawBody = (await readBankBody(req, 1_048_576)).toString("utf8"); }
+  catch { return NextResponse.json({ error: "Corpo inválido ou grande demais" }, { status: 413 }); }
+  try { body = JSON.parse(rawBody); } catch { body = null; }
 
-  // Grava a tentativa (corpo recebido de verdade) ANTES de qualquer checagem
+  // Grava os campos diagnósticos permitidos ANTES de qualquer checagem
   // — inclusive quando a integração está desativada ou a autenticação falha
   // — pra dar visibilidade real do que a plataforma de venda está mandando,
   // sem precisar adivinhar o formato exato ou vasculhar log de servidor.
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
     return NextResponse.json({ ok: true });
   }
   if (!authOk) {
-    console.error(`[webhook/billing/${cfg.label}] autenticação falhou — requisição rejeitada`);
+    console.error("[webhook/billing/] autenticação falhou — requisição rejeitada");
     await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: false, body }, cfg);
     return NextResponse.json({ ok: true }); // 200 mesmo assim — não ajuda um atacante a descobrir por tentativa e erro
   }
@@ -38,9 +38,9 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   const result = await evaluateBillingWebhook(cfg, body);
   await recordWebhookAttempt(id, { at: new Date().toISOString(), wasActive: true, authOk: true, body, result }, cfg);
   if (!result.ok) {
-    console.error(`[webhook/billing/${cfg.label}] ${result.error.replace(/[\w.+-]+@[\w.-]+/g, m => maskEmail(m))}`);
+    console.error("[webhook/billing/]");
   } else {
-    console.log(`[webhook/billing/${cfg.label}] ${result.action}${result.email ? ` — ${maskEmail(result.email)}` : ""}${result.detail ? ` (${result.detail})` : ""}`);
+    console.log("[webhook/billing] Evento processado");
   }
 
   // Falha ao gravar no banco: responde 503 para a plataforma de venda reenviar

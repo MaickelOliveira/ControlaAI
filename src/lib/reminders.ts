@@ -81,7 +81,7 @@ export async function getDueReminders(): Promise<Reminder[]> {
   const now = new Date().toISOString();
   const { data, error } = await getSupabase().from(process.env.MULTI_COMPANY_ENABLED==="true"?"zelo_active_reminders":"reminders").select("*")
     .eq("sent", false).lte("scheduled_at", now).lt("failed_attempts", MAX_FAILED_ATTEMPTS);
-  if (error) { console.error("[reminders] getDueReminders erro:", error.message); return []; }
+  if (error) { console.error("[reminders] getDueReminders erro:"); return []; }
   return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 
@@ -140,7 +140,7 @@ export async function getRemindersByUser(userId: string, mode?: "personal" | "bu
   let query = getSupabase().from("reminders").select("*").eq("user_id", userId).eq("sent", false);
   if (mode) query = query.eq("mode", mode);
   const { data, error } = await query;
-  if (error) { console.error("[reminders] getRemindersByUser erro:", error.message); return []; }
+  if (error) { console.error("[reminders] getRemindersByUser erro:"); return []; }
   return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 
@@ -148,7 +148,7 @@ export async function getAllRemindersByUser(userId: string, mode?: "personal" | 
   let query = getSupabase().from("reminders").select("*").eq("user_id", userId);
   if (mode) query = query.eq("mode", mode);
   const { data, error } = await query;
-  if (error) { console.error("[reminders] getAllRemindersByUser erro:", error.message); return []; }
+  if (error) { console.error("[reminders] getAllRemindersByUser erro:"); return []; }
   return (data as Row[]).map(fromRow).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 }
 

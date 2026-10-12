@@ -87,4 +87,13 @@ describe("cron de lembretes e assinatura", () => {
     expect(mocks.markReminderSent).toHaveBeenCalledWith("reminder-1", "daily");
     expect(mocks.markReminderSkippedForInactiveUser).not.toHaveBeenCalled();
   });
+
+  it("returns a generic failure without exposing a provider error and releases the cron lock", async () => {
+    mocks.getDueReminders.mockRejectedValueOnce(new Error("fake-private-provider-token"));
+    const response = await GET(new NextRequest("http://localhost/api/cron/reminders?secret=test-secret"));
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("fake-private-provider-token");
+    expect(mocks.sendReminderTemplate).not.toHaveBeenCalled();
+    expect(mocks.releaseCronLock).toHaveBeenCalledOnce();
+  });
 });

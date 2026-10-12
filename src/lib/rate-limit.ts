@@ -18,7 +18,7 @@ export async function checkRateLimit(key: string, max: number, windowMs: number)
     p_window_ms: windowMs,
   });
   if (error) {
-    console.error("Rate limit indisponível:", error.message);
+    console.error("Rate limit indisponível:");
     return false;
   }
   return data === true;

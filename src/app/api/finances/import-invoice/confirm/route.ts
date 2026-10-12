@@ -63,12 +63,12 @@ export async function POST(req: NextRequest) {
       currentStatementDueDate: dueDate,
     });
   } catch (error) {
-    await Promise.all(inserted.map(item => deleteFinance(item.id, session.sub).catch(rollbackError => {
-      console.error("[import-invoice] falha ao desfazer lançamento:", rollbackError);
+    await Promise.all(inserted.map(item => deleteFinance(item.id, session.sub).catch(() => {
+      console.error("[import-invoice] falha ao desfazer lançamento:");
     })));
     if (account.created && account.accountId) {
-      await deleteAccount(account.accountId, session.sub).catch(rollbackError => {
-        console.error("[import-invoice] falha ao desfazer conta criada:", rollbackError);
+      await deleteAccount(account.accountId, session.sub).catch(() => {
+        console.error("[import-invoice] falha ao desfazer conta criada:");
       });
     }
     throw error;

@@ -1,5 +1,5 @@
 /** Database request boundary shared by web, WhatsApp and server jobs. */
-export type CompanyScope={userId:string;companyId:string;mode:"personal"|"business";allowBusiness?:boolean;companyName?:string;customCategoriesExpense?:string[];customCategoriesIncome?:string[];archivedCompanyIds?:string[]};
+export type CompanyScope={userId:string;companyId:string;mode:"personal"|"business";allowBusiness?:boolean;allowPersonal?:boolean;companyName?:string;customCategoriesExpense?:string[];customCategoriesIncome?:string[];archivedCompanyIds?:string[]};
 export const COMPANY_MODE_TABLES=new Set(["accounts","finances","tasks","reminders","goals","vehicles","recurring_transactions"]);
 export const COMPANY_SHARED_TABLES=new Set(["appointments","meets","drive_folders","drive_files"]);
 export const COMPANY_BUSINESS_TABLES=new Set(["employees","customers"]);
@@ -18,11 +18,12 @@ export function scopeCompanyRequest(input:URL,options:RequestInit,scope:CompanyS
  headers.set("x-zelo-company",scope.companyId);
  headers.set("x-zelo-business-access",String(scope.allowBusiness!==false));
  init.headers=headers;
- const businessAllowed=scope.allowBusiness!==false;
+ const businessAllowed=scope.allowBusiness!==false,personalAllowed=scope.allowPersonal!==false;
+ if(!businessAllowed&&!personalAllowed||scope.mode==="personal"&&!personalAllowed)throw Error("COMPANY_ACCESS_DENIED");
  let predicate:string;
- if(COMPANY_MODE_TABLES.has(table))predicate=businessAllowed?`or(and(mode.eq.personal,company_id.is.null),and(mode.eq.business,company_id.eq.${scope.companyId}))`:"and(mode.eq.personal,company_id.is.null)";
+ if(COMPANY_MODE_TABLES.has(table))predicate=businessAllowed?(personalAllowed?`or(and(mode.eq.personal,company_id.is.null),and(mode.eq.business,company_id.eq.${scope.companyId}))`:`and(mode.eq.business,company_id.eq.${scope.companyId})`):"and(mode.eq.personal,company_id.is.null)";
  else if(COMPANY_SHARED_TABLES.has(table))predicate=scope.mode==="business"&&businessAllowed?`company_id.eq.${scope.companyId}`:"or(company_id.is.null,workspace_legacy.eq.true)";
- else if(table==="card_invoices")predicate=businessAllowed?`or(company_id.is.null,company_id.eq.${scope.companyId})`:"company_id.is.null";
+ else if(table==="card_invoices")predicate=businessAllowed?(personalAllowed?`or(company_id.is.null,company_id.eq.${scope.companyId})`:`company_id.eq.${scope.companyId}`):"company_id.is.null";
  else {if(!businessAllowed)throw Error("COMPANY_ACCESS_DENIED");predicate=`company_id.eq.${scope.companyId}`;}
  if(predicate.startsWith("company_id.eq.")&&!url.searchParams.has("company_id"))url.searchParams.set("company_id",`eq.${scope.companyId}`);
  else {
@@ -41,8 +42,9 @@ export function scopeCompanyRequest(input:URL,options:RequestInit,scope:CompanyS
    if(row.user_id!==undefined&&row.user_id!==scope.userId)throw Error("COMPANY_OWNER_MISMATCH");
    if(row.company_id!==undefined)throw Error("COMPANY_REASSIGNMENT_DENIED");
    if(row.workspace_legacy!==undefined)throw Error("COMPANY_REASSIGNMENT_DENIED");
-   const mode=COMPANY_MODE_TABLES.has(table)?row.mode:COMPANY_BUSINESS_TABLES.has(table)?"business":scope.mode;
+   const mode=COMPANY_MODE_TABLES.has(table)?(row.mode??(method==="POST"?"personal":undefined)):COMPANY_BUSINESS_TABLES.has(table)?"business":scope.mode;
    if(mode==="business"&&!businessAllowed)throw Error("COMPANY_ACCESS_DENIED");
+   if(mode==="personal"&&!personalAllowed)throw Error("COMPANY_ACCESS_DENIED");
    if(method==="POST"){
     row.user_id=scope.userId;
     // Invoice scope is also checked against the parent account by its trigger.

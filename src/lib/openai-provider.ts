@@ -1,7 +1,6 @@
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL = "gpt-5.6-luna";
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
-const MAX_ERROR_MESSAGE_LENGTH = 500;
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 
 class NonRetryableOpenAIError extends Error {}
@@ -75,15 +74,6 @@ function sanitizeSchemaName(name: string): string {
   return sanitized || "response";
 }
 
-function getErrorMessage(payload: unknown): string {
-  if (!payload || typeof payload !== "object") return "erro desconhecido";
-  const error = (payload as { error?: unknown }).error;
-  if (!error || typeof error !== "object") return "erro desconhecido";
-  const message = (error as { message?: unknown }).message;
-  if (typeof message !== "string" || !message.trim()) return "erro desconhecido";
-  return message.trim().slice(0, MAX_ERROR_MESSAGE_LENGTH);
-}
-
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -106,7 +96,7 @@ async function fetchOpenAIJson(
       if (response.ok) return payload;
 
       const error = new Error(
-        `OpenAI respondeu HTTP ${response.status}: ${getErrorMessage(payload)}`,
+        `OpenAI respondeu HTTP ${response.status}`,
       );
       if (!RETRYABLE_STATUS_CODES.has(response.status)) {
         throw new NonRetryableOpenAIError(error.message);
@@ -116,7 +106,7 @@ async function fetchOpenAIJson(
       }
       lastError = error;
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError = error instanceof NonRetryableOpenAIError ? error : new Error("OPENAI_REQUEST_FAILED");
       if (error instanceof NonRetryableOpenAIError) throw error;
       if (attempt === 2) throw lastError;
     }

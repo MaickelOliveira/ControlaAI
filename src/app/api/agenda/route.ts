@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
       meetLink = result.meetLink;
       calendarEventId = result.calendarEventId;
       googleCalendarId = result.googleCalendarId;
-    } catch (e) {
-      console.error("[agenda POST meet]", e);
+    } catch  {
+      console.error("[agenda POST meet]");
       return NextResponse.json({ error: "Erro ao criar Google Meet. Verifique a conexão Google." }, { status: 500 });
     }
   }

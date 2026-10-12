@@ -75,9 +75,9 @@ async function runCron() {
       results.push({ id: r.id, sent: ok });
     }
     return NextResponse.json({ ok: true, fired: results.length, results, now: new Date().toISOString() });
-  } catch (e) {
-    console.error("[cron/reminders] Erro:", e);
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+  } catch {
+    console.error("[cron/reminders] Erro:");
+    return NextResponse.json({ error: "Não foi possível concluir os lembretes agora." }, { status: 500 });
   } finally {
     await releaseCronLock(lockToken);
   }

@@ -53,7 +53,7 @@ export async function getEmployeesByUser(userId: string, status?: EmployeeStatus
   let query = getSupabase().from("employees").select("*").eq("user_id", userId);
   if (status) query = query.eq("status", status);
   const { data, error } = await query;
-  if (error) { console.error("[employees] getEmployeesByUser erro:", error.message); return []; }
+  if (error) { console.error("[employees] getEmployeesByUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 
@@ -107,7 +107,7 @@ export async function getEmployeePaymentsByUser(userId: string): Promise<Record<
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
   if (error) {
-    console.error("[employees] getEmployeePaymentsByUser erro:", error.message);
+    console.error("[employees] getEmployeePaymentsByUser erro:");
     return {};
   }
   const grouped: Record<string, EmployeePayment[]> = {};

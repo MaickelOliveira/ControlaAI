@@ -22,7 +22,7 @@ function fromRow(r: Row): WppPhoneLink {
 
 export async function getPhonesForUser(userId: string): Promise<WppPhoneLink[]> {
   const { data, error } = await getSupabase().from("wpp_phone_links").select("*").eq("user_id", userId);
-  if (error) { console.error("[wpp-phone-links] getPhonesForUser erro:", error.message); return []; }
+  if (error) { console.error("[wpp-phone-links] getPhonesForUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 
@@ -32,7 +32,7 @@ export async function getPhonesForUser(userId: string): Promise<WppPhoneLink[]> 
 export async function getAllPhoneLinks(): Promise<Map<string, WppPhoneLink[]>> {
   const { data, error } = await getSupabase().from("wpp_phone_links").select("*");
   const byUser = new Map<string, WppPhoneLink[]>();
-  if (error) { console.error("[wpp-phone-links] getAllPhoneLinks erro:", error.message); return byUser; }
+  if (error) { console.error("[wpp-phone-links] getAllPhoneLinks erro:"); return byUser; }
   for (const row of data as Row[]) {
     const link = fromRow(row);
     const list = byUser.get(link.userId);
@@ -78,7 +78,7 @@ export async function linkPhone(userId: string, phone: string): Promise<LinkResu
     if ((data as { user_id: string } | null)?.user_id === userId) return "ok"; // já vinculado a este mesmo usuário — idempotente
     return "already_linked_elsewhere";
   }
-  console.error("[wpp-phone-links] linkPhone erro:", error.message);
+  console.error("[wpp-phone-links] linkPhone erro:");
   return "already_linked_elsewhere"; // erro desconhecido — mais seguro bloquear do que deixar vincular
 }
 

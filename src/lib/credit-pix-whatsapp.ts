@@ -3,7 +3,7 @@ import {getSupabase} from "./supabase";
 import {getUserById,hasAccess} from "./users";
 import {getPhonesForUser,getUserIdByPhone} from "./wpp-phone-links";
 import {getAiPaused,addMessage,phoneVariants} from "./conversations";
-import {isAccountHolderRelation} from "./wpp-link-identity";
+import {isRegisteredAccountHolderPhone} from "./wpp-holder-authorization";
 import {getOpenFinanceAccess,type OpenFinanceScope} from "./open-finance-access";
 import {openFinanceRpc} from "./open-finance-http";
 import {getConfig} from "./whatsapp-config";
@@ -30,7 +30,9 @@ async function allowed(phone:string,expectedUser?:string,expectedMode?:string,ex
  if(!userId||expectedUser&&userId!==expectedUser||await getAiPaused(phone))return null;
  const user=await getUserById(userId);if(!user||!hasAccess(user))return null;
  const variants=phoneVariants(phone),link=(await getPhonesForUser(userId)).find(item=>variants.includes(item.phone));
- if(!link||!isAccountHolderRelation(link.relation))return null;
+ // Relation is a client-editable label, never an authorization role. A verified
+ // link must belong to the registered account owner phone before bank facts leave.
+ if(!link||link.userId!==userId||!isRegisteredAccountHolderPhone(user.phone,link.phone))return null;
  const mode=link.access==="both"?link.activeWorkspaceMode??user.activeMode:link.access;
  if(expectedMode&&mode!==expectedMode||mode==="business"&&(!link.activeCompanyId||expectedCompany&&link.activeCompanyId!==expectedCompany))return null;
  const scope=await getOpenFinanceAccess(user,mode,{throwOnStorageError:true,companyId:mode==="business"?link.activeCompanyId:null});

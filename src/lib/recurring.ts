@@ -372,7 +372,7 @@ export async function getRecurringByUser(userId: string, mode?: string, status?:
   if (status) query = query.eq("status", status);
   const { data, error,count } = await query;
   if(strict&&(error||!Array.isArray(data)||count==null||data.length!==count))throw Error("RECURRING_READ_UNAVAILABLE");
-  if (error) { console.error("[recurring] getRecurringByUser erro:", error.message); return []; }
+  if (error) { console.error("[recurring] getRecurringByUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 

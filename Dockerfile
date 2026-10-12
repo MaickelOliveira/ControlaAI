@@ -1,10 +1,11 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
+RUN npm install --global npm@11.8.0 --ignore-scripts
 
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json package-lock.json* .npmrc ./
+RUN npm ci --ignore-scripts
 
 FROM base AS builder
 WORKDIR /app

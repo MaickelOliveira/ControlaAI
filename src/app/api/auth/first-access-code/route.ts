@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
   const reset = await createPasswordResetCode(user.id);
   try {
     await sendFirstAccessCodeEmail({ email: user.email, name: user.name, code: reset.code, locale: user.locale });
-  } catch (error) {
+  } catch {
     await invalidatePasswordResetCode(reset.id);
-    console.error("[first-access] envio do código falhou", error);
+    console.error("[first-access] envio do código falhou");
     return NextResponse.json({ error: "Não foi possível enviar o código. Fale com o suporte." }, { status: 502 });
   }
 

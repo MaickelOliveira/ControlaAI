@@ -8,3 +8,10 @@ logo
 .env*
 .DS_Store
 coverage
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore

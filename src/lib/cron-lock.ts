@@ -29,7 +29,7 @@ export async function acquireCronLock(): Promise<string | null> {
     .eq("id", 1)
     .or(`locked_at.is.null,locked_at.lt.${staleThreshold}`)
     .select("id");
-  if (error) { console.error("[cron-lock] acquire erro:", error.message); return null; }
+  if (error) { console.error("[cron-lock] acquire erro:"); return null; }
   return data && data.length > 0 ? token : null;
 }
 

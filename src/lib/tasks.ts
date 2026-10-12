@@ -53,7 +53,7 @@ export async function getTasksByUser(userId: string, mode?: TaskMode): Promise<T
   let query = getSupabase().from("tasks").select("*").eq("user_id", userId);
   if (mode) query = query.eq("mode", mode);
   const { data, error } = await query;
-  if (error) { console.error("[tasks] getTasksByUser erro:", error.message); return []; }
+  if (error) { console.error("[tasks] getTasksByUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 
@@ -63,7 +63,7 @@ export async function getTasksByUser(userId: string, mode?: TaskMode): Promise<T
 export async function getTasksCountsByAllUsers(): Promise<Map<string, number>> {
   const { data, error } = await getSupabase().from("tasks").select("user_id");
   const counts = new Map<string, number>();
-  if (error) { console.error("[tasks] getTasksCountsByAllUsers erro:", error.message); return counts; }
+  if (error) { console.error("[tasks] getTasksCountsByAllUsers erro:"); return counts; }
   for (const row of data as { user_id: string }[]) {
     counts.set(row.user_id, (counts.get(row.user_id) ?? 0) + 1);
   }

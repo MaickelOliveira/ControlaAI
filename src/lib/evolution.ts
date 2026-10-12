@@ -51,8 +51,8 @@ export async function createOrRestartInstance(webhookUrl: string): Promise<{ api
     const qr = (data?.qrcode as Record<string, unknown> | undefined)?.base64 as string | undefined ?? null;
     await setWebhook(hash || undefined, webhookUrl);
     return { apiKey: hash, qrBase64: qr };
-  } catch (e) {
-    console.error("[evolution] createOrRestartInstance erro:", e);
+  } catch  {
+    console.error("[evolution] createOrRestartInstance erro:");
     return null;
   }
 }
@@ -89,8 +89,8 @@ export async function setWebhook(instanceApiKey: string | undefined, webhookUrl:
       signal: AbortSignal.timeout(15_000),
     });
     return res.ok;
-  } catch (e) {
-    console.error("[evolution] setWebhook erro:", e);
+  } catch  {
+    console.error("[evolution] setWebhook erro:");
     return false;
   }
 }
@@ -163,12 +163,11 @@ export async function sendText(to: string, message: string, countryIso?: string)
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
-      const err = await res.text().catch(() => "");
-      console.error(`[evolution] sendText falhou ${res.status}: ${err.slice(0, 200)}`);
+      console.error("[evolution] sendText falhou");
     }
     return res.ok;
-  } catch (e) {
-    console.error("[evolution] sendText erro:", e);
+  } catch  {
+    console.error("[evolution] sendText erro:");
     return false;
   }
 }
@@ -206,12 +205,11 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
-      const err = await res.text().catch(() => "");
-      console.error(`[evolution] sendFile falhou ${res.status}: ${err.slice(0, 200)}`);
+      console.error("[evolution] sendFile falhou");
     }
     return res.ok;
-  } catch (e) {
-    console.error("[evolution] sendFile erro:", e);
+  } catch  {
+    console.error("[evolution] sendFile erro:");
     return false;
   }
 }

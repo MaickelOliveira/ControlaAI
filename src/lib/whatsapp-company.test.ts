@@ -82,3 +82,9 @@ it("discards a held business request after the participant becomes personal-only
  expect(next).toHaveBeenCalledExactlyOnceWith({from:"5511",text:"gastei 20 na farmácia"});
  expect(m.workspace).not.toHaveBeenCalled();
 });
+it("marks a dedicated business participant as unable to access personal rows",async()=>{
+ m.links.mockResolvedValue([{phone:"5511",access:"business",activeCompanyId:"a",activeWorkspaceMode:"business"}]);
+ const next=vi.fn();await withWhatsAppCompany({from:"5511",text:"quanto gastei"},next);
+ expect(next).toHaveBeenCalledOnce();
+ expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({mode:"business",allowPersonal:false,allowBusiness:true}));
+});

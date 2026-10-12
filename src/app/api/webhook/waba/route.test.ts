@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   begin: vi.fn(), finish: vi.fn(), handle: vi.fn(), dedup: vi.fn(), signature: vi.fn(),
   media: vi.fn(), transcribe: vi.fn(), config: vi.fn(), user: vi.fn(),
@@ -17,7 +18,7 @@ const from = "5511999990000";
 const questionId = "00000000-0000-4000-8000-000000000099";
 const textMessage = (id = "fictional-message") => ({ id, from, type: "text", text: { body: "mensagem fictícia" } });
 const request = (messages: unknown[]) => new NextRequest("https://zelo.test/api/webhook/waba", {
-  method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=fictitious" },
+  method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": `sha256=${"0".repeat(64)}` },
   body: JSON.stringify({ entry: [{ changes: [{ value: { messages, contacts: [{ profile: { name: "Contato fictício" } }] } }] }] }),
 });
 const settled = async (assertion: () => void) => vi.waitFor(assertion, { timeout: 150, interval: 1 });

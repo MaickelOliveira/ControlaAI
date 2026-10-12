@@ -11,8 +11,8 @@ export async function GET() {
       getSelectedCalendar(session.sub),
     ]);
     return NextResponse.json({ calendars, selectedCalendarId: selected.id });
-  } catch (error) {
-    console.error("[google-calendars GET]", error);
+  } catch {
+    console.error("[google-calendars GET]");
     return NextResponse.json({
       error: "Não foi possível carregar suas agendas. Reconecte o Google para autorizar a seleção.",
       reauthRequired: true,

@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
   let invoice;
   try {
     invoice = await extractInvoiceTransactions(buffer, mimeType, undefined, session.sub, fileObj.name);
-  } catch (error) {
-    console.error("[import-invoice] falha ao extrair lançamentos:", error);
+  } catch {
+    console.error("[import-invoice] falha ao extrair lançamentos:");
     return NextResponse.json({ error: "Não consegui separar os lançamentos com segurança. Nada foi importado; reenvie o arquivo original ou uma imagem mais nítida." }, { status: 422 });
   }
   if (!invoice || invoice.transactions.length === 0) {

@@ -32,8 +32,9 @@ const linkPhone=async(user,workspace,p=phone,mode='business',relation='Titular')
 };
 const reset=async()=>{
  await root();await db.exec('truncate open_finance.credit_pix_questions,open_finance.credit_pix_links,open_finance.connections cascade');
- await db.exec('truncate pending_actions;truncate open_finance.whatsapp_activity;truncate open_finance.whatsapp_recent_activity');
+ await db.exec('truncate wpp_phone_links;truncate pending_actions;truncate open_finance.whatsapp_activity;truncate open_finance.whatsapp_recent_activity');
  await db.query("update users set status='active' where id=any($1::uuid[])",[[owner,other]]);
+ await db.query('update users set phone=$1 where id=$2',[phone,owner]);
  await linkPhone(owner,company);await linkPhone(other,foreignCompany,foreignPhone);await owned();
 };
 const makePair=async({user=owner,workspace=company,mode='business',description,paymentBank=bank}={})=>{
@@ -62,6 +63,26 @@ try{
  if(!process.argv.includes('--before-queue')){
   try{await db.exec(await sql('../migrations/20261012071000_credit_pix_question_completion.sql'));}catch(error){if(error.code!=='ENOENT')throw error;console.log('RED maintenance setup: 71000 absent; checking completion against the existing queue.');}
  }
+ if(!process.argv.includes('--before-queue')&&!process.argv.includes('--before-verified-holder')){
+  // Supabase's managed migrator can administer runtime roles but is not a
+  // superuser and does not permanently inherit scoped function ownership.
+  const migrator='zelo_managed_migration_fixture';
+  await db.exec(`create role ${migrator} nosuperuser createrole inherit;grant usage,create on schema public,open_finance to ${migrator} with grant option;grant zelo_of_workspace to ${migrator} with admin true,inherit false,set false;alter function public.zelo_of_credit_pix_targets() owner to ${migrator}`);
+  const migrationFunctions=['public.zelo_of_claim_credit_pix_question(uuid,text,uuid,text)','public.zelo_of_answer_credit_pix_question(uuid,text,uuid,text,boolean)','public.zelo_of_credit_pix_targets()'];
+  const functionPermissions=async()=> (await db.query('select oid::regprocedure::text signature,pg_get_userbyid(proowner) owner,proacl::text acl,proconfig from pg_proc where oid=any($1::regprocedure[]) order by oid',[migrationFunctions])).rows;
+  const membership=async()=> (await db.query("select grantor,admin_option,inherit_option,set_option from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=$1::regrole order by grantor",[migrator])).rows;
+  const beforePermissions=await functionPermissions(),beforeMembership=await membership();
+  assert.equal((await db.query('select rolsuper from pg_roles where rolname=$1',[migrator])).rows[0].rolsuper,false);
+  assert.equal((await db.query("select pg_has_role($1,'zelo_of_workspace','USAGE') allowed",[migrator])).rows[0].allowed,false,'the managed migration cannot already inherit scoped function ownership');
+  await db.exec('set role '+migrator);
+  try{await db.exec(await sql('../migrations/20261012072000_credit_pix_verified_holder.sql'));}catch(error){await db.exec('rollback');throw error;}finally{await root();}
+  assert.deepEqual(await functionPermissions(),beforePermissions,'the managed migration preserves existing function owners, grants and security settings');
+  assert.deepEqual(await membership(),beforeMembership,'temporary inherited/settable workspace membership is removed after migration');
+  for(const schema of ['public','open_finance'])assert.equal((await db.query("select has_schema_privilege('zelo_of_workspace',$1,'CREATE') allowed",[schema])).rows[0].allowed,false,'the migration leaves no scoped schema CREATE permission');
+  // Restore only the fixture's global function owner before runtime contracts.
+  await db.exec('alter function public.zelo_of_credit_pix_targets() owner to postgres');
+  console.log('PASS: a non-superuser managed migration updates scoped functions atomically and removes temporary privileges');
+ }
  company=(await db.query('select id from companies where user_id=$1 and is_default',[owner])).rows[0].id;
  otherCompany=(await db.query("insert into companies(user_id,name) values($1,'Second fixture company') returning id",[owner])).rows[0].id;
  foreignCompany=(await db.query('select id from companies where user_id=$1 and is_default',[other])).rows[0].id;
@@ -77,6 +98,30 @@ try{
  const targets=await rpc('zelo_of_credit_pix_targets');assert.ok(Array.isArray(targets));assert.equal(targets.length,1);assert.equal(targets[0].id,initial.id);assert.equal(targets[0].phone,phone);
  for(const target of targets)for(const key of Object.keys(target))assert.ok(!/amount|description|name|currency|date/i.test(key),'global dispatcher exposes only scope, identity and recipient');
  console.log('PASS: prepare is idempotent, private and financially inert');
+
+ await reset();let holderCase=await prepared();const holderFacts=await raw();
+ await root();await db.query('delete from wpp_phone_links where phone=$1',[foreignPhone]);
+ await linkPhone(owner,company,foreignPhone,'business','Titular');await owned();
+ assert.equal(await claim(holderCase.q.id,foreignPhone),null,'a delegate self-described as Titular cannot claim financial questions');
+ const holderTargets=await rpc('zelo_of_credit_pix_targets');assert.equal(holderTargets.length,1);assert.equal(holderTargets[0].phone,phone,'targets choose the registered owner phone, not a self-described holder');
+ // Even an already asked legacy question must reject an improperly selected delegate.
+ await root();await db.query("update open_finance.credit_pix_questions set status='asked',phone=$1 where id=$2",[foreignPhone,holderCase.q.id]);await owned();
+ assert.equal(await denied(()=>answer(holderCase.q.id,true,foreignPhone)),null,'a legacy question addressed to a delegate cannot reconcile bank facts');assert.equal(await linkCount(),0);assert.deepEqual(await raw(),holderFacts);
+ await reset();holderCase=await prepared();await root();await db.query("update wpp_phone_links set relation='Spouse' where phone=$1",[phone]);await owned();
+ assert.equal((await rpc('zelo_of_credit_pix_targets'))[0].phone,phone,'the owner identity does not depend on a cosmetic family relation');await asked(holderCase.q);assert.equal((await answer(holderCase.q.id,true)).status,'confirmed');assert.equal(await linkCount(),1);
+ for(const linkedAlias of ['551199990001','11999990001','1199990001']){
+  await reset();holderCase=await prepared();await root();await db.query('delete from wpp_phone_links where phone=$1',[phone]);
+  await linkPhone(owner,company,linkedAlias,'business','Other');await owned();
+  assert.equal((await rpc('zelo_of_credit_pix_targets'))[0]?.phone,linkedAlias,'an explicit Brazilian registered number preserves legacy linked aliases');
+  const aliasToken=await claim(holderCase.q.id,linkedAlias);assert.match(aliasToken,/^[a-f0-9-]{36}$/i);assert.equal(await arm(holderCase.q.id,aliasToken),true);assert.equal(await finish(holderCase.q.id,aliasToken,'asked'),true);assert.equal((await answer(holderCase.q.id,true,linkedAlias)).status,'confirmed');
+ }
+ for(const invalidOwnerPhone of ['',null,'341999990001','11999990001']){
+  await reset();holderCase=await prepared();await root();await db.query('update users set phone=$1 where id=$2',[invalidOwnerPhone??'',owner]);await owned();
+  assert.equal((await rpc('zelo_of_credit_pix_targets')).length,0,'missing, foreign or ambiguous local registered ownership must fail closed');assert.equal(await claim(holderCase.q.id),null);
+ }
+ await reset();holderCase=await prepared();await asked(holderCase.q);await root();await db.query('update users set phone=$1 where id=$2',[foreignPhone,owner]);await owned();
+ assert.equal(await denied(()=>answer(holderCase.q.id,true)),null,'registered owner changes invalidate already sent questions');assert.equal(await linkCount(),0);
+ console.log('PASS: self-editing relations never elevates holder privileges; registered ownership, aliases and answer rechecks hold');
 
  await reset();const ambiguous=await makePair();await root();
  // More than a report page of harmless rows, followed by a second valid candidate.
@@ -136,7 +181,7 @@ try{
  await scope(owner,otherCompany);assert.equal(await denied(()=>get(q.id)),null);await denied(()=>answer(q.id,true));await owned();assert.equal(await linkCount(),0);
  await scope(other,foreignCompany);assert.equal(await denied(()=>get(q.id,other)),null);await denied(()=>answer(q.id,true,foreignPhone,other));await owned();assert.equal(await linkCount(),0);
  await denied(()=>answer(q.id,true,phone,owner,'personal'));await denied(()=>answer(q.id,true,foreignPhone));assert.equal(await linkCount(),0);
- await root();await db.query("update wpp_phone_links set relation='Spouse' where phone=$1",[phone]);await owned();await denied(()=>answer(q.id,true));assert.equal(await linkCount(),0,'a non-holder cannot answer');
+ await root();await db.query('update users set phone=$1 where id=$2',[foreignPhone,owner]);await owned();await denied(()=>answer(q.id,true));assert.equal(await linkCount(),0,'a non-holder cannot answer');
  await linkPhone(other,foreignCompany,phone);await owned();await denied(()=>answer(q.id,true));assert.equal(await linkCount(),0,'relinked phone cannot answer an old holder question');
  console.log('PASS: state, nonce, phone, holder, mode and company authorization');
 
@@ -175,7 +220,7 @@ try{
 
 
  await reset();({q}=await prepared());
- for(const [column,value] of [['relation','Spouse'],['access','personal'],['active_workspace_mode','personal'],['active_company_id',otherCompany]]){
+ for(const [column,value] of [['access','personal'],['active_workspace_mode','personal'],['active_company_id',otherCompany]]){
   await root();await db.exec('begin');
   try{await db.query(`update wpp_phone_links set ${column}=$1 where phone=$2`,[value,phone]);await owned();assert.equal((await rpc('zelo_of_credit_pix_targets')).length,0,`targets recheck phone ${column}`);}finally{await db.exec('rollback');}
  }
@@ -187,6 +232,14 @@ try{
  }
  assert.equal((await db.query("select exists(select 1 from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=current_user::regrole) member")).rows[0].member,false,'temporary migration-role membership must be revoked');
  const meta=(await db.query("select relrowsecurity rls,relforcerowsecurity forced from pg_class where oid='open_finance.credit_pix_questions'::regclass")).rows[0];assert.equal(meta.rls,true);assert.equal(meta.forced,true);
+ const registeredSignature='open_finance.credit_pix_registered_phone(text,text)';
+ for(const role of ['anon','authenticated','service_role'])assert.equal((await db.query("select has_function_privilege($1,$2,'EXECUTE') allowed",[role,registeredSignature])).rows[0].allowed,false,'registered owner helper is private and cannot be probed by clients/service');
+ assert.equal((await db.query("select has_function_privilege('zelo_of_workspace',$1,'EXECUTE') allowed",[registeredSignature])).rows[0].allowed,true);
+ for(const [registered,linked,allowed] of [
+  ['+55 (11) 99999-0001','5511999990001',true],['5511999990001','551199990001',true],['5511999990001','1199990001',true],
+  ['551199990001','5511999990001',true],['551134560001','5511934560001',false],['34612345678','5534612345678',false],
+  ['34612345678','34612345678',true],['11999990001','5511999990001',false],['','',false],[null,phone,false]
+ ])assert.equal((await db.query('select open_finance.credit_pix_registered_phone($1,$2) allowed',[registered,linked])).rows[0].allowed,allowed,'only known Brazilian aliases expand, foreign/unknown/landline numbers stay exact');
  const quotaSignature='open_finance.credit_pix_holder_busy(uuid,uuid)';
  const quota=(await db.query('select proconfig,prosecdef from pg_proc where oid=$1::regprocedure',[quotaSignature])).rows[0];assert.equal(quota.prosecdef,true);assert.ok(quota.proconfig.includes('row_security=off'));
  for(const role of ['anon','authenticated','service_role'])assert.equal((await db.query("select has_function_privilege($1,$2,'EXECUTE') allowed",[role,quotaSignature])).rows[0].allowed,false,'quota helper has no direct client/service access');

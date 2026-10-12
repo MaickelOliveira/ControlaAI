@@ -20,11 +20,11 @@ export async function register() {
   let acquiredTickCount = 0;
 
   // Captura qualquer erro não tratado para evitar crash do processo
-  process.on("uncaughtException", (err) => {
-    console.error("[process] uncaughtException:", err);
+  process.on("uncaughtException", () => {
+    console.error("[process] uncaughtException:");
   });
-  process.on("unhandledRejection", (reason) => {
-    console.error("[process] unhandledRejection:", reason);
+  process.on("unhandledRejection", () => {
+    console.error("[process] unhandledRejection:");
   });
 
   console.log("[instrumentation] Iniciando cron de lembretes...");
@@ -50,8 +50,8 @@ export async function register() {
             const posted = await financesModule.autoPostPendingFinances(dateBrModule.todayStrBR());
             if (posted.length > 0) console.log(`[cron] ${posted.length} lançamento(s) pendente(s) postados`);
           }
-        } catch (e) {
-          console.error("[cron] Erro ao postar pendentes:", e);
+        } catch  {
+          console.error("[cron] Erro ao postar pendentes:");
         }
       }
 
@@ -63,8 +63,8 @@ export async function register() {
             const closed = await accountsModule.closeDueInvoices();
             if (closed.length > 0) console.log(`[cron] ${closed.length} fatura(s) de cartão fechada(s)`);
           }
-        } catch (e) {
-          console.error("[cron] Erro ao fechar faturas:", e);
+        } catch  {
+          console.error("[cron] Erro ao fechar faturas:");
         }
       }
 
@@ -108,8 +108,8 @@ export async function register() {
           console.log(`[cron] ${ok ? "✓" : "✗"} id=${r.id}`);
           if (ok) await markReminderSent(r.id, r.repeat);
           else await markReminderFailed(r.id);
-        } catch (e) {
-          console.error("[cron] Erro ao enviar lembrete:", e);
+        } catch  {
+          console.error("[cron] Erro ao enviar lembrete:");
           await markReminderFailed(r.id);
         }
       }
@@ -175,12 +175,12 @@ export async function register() {
                   });
                 }
               }
-            } catch (e) {
-              console.error("[cron] Erro ao notificar recorrente:", e);
+            } catch  {
+              console.error("[cron] Erro ao notificar recorrente:");
             }
           }
-        } catch (e) {
-          console.error("[cron] Erro no bloco de recorrentes:", e);
+        } catch  {
+          console.error("[cron] Erro no bloco de recorrentes:");
         }
       }
       // ── Lembrete de compromissos que começam em até 2h ──
@@ -212,13 +212,13 @@ export async function register() {
                 if (ok) sentToAny = true;
               }
               if (sentToAny) await updateAppointment(apt.id, apt.userId, { reminderSentAt: new Date().toISOString() });
-            } catch (e) {
-              console.error("[cron] Erro ao enviar lembrete de compromisso:", e);
+            } catch  {
+              console.error("[cron] Erro ao enviar lembrete de compromisso:");
             }
           }
         }
-      } catch (e) {
-        console.error("[cron] Erro no bloco de lembrete de compromissos:", e);
+      } catch  {
+        console.error("[cron] Erro no bloco de lembrete de compromissos:");
       }
 
       // ── Lembrete de compromissos que começam em até 15min — independente
@@ -256,16 +256,16 @@ export async function register() {
                 if (ok) sentToAny = true;
               }
               if (sentToAny) await updateAppointment(apt.id, apt.userId, { reminder15MinSentAt: new Date().toISOString() });
-            } catch (e) {
-              console.error("[cron] Erro ao enviar lembrete de compromisso (15min):", e);
+            } catch  {
+              console.error("[cron] Erro ao enviar lembrete de compromisso (15min):");
             }
           }
         }
-      } catch (e) {
-        console.error("[cron] Erro no bloco de lembrete de compromissos (15min):", e);
+      } catch  {
+        console.error("[cron] Erro no bloco de lembrete de compromissos (15min):");
       }
-    } catch (e) {
-      console.error("[cron] Erro no tick:", e);
+    } catch  {
+      console.error("[cron] Erro no tick:");
     } finally {
       await releaseCronLock(lockToken);
     }

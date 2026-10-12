@@ -25,8 +25,8 @@ export function startOpenFinanceWorker():()=>void {
   let nextRetirementCheck=0;
   const nextSyncCheck={personal:0,business:0},failures={personal:0,business:0};
   const nextErrorLog:Record<string,number>={};
-  function reportFailure(key:string,message:string){
-    if(Date.now()>=(nextErrorLog[key]??0)){console.error(message);nextErrorLog[key]=Date.now()+300_000;}
+  function reportFailure(key:string){
+    if(Date.now()>=(nextErrorLog[key]??0)){console.error("[open-finance] Operação bancária adiada");nextErrorLog[key]=Date.now()+300_000;}
   }
   async function tick(){
     if(stopped)return;
@@ -34,10 +34,10 @@ export function startOpenFinanceWorker():()=>void {
       try {
         const result=await runBankRetirement();
         nextRetirementCheck=Date.now()+(result==="idle"||result==="failed"?30000:10000);
-        if(result==="failed")reportFailure("retirement","[open-finance] Cancelamento bancário aguardando nova tentativa");
+        if(result==="failed")reportFailure("retirement");
       } catch {
         nextRetirementCheck=Date.now()+30000;
-        reportFailure("retirement","[open-finance] Cancelamento bancário temporariamente indisponível");
+        reportFailure("retirement");
       }
     }
     try{if(isPublicOpenFinanceEnabled()&&process.env.OPEN_FINANCE_SYNC_ENABLED==="true"){
@@ -55,7 +55,7 @@ export function startOpenFinanceWorker():()=>void {
     catch{
       failures[mode]++;
       nextSyncCheck[mode]=Date.now()+Math.min(300000,30000*2**Math.min(failures[mode]-1,4));
-      reportFailure(`sync-${mode}`,"[open-finance] Sincronização temporariamente indisponível");
+      reportFailure(`sync-${mode}`);
     }
     mode=mode==="personal"?"business":"personal";
     if(!stopped)timer=setTimeout(()=>void tick(),2000);

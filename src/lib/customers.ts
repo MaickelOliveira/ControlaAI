@@ -43,7 +43,7 @@ export async function getCustomersByUser(userId: string, status?: CustomerStatus
   let query = getSupabase().from("customers").select("*").eq("user_id", userId);
   if (status) query = query.eq("status", status);
   const { data, error } = await query;
-  if (error) { console.error("[customers] getCustomersByUser erro:", error.message); return []; }
+  if (error) { console.error("[customers] getCustomersByUser erro:"); return []; }
   return (data as Row[]).map(fromRow);
 }
 

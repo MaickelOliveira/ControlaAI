@@ -40,3 +40,15 @@ it("keeps the edit modal actionable when a write fails", async () => {
  const response = await POST(request({ ...purchase, action: "purchase_update", id: "owned" }));
  expect(response.status).toBe(400); expect((await response.json()).error).toContain("Não foi possível");
 });
+it("does not expose provider diagnostics or credentials when saving a purchase fails", async () => {
+ const internalError = "[grocery] provider password=FAKE_TEST_ONLY_PRIVATE_VALUE database diagnostic";
+ for (const failure of [mocks.store, mocks.save]) {
+  failure.mockRejectedValueOnce(Error(internalError));
+  const response = await POST(request(purchase));
+  expect(response.status).toBe(400);
+  const result = await response.json();
+  expect(result.error).toContain("Não foi possível");
+  expect(JSON.stringify(result)).not.toContain("FAKE_TEST_ONLY_PRIVATE_VALUE");
+  expect(JSON.stringify(result)).not.toContain("[grocery]");
+ }
+});

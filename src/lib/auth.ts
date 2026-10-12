@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { timingSafeEqual } from "node:crypto";
 import { getUserById, hasAccess, type User } from "./users";
 
 // Evita que cada API aberta em paralelo por uma página repita a mesma ida ao
@@ -66,10 +67,18 @@ export type SessionPayload = {
   plan: string;
   role: "client" | "admin";
   iat?: number;
+  adminVersion?: string;
 };
 
-export async function signToken(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ ...payload })
+export async function signToken(payload: SessionPayload, attestedAdminVersion?: string): Promise<string> {
+  let claims = { ...payload };
+  if (payload.role === "admin") {
+    const { getAdminCredentialVersion } = await import("./admin");
+    const current = await getAdminCredentialVersion();
+    if (!current || payload.sub !== "admin" || payload.email !== current.email || attestedAdminVersion !== current.version) throw Error("ADMIN_SESSION_UNAVAILABLE");
+    claims = { ...payload, adminVersion: current.version };
+  }
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
@@ -124,7 +133,14 @@ export async function getAdminSession(): Promise<SessionPayload | null> {
   const jar = await cookies();
   const token = jar.get(ADMIN_COOKIE)?.value;
   if (!token) return null;
-  return verifyToken(token);
+  const payload = await verifyToken(token);
+  if (!payload || payload.role !== "admin" || payload.sub !== "admin" || typeof payload.adminVersion !== "string" || !/^[a-f0-9]{64}$/.test(payload.adminVersion)) return null;
+  try {
+    const { getAdminCredentialVersion } = await import("./admin");
+    const current = await getAdminCredentialVersion();
+    if (!current || payload.email !== current.email || !timingSafeEqual(Buffer.from(payload.adminVersion, "hex"), Buffer.from(current.version, "hex"))) return null;
+    return payload;
+  } catch { return null; }
 }
 
 export async function setAdminSessionCookie(token: string) {

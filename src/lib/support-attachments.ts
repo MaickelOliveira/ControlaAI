@@ -88,7 +88,7 @@ export async function uploadSupportImage(userId: string, file: File): Promise<Su
     });
 
   if (error) {
-    console.error("[support] Falha no upload da imagem:", error.message);
+    console.error("[support] Falha no upload da imagem:");
     throw new SupportImageError("Não foi possível enviar a imagem agora. Tente novamente.", 500);
   }
 
@@ -98,7 +98,7 @@ export async function uploadSupportImage(userId: string, file: File): Promise<Su
 export async function deleteSupportImage(userId: string, fileName: string): Promise<void> {
   if (!supportImageMimeFromFileName(fileName)) return;
   const { error } = await getSupabase().storage.from(SUPPORT_IMAGE_BUCKET).remove([`${userId}/${fileName}`]);
-  if (error) console.error("[support] Falha ao remover imagem órfã:", error.message);
+  if (error) console.error("[support] Falha ao remover imagem órfã:");
 }
 
 export async function downloadSupportImage(userId: string, fileName: string): Promise<Blob | null> {

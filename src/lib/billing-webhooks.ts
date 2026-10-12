@@ -72,6 +72,83 @@ export type WebhookHistoryEntry = {
 
 const WEBHOOK_HISTORY_LIMIT = 100;
 
+type DiagnosticConfig = Pick<BillingWebhookConfig, "emailPath" | "statusPath" | "planPath" | "localePath" | "secretBodyField" | "secretValue"> & { diagnosticSecrets?: readonly string[]; redactDiagnosticText?: boolean };
+const CREDENTIAL_FIELD = /(?:token|secret|password|passwd|credential|authorization|api[-_]?key|hottok)/i;
+
+/** Legacy bodies may contain a previous credential after its configured value changed. */
+function bodyDiagnosticConfig(body: unknown, cfg?: DiagnosticConfig): DiagnosticConfig | undefined {
+  if (!cfg) return cfg;
+  const secrets = new Set<string>(cfg.secretValue ? [cfg.secretValue] : []);
+  let visited = 0, truncated = false;
+  function scan(value: unknown, sensitive = false, depth = 0): void {
+    if (++visited > 5_000 || depth > 16 || secrets.size > 128) { truncated = true; return; }
+    if (typeof value === "string") { if (sensitive && value) secrets.add(value); return; }
+    if (!value || typeof value !== "object") return;
+    for (const [key, child] of Object.entries(value)) {
+      if (truncated) break;
+      scan(child, sensitive || CREDENTIAL_FIELD.test(key), depth + 1);
+    }
+  }
+  scan(body);
+  if (cfg.secretBodyField) scan(getByPath(body, cfg.secretBodyField), true);
+  return { ...cfg, diagnosticSecrets: [...secrets].sort((a, b) => b.length - a.length), redactDiagnosticText: truncated };
+}
+
+function diagnosticText(value: unknown, cfg?: DiagnosticConfig): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (cfg?.redactDiagnosticText) return "[oculto]";
+  let safe = value;
+  for (const secret of cfg?.diagnosticSecrets ?? (cfg?.secretValue ? [cfg.secretValue] : [])) safe = safe.replaceAll(secret, "[oculto]");
+  return safe.slice(0, 500);
+}
+
+/** Diagnostics retain mapped scalar fields, never a copy of a provider payload. */
+function diagnosticBody(body: unknown, cfg?: DiagnosticConfig): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  if (!cfg) return safe;
+  for (const path of [cfg.emailPath, cfg.statusPath, cfg.planPath, cfg.localePath, "data.subscriber.email"]) {
+    if (!path || path.length > 200) continue;
+    const parts = path.split(".");
+    if (parts.length > 8 || parts.some(part => !/^[\w-]{1,64}$/.test(part) || /^(?:__proto__|prototype|constructor)$/i.test(part)
+      || CREDENTIAL_FIELD.test(part))) continue;
+    if (cfg.secretBodyField && (path === cfg.secretBodyField || path.startsWith(`${cfg.secretBodyField}.`))) continue;
+    const value = getByPath(body, path);
+    const scalar = typeof value === "string" ? diagnosticText(value, cfg)
+      : typeof value === "number" && Number.isFinite(value) || typeof value === "boolean" ? value : undefined;
+    if (scalar === undefined) continue;
+    let node = safe;
+    for (const part of parts.slice(0, -1)) {
+      if (!node[part] || typeof node[part] !== "object") node[part] = {};
+      node = node[part] as Record<string, unknown>;
+    }
+    node[parts[parts.length - 1]] = scalar;
+  }
+  return safe;
+}
+
+export function billingWebhookAdminResult(result: BillingWebhookResult, cfg?: DiagnosticConfig): BillingWebhookResult {
+  return result.ok ? { ok: true, action: result.action, email: diagnosticText(result.email, cfg), detail: diagnosticText(result.detail, cfg) }
+    : { ok: false, error: diagnosticText(result.error, cfg) ?? "Falha no processamento", retryable: result.retryable === true };
+}
+
+function diagnosticAttempt(attempt: WebhookAttempt, cfg?: DiagnosticConfig): WebhookAttempt {
+  cfg = bodyDiagnosticConfig(attempt.body, cfg);
+  const safeResult = attempt.result ? billingWebhookAdminResult(attempt.result, cfg) : undefined;
+  return {
+    at: diagnosticText(attempt.at, cfg) ?? "", wasActive: attempt.wasActive === true, authOk: attempt.authOk === true,
+    body: diagnosticBody(attempt.body, cfg), ...(safeResult ? { result: safeResult } : {}),
+    ...(Array.isArray(attempt.history) ? { history: attempt.history.slice(0, WEBHOOK_HISTORY_LIMIT).map(entry => ({
+      at: diagnosticText(entry.at, cfg) ?? "", authOk: entry.authOk === true,
+      event: diagnosticText(entry.event, cfg), email: diagnosticText(entry.email, cfg), outcome: diagnosticText(entry.outcome, cfg) ?? "",
+    })) } : {}),
+  };
+}
+
+/** Applies to reads and mutation responses, including diagnostics saved before hardening. */
+export function billingWebhookAdminView(cfg: BillingWebhookConfig): BillingWebhookConfig {
+  return { ...cfg, secretValue: cfg.secretValue ? "••••••••" : "", ...(cfg.lastAttempt ? { lastAttempt: diagnosticAttempt(cfg.lastAttempt, cfg) } : {}) };
+}
+
 type Row = {
   id: string;
   label: string;
@@ -146,7 +223,7 @@ export async function getBillingWebhookById(id: string): Promise<BillingWebhookC
  *  200 OK, o admin acha que "testou e funcionou", mas nada acontece porque
  *  ninguém tinha ligado a integração ainda). Best-effort: nunca deve
  *  derrubar o processamento do webhook por causa de erro aqui. */
-export async function recordWebhookAttempt(id: string, attempt: WebhookAttempt, cfg?: Pick<BillingWebhookConfig, "emailPath" | "statusPath" | "lastAttempt">): Promise<void> {
+export async function recordWebhookAttempt(id: string, attempt: WebhookAttempt, cfg?: DiagnosticConfig & Pick<BillingWebhookConfig, "lastAttempt">): Promise<void> {
   try {
     const event = cfg ? getByPath(attempt.body, cfg.statusPath) : undefined;
     const email = cfg ? (getByPath(attempt.body, cfg.emailPath) ?? getByPath(attempt.body, "data.subscriber.email")) : undefined;
@@ -163,9 +240,9 @@ export async function recordWebhookAttempt(id: string, attempt: WebhookAttempt, 
       outcome,
     };
     const history = [entry, ...(cfg?.lastAttempt?.history ?? [])].slice(0, WEBHOOK_HISTORY_LIMIT);
-    await getSupabase().from("billing_webhooks").update({ last_attempt: { ...attempt, history } }).eq("id", id);
-  } catch (e) {
-    console.error("[billing-webhook] falha ao gravar last_attempt:", e);
+    await getSupabase().from("billing_webhooks").update({ last_attempt: diagnosticAttempt({ ...attempt, history }, cfg) }).eq("id", id);
+  } catch  {
+    console.error("[billing-webhook] falha ao gravar last_attempt:");
   }
 }
 
@@ -479,16 +556,16 @@ export async function evaluateBillingWebhook(cfg: BillingWebhookConfig, body: un
       const setup = await createPasswordSetupLink(user.id);
       setupId = setup.id;
       await sendFirstAccessLinkEmail({ email: user.email, name: user.name, setupId: setup.id, locale: user.locale });
-    } catch (error) {
-      console.error("[billing-webhook] conta criada, mas o e-mail de acesso falhou", error);
+    } catch {
+      console.error("[billing-webhook] conta criada, mas o e-mail de acesso falhou");
     }
     // Mesmo link/token do e-mail, também por WhatsApp — independente do
     // e-mail ter falhado ou não, e só se o webhook trouxe telefone.
     if (setupId && user.phone) {
       try {
         await sendWelcomeTemplate(user.phone, user.locale);
-      } catch (error) {
-        console.error("[billing-webhook] conta criada, mas a mensagem de boas-vindas por WhatsApp falhou", error);
+      } catch {
+        console.error("[billing-webhook] conta criada, mas a mensagem de boas-vindas por WhatsApp falhou");
       }
     }
     return { ok: true, action: "activated", email, detail: "conta paga criada e acesso enviado por e-mail" };
