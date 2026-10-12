@@ -14,3 +14,7 @@ Critério de conclusão: registrar changelog e alcance de cada correção; atual
 ## Preparação fiscal em 11/10/2026
 
 Acrescentado node-forge 1.4.0, versão exata, apenas no subprocesso de leitura PKCS#12 (com término forçado em 4 segundos e limite de duas validações concorrentes). A assinatura XML/validação de confiança do emissor ainda não está implementada. O aviso GHSA-86w9-cpqp-85rv afeta a verificação RSA PKCS#1 feita por forge; a aplicação não usa esse verificador. A correspondência da chave/certificado e a leitura X509 usam Node/OpenSSL. Não usar forge para estabelecer confiança ICP-Brasil. Não há correção publicada na auditoria realizada; revisar em 17/10/2026 antes de habilitar emissão real. O teste de certificado autogerado não prova credenciamento ou confiança fiscal. XML-crypto e xmldom foram retirados porque este incremento não assina nem transmite XML.
+
+## Consultas bancárias pelo WhatsApp em 11/10/2026
+
+Nova auditoria confirmou 10 ocorrências existentes (8 altas e 2 moderadas, nenhuma crítica), incluindo node-forge da preparação fiscal acima. Nenhuma dependência/lockfile foi alterada. A consulta nova apenas lê DTOs autenticados e formata texto, sem processamento de certificados, imagens, planilhas ou mapas de código. As pendências de manutenção e as restrições fiscais acima permanecem vigentes.

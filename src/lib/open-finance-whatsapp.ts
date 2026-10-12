@@ -5,6 +5,7 @@ import {getOpenFinanceAccess,canEnrollOpenFinance,type OpenFinanceIdentity} from
 import {readUnifiedFinances} from "./unified-finances";
 import {summarizeFinanceQuery,financeCoverageNotice,type FinanceQuery} from "./finance-query";
 import {answerBankQuestion,parseBankQuestion} from "./open-finance-question";
+import {isBankPositionQuestion} from "./bank-question-parser";
 import {expandMerchantAliases,getPendingFinances} from "./finances";
 import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
@@ -15,16 +16,22 @@ const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toL
 
 export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"business",phoneAccess:string,message:string,today:string):Promise<string|null>{
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true")return null;
-  const text=normalize(message),requested=/\b(empresa|empresarial|pj)\b/.test(text)?"business":/\b(pessoal|pf)\b/.test(text)?"personal":mode;
-  if(phoneAccess!=="both"&&requested!==mode)return /banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  const text=normalize(message);
+  const business=/\b(empresa|empresarial|empresariais|pj)\b/.test(text),personal=/\b(pessoal|pessoais|pf)\b/.test(text);
+  const positionQuestion=isBankPositionQuestion(message);
+  if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
+  const requested=business?"business":personal?"personal":mode;
+  if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
   if(/\bopen\s*(finance|banking)\b/.test(text)||(/\b(conectar|conecto|sincronizar|vincular)\b/.test(text)&&/\b(banco|bancos|bancaria|bancarias)\b/.test(text))){
     if(!canEnrollOpenFinance(user,requested)&&!await getOpenFinanceAccess(user,requested))return null;
     return "O Open Finance está disponível para contas bancárias do Brasil. Na Zelo, abra Contas → Conectar banco no modo Pessoal (PF) ou Empresa (PJ). Você autoriza diretamente no banco; a Zelo não pede sua senha. Depois, as consultas usam os dados recebidos e salvos na Zelo.";
   }
-  const question=message.replace(/\b(?:da empresa|empresarial|pessoal|pf|pj)\b/gi,"").replace(/\s+/g," ").trim();
+  const question=message.replace(/\b(?:(?:da|na|de|em|do) (?:minha |meu |modo )?|modo )?(?:empresa|empresarial|empresariais|pessoal|pessoais|pf|pj)\b/gi,"").replace(/\s+/g," ").trim();
   const parsed=parseBankQuestion(question,today);
-  if(!parsed||parsed.kind==="spending")return null;
-  return answerBankQuestion(user,requested,question,today);
+  if(parsed?.kind==="spending"&&!parsed.bankName)return null;
+  if(!parsed)return positionQuestion?"Consigo consultar os dados atuais recebidos dos bancos, por modo e empresa. Exemplos: ‘quanto tenho de empréstimos em cada banco’, ‘qual meu limite disponível no cartão Nubank’ e ‘mostre meus financiamentos’. Informe o banco se quiser filtrar. Para uma fatura de outro mês, peça ‘envie a fatura do Nubank de setembro’. Não vou substituir esse pedido por um resumo de gastos.":null;
+  const reply=await answerBankQuestion(user,requested,question,today);
+  return reply??(parsed.kind==="spending"?null:"A consulta bancária não está disponível nesse modo. Confira seu plano e a conexão em Contas; nenhum valor foi calculado.");
 }
 
 /** The model supplies filters only. Financial rows and totals never enter its prompt. */
