@@ -45,7 +45,7 @@ it("includes bank installments when the manual recurring list is empty, retainin
   m.rpc.mockResolvedValue({ incomplete: false, items: [{ id: "parcel", kind: "installment", resource_id: "card", description: "Compra teste", institution_name: "Nubank", resource_name: "Platinum", amount: "90.10", currency: null, due_date: null, synced_at: "2026-10-11", total_installments: 12, observed_installments: 12 }] });
   await handleIncomingMessage({ from: "5511999990000", text: "quanto tenho de parcelados" });
   const response = m.send.mock.calls.map(call => call[1]).join("\n");
-  expect(response).toContain("Compra teste"); expect(response).toContain("12/12"); expect(response).toContain("moeda não informada"); expect(response).not.toContain("Nenhum lançamento recorrente ou parcelado ativo");
+  expect(response).toContain("Compra teste"); expect(response).toContain("Última parcela identificada: 12 de 12"); expect(response).toContain("moeda não informada"); expect(response).not.toContain("Nenhum lançamento recorrente ou parcelado ativo");
   expect(m.send.mock.calls.every(call => call[2]?.privateFinancial)).toBe(true);
 });
 afterEach(() => vi.unstubAllEnvs());
