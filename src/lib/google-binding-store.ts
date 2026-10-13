@@ -74,11 +74,16 @@ export async function captureGoogleGrantVersions(scope:GoogleWorkspace,clientId:
  }catch{throw Error("GOOGLE_BINDING_STORAGE_INVALID");}
 }
 function snapshotVersion(snapshot:GoogleGrantVersionSnapshot,proof:VerifiedGoogleIdentity):string{
+ return googleCapturedGrantVersion(snapshot,proof.workspace,proof.clientFingerprint,proof.subject);
+}
+/** A revision is concurrency metadata, not identity/credential authority. Callers
+ * must verify the provider subject independently before a corresponding write. */
+export function googleCapturedGrantVersion(snapshot:GoogleGrantVersionSnapshot,scope:GoogleWorkspace,clientFingerprint:string,subject:string):string{
  const captured=snapshots.get(snapshot);
  if(!captured||Date.now()>=captured.expiresAt)throw Error("GOOGLE_BINDING_SNAPSHOT_INVALID");
- assertGoogleWorkspaceMatch(proof.workspace,snapshot.workspace);
- if(snapshot.clientFingerprint!==proof.clientFingerprint)throw Error("GOOGLE_BINDING_SNAPSHOT_INVALID");
- return captured.versions.get(proof.subject)??"0";
+ assertGoogleWorkspaceMatch(scope,snapshot.workspace);
+ if(snapshot.clientFingerprint!==clientFingerprint||/\s/.test(text(subject,255)))throw Error("GOOGLE_BINDING_SNAPSHOT_INVALID");
+ return captured.versions.get(subject)??"0";
 }
 export function googleCredentialValue(value:unknown):string{
  if(typeof value!=="string"||!value||value.length>16384||/[\s\p{Cc}]/u.test(value))throw Error("GOOGLE_BINDING_CREDENTIAL_INVALID");return value;
