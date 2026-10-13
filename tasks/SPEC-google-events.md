@@ -124,6 +124,67 @@ revision and both v1 retry IDs against the local logical event. Reservation resu
 must also match the captured binding/grant/calendar/revision. Return frozen DTOs
 and fixed errors without raw storage diagnostics. Install no live consumer yet.
 
+### Creation lifecycle
+
+First persist one immutable validated creation payload per origin. Reusing the
+logical UUID with different content is a conflict, never an implicit remote update.
+Keep payloads private; status/UI serializers expose only allowlisted fields.
+Mutable state records queued/running/waiting/succeeded/failed, exact decimal attempt
+revision, short database-issued lease, bounded attempts, known remote creation,
+ETag, safe failure code and validated Meet link. No tokens or provider diagnostics.
+
+Claim after scoped runtime credentials are ready. Owner/company locks and an exact
+attempt revision yield one worker; a60-second lease expires independently of the
+worker process. Completion compares lease UUID/revision/lifetime and active exact
+binding/grant/client again. A stale worker cannot overwrite a winner or revive a
+removed connection. No provider call occurs under a database lock. Provider calls
+have fixed timeouts and retry disabled; metadata is checked before every effect.
+
+Before an insert, GET the stable remote ID and verify its signed origin/operation
+markers. A409 requires that same verification, never blind acceptance. A known
+deleted/foreign event is not recreated. Existing exact marked events are reconciled
+without a second insert/invitation. Conference pending uses read-only polling of
+the same request ID, without a second patch/conference. A definitive conference
+failure requires a separate explicit retry operation, not a regenerated ID during
+an ambiguous retry. Updates/deletes later use stored calendar, ownership markers
+and conditional ETags to prevent stale writes.
+
+A new creation initially requires the original binding revision. After a binding
+change, retries may reconcile an already attempted remote event using the same
+active binding/grant; they cannot silently insert a new event. An explicit user
+retry can capture the current binding revision while retaining the event's original
+calendar/account. It does not modify immutable origin or payload. Preserve a sticky
+was-attempted/remote-known flag across retry rounds, so a restart cannot reinterpret
+an ambiguous request as an untouched first attempt. Limit automatic attempts per
+round; explicit retries retain the same logical IDs and invalidate older leases.
+
+Prepare storage/rollback/fixtures, then private DTO adapters and payload/marker
+validation, then actual SDK reconciliation. Transactional public-record linkage and
+all consumers follow before activation. No existing row is assigned provenance.
+
+The first lifecycle increment stores one private JSON object (at most32 KiB) per
+origin, with an immutable meeting flag and database-derived payload digest. It
+does not validate the complete Calendar payload yet; that belongs to the next
+server boundary. There is no browser access. Backend UPDATE privileges apply
+only to synchronization fields, never the event key, payload or request kind.
+The origin FK preserves ownership through the scoped origin join; getters do
+not expose the private payload to the UI. Account erasure follows the existing
+owner→origin cascade; rollback retains all history and revokes column ACLs too.
+
+Each automatic round permits at most10 leases, including workers lost without
+completion. A claim stores attempted=true before leaving the transaction. A
+changed binding revision permits only reconciliation of a prior attempted
+creation; insert_allowed is false unless the original/explicitly resumed
+revision matches and remote_known is false. Completion requires the exact
+current lease binding revision. Remote-known uses a sticky OR and preserves its
+ETag across transient failures. Pending conferences exhaust into a fixed failure
+instead of polling indefinitely. Explicit retry compares the original attempt
+revision, refuses an unexpired worker, increments the revision, resets only the
+round counter and captures the same active account's current binding revision.
+Succeeded, foreign, deleted and definitively failed conference operations cannot
+be retried through this creation RPC. A separate future conference operation is
+required for a new definitive retry request. These RPCs have no live consumer.
+
 Official references checked2026-10-13:
 https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
 https://developers.google.com/workspace/calendar/api/v3/reference/events
