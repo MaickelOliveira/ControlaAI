@@ -215,6 +215,27 @@ mandatory. These helpers install no provider call or live consumer. Google permi
 64-character opaque values. Official extended-properties reference checked2026-10-13:
 https://developers.google.com/workspace/calendar/api/guides/extended-properties
 
+### Private lifecycle server adapter
+
+Only a trusted authenticated consumer can supply a scope/authorized local event.
+The private loader reads its immutable scoped intent before lifecycle metadata,
+does not create provenance for missing old rows and never queries Google config,
+credentials or legacy. Canonicalize/copy/freeze payload and scope before awaits.
+Preparation reserves new intent and submits the immutable canonical payload;
+validate the returned payload and original authorized binding revision.
+
+Claim/finish receive the scoped runtime's captured binding/client metadata after
+credentials are ready. Copy metadata and exact attempt/lease parameters before
+awaits; validate against original intent and leave the original calendar unchanged
+even if the current selected calendar differs. Storage rechecks activity, exact
+account/client/revision and lease CAS. Explicit retry is a separate authenticated
+user action. Validate every returned enum, bigint decimal, counter, sticky flag,
+lease, ETag, Meet URL, payload flag/digest and synchronization invariant; mutation
+results must match their expected state/revision. Return frozen allowlisted private
+DTOs, no SDK responses, raw diagnostics, credentials or config objects. Reject raw
+failure diagnostics before RPC and hide underlying errors/causes. These adapters
+remain dormant; public-record transactions and provider effects follow.
+
 Official references checked2026-10-13:
 https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
 https://developers.google.com/workspace/calendar/api/v3/reference/events
