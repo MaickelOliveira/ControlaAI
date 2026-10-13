@@ -1,16 +1,15 @@
 "use client";
-import BankLogo from "@/components/BankLogo";
-import FinanceAuthor from "@/components/FinanceAuthor";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import {fetchDashboardMe} from "@/lib/dashboard-me-client";
-import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
+import {ledgerBalance,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankDate} from "@/lib/open-finance-display";
 import {bankDashboardAccounts} from "@/lib/bank-dashboard";
 import {bankMoney} from "@/lib/open-finance-display";
+import DashboardRecentMovements from "@/components/DashboardRecentMovements";
 import DashboardCredit from "@/components/DashboardCredit";
 import DashboardAgenda from "@/components/DashboardAgenda";
 import EclipseDashboardHeader from "@/components/EclipseDashboardHeader";
@@ -320,7 +319,7 @@ export default function DashboardPage() {
       </div>
           <div className="z-eclipse-secondary">
             <article className="z-card z-activity-card"><div className="z-card-heading"><h2>Onde você gastou</h2><span className="z-badge">{rangeLabel}</span></div><div className="z-activity-chart" role="region" tabIndex={0} aria-label="Participação das categorias">{positiveExpenses.length?<PieChartComponent data={positiveExpenses} totalExpense={positiveExpenseTotal}/>:<div className="z-empty">Sem despesas positivas neste período.</div>}{pieData.some(g=>g.value<0)&&<p className="mt-3 text-[10px] text-emerald-ink">Estornos líquidos aparecem no ranking, fora desta participação.</p>}</div></article>
-            <article className="z-card z-activity-card"><div className="z-card-heading"><h2>Últimas movimentações</h2><Link href="/dashboard/financas">Ver todas →</Link></div><div className="z-activity-list" tabIndex={0} role="region" aria-label="Últimas movimentações">{!filteredFinances.length?<div className="z-empty">Nenhuma movimentação neste período.</div>:filteredFinances.slice(0,6).map(transaction=><div key={transaction.id} className="z-transaction-row"><span className={clsx("grid h-8 w-8 shrink-0 place-items-center rounded-xl",transaction.type==="income"?"bg-emerald-soft text-emerald-ink":"bg-red-soft text-red-ink")}>{transaction.type==="income"?"↗":"↘"}</span><div className="min-w-0 flex-1"><p className="truncate">{transaction.description}</p><small>{transaction.category}</small><span className="z-badge ml-1 inline-flex items-center gap-1.5">{transaction.bank&&<BankLogo institutionId={transaction.bank.institution_id} size={24}/>}<span>{financeOrigin(transaction)}</span></span><FinanceAuthor name={transaction.registeredByName}/></div><strong className={transaction.type==="income"?"text-emerald-ink":"text-red-ink"}>{transaction.type==="income"?"+":"−"}{fmt(transaction.amount)}</strong></div>)}</div></article>
+            <DashboardRecentMovements entries={filteredFinances}/>
           </div>
       <section className="z-dashboard-planning z-dashboard-compact z-card" aria-label="Planejamento">
           <DashboardAgenda/>
