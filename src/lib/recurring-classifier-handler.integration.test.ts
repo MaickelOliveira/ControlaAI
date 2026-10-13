@@ -31,7 +31,7 @@ it("uses the real classifier normalization and handler to retain undated bank in
  const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
  expect(m.model).toHaveBeenCalledOnce();
  expect(reply).toContain("Parcela manual fictícia");expect(reply).toContain("Parcela bancária fictícia");
- expect(reply).toContain("2/12 parcelas observadas");expect(reply).not.toContain("sem vencimento informado ficaram fora");
+ expect(reply).toContain("Última parcela identificada: 2 de 12");expect(reply).toContain("10 parcelas previstas");expect(reply).not.toContain("sem vencimento informado ficaram fora");
  expect(m.recurring).toHaveBeenCalledWith("recurring-holder","personal","active",true);
  expect(m.send.mock.calls.every(call=>call[2]?.privateFinancial)).toBe(true);
  expect(m.confirm).not.toHaveBeenCalled();expect(m.due).not.toHaveBeenCalled();

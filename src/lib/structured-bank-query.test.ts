@@ -25,7 +25,7 @@ it("executes a semantically interpreted card question against saved values", asy
 });
 it("includes a fully observed installment without claiming it has been paid", async () => {
   const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }), "2026-10-11");
-  expect(response).toContain("Notebook teste"); expect(response).toContain("12/12"); expect(response).toContain("não confirmam pagamento"); expect(response).not.toContain("quitad"); expect(response).not.toContain("faltam 0");
+  expect(response).toContain("Notebook teste"); expect(response).toContain("Última parcela identificada: 12 de 12"); expect(response).toContain("não confirmam pagamento"); expect(response).not.toContain("quitad"); expect(response).not.toContain("faltam 0");
 });
 it("keeps unknown currency and payment dates unknown", async () => {
   m.rpc.mockResolvedValue({ ...overview, agenda: { ...overview.agenda, items: [{ ...overview.agenda.items[0], currency: null }] } });
