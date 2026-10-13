@@ -26,6 +26,7 @@ it("preserves a chosen category, transfers and income even when a merchant match
 });
 it.each([
  ["FOOD_AND_DRINK_GROCERIES","Alimentação"],
+ ["FOOD_AND_DRINK_FAST_FOOD","Delivery"],
  ["TRANSPORTATION_GAS","Transporte"],
  ["MEDICAL_PHARMACIES_AND_SUPPLEMENTS","Saúde"],
  ["GENERAL_SERVICES_EDUCATION","Educação"],

@@ -1,10 +1,10 @@
 import type {BankMovement} from "./open-finance-report";
-import {descriptionExpenseCategory,descriptionIncomeCategory} from "./expense-category";
+import {descriptionExpenseCategory,descriptionIncomeCategory,isNonFoodDeliveryDescription} from "./expense-category";
 
 export type BankCategory={name:string;source:"user"|"provider"|"description"|"default"|"excluded"};
 // Polp Celcoin taxonomy: https://polp.com.br/docs/celcoin/categories
 const expenseFamilies:Record<string,string>={FOOD_AND_DRINK:"Alimentação",TRANSPORTATION:"Transporte",MEDICAL:"Saúde",ENTERTAINMENT:"Lazer",TRAVEL:"Lazer",HOME_IMPROVEMENT:"Moradia",RENT_AND_UTILITIES:"Moradia",GENERAL_SERVICES:"Serviços",PERSONAL_CARE:"Serviços",BANK_FEES:"Encargos bancários",GENERAL_MERCHANDISE:"Outros",GOVERNMENT_AND_NON_PROFIT:"Outros"};
-const specific:Record<string,string>={GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES:"Vestuário",GENERAL_MERCHANDISE_ELECTRONICS:"Tecnologia",GENERAL_SERVICES_EDUCATION:"Educação",GENERAL_SERVICES_AUTOMOTIVE:"Transporte",GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT:"Impostos"};
+const specific:Record<string,string>={FOOD_AND_DRINK_FAST_FOOD:"Delivery",GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES:"Vestuário",GENERAL_MERCHANDISE_ELECTRONICS:"Tecnologia",GENERAL_SERVICES_EDUCATION:"Educação",GENERAL_SERVICES_AUTOMOTIVE:"Transporte",GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT:"Impostos"};
 const incomeCategories:Record<string,string>={INCOME_SALARY:"Salário",INCOME_CONTRACTOR:"Freelance",INCOME_GIG_ECONOMY:"Serviços",INCOME_RENTAL:"Aluguel",INCOME_DIVIDENDS:"Rendimentos",INCOME_INTEREST_EARNED:"Rendimentos",INCOME_TAX_REFUND:"Reembolso"};
 
 export function bankCategory(movement:BankMovement):BankCategory {
@@ -15,7 +15,7 @@ export function bankCategory(movement:BankMovement):BankCategory {
   if(merchant)return {name:merchant,source:"description"};
   const code=movement.source_category;
   const provider=code?(income?incomeCategories[code]:specific[code]??Object.entries(expenseFamilies).find(([family])=>code===family||code.startsWith(family+"_"))?.[1]):undefined;
-  if(provider)return {name:provider,source:"provider"};
+  if(provider&&!(provider==="Delivery"&&isNonFoodDeliveryDescription(movement.description)))return {name:provider,source:"provider"};
   const description=movement.description.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
   const name=income?
     /\b(?:salario|folha de pagamento)\b/.test(description)?"Salário":/\b(?:reembolso|restituicao)\b/.test(description)?"Reembolso":/\b(?:servicos?\s+(?:prestados?|executados?)|estetica|salao\s+de\s+beleza|barbearia|consultoria)\b/.test(description)?"Serviços":undefined:

@@ -7,9 +7,13 @@ export function isNonFoodDeliveryDescription(description: string): boolean {
 }
 function foodDelivery(text: string): boolean {
   if (nonFoodDelivery.test(text)) return false;
-  return /\b(?:i\s*food|ifd|99\s*food|ze\s*delivery|aiq\s*fome|ai\s*(?:q|que)\s*fome|aiquefome|rappi(?!\s*(?:pay|bank|card)\b)|uber\s*eats|keeta|delivery\s*much|quero\s*delivery|to\s*no\s*lucro|pede\s*pronto)\b/.test(text)
+  if (/\b(?:i\s*food|ifd|99\s*food|ze\s*delivery|aiq\s*fome|ai\s*(?:q|que)\s*fome|aiquefome|rappi(?!\s*(?:pay|bank|card)\b)|uber\s*eats|keeta|delivery\s*much|quero\s*delivery|to\s*no\s*lucro|pede\s*pronto)\b/.test(text)
     || /\bdelivery\b/.test(text)
-    || /\b(?:tele\s*entrega|entrega|entregue|entregues)\b/.test(text) && food.test(text);
+    || /\b(?:tele\s*entrega|entrega|entregue|entregues)\b/.test(text) && food.test(text)) return true;
+  if (/\b(?:supermercados?|mercearias?|padarias?|muffato|assai|atacadao|carrefour|pao\s+de\s+acucar|mercado(?!\s+(?:pago|livre)))\b/.test(text)) return false;
+  // Product policy includes these prepared meals and food chains in Delivery,
+  // even when the bank does not indicate whether the meal was delivered.
+  return /\b(?:lanches?|lanchonetes?|pizzas?|pizzarias?|esfihas?|esfiharias?|sushis?|temakis?|yakisobas?|comida\s+japonesa|hamburguers?|hamburgers?|hamburguerias?|fast\s*food|ebi|bur(?:ger|guer)\s*king|bk|mc\s*donald(?:s|\s+s)?|subway|bob\s*s|habib\s*s?|kfc|pizza\s*hut|domino\s*s|giraffas|ragazzo|popeyes|madero|jeronimo\s+(?:burger|track|restaurante)|china\s*in\s*box|spoleto)\b/.test(text);
 }
 const priorityRules: Array<[RegExp, string]> = [
   [/\b(?:iof|juros\s+(?:bancarios|do\s+(?:cartao|emprestimo|financiamento)|de\s+mora|mora|rotativo|sobre\s+(?:saldo|emprestimo|financiamento))|encargos\s+(?:bancarios|financeiros)|tarifa\s+(?:bancaria|do\s+banco)|anuidade\s+(?:do\s+cartao|diferenciada|cartao))\b|^juros$/, "Encargos bancários"],
