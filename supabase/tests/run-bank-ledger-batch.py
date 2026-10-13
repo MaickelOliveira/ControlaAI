@@ -96,6 +96,22 @@ try:
     assert sql("select json_agg(json_build_object('name',nspname,'acl',nspacl::text) order by nspname) from pg_namespace where nspname in ('public','open_finance');")==schema_acl
     sql('revoke create on schema public,open_finance from public;')
     sql(migration.read_text())
+    # Managed migrators can administer a role without SET/INHERIT access.
+    sql(rollback.read_text())
+    sql("create role managed_migrator nologin createrole noinherit;grant usage,create on schema public,open_finance to managed_migrator with grant option;grant zelo_of_workspace to managed_migrator with admin true,inherit false,set false;")
+    def membership_snapshot():
+        return sql("select json_agg(json_build_object('grantor',grantor,'admin',admin_option,'inherit',inherit_option,'set',set_option) order by grantor) from pg_auth_members where roleid='zelo_of_workspace'::regrole and member='managed_migrator'::regrole;")
+    for own,set_option in [(False,False),(True,False),(True,True)]:
+        if own:
+            sql("set role managed_migrator;grant zelo_of_workspace to managed_migrator with admin false,inherit false,set "+('true' if set_option else 'false')+" granted by managed_migrator;")
+        original_memberships=membership_snapshot()
+        original_acl=sql("select json_agg(json_build_object('name',nspname,'acl',nspacl::text) order by nspname) from pg_namespace where nspname in ('public','open_finance');")
+        sql('set role managed_migrator;'+migration.read_text())
+        assert membership_snapshot()==original_memberships,'Migrator memberships changed'
+        assert sql("select json_agg(json_build_object('name',nspname,'acl',nspacl::text) order by nspname) from pg_namespace where nspname in ('public','open_finance');")==original_acl
+        sql('set role managed_migrator;'+rollback.read_text())
+        assert membership_snapshot()==original_memberships,'Rollback memberships changed'
+    sql(migration.read_text())
     print('PASS fixture report bytes:',old_bytes,'serial ->',len(json.dumps(batch,separators=(',',':')).encode()),'batch',flush=True)
     print('PASS PostgreSQL: 2000 facts/order/metadata match40 pages; owner/company/mode isolation; bounded overflow; ACL/RLS/owner and no temporary privileges',flush=True)
 finally:

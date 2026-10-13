@@ -3,9 +3,16 @@ begin;
 set local lock_timeout='5s';
 set local statement_timeout='60s';
 create temporary table zelo_ledger_rollback_privileges on commit drop as
- select exists(select 1 from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=(select oid from pg_roles where rolname=current_user)) as member;
-do $$begin
- if not(select member from zelo_ledger_rollback_privileges) then execute format('grant zelo_of_workspace to %I',current_user);end if;
+ select pg_has_role(current_user,'zelo_of_workspace','SET') and pg_has_role(current_user,'zelo_of_workspace','USAGE') as effective,
+ (select jsonb_build_object('admin',admin_option,'inherit',inherit_option,'set',set_option) from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=(select oid from pg_roles where rolname=current_user) and grantor=(select oid from pg_roles where rolname=current_user)) as own_grant,
+ has_schema_privilege('zelo_of_workspace','public','CREATE') as public_create,
+ has_schema_privilege('zelo_of_workspace','open_finance','CREATE') as private_create;
+do $$declare original jsonb;begin
+ if not exists(select 1 from pg_roles where rolname='zelo_of_workspace' and not rolcanlogin and not rolsuper and not rolbypassrls) then raise exception 'OF_WORKSPACE_ROLE_UNSAFE';end if;
+ if not(select effective from zelo_ledger_rollback_privileges) then
+  select own_grant into original from zelo_ledger_rollback_privileges;
+  execute format('grant zelo_of_workspace to %I with admin %s,inherit true,set true granted by %I',current_user,case when (original->>'admin')::boolean then 'true' else 'false' end,current_user);
+ end if;
 end;$$;
 create or replace function public.zelo_of_report(p_user uuid,p_mode text,p_from date,p_to date,p_after uuid default null) returns jsonb
 language plpgsql stable security definer set search_path=pg_catalog set row_security=on as $$
@@ -56,7 +63,13 @@ begin
 end;$$;
 drop function public.zelo_of_ledger_report(uuid,text,date,date);
 drop function open_finance.report_page(uuid,text,date,date,uuid,integer);
-do $$begin
- if not(select member from zelo_ledger_rollback_privileges) then execute format('revoke zelo_of_workspace from %I',current_user);end if;
+do $$declare original jsonb;begin
+ if not(select effective from zelo_ledger_rollback_privileges) then
+  if (select own_grant from zelo_ledger_rollback_privileges) is null then execute format('revoke zelo_of_workspace from %I granted by %I',current_user,current_user);
+  else
+   select own_grant into original from zelo_ledger_rollback_privileges;
+   execute format('grant zelo_of_workspace to %I with admin %s,inherit %s,set %s granted by %I',current_user,case when (original->>'admin')::boolean then 'true' else 'false' end,case when (original->>'inherit')::boolean then 'true' else 'false' end,case when (original->>'set')::boolean then 'true' else 'false' end,current_user);
+  end if;
+ end if;
 end;$$;
 commit;

@@ -4,12 +4,16 @@ begin;
 set local lock_timeout='5s';
 set local statement_timeout='60s';
 create temporary table zelo_ledger_migration_privileges on commit drop as
- select exists(select 1 from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=(select oid from pg_roles where rolname=current_user)) as member,
+ select pg_has_role(current_user,'zelo_of_workspace','SET') and pg_has_role(current_user,'zelo_of_workspace','USAGE') as effective,
+ (select jsonb_build_object('admin',admin_option,'inherit',inherit_option,'set',set_option) from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=(select oid from pg_roles where rolname=current_user) and grantor=(select oid from pg_roles where rolname=current_user)) as own_grant,
  has_schema_privilege('zelo_of_workspace','public','CREATE') as public_create,
  has_schema_privilege('zelo_of_workspace','open_finance','CREATE') as private_create;
-do $$begin
+do $$declare original jsonb;begin
  if not exists(select 1 from pg_roles where rolname='zelo_of_workspace' and not rolcanlogin and not rolsuper and not rolbypassrls) then raise exception 'OF_WORKSPACE_ROLE_UNSAFE';end if;
- if not(select member from zelo_ledger_migration_privileges) then execute format('grant zelo_of_workspace to %I',current_user);end if;
+ if not(select effective from zelo_ledger_migration_privileges) then
+  select own_grant into original from zelo_ledger_migration_privileges;
+  execute format('grant zelo_of_workspace to %I with admin %s,inherit true,set true granted by %I',current_user,case when (original->>'admin')::boolean then 'true' else 'false' end,current_user);
+ end if;
 end;$$;
 do $$begin
  if not(select public_create from zelo_ledger_migration_privileges) then grant create on schema public to zelo_of_workspace;end if;
@@ -81,9 +85,15 @@ alter function public.zelo_of_ledger_report(uuid,text,date,date) owner to zelo_o
 revoke all on function public.zelo_of_ledger_report(uuid,text,date,date) from public,anon,authenticated;
 grant execute on function public.zelo_of_ledger_report(uuid,text,date,date) to service_role;
 
-do $$begin
+do $$declare original jsonb;begin
  if not(select public_create from zelo_ledger_migration_privileges) then revoke create on schema public from zelo_of_workspace;end if;
  if not(select private_create from zelo_ledger_migration_privileges) then revoke create on schema open_finance from zelo_of_workspace;end if;
- if not(select member from zelo_ledger_migration_privileges) then execute format('revoke zelo_of_workspace from %I',current_user);end if;
+ if not(select effective from zelo_ledger_migration_privileges) then
+  if (select own_grant from zelo_ledger_migration_privileges) is null then execute format('revoke zelo_of_workspace from %I granted by %I',current_user,current_user);
+  else
+   select own_grant into original from zelo_ledger_migration_privileges;
+   execute format('grant zelo_of_workspace to %I with admin %s,inherit %s,set %s granted by %I',current_user,case when (original->>'admin')::boolean then 'true' else 'false' end,case when (original->>'inherit')::boolean then 'true' else 'false' end,case when (original->>'set')::boolean then 'true' else 'false' end,current_user);
+  end if;
+ end if;
 end;$$;
 commit;
