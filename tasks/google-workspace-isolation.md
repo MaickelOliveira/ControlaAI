@@ -192,6 +192,38 @@ stale callback and archive/refresh races, cancellation, and metadata allowlistin
 
 ## Boundaries and rollout
 
+### Active runtime and renewal increment
+
+Read runtime credentials only through a private invoker accessor that joins the
+exact authenticated workspace's active binding to its owner/client grant. No
+grant ID or subject claimed by an event/request selects a credential. Missing or
+unlinked binding and another configured client return no connection; inaccessible
+or archived companies fail closed. Return exact decimal revisions and encrypted
+token fields to the server adapter only, never to a status/UI response.
+
+Capture and validate immutable workspace, binding/grant identity and revisions
+before renewal. AES-GCM decryption rejects plaintext/malformed envelopes. Renew
+with the configured Google client, validate and encrypt returned token fields, and
+use the existing grant-only CAS. A lost race rereads the same active binding and
+uses only a valid committed winner, with bounded attempts; never use a rejected
+refresh response or change calendar/binding/tombstone. Recheck activity and the
+captured binding before the actual provider operation, including after renewal.
+No legacy fallback or calendar effect is installed in this increment.
+
+Capture any rotated refresh token synchronously from the SDK's token event: the
+installed SDK's `refreshAccessToken` wrapper replaces that field with the previous
+refresh token after emitting it. The capture belongs only to this explicit renewal,
+is removed even on failure, and is validated/encrypted before CAS. Tests use the
+real SDK with only its transport replaced to reproduce and guard this behavior.
+
+The operation client receives only persisted access credentials, no refresh token
+or refresh handler. Disable eager/automatic renewal for this operation; expired
+access or provider failures fail closed instead of bypassing storage CAS. Keep SDK
+objects inside a trusted server callback, clear temporary credentials afterward,
+and require callers to return only their allowlisted DTOs. All error diagnostics
+are replaced with fixed safe codes. Test real SDK request behavior with fictitious
+transport, plus unlink/reconnect/archive/selection/refresh races on disposable SQL.
+
 Always validate workspace before effects, preserve credentials/history and test concurrency/ownership before private storage activation. Never choose a grant by company name, copy legacy bindings implicitly, log secrets, broaden OAuth scopes or revoke a global authorization when unlinking one workspace. Actual Google consent/credential actions belong to the account holder in the UI. Evaluate any production migration/security action under the applicable policy after concrete code and tests are ready.
 
 ## Primary references
