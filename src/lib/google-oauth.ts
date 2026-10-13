@@ -4,12 +4,12 @@ import { getConfig } from "./whatsapp-config";
 import { encryptField, decryptField } from "./crypto-store";
 import { getSupabase } from "./supabase";
 
-const SCOPES = [
+export const GOOGLE_OAUTH_SCOPES = Object.freeze([
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "openid",
   "email",
-];
+]);
 
 export type GoogleCalendarOption = {
   id: string;
@@ -111,7 +111,7 @@ export async function getAuthUrl(userId: string, locale: PendingState["locale"] 
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: SCOPES,
+    scope: [...GOOGLE_OAUTH_SCOPES],
     state,
   });
 }

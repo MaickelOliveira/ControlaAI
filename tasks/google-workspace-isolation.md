@@ -149,6 +149,40 @@ Fixtures must reproduce a usable late callback on the old schema, then prove
 rejection after connect/unlink/calendar change, process concurrency, scope/ACL
 isolation, permissive migration defaults and preserved bytes through rollback.
 
+### Callback credential adapter
+
+Prepare a server-only authorization broker and private binding adapter. Start
+with the authenticated workspace/session, persist state before building the
+Google URL, and keep existing scopes. Complete using the authenticated owner and
+session, configured OAuth client and consumed state; never accept a claimed
+workspace/subject or substitute current UI mode. Recheck the captured binding
+revision before code exchange and preserve captured token fields during awaits.
+Cancellation consumes state without altering credentials or calling the provider.
+
+Only a verified opaque identity can read/reuse a previous refresh token, and only
+for the exact owner, signed subject and configured client. Validate response
+metadata, version, expiry and encrypted envelope; never accept plaintext fallback.
+Capture the exact owner's grant revisions for the configured client before code
+exchange, while the returned subject is still unknown. The invoker-only private
+`grant_versions` accessor returns only subject/revision pairs; it rechecks the
+active workspace and never returns credential bytes. Keep the revision map in an
+opaque, expiring server snapshot. After signature verification, select only that
+verified subject's captured revision (zero if absent). If refresh or another
+callback creates/changes it during exchange, reject; never adopt a newer revision
+from the post-exchange lookup. The final atomic write still compares both versions.
+Encrypt credentials before saving with both grant and original binding revisions.
+Return only validated binding metadata, never token/secret/SDK objects or raw
+provider/database error details. CAS conflict or any failure leaves existing
+bindings unchanged when storage rejects the write. Invalid returned metadata is
+reported as failure rather than pretending the operation succeeded; this check
+does not roll back a committed database write. No live routes or legacy credential
+lookup are installed yet. Migration20261013050000 and its rollback only add/disable
+the private revision accessor; they preserve all existing data and permissions.
+
+Fixtures cover signed identity through the real SDK, malformed response/expiry,
+same-identity refresh reuse, foreign scope/client/subject, unencrypted storage,
+stale callback and archive/refresh races, cancellation, and metadata allowlisting.
+
 - Personal ignores remembered/archived company identity and returns null; denied personal access is rejected.
 - Business requires a valid active company and allowed access, with no global/default fallback.
 - Another owner, invalid runtime objects/UUIDs/mode/flags and context without an authenticated owner are rejected.
