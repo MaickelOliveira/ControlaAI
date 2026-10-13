@@ -192,6 +192,39 @@ stale callback and archive/refresh races, cancellation, and metadata allowlistin
 
 ## Boundaries and rollout
 
+### Explicit single-target legacy assignment
+
+Add a private one-time assignment record per owner. Existing encrypted legacy
+bytes remain untouched; no current/default workspace or company name assigns them.
+Status returns only existence/assignment flags for the authenticated workspace.
+The private snapshot accessor captures legacy fingerprint, exact binding revision
+and encrypted fields; an already connected target cannot be silently overwritten.
+Fingerprint includes owner, both original ciphertext fields and exact expiry.
+
+Assignment is a separate authenticated, CSRF-protected user action with an explicit
+target. The server captures scope/client, legacy and grant revisions before Google
+calls. It validates Google's token-info response over the SDK's fixed HTTPS endpoint
+(configured audience, stable sub, expiry and existing Calendar permissions); email
+never identifies the account. Expired or unverifiable legacy access requires an
+explicit new connection; do not refresh, rewrite or revoke the unknown legacy grant.
+Verify the stored calendar's writer access
+through CalendarList.get; never silently substitute another calendar/account.
+Failure requires an explicit new connection, without rewriting or deleting legacy.
+
+The private atomic assignment rechecks source fingerprint, target/grant revisions,
+activity and absence of a previous assignment/active target. Create a grant only
+if absent; an already verified same-owner/subject/client grant is reused unchanged,
+so older legacy credentials cannot overwrite newer tokens. Create/reactivate only
+the chosen binding and record its original legacy claim, with exact owner FKs.
+Concurrent assignments to different spaces have one winner; the loser changes no
+data. Unlink/reconnect never frees the original one-time claim or copies it elsewhere.
+No event provenance is claimed by assigning credentials; that belongs to events.
+
+Browser principals have no access to claims, fingerprints or encrypted fields.
+Use only explicit invoker ACLs for the existing backend, fixed search path and
+rollback that disables access without dropping claims/history/legacy. Prepare the
+storage and transport adapter without installing production callers yet.
+
 ### Active runtime and renewal increment
 
 Read runtime credentials only through a private invoker accessor that joins the
