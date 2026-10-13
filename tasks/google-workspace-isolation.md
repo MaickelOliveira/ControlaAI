@@ -24,6 +24,14 @@ Private storage separates a stable Google grant from each workspace's binding/ca
 
 Refresh only grant token fields under concurrency/version control; never restore an old calendar choice or removed binding. Local unlinking must not revoke Google tokens used by other workspaces. Google's documented project-level revocation can invalidate other access/refresh tokens. Legacy encrypted bytes remain preserved and unassigned until explicit selection; the remembered/default company does not prove their original workspace. Event provenance is a separate module and is not assigned implicitly along with a credential.
 
+## Persistent OAuth state increment
+
+Prepare `google_workspace.oauth_states` and server-only invoker RPCs `zelo_google_state_issue` and `zelo_google_state_consume`; do not change the live OAuth routes yet. The row stores SHA-256 hashes of a random state, OpenID nonce, authenticated session identifier and OAuth client ID. No session cookie, OAuth code, token or client secret is stored. It captures the validated owner/mode/company and locale; expiry is fixed by the database at ten minutes. At most twenty unexpired starts per owner are accepted under a transaction lock. Expired cleanup is bounded.
+
+Issue rejects an invalid tuple, another owner's company or an archived company. Consume atomically removes exactly one state only when its owner, session hash and client fingerprint match. A mismatched browser/client cannot consume it. Expired states are removed without returning authorization. An archived/deleted target returns no authorization; another company or current UI mode is never substituted. Concurrent callbacks in different processes yield at most one result. Locale and nonce hash are returned with the captured tuple. Personal has no company. Names, active-mode changes and renames cannot alter the target.
+
+RLS is enabled with no browser policy; schema, table and function ACLs deny PUBLIC, anon and authenticated. Only the existing trusted backend service principal receives explicit access. RPCs use an explicit `pg_catalog` search path and invoker rights; they create no new privileged role or membership. The rollback refuses to discard unexpired states and leaves legacy Google ciphertext and other tables untouched. Disposable PostgreSQL tests verify behavior and ACLs using fictitious data, including cross-process consumption and rollback preservation.
+
 ## Commands, structure and style
 
 Next/TypeScript, Vitest, PostgreSQL and the existing Google libraries; no additional dependencies. Pure policy and adjacent `*.test.ts` live in `src/lib`; later private migrations/rollback and disposable fixtures live under `supabase/`. Validate unknown runtime input explicitly, use named tuple types and return fresh immutable data. API errors use fixed codes and never include tokens, OAuth codes or raw provider payloads.
