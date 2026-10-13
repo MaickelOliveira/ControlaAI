@@ -225,6 +225,28 @@ Use only explicit invoker ACLs for the existing backend, fixed search path and
 rollback that disables access without dropping claims/history/legacy. Prepare the
 storage and transport adapter without installing production callers yet.
 
+The server adapter uses the real SDK's fixed TokenInfo endpoint and CalendarList
+transport. Verify audience, optional authorized presenter, stable `sub`, actual
+expiry and either the original event/list permissions or an existing full Calendar
+permission. No email/user_id fallback, consent expansion or legacy token renewal.
+Both credentials must already be authenticated encrypted envelopes. Raw legacy
+access represents `primary`; a valid JSON envelope retains its explicit calendar.
+Malformed/empty calendar metadata never silently becomes primary. An explicit ID
+must match the provider response; the `primary` alias requires `primary === true`
+before retaining its resolved stable ID. Require writer/owner access and reject
+deleted calendars. Clamp expiry to the earlier original/provider limit.
+
+Capture the immutable authenticated target before configuration awaits, source and
+binding state before Google calls, and an opaque grant-revision snapshot before
+verification. A scalar revision accessor checks that snapshot's registration,
+workspace/client and expiry; it does not establish provider identity or expose
+credentials. The signed-OAuth adapter retains its independent opaque-proof gate.
+Final storage CAS uses the original source/binding/grant versions. Return only
+immutable scoped binding metadata or status flags and fixed safe errors; SDK,
+subject/email, ciphertext and diagnostics remain private. Temporary SDK credentials
+are cleared on all outcomes. An invalid post-write metadata result is reported as
+failure; it cannot undo a storage transaction already committed. No live caller yet.
+
 ### Active runtime and renewal increment
 
 Read runtime credentials only through a private invoker accessor that joins the
