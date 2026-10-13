@@ -132,6 +132,23 @@ expired state, changed scope/client and deserialized proofs; no Google calls,
 customer credentials or production database. Use the existing client fingerprint
 helper so states and future grants use the same domain-separated hash.
 
+### Capture the connection revision at OAuth start
+
+OAuth issue/consume must share the owner → company lock order used by bindings
+and archival. Capture the exact binding revision (zero if absent, including
+unlinked tombstone revisions) in the state row at issue time. Consume once and
+return no authorization if the binding changed after issue. Another workspace's
+changes and grant-only refresh must not invalidate this state. Return bigint
+revisions as decimal strings; validate the PostgreSQL range and capture it in the
+opaque verified identity so a callback cannot substitute a later revision.
+
+This additive dormant migration refuses to apply while old live states remain,
+rather than guessing their original snapshot. Expired old states remain intact.
+Rollback disables the state RPCs without deleting state, credentials or bindings.
+Fixtures must reproduce a usable late callback on the old schema, then prove
+rejection after connect/unlink/calendar change, process concurrency, scope/ACL
+isolation, permissive migration defaults and preserved bytes through rollback.
+
 - Personal ignores remembered/archived company identity and returns null; denied personal access is rejected.
 - Business requires a valid active company and allowed access, with no global/default fallback.
 - Another owner, invalid runtime objects/UUIDs/mode/flags and context without an authenticated owner are rejected.
