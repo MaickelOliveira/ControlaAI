@@ -185,6 +185,36 @@ Succeeded, foreign, deleted and definitively failed conference operations cannot
 be retried through this creation RPC. A separate future conference operation is
 required for a new definitive retry request. These RPCs have no live consumer.
 
+### Canonical payload and provider ownership markers
+
+The next boundary validates a narrow canonical private payload: summary,
+description, location, explicit start/end, all-day, existing recurrence modes,
+attendees (email/display name only) and meeting flag. Timed values require an
+explicit offset and normalize once to UTC; all-day values are validated date-only
+strings with an exclusive end. The consumer later converts existing UI inputs
+before this boundary. No default/current time, body-supplied owner/account/calendar,
+remote ID, conference request, extended property or invitation control is accepted.
+Validate controls, lengths, duplicate attendees, at most100 attendees and16KiB
+canonical UTF-8 JSON (within the32KiB JSONB storage cap). Copy/freeze every level.
+Use conservative ASCII dot-atom emails (local part≤64; DNS labels≤63, no empty
+labels or boundary hyphens). The following provider adapter must preserve the
+existing application's fixed America/Sao_Paulo recurrence timezone; normalized
+UTC instants do not authorize a new timezone or change the expansion of a series.
+
+Server-only provider markers are two domain-separated HMAC-SHA256 values derived
+from the existing encryption secret under an independent marker key domain. Do
+not change the encryption key or expose it, credentials, owner UUIDs, titles or
+emails in markers. Sign the original immutable scoped origin/revision/calendar,
+stable event/conference IDs, persisted payload digest and meeting flag. Missing
+configuration fails closed with a fixed error. Verify both private properties
+with constant-time comparison after reading the exact original event/calendar;
+no ID/409/unsigned property alone establishes origin. Marker verification is not
+credential selection or authorization; the scoped runtime/activity check remains
+mandatory. These helpers install no provider call or live consumer. Google permits
+44-character keys and1024-character values; both properties use short keys and
+64-character opaque values. Official extended-properties reference checked2026-10-13:
+https://developers.google.com/workspace/calendar/api/guides/extended-properties
+
 Official references checked2026-10-13:
 https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
 https://developers.google.com/workspace/calendar/api/v3/reference/events
