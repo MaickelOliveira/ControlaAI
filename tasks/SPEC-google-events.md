@@ -93,6 +93,27 @@ revoke shared grants, infer legacy provenance, or activate a partial integration
 5. Web/WhatsApp/job consumers use authenticated scope and safe DTOs. The subsequent
    `google-settings` module completes UI/API cutover and full activation review.
 
+### First private storage increment
+
+Prepare an immutable private event-origin intent, keyed by the server-authorized
+logical event UUID. Capture the exact active binding/grant, configured client,
+binding revision and selected calendar under owner → company locks. Derive and
+store the v1 event/conference IDs inside the transaction; the database byte sequence
+must match the pure policy's domain-separated UTF-8/NUL hashing. Another owner or
+workspace cannot borrow an existing UUID; a repeated reservation must match the
+original binding/grant/revision and must not move its target. Binding changes
+invalidate a stale first-creation reservation. Grant-only refresh leaves it valid.
+
+An authorized scoped getter returns immutable origin metadata for local history,
+including its exact decimal creation-binding revision. It is not authorization
+for a provider effect: the runtime/consumer rechecks the active connection and
+record access. Rows are private with owner/company and grant/binding ownership
+foreign keys, no browser policies and backend select/insert only. Preserve all
+rows and close access in rollback. Do not modify or infer origins for existing
+appointments/Meets. This storage-only slice installs no caller; transactional
+local-record linkage, command state/retry reconciliation and provider effects
+follow before activation.
+
 Official references checked2026-10-13:
 https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
 https://developers.google.com/workspace/calendar/api/v3/reference/events
