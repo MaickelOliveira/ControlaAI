@@ -39,7 +39,7 @@ async function rpc(name:string,params:Record<string,unknown>):Promise<unknown>{
   throw Error("GOOGLE_BINDING_STORAGE_UNAVAILABLE");
  }
 }
-function metadata(value:unknown,expected:GoogleWorkspace):GoogleBinding{
+export function googleBindingFromStorage(value:unknown,expected:GoogleWorkspace):GoogleBinding{
  try{
   const row=record(value);
   if(row.mode!=="personal"&&row.mode!=="business")throw Error();
@@ -53,7 +53,7 @@ function metadata(value:unknown,expected:GoogleWorkspace):GoogleBinding{
 export async function loadGoogleBinding(scope:GoogleWorkspace):Promise<GoogleBinding|null>{
  const selected=snapshotScope(scope);
  const result=await rpc("zelo_google_binding_get",scopeParams(selected));
- return result===null?null:metadata(result,selected);
+ return result===null?null:googleBindingFromStorage(result,selected);
 }
 /** Capture revisions before exchanging the OAuth code, while the returned
  * Google subject is still unknown. No credential bytes leave private storage. */
@@ -80,10 +80,10 @@ function snapshotVersion(snapshot:GoogleGrantVersionSnapshot,proof:VerifiedGoogl
  if(snapshot.clientFingerprint!==proof.clientFingerprint)throw Error("GOOGLE_BINDING_SNAPSHOT_INVALID");
  return captured.versions.get(proof.subject)??"0";
 }
-function credential(value:unknown):string{
+export function googleCredentialValue(value:unknown):string{
  if(typeof value!=="string"||!value||value.length>16384||/[\s\p{Cc}]/u.test(value))throw Error("GOOGLE_BINDING_CREDENTIAL_INVALID");return value;
 }
-function ciphertext(value:unknown):string{
+export function googleCredentialCiphertext(value:unknown):string{
  if(typeof value!=="string"||value.length>32768||! /^enc:[A-Za-z0-9+/]+={0,2}$/.test(value))throw Error();
  const encoded=value.slice(4),bytes=Buffer.from(encoded,"base64");
  if(bytes.length<29||bytes.toString("base64")!==encoded)throw Error();return value;
@@ -93,8 +93,8 @@ function ciphertext(value:unknown):string{
 export async function saveVerifiedGoogleBinding(proof:VerifiedGoogleIdentity,clientId:string,tokens:GoogleBindingTokens,snapshot:GoogleGrantVersionSnapshot):Promise<GoogleBinding>{
  assertVerifiedGoogleIdentity(proof,proof?.workspace,clientId);
  const grantVersion=snapshotVersion(snapshot,proof);
- const input=record(tokens),access=credential(input.accessToken);
- const refresh=input.refreshToken==null?null:credential(input.refreshToken);
+ const input=record(tokens),access=googleCredentialValue(input.accessToken);
+ const refresh=input.refreshToken==null?null:googleCredentialValue(input.refreshToken);
  let expiresAt:string;
  try{expiresAt=timestamp(input.expiresAt);if(Date.parse(expiresAt)<=Date.now())throw Error();}
  catch{throw Error("GOOGLE_BINDING_CREDENTIAL_INVALID");}
@@ -104,10 +104,10 @@ export async function saveVerifiedGoogleBinding(proof:VerifiedGoogleIdentity,cli
   try{
    const row=record(data);
    if(id(row.user_id)!==proof.workspace.userId||row.subject!==proof.subject||row.client_fingerprint!==proof.clientFingerprint)throw Error();
-   id(row.id);timestamp(row.expires_at);ciphertext(row.access_ciphertext);
-   const encryptedRefresh=ciphertext(row.refresh_ciphertext);
+   id(row.id);timestamp(row.expires_at);googleCredentialCiphertext(row.access_ciphertext);
+   const encryptedRefresh=googleCredentialCiphertext(row.refresh_ciphertext);
    if(version(row.version)!==grantVersion)throw Error("GOOGLE_BINDING_CONFLICT");
-   if(refresh===null)previousRefresh=credential(decryptField(encryptedRefresh));
+   if(refresh===null)previousRefresh=googleCredentialValue(decryptField(encryptedRefresh));
   }catch(error){
    if(error instanceof Error&&error.message==="GOOGLE_BINDING_CONFLICT")throw Error("GOOGLE_BINDING_CONFLICT");
    throw Error("GOOGLE_BINDING_STORAGE_INVALID");
@@ -122,7 +122,7 @@ export async function saveVerifiedGoogleBinding(proof:VerifiedGoogleIdentity,cli
  try{encryptedAccess=encryptField(access);encryptedRefresh=encryptField(selectedRefresh);if(!encryptedAccess||!encryptedRefresh)throw Error();}
  catch{throw Error("GOOGLE_BINDING_STORAGE_UNAVAILABLE");}
  const result=await rpc("zelo_google_binding_save",{...scopeParams(proof.workspace),p_subject:proof.subject,p_client_fingerprint:proof.clientFingerprint,p_binding_version:proof.bindingVersion,p_grant_version:grantVersion,p_access_ciphertext:encryptedAccess,p_refresh_ciphertext:encryptedRefresh,p_expires_at:expiresAt});
- const saved=metadata(result,proof.workspace);
+ const saved=googleBindingFromStorage(result,proof.workspace);
  if(saved.unlinkedAt!==null||BigInt(saved.version)!==BigInt(proof.bindingVersion)+BigInt(1))throw Error("GOOGLE_BINDING_STORAGE_INVALID");
  return saved;
 }
