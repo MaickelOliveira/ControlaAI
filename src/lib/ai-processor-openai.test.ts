@@ -106,7 +106,7 @@ describe("AI provider routing", () => {
     const answer=await processMessage("quanto gastei no amazonas mes passado",context);
     expect(answer.intent).toBe("finance_query"); expect(answer.keyword).toBe("amazonas"); expect(answer.period).toBeDefined();
   });
-  it.each([["Zé Delivery","Outros","Alimentação"],["Google*ADS","Moradia","Marketing"],["Facebook Serviços Online","Lazer","Marketing"],["Google Workspace","Moradia","Tecnologia"]])("corrects the model's automatic category for %s before storage",async(description,wrong,correct)=>{
+  it.each([["Zé Delivery","Outros","Delivery"],["Google*ADS","Moradia","Marketing"],["Facebook Serviços Online","Lazer","Marketing"],["Google Workspace","Moradia","Tecnologia"]])("corrects the model's automatic category for %s before storage",async(description,wrong,correct)=>{
     process.env.OPENAI_TEST_USER_IDS="another-user";
     googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"finance_register",confidence:.96,finance:{type:"expense",amount:50,description,category:wrong}})}});
     const answer=await processMessage(`gastei 50 no ${description}`,context);

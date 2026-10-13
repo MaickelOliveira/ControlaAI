@@ -175,7 +175,7 @@ function FinancasContent() {
     fetch("/api/categories").then(r => r.json()).then(d => {
       setCatsExpense(d.expense || []);
       setCatsIncome(d.income || []);
-      const defaults = { expense: ["Alimentación","Transporte","Vivienda","Salud","Educación","Ocio","Ropa","Tecnología","Servicios","Impuestos","Empleados","Marketing","Proveedores","Otros"], income: ["Salario","Freelance","Ventas","Inversiones","Alquiler","Servicios","Reembolso","Otros"] };
+      const defaults = { expense: ["Alimentación", "Delivery","Transporte","Vivienda","Salud","Educación","Ocio","Ropa","Tecnología","Servicios","Impuestos","Empleados","Marketing","Proveedores","Otros"], income: ["Salario","Freelance","Ventas","Inversiones","Alquiler","Servicios","Reembolso","Otros"] };
       setCustomExpense((d.expense || []).filter((c: string) => !defaults.expense.includes(c)));
       setCustomIncome((d.income || []).filter((c: string) => !defaults.income.includes(c)));
     }).catch(() => {});

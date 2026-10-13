@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { descriptionExpenseCategory, isNonFoodDeliveryDescription } from "./expense-category";
 
 export type InvoiceTransaction = {
   /** Data de competência usada nos filtros do dashboard. */
@@ -128,7 +129,7 @@ function csvInstallment(value: string): { current: number; total: number } | und
 const INVOICE_EXPENSE_CATEGORIES = new Set([
   "Alimentação", "Transporte", "Moradia", "Saúde", "Educação", "Lazer",
   "Vestuário", "Tecnologia", "Serviços", "Impostos", "Funcionários",
-  "Marketing", "Fornecedores", "Outros",
+  "Marketing", "Fornecedores", "Outros", "Delivery", "Encargos bancários",
 ]);
 
 /** Classificação determinística para comerciantes reconhecíveis na fatura.
@@ -136,6 +137,8 @@ const INVOICE_EXPENSE_CATEGORIES = new Set([
  *  regras abaixo prevalecem somente quando o ramo do estabelecimento é
  *  inequívoco; nos demais casos, preservamos a categoria sugerida. */
 export function categoryForInvoiceTransaction(description: string, suggestedCategory = "Outros"): string {
+  const recognized=descriptionExpenseCategory(description);
+  if (recognized === "Delivery" || recognized === "Encargos bancários") return recognized;
   const normalized = normalizeCsvHeader(description);
   const paymentMarketplace = /\bmercado\s*(?:pago|livre)\b|\bmercadopago\b|\bmercadolivre\b/.test(normalized);
   if (!paymentMarketplace && /\bamazonas?\s+mercad|\bmercad(?:o|inho|ao)?\b|supermerc|hipermerc|atacadao|assai|condor|carrefour|ifd|ifood|ze delivery|dog king|restaurante|lanch|esfih|acai|alimento|burger|pizz|padaria|panificadora/.test(normalized)) return "Alimentação";
@@ -147,6 +150,7 @@ export function categoryForInvoiceTransaction(description: string, suggestedCate
   if (/escola|curso|faculdade|livraria/.test(normalized)) return "Educação";
   if (/asaas|assinatura|mensalidade|servico/.test(normalized)) return "Serviços";
   if (/software|apple|google|microsoft|tecnologia/.test(normalized)) return "Tecnologia";
+  if (suggestedCategory === "Delivery" && isNonFoodDeliveryDescription(description)) return "Outros";
   return INVOICE_EXPENSE_CATEGORIES.has(suggestedCategory) ? suggestedCategory : "Outros";
 }
 
