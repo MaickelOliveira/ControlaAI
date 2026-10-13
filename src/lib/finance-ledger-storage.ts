@@ -23,6 +23,12 @@ export async function readBankOverview(scope:OpenFinanceScope):Promise<BankOverv
 }
 export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankFinancialData> {
   async function pages():Promise<BankReport>{
+    if(process.env.OPEN_FINANCE_BATCH_REPORT_ENABLED==="true"){
+      const report=await openFinanceRpc(scope,"zelo_of_ledger_report",{p_from:period.from,p_to:period.to}) as BankReport;
+      if(!report||!Array.isArray(report.movements))throw Error("OF_LEDGER_INVALID");
+      if(report.movements.length>2000||report.next)throw Error("OF_LEDGER_LIMIT");
+      return report;
+    }
     const movements:BankMovement[]=[],seen=new Set<string>();
     let after:string|null=null,first:BankReport|null=null;
     // Bounded database reads only. Never issue a provider request from the dashboard.
