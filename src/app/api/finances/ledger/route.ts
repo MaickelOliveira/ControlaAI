@@ -24,7 +24,10 @@ export async function GET(request:Request){
   try{
     const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
     if(scope){try{bankPeriod(period.from,period.to);}catch{return NextResponse.json({error:"Para incluir os bancos, escolha um período de até 366 dias."},{status:400,headers});}}
-    const [records,allRecords,bank,participants,accounts]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode,period.from,period.to),getFinancesInRangeStrict(auth.user.id,mode),scope?readBankLedger(scope,period):null,getPhonesForUser(auth.user.id),getAccountsByUser(auth.user.id,mode)]);
+    // The complete authorized history already contains the selected period.
+    // Read it once so totals and the visible records share the same snapshot.
+    const [allRecords,bank,participants,accounts]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode),scope?readBankLedger(scope,period):null,getPhonesForUser(auth.user.id),getAccountsByUser(auth.user.id,mode)]);
+    const records=allRecords.filter(record=>record.date>=period.from&&record.date<=period.to);
     const totalBalance=calculateFinanceBalance(allRecords);
     const finances=createFinanceLedger(identifyFinanceAuthors(records,auth.user,participants).map(({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})=>({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})),bank?.report.movements??[],mode);
     return NextResponse.json({finances,balance:ledgerBalance(finances),totalBalance,bank,accounts:accounts.map(({id,name,type})=>({id,name,type}))},{headers});

@@ -16,12 +16,12 @@ let currentRequest: Promise<DashboardMe> | null = null;
  *  Sem isso, ambos montam juntos e duplicam a consulta ao Supabase. */
 export function fetchDashboardMe(): Promise<DashboardMe> {
   if (!currentRequest) {
-    currentRequest = fetch("/api/me")
+    const pending = fetch("/api/me")
       .then(response => response.ok ? response.json() : {})
-      .catch(error => {
-        currentRequest = null;
-        throw error;
+      .finally(() => {
+        if(currentRequest===pending)currentRequest = null;
       });
+    currentRequest=pending;
   }
   return currentRequest;
 }

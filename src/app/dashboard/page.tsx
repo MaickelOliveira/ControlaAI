@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {useBankUpdates} from "@/components/useBankUpdates";
+import {fetchDashboardMe} from "@/lib/dashboard-me-client";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankDate} from "@/lib/open-finance-display";
 import {bankDashboardAccounts} from "@/lib/bank-dashboard";
@@ -183,7 +184,9 @@ export default function DashboardPage() {
   const [now] = useState(() => Date.now());
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<string>("personal");
+  const [bootstrapError,setBootstrapError]=useState("");
+  const [bootstrapAttempt,setBootstrapAttempt]=useState(0);
+  const [mode, setMode] = useState<string>("");
   const [categories, setCategories] = useState<string[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
@@ -192,28 +195,38 @@ export default function DashboardPage() {
   const [history,setHistory]=useState<{mode:string;finances:Finance[];error:string}>({mode:"",finances:[],error:""});
   const finances6mo=useMemo(()=>history.mode===mode?history.finances:[],[history,mode]);
   const ledgerLoader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
+    if(!mode)return null;
     const response=await fetch(`/api/finances/ledger?${new URLSearchParams({mode,from:filters.from,to:filters.to})}`,{cache:"no-store",signal});
     if(response.status===401)return null;
     const body=await response.json();if(!response.ok)throw Error(body.error);return body;
   },[mode,filters.from,filters.to]);
-  const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader);
+  const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader,!!mode);
   const finances=useMemo(()=>(ledger?.finances??[]).filter(f=>f.included),[ledger]);
   const fetchSequence = useRef(0);
 
   // Carrega dados independentes de filtro: usuário, tarefas, categorias, metas
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
+    let disposed=false,dashboardModeKnown=false;
+    const identity=fetchDashboardMe().then(d=>{
+      if(!disposed&&!dashboardModeKnown&&(d.user?.activeMode==="personal"||d.user?.activeMode==="business"))setMode(d.user.activeMode);
+    }).catch(()=>{});
+    const dashboard=fetch("/api/dashboard")
+      .then(r => {if(!r.ok)throw Error("DASHBOARD_UNAVAILABLE");return r.json();})
       .then((d: DashData) => {
+        if(!d.user||(d.user.activeMode!=="personal"&&d.user.activeMode!=="business"))throw Error("DASHBOARD_MODE_UNAVAILABLE");
+        if(disposed)return;
+        dashboardModeKnown=true;
         setData(d);
-        setMode(d.user?.activeMode || "personal");
+        setMode(d.user.activeMode);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {if(!disposed){setBootstrapError("Não foi possível carregar o seu painel. Tente novamente.");setLoading(false);}});
+    void Promise.allSettled([identity,dashboard]);
     fetch("/api/categories").then(r => r.json()).then(d => {
       setCategories([...new Set([...(d.expense || []), ...(d.income || [])])]);
     }).catch(() => {});
-  }, []);
+    return ()=>{disposed=true;};
+  }, [bootstrapAttempt]);
 
   useEffect(() => {
     if (!mode) return;
@@ -242,10 +255,11 @@ export default function DashboardPage() {
     }).catch(() => {});
   }, []);
 
+  const compareManualPeriods=!!ledger&&!ledger.bank;
   useEffect(() => {
-    if (!mode) return;
+    if (!mode||!compareManualPeriods) return;
     fetchFiltered(mode, filters);
-  }, [mode, filters.from, filters.to, fetchFiltered]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, filters.from, filters.to, fetchFiltered,compareManualPeriods]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredFinances = useMemo(() => applyClientFilters(finances, filters), [finances, filters]);
   const filteredPrevFinances = useMemo(() => applyClientFilters(prevFinances, filters), [prevFinances, filters]);
@@ -258,6 +272,7 @@ export default function DashboardPage() {
   const areaData = useMemo(() => buildAreaData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
   const flowData = useMemo(() => buildFlowData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
 
+  if(bootstrapError)return <div role="alert" className="z-card"><p className="text-sm text-muted">{bootstrapError}</p><button className="z-primary mt-4" onClick={()=>{setLoading(true);setBootstrapError("");setBootstrapAttempt(n=>n+1);}}>Tentar novamente</button></div>;
   if (loading||(!ledger&&!ledgerError)) return <DashboardLoading />;
   if(!ledger&&ledgerError)return <div className="space-y-5"><h1 className="text-2xl font-bold text-ink">Dashboard</h1><FinanceFilterBar categories={categories} value={filters} onChange={setFilters}/><p role="alert" className="rounded-2xl bg-amber-soft p-5 text-sm text-amber-ink">{ledgerError} Tente reduzir o período. Tentaremos atualizar novamente.</p></div>;
 

@@ -24,7 +24,7 @@ type Account = {
 export default function ContasPage() {
   const pathname = usePathname();
   const es = pathname.startsWith("/es/");
-  const [mode, setMode] = useState<"personal" | "business">("personal");
+  const [mode, setMode] = useState<"personal" | "business" | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -49,7 +49,8 @@ export default function ContasPage() {
 
   useEffect(() => {
     fetchDashboardMe().then(data => {
-      const selectedMode = data.user?.activeMode === "business" ? "business" : "personal";
+      const selectedMode = data.user?.activeMode;
+      if(selectedMode!=="business"&&selectedMode!=="personal")throw Error("ACCOUNT_MODE_UNAVAILABLE");
       setMode(selectedMode);
       void load(selectedMode);
     }).catch(() => {
@@ -60,6 +61,7 @@ export default function ContasPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if(!mode)return;
     const response = await fetch("/api/admin/accounts", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editing ? { action: "update", id: editing.id, name } : { action: "create", mode, name, type: "bank" }),
@@ -70,6 +72,7 @@ export default function ContasPage() {
   }
 
   async function post(body: Record<string, unknown>) {
+    if(!mode)return;
     const response = await fetch("/api/admin/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await response.json().catch(() => null);
     if (!response.ok) setError(data?.error || (es ? "No se pudo completar la acción." : "Não foi possível concluir a ação."));
@@ -79,10 +82,10 @@ export default function ContasPage() {
   return <div className="z-page z-accounts-page">
     <div className="z-page-heading flex items-center justify-between gap-3">
       <div><PageTitle icon="wallet">{es ? "Cuentas" : "Contas"}</PageTitle><p className="text-sm text-muted mt-1">{es ? "Organiza tus cuentas manuales y conecta bancos de Brasil para consultar saldos, tarjetas y movimientos." : "Saldos, cartões e investimentos dos seus bancos, em uma visão simples."}</p></div>
-      <button onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold">+ {es ? "Nueva cuenta" : "Conta manual"}</button>
+      <button disabled={!mode} onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold disabled:opacity-50">+ {es ? "Nueva cuenta" : "Conta manual"}</button>
     </div>
 
-    {!es&&<OpenFinanceAccounts key={mode} mode={mode}/>}
+    {!es&&mode&&<OpenFinanceAccounts key={mode} mode={mode}/>}
     {error && <div className="rounded-xl bg-red-soft border border-line p-3 text-sm text-red-ink">{error}</div>}
     <div className="flex items-center justify-between gap-3 border-t border-line pt-6"><div><h2 className="text-base font-semibold">{es ? "Cuentas registradas" : "Contas registradas"}</h2><p className="mt-1 text-xs text-muted">{es ? "Cuentas organizadas por ti para tus movimientos." : "Contas organizadas por você para os seus lançamentos."}</p></div><span className="z-badge">{accounts.length}</span></div>
     {loading ? <div className="py-16 text-center text-subtle">{es ? "Cargando..." : "Carregando..."}</div> : accounts.length === 0 ? <div className="z-empty">{es ? "Añade una cuenta para organizar tus movimientos." : "Adicione uma conta para organizar seus lançamentos manuais."}</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{accounts.map(account => <div key={account.id} className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
