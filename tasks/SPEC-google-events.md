@@ -236,6 +236,44 @@ DTOs, no SDK responses, raw diagnostics, credentials or config objects. Reject r
 failure diagnostics before RPC and hide underlying errors/causes. These adapters
 remain dormant; public-record transactions and provider effects follow.
 
+### SDK creation and reconciliation
+
+Prepare a server-only worker using the real installed Calendar SDK and scoped
+runtime. Load the authorized logical event, return terminal/in-progress statuses
+without another operation, and claim only after credentials are ready. Before
+every GET/insert, reread the current private lease and then exact active binding;
+compare account/runtime revision, attempt/lease, immutable payload digest and
+original target. Require more than16 seconds of lease lifetime for a15-second
+request timeout, with SDK HTTP retry disabled. No Google call spans a database
+lock. An already in-flight effect can precede unlink; completion afterward still
+fails CAS, and subsequent recovery retains its original IDs/account/calendar.
+
+Always GET first.404 permits insert only when remote-known is false and the
+captured lease explicitly allows it;410/known removed events never recreate.
+Insert only the validated private fields, fixed event/conference IDs and signed
+private markers. Preserve America/Sao_Paulo recurrence, exclusive all-day dates
+and the existing all/none invitation choice based on authorized persisted guests.
+409 performs another guarded GET and verifies both markers before acceptance.
+An ambiguous network error records a fixed transient outcome; the next attempt
+starts with GET and can reconcile without another insert/invitation. No patch,
+regenerated conference ID or implicit explicit-user retry is allowed.
+
+Validate provider ID, markers, status and bounded/control-free ETag. A pending
+conference stores remote-known/ETag and waits for read-only polling of the same
+request. Definitive failure, mismatched request/solution or invalid video URL
+requires a separate conference operation; never regenerate automatically.
+Only an actual HTTP404 marks a missing event; an HTTP200 null/malformed response
+fails without insert. Validate conference objects/entry arrays explicitly so a
+malformed conference retains the already verified remote-known/ETag. Completed
+Meet responses may omit the optional createRequest; accept a signed matching event
+only with its valid Meet solution and unique valid video URL. When createRequest
+is present, require the original request ID and recognized status; pending/failed
+requests never trigger another conference write.
+401/403 fail with a fixed connection code. Untrusted/raw diagnostics never reach
+storage/status. Only event UUID, state, validated Meet URL and fixed failure code
+leave the worker. Mock SDK transport with fictitious credentials/events for tests;
+no live consumer or actual invitation is installed before full integration.
+
 Official references checked2026-10-13:
 https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
 https://developers.google.com/workspace/calendar/api/v3/reference/events
