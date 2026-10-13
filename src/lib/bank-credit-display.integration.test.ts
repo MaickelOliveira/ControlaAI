@@ -39,6 +39,11 @@ const renderers: Array<[string, (data: BankOverview) => string]> = [
 ];
 
 describe("credit-line grouping at the display boundaries", () => {
+  it.each([null,"","   "])("keeps a visible label for an unnamed credit line: %s",line_name=>{
+    const overview=fixture();overview.limits=[{...overview.limits[0],line_name}];
+    const html=renderToStaticMarkup(React.createElement(BankDashboard,{data:{overview,report},entries:[]}));
+    expect(html).toContain("Linha do cartão");expect(html).toContain("731,25");
+  });
   it.each(renderers)("%s turns six duplicate records into three named lines with transparent source counts", (_name, render) => {
     const data = fixture();
     const before = JSON.stringify(data);

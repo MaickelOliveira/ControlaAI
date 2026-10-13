@@ -174,15 +174,36 @@
 .z-sidebar .p-3.border-t {padding:6px 12px;border:0;}
 .z-sidebar .z-nav {padding-top:8px;}
 .z-eclipse-dashboard {gap:18px;}
-.z-dashboard-planning {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start;}
-.z-wallet-content {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start;}
-.z-dashboard-wallet .z-credit-deck-viewport {max-height:290px;}
-.z-dashboard-wallet .z-credit-selected {border-top:0;border-left:1px solid var(--z-line);padding:0 0 0 24px;max-height:350px;overflow-y:auto;scrollbar-width:thin;}
+.z-eclipse-dashboard .z-eclipse-grid {grid-template-columns:minmax(0,1fr) 320px;}
+.z-dashboard-planning {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:start;}
+.z-wallet-content {display:flex;flex-direction:column;gap:14px;}
+.z-wallet-content>div,.z-wallet-content>section {width:100%;}
+.z-dashboard-wallet .z-credit-deck-viewport {max-height:220px;}
+.z-dashboard-wallet .z-credit-face[aria-pressed=true] {order:-1;margin-bottom:10px;}
+.z-dashboard-wallet .z-credit-card-picker {flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px;scrollbar-width:thin;}
+.z-dashboard-wallet .z-credit-card-picker button {flex-shrink:0;}
+.z-dashboard-wallet .z-credit-selected {border-top:1px solid var(--z-line);padding:14px 0 0;max-height:230px;overflow-y:auto;scrollbar-width:thin;}
+.z-eclipse-secondary {grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:stretch;}
+.z-activity-card {height:365px;display:flex;flex-direction:column;}
+.z-activity-list {min-height:0;overflow-y:auto;scrollbar-width:thin;}
+.z-activity-chart {min-height:0;overflow-y:auto;scrollbar-width:thin;}
+.z-dashboard-compact .z-empty {background:none;text-align:left;padding:0;border-radius:0;}
+.z-dashboard-compact .z-card-heading {margin-bottom:12px;}
+.z-dashboard-compact .z-card {padding:0;background:none;border:0;box-shadow:none;}
+.z-dashboard-compact>article+article {border-left:1px solid var(--z-line);padding-left:24px;}
 .z-bank-cash-summary {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 30px;align-items:center;}
 .z-bank-cash-summary>div:first-child {grid-column:1/-1;}
 .z-bank-cash-summary>p {grid-column:1/-1;}
-.z-bank-credit-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;}
-@media(max-width:767px) {.z-dashboard-planning,.z-wallet-content,.z-bank-cash-summary,.z-bank-credit-grid {grid-template-columns:1fr;}.z-dashboard-wallet .z-credit-selected {border-left:0;border-top:1px solid var(--z-line);padding:16px 0 0;}.z-wallet-content {gap:12px;}}
+.z-bank-credit-grid {display:flex;flex-direction:column;gap:18px;max-height:480px;overflow-y:auto;scrollbar-width:thin;}
+.z-bank-credit-row {display:grid;grid-template-columns:minmax(130px,1.2fr) repeat(3,minmax(80px,.8fr));align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--z-line);}
+.z-bank-credit-row:last-child {border-bottom:0;}
+.z-bank-credit-row dl {display:contents;}
+.z-bank-credit-row dt {font-size:10px;color:var(--z-muted);}
+.z-bank-credit-row dd {margin-top:3px;font-size:12px;font-weight:600;overflow-wrap:anywhere;}
+.z-bank-credit-row .z-credit-usage {height:4px;margin-top:8px;border-radius:4px;background:var(--z-line);overflow:hidden;}
+.z-bank-cash-single {grid-template-columns:1fr;}
+@media(max-width:1279px) {.z-eclipse-dashboard .z-eclipse-grid {grid-template-columns:minmax(0,1fr) 280px;}.z-eclipse-secondary {grid-template-columns:1fr;}.z-activity-card {height:auto;}.z-activity-list {max-height:310px;}}
+@media(max-width:767px) {.z-eclipse-dashboard .z-eclipse-grid,.z-dashboard-planning {grid-template-columns:1fr;}.z-eclipse-rail {display:flex;}.z-dashboard-compact>article+article {border-left:0;border-top:1px solid var(--z-line);padding:18px 0 0;}.z-bank-cash-summary {grid-template-columns:1fr;}.z-bank-credit-row {grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}.z-bank-credit-row>div:first-child {grid-column:1/-1;}.z-bank-credit-grid {max-height:440px;}.z-wallet-content {gap:12px;}}
 .z-eclipse-focus {padding:21px 24px;}
 .z-eclipse-stats {margin-bottom:21px;}
 .z-eclipse-stat {padding:14px 12px;}
