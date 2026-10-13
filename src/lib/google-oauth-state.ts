@@ -14,9 +14,13 @@ function locale(value:unknown):Locale {
   if(value!=="pt-BR"&&value!=="pt-PT"&&value!=="es")throw Error("GOOGLE_STATE_INVALID");
   return value;
 }
+export function googleOAuthClientFingerprint(clientId:string):string {
+  if(typeof clientId!=="string"||!clientId||clientId.length>1024||/\s/.test(clientId))throw Error("GOOGLE_STATE_INVALID");
+  return hash("client",clientId);
+}
 function identity(sessionId:string,clientId:string):{sessionHash:string;clientFingerprint:string} {
-  if(typeof sessionId!=="string"||!sessionId||sessionId.length>16384||typeof clientId!=="string"||!clientId||clientId.length>1024||/\s/.test(clientId))throw Error("GOOGLE_STATE_INVALID");
-  return {sessionHash:hash("session",sessionId),clientFingerprint:hash("client",clientId)};
+  if(typeof sessionId!=="string"||!sessionId||sessionId.length>16384)throw Error("GOOGLE_STATE_INVALID");
+  return {sessionHash:hash("session",sessionId),clientFingerprint:googleOAuthClientFingerprint(clientId)};
 }
 function workspace(value:GoogleWorkspace):GoogleWorkspace {
   googleWorkspaceKey(value); // Validate the whole tuple before accessing fields.

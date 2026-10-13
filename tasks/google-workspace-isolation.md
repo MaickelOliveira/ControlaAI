@@ -112,6 +112,26 @@ already separates the live Google connections.
 
 ## First-increment acceptance criteria
 
+### Server identity increment
+
+Prepare a server-only verifier using the existing Google Auth SDK. Verify the
+signed ID token with Google's certificate endpoint, a single configured OAuth
+client audience and Google's documented issuers; require valid numeric issued/
+expiry times, a matching authorized presenter when supplied, a stable nonempty
+subject and the nonce hash captured by the pending state. Recheck the pending
+state lifetime and validate/copy its immutable workspace. Email is not identity.
+Return only an opaque, frozen identity proof bound to owner/workspace/client and
+expiry; never return the ID token, email, provider payload or SDK error/cause.
+Storage adapters must reject reconstructed/copied proofs or another scope/client.
+No live OAuth route, credential storage or existing connection changes yet.
+
+Tests use ephemeral RSA signatures and the real Google SDK verifier with only
+public certificate retrieval replaced by a fictitious local certificate. Reject
+forged signatures, wrong issuer/audience/nonce/presenter, expired/malformed claims,
+expired state, changed scope/client and deserialized proofs; no Google calls,
+customer credentials or production database. Use the existing client fingerprint
+helper so states and future grants use the same domain-separated hash.
+
 - Personal ignores remembered/archived company identity and returns null; denied personal access is rejected.
 - Business requires a valid active company and allowed access, with no global/default fallback.
 - Another owner, invalid runtime objects/UUIDs/mode/flags and context without an authenticated owner are rejected.
