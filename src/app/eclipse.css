@@ -174,6 +174,15 @@
 .z-sidebar .p-3.border-t {padding:6px 12px;border:0;}
 .z-sidebar .z-nav {padding-top:8px;}
 .z-eclipse-dashboard {gap:18px;}
+.z-dashboard-planning {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start;}
+.z-wallet-content {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start;}
+.z-dashboard-wallet .z-credit-deck-viewport {max-height:290px;}
+.z-dashboard-wallet .z-credit-selected {border-top:0;border-left:1px solid var(--z-line);padding:0 0 0 24px;max-height:350px;overflow-y:auto;scrollbar-width:thin;}
+.z-bank-cash-summary {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 30px;align-items:center;}
+.z-bank-cash-summary>div:first-child {grid-column:1/-1;}
+.z-bank-cash-summary>p {grid-column:1/-1;}
+.z-bank-credit-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;}
+@media(max-width:767px) {.z-dashboard-planning,.z-wallet-content,.z-bank-cash-summary,.z-bank-credit-grid {grid-template-columns:1fr;}.z-dashboard-wallet .z-credit-selected {border-left:0;border-top:1px solid var(--z-line);padding:16px 0 0;}.z-wallet-content {gap:12px;}}
 .z-eclipse-focus {padding:21px 24px;}
 .z-eclipse-stats {margin-bottom:21px;}
 .z-eclipse-stat {padding:14px 12px;}
