@@ -39,7 +39,7 @@ it("shows transfers, original currencies and unknown amounts in an extract witho
 });
 it("organizes a merchant answer into total, period, origins and separate purchases with blank lines",()=>{
   const reply=summarizeFinanceQuery(createFinanceLedger([], [{...bank("ze","43.75","debit","card","card_purchases"),description:"Zé Delivery"}],"personal"),{from:"2026-09-01",to:"2026-09-30",type:"expense",keywords:["ze delivery"]},"personal");
-  expect(reply).toMatch(/^💸 \*Você gastou R\$ 43,75\*/); expect(reply).toContain("\n\n📅"); expect(reply).toContain("\n\n*Por origem*\n"); expect(reply).toContain("\n\n*Movimentações encontradas (1)*\n\n"); expect(reply).toContain("*1. Zé Delivery*\n💰 R$ 43,75\n"); expect(reply).toContain("🏷️ Alimentação");
+  expect(reply).toMatch(/^💸 \*Você gastou R\$ 43,75\*/); expect(reply).toContain("\n\n📅"); expect(reply).toContain("\n\n*Por origem*\n"); expect(reply).toContain("\n\n*Movimentações encontradas (1)*\n\n"); expect(reply).toContain("*1. Zé Delivery*\n💰 R$ 43,75\n"); expect(reply).toContain("🏷️ Delivery");
 });
 
 it("answers category ranking before the separate source breakdown",()=>{

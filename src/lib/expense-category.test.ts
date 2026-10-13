@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { descriptionExpenseCategory, normalizeExpenseCategories } from "./expense-category";
 import type { AIResult } from "./ai-processor";
 it.each([
-  ["ZE*DELIVERY", "Alimentação"], ["Zé Delivery", "Alimentação"], ["Uber Eats", "Alimentação"],
+  ["ZE*DELIVERY", "Delivery"], ["Zé Delivery", "Delivery"], ["Uber Eats", "Delivery"],
   ["Google*Ads", "Marketing"], ["FACEBK*123", "Marketing"], ["Facebook Serviços Online", "Marketing"],
   ["Google Workspace", "Tecnologia"], ["GOOGLE*Serviços", "Serviços"], ["YouTube Premium", "Lazer"],
   ["Drogasil", "Saúde"], ["DARF", "Impostos"], ["Energia elétrica", "Moradia"],
@@ -21,7 +21,7 @@ it("does not rewrite an explicitly chosen custom category, incomes or edits", ()
 });
 it("corrects each expense of a batch independently and keeps unknown items categorized as Outros",()=>{
   const original={intent:"finance_register",confidence:1,finances:[result("Zé Delivery","Outros").finance!,result("FACEBK*123","Lazer").finance!,result("Pix - Pessoa","").finance!] } as AIResult;
-  expect(normalizeExpenseCategories("registrei três gastos",original).finances?.map(item=>item.category)).toEqual(["Alimentação","Marketing","Outros"]);
+  expect(normalizeExpenseCategories("registrei três gastos",original).finances?.map(item=>item.category)).toEqual(["Delivery","Marketing","Outros"]);
 });
 it("does not let an explicit category for one item disable automatic categorization of another",()=>{
   const original={intent:"finance_register",confidence:1,finances:[result("Google Ads","Moradia").finance!,result("Zé Delivery","Evento empresa").finance!]} as AIResult;
@@ -47,3 +47,13 @@ it.each(["IOF", "Juros do cartão", "Tarifa bancária", "Anuidade do cartão", "
 });
 
 it.each([["Compra parcelada sem juros — Drogasil", "Saúde"],["Google Ads sem juros", "Marketing"]])("does not turn a purchase without interest into bank charges: %s",(description,category)=>expect(descriptionExpenseCategory(description)).toBe(category));
+
+it.each(["Delivery de eletrônicos","Delivery de livros","Delivery de cosméticos","Delivery de tênis"])("does not infer food from a delivery of named non-food goods: %s",description=>{
+  expect(descriptionExpenseCategory(description)).not.toBe("Delivery");
+  expect(normalizeExpenseCategories(`gastei 50 com ${description}`,result(description,"Delivery")).finance?.category).not.toBe("Delivery");
+});
+it("distinguishes a delivery brand from an explicitly chosen Delivery category",()=>{
+  expect(normalizeExpenseCategories("gastei 50 de IOF no Zé Delivery",result("IOF Zé Delivery","Delivery")).finance?.category).toBe("Encargos bancários");
+  const original=result("Delivery de medicamentos","Delivery");
+  expect(normalizeExpenseCategories("gastei 50 em medicamentos, na categoria Delivery",original)).toEqual(original);
+});

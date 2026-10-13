@@ -27,7 +27,7 @@ function fmt(v: number) { return v.toLocaleString("pt-PT", { style: "currency", 
 function fmtDate(d: string) { return new Date(d + "T12:00:00").toLocaleDateString("pt-PT"); }
 
 const UNIT_LABEL: Record<string, string> = { monthly: "Mensal", weekly: "Semanal", daily: "Diário", yearly: "Anual" };
-const CATEGORIES_EXPENSE = ["Alimentação", "Transporte", "Habitação", "Saúde", "Educação", "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Funcionários", "Marketing", "Fornecedores", "Outros"];
+const CATEGORIES_EXPENSE = ["Alimentação", "Delivery", "Transporte", "Habitação", "Saúde", "Educação", "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Funcionários", "Marketing", "Fornecedores", "Outros"];
 const CATEGORIES_INCOME = ["Salário", "Freelance", "Vendas", "Investimentos", "Renda", "Serviços", "Reembolso", "Outros"];
 
 type FormState = {

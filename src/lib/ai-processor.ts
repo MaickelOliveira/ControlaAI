@@ -605,7 +605,7 @@ function categoryForNaturalFinance(description: string, type: "income" | "expens
   const merchant = descriptionExpenseCategory(description);
   if (merchant) return merchant;
   if (/\baluguel|alquiler|casa|moradia|condominio\b/.test(normalized)) return "Moradia";
-  if (/\bmercado|comida|almoco|jantar|ifood|rappi|restaurante\b/.test(normalized)) return "Alimentação";
+  if (/\bmercado|comida|almoco|jantar|restaurante\b/.test(normalized)) return "Alimentação";
   if (/\bfarmacia|remedio|medicamento|consulta|saude\b/.test(normalized)) return "Saúde";
   if (/\buber|combustivel|gasolina|transporte|onibus|passagem\b/.test(normalized)) return "Transporte";
   if (/\bfornecedor|proveedor\b/.test(normalized)) return "Fornecedores";
@@ -3780,6 +3780,14 @@ async function tryOpenAIForTestUser<T>(
   }
 }
 
+function explicitDeliverySpendingResult(message:string):AIResult|null {
+ const text=normalizeCapabilityText(message).replace(/[?!.,;:]+$/,"").trim();
+ if(explicitMerchantInQuestion(message)||/\b(?:registr\w*|anot\w*|lanc\w*|pagu\w*|pagar|exclu\w*|apag\w*|alter\w*|edit\w*|corrig\w*)\b/.test(text))return null;
+ if(!/\b(?:quanto\s+(?:eu\s+)?(?:gastei|gastamos)|gastos|total\s+gasto)\b/.test(text))return null;
+ if(!/\bcategoria\s+delivery\b|\b(?:com|em|de|no)\s+delivery(?=\s*(?:$|(?:este|esse|neste|nesse|no|em|na|mes|semana|hoje|ontem|de)\b))/.test(text))return null;
+ return {intent:"finance_query",confidence:1,category:"Delivery",financeType:"expense"};
+}
+
 function explicitCategoryDetailResult(message:string,ctx?:AiContext):AIResult|null {
  const expense=[...CATEGORIES_EXPENSE,...(ctx?.user.customCategoriesExpense??[])],income=[...CATEGORIES_INCOME,...(ctx?.user.customCategoriesIncome??[])];
  const category=categoryDetailQuestion(message,[...expense,...income]);
@@ -3790,16 +3798,40 @@ function explicitCategoryDetailResult(message:string,ctx?:AiContext):AIResult|nu
  return {intent:"finance_detail",confidence:1,category,...(financeType?{financeType}:{}),...(mode?{mode}:{})};
 }
 
+function deliveryQueryKeyword(keyword:unknown):string|undefined {
+ return typeof keyword==="string"&&normalizeCapabilityText(keyword).trim()!=="delivery"?keyword:undefined;
+}
+
+function unresolvedDeliveryMerchant(message: string, keyword: unknown, bank?: string): boolean {
+  if (deliveryQueryKeyword(keyword)?.trim()) return false;
+  const qualifier = normalizeCapabilityText(message).match(/\bdelivery\s+(?:no|na|nos|nas|com|do|da)\s+(.+)/)?.[1];
+  if (!qualifier || /^(?:mes|ano|semana|dia|periodo|cartao|conta|banco|modo|pessoal|empresa)\b/.test(qualifier)) return false;
+  return !bank || !qualifier.startsWith(normalizeCapabilityText(bank));
+}
+
 function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): AIResult {
+  const deliverySpending=explicitDeliverySpendingResult(message);
+  const merchant = explicitMerchantInQuestion(message);
+  if (deliverySpending && !merchant && ["how_to", "unknown", "finance_query", "finance_analysis", "bank_query"].includes(result.intent)) {
+    const query = result.intent === "bank_query" ? validateBankQuery(result.bankQuery) : undefined;
+    if (unresolvedDeliveryMerchant(message, query?.keyword ?? result.keyword, query?.bankName)) {
+      return { intent: "unknown", confidence: 0, response: "Não consegui entender qual estabelecimento consultar. Pode repetir o nome?" };
+    }
+  }
   const categoryDetail=explicitCategoryDetailResult(message,ctx);
   if(categoryDetail&&["how_to","unknown","finance_query","finance_detail"].includes(result.intent))result={...result,...categoryDetail,keyword:undefined,response:undefined};
-  if (result.intent === "bank_query") return withExplicitRelativePeriod(message, { ...result, bankQuery: validateBankQuery(result.bankQuery) ?? undefined });
+  if (result.intent === "bank_query") {
+    let bankQuery=validateBankQuery(result.bankQuery)??undefined;
+    if(merchant&&bankQuery&&(bankQuery.kind==="spending"||bankQuery.kind==="transactions"))bankQuery={...bankQuery,keyword:merchant,category:undefined};
+    else if(deliverySpending&&bankQuery?.kind==="spending")bankQuery={...bankQuery,category:"Delivery",keyword:deliveryQueryKeyword(bankQuery.keyword)};
+    return withExplicitRelativePeriod(message,{...result,bankQuery});
+  }
+  if(deliverySpending&&["how_to","unknown","finance_query","finance_analysis"].includes(result.intent))result={...result,...deliverySpending,keyword:deliveryQueryKeyword(result.keyword),response:undefined};
   const recurringQuery=getExplicitRecurringQueryResult(message);
   if(recurringQuery&&["how_to","unknown","finance_query","finance_detail","recurring_query"].includes(result.intent)){
     const keyword=recurringQuery.keyword??result.keyword;
     result={...recurringQuery,mode:recurringQuery.mode??result.mode,period:recurringQuery.period??(result.intent==="recurring_query"?result.period:undefined),keyword:keyword&&/^(?:contas?|parcelad[oa]s?|parcelas?|recorrentes?|assinaturas?)$/i.test(keyword.trim())?undefined:keyword};
   }
-  const merchant = explicitMerchantInQuestion(message);
   if (merchant && result.intent === "grocery_spend_query") result = { ...result, intent: "finance_query", keyword: merchant, period: result.grocery?.period ?? result.period, category: undefined, financeType: "expense" };
   if (merchant && ["finance_query", "finance_detail", "finance_analysis"].includes(result.intent)) result = { ...result, keyword: merchant, category: undefined };
   const normalized = withExplicitAgendaAllDay(message, withExplicitFinanceAccount(message, normalizeActionReminder(message, normalizeMeetingCreation(message, withExplicitFinanceDestinationMode(
@@ -3875,6 +3907,7 @@ function getExplicitIntentFallback(message: string, ctx?: AiContext): AIResult |
 
   const explicitFinanceDetail = explicitCategoryDetailResult(message,ctx) ?? getExplicitFinanceDetailResult(message, ctx?.history);
   if (explicitFinanceDetail) return withExplicitRelativePeriod(message, explicitFinanceDetail);
+
 
   const explicitConfirmPending = getExplicitFinanceConfirmPendingResult(message);
   if (explicitConfirmPending) return explicitConfirmPending;

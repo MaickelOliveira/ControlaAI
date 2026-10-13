@@ -1,17 +1,30 @@
 import { normalizeMerchantText as normalize } from "./merchant-text";
 import type { AIResult, FinanceData } from "./ai-processor";
-const rules: Array<[RegExp, string]> = [
+const food = /\b(?:pizza|pizzaria|esfiha|esfiharia|sushi|temaki|comida\s+japonesa|marmita|marmitex|yakisoba|hamburguer|hamburger|lanche|refeicao|comida|bebida|acai|pastel|restaurante|padaria)\b/;
+const nonFoodDelivery = /\b(?:farmacia|drogaria|drogasil|remedios?|medicamentos?|roupas?|calcados?|tenis|moveis|material\s+de\s+construcao|pet\s*shop|racao|eletronicos?|livros?|cosmeticos?|computador|celular|documentos?|software|keeta\s+network)\b/;
+export function isNonFoodDeliveryDescription(description: string): boolean {
+  return nonFoodDelivery.test(normalize(description));
+}
+function foodDelivery(text: string): boolean {
+  if (nonFoodDelivery.test(text)) return false;
+  return /\b(?:i\s*food|ifd|99\s*food|ze\s*delivery|aiq\s*fome|ai\s*(?:q|que)\s*fome|aiquefome|rappi(?!\s*(?:pay|bank|card)\b)|uber\s*eats|keeta|delivery\s*much|quero\s*delivery|to\s*no\s*lucro|pede\s*pronto)\b/.test(text)
+    || /\bdelivery\b/.test(text)
+    || /\b(?:tele\s*entrega|entrega|entregue|entregues)\b/.test(text) && food.test(text);
+}
+const priorityRules: Array<[RegExp, string]> = [
   [/\b(?:iof|juros\s+(?:bancarios|do\s+(?:cartao|emprestimo|financiamento)|de\s+mora|mora|rotativo|sobre\s+(?:saldo|emprestimo|financiamento))|encargos\s+(?:bancarios|financeiros)|tarifa\s+(?:bancaria|do\s+banco)|anuidade\s+(?:do\s+cartao|diferenciada|cartao))\b|^juros$/, "Encargos bancários"],
   [/\b(?:emprestimos?|consignado|credito\s+(?:pessoal|facil\s+mobi))\b/, "Empréstimos"],
   [/\b(?:mensalidade\s+escolar|faculdade|universidade|curso|alura|udemy|coursera)\b/, "Educação"],
   [/\b(?:chat\s*gpt|open\s*ai|anthropic|google\s*gemini|perplexity)\b|^claude(?:\s+(?:ai|pro|sub))?$|\b(?:assinatura|subscription)\s+(?:do\s+)?claude\b/, "Inteligência Artificial"],
   [/\b(?:google\s*ads|google\s*adwords|facebook(?:\s+servicos\s+online|\s+ads)?|facebk|meta\s+ads|anuncios|publicidade|trafego\s+pago)\b/, "Marketing"],
-  [/\b(?:delivery|zedelivery|ze\s+delivery|ifood|rappi|uber\s*eats|supermercado|mercearia|restaurante|padaria|refeicao|lanchonete|muffato|assai|atacadao|carrefour|pao\s+de\s+acucar|mercado(?!\s+(?:pago|livre)))\b/, "Alimentação"],
+];
+const rules: Array<[RegExp, string]> = [
+  [/\b(?:supermercado|mercearia|restaurante|padaria|refeicao|lanchonete|muffato|assai|atacadao|carrefour|pao\s+de\s+acucar|mercado(?!\s+(?:pago|livre))|pizza|pizzaria|esfiha|esfiharia|sushi|temaki|comida\s+japonesa|marmita|marmitex|yakisoba|hamburguer|hamburger|acai|pastel|pastelaria)\b/, "Alimentação"],
   [/\b(?:google\s*(?:cloud|workspace|one|drive|gsuite)|aws|amazon\s+web\s+services|microsoft\s*(?:365|azure)|adobe|canva)\b/, "Tecnologia"],
   [/\b(?:netflix|spotify|cinema|youtube\s*(?:premium|music)|disney\s*plus|prime\s*video|hbo\s*max)\b/, "Lazer"],
   [/\bgoogle\b(?!\s*(?:pay|pays|pagamentos))/, "Serviços"],
-  [/\b(?:uber|99app|combustivel|gasolina|etanol|estacionamento|pedagio|posto\s+(?:de\s+)?combustivel)\b/, "Transporte"],
-  [/\b(?:farmacia|drogaria|drogasil|droga\s*raia|drogaria\s*pacheco|hospital|dentista|clinica\s+medica)\b/, "Saúde"],
+  [/\b(?:uber|99app|99(?=\s+(?:corrida|viagem|taxi|app))|combustivel|gasolina|etanol|estacionamento|pedagio|posto\s+(?:de\s+)?combustivel)\b/, "Transporte"],
+  [/\b(?:farmacia|drogaria|drogasil|droga\s*raia|drogaria\s*pacheco|hospital|dentista|clinica\s+medica|remedios?|medicamentos?)\b/, "Saúde"],
   [/\b(?:renner|riachuelo|vestuario|roupas|calcados)\b/, "Vestuário"],
   [/\b(?:darf|das\s+mei|iptu|ipva|tributo|imposto)\b/, "Impostos"],
   [/\b(?:aluguel|condominio|energia\s+eletrica|conta\s+de\s+agua|saneamento)\b/, "Moradia"],
@@ -23,7 +36,10 @@ export function descriptionExpenseCategory(description: string): string | null {
   const text = normalize(description).replace(/\bsem juros\b/g, " ");
   // Marketplace/payment brands alone do not identify what was purchased.
   if (/\b(?:facebook\s*marketplace|meta\s*pay)\b/.test(text)) return null;
-  return rules.find(([pattern]) => pattern.test(text))?.[1] ?? null;
+  // Banking charges, principal, education/AI and advertising keep their
+  // specific purpose even when a delivery brand appears in the description.
+  const priority = priorityRules.find(([pattern]) => pattern.test(text))?.[1];
+  return priority ?? (foodDelivery(text) ? "Delivery" : rules.find(([pattern]) => pattern.test(text))?.[1] ?? null);
 }
 
 /** Received principal and yield have distinct purposes; a redemption is not all yield. */
@@ -38,7 +54,11 @@ export function descriptionIncomeCategory(description: string): string | null {
 /** Respect a category expressly named by the person, including custom categories. */
 export function hasExplicitExpenseCategory(message: string, category: string, description = "", bindToItem = false): boolean {
   const text = normalize(message), name = normalize(category.trim());
-  const named = (value: string) => !!name && ` ${normalize(value)} `.includes(` ${name} `);
+  const named = (value: string) => {
+    const words=normalize(value);
+    if(name==="delivery")return /\b(?:categoria|classifique|categorize|classificar|categorizar)\s+(?:(?:em|como)\s+)?delivery\b|\b(?:marca|marque|marcar)\s+como\s+delivery\b/.test(words);
+    return !!name && ` ${words} `.includes(` ${name} `);
+  };
   if (!named(text)) return false;
   if (!bindToItem || /\b(todos|todas|ambos|ambas|tudo)\b/.test(text)) return true;
   const clauses: string[] = [];
@@ -61,7 +81,8 @@ export function normalizeExpenseCategories(message: string, result: AIResult): A
     const description = typeof finance.description === "string" ? finance.description : "";
     if (hasExplicitExpenseCategory(message, current, description, batch)) return missing ? { ...finance, category: "Outros" } : finance;
     const inferred = finance.type === "expense" ? descriptionExpenseCategory(description) : finance.type === "income" ? descriptionIncomeCategory(description) : null;
-    const category = inferred ?? (missing ? "Outros" : current);
+    const invalidFoodInference=finance.type==="expense"&&normalize(current)==="delivery"&&isNonFoodDeliveryDescription(description);
+    const category = inferred ?? (missing || invalidFoodInference ? "Outros" : current);
     return category === finance.category ? finance : { ...finance, category };
   };
   return { ...result, ...(result.finance ? { finance: normalizeFinance(result.finance) } : {}), ...(result.finances ? { finances: result.finances.map(normalizeFinance) } : {}) };
