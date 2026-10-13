@@ -114,6 +114,16 @@ appointments/Meets. This storage-only slice installs no caller; transactional
 local-record linkage, command state/retry reconciliation and provider effects
 follow before activation.
 
+The following server adapter receives only an authenticated workspace and the
+authorized logical event UUID. It captures immutable inputs before awaits, loads
+the exact active binding and configured OAuth client, then submits the original
+binding/grant/revision to the private reservation. No metadata refresh/retry after
+a conflict. A read is scoped history metadata only; no configured credential lookup
+or legacy fallback. Validate all returned UUIDs/scope, exact decimal creation
+revision and both v1 retry IDs against the local logical event. Reservation results
+must also match the captured binding/grant/calendar/revision. Return frozen DTOs
+and fixed errors without raw storage diagnostics. Install no live consumer yet.
+
 Official references checked2026-10-13:
 https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
 https://developers.google.com/workspace/calendar/api/v3/reference/events
