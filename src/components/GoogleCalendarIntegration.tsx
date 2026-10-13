@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 
 type Locale = "pt-BR" | "pt-PT" | "es";
 type CalendarOption = { id: string; name: string; primary: boolean; backgroundColor?: string };
@@ -100,7 +101,7 @@ export default function GoogleCalendarIntegration({ locale }: { locale: Locale }
   return (
     <div className="flex flex-col gap-4 p-4 rounded-xl border border-line bg-surface-muted sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-surface border border-line flex items-center justify-center shadow-sm text-xl shrink-0">🗓️</div>
+        <div className="w-10 h-10 rounded-xl bg-white border border-line flex items-center justify-center shadow-sm shrink-0"><Image src="/brand/google-calendar.png" alt="Google Agenda" width={30} height={30}/></div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-ink">Google Calendar / Meet</p>
           <p className="text-xs text-subtle mt-0.5">{copy.description}</p>
