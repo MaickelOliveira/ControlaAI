@@ -14,7 +14,7 @@ const client="fixture-client.apps.googleusercontent.com";
 const state="s".repeat(43),nonce="n".repeat(43);
 const nonceHash=createHash("sha256").update("google-oauth-nonce\0"+nonce).digest("hex");
 function row(patch:Record<string,unknown>={}){
-  return {user_id:owner,mode:"business",company_id:company,locale:"pt-BR",nonce_hash:nonceHash,expires_at:new Date(Date.now()+600_000).toISOString(),...patch};
+  return {user_id:owner,mode:"business",company_id:company,locale:"pt-BR",nonce_hash:nonceHash,expires_at:new Date(Date.now()+600_000).toISOString(),binding_version:"0",...patch};
 }
 beforeEach(()=>{storage.rpc.mockReset().mockResolvedValue({data:null,error:null});});
 
@@ -84,7 +84,8 @@ describe("persistent Google state boundary",()=>{
   it.each([
     {user_id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"},{user_id:"bad"},{mode:"unknown"},{company_id:null},
     {mode:"personal",company_id:company},{locale:"evil"},{nonce_hash:"bad"},{expires_at:"invalid"},
-    {expires_at:new Date(0).toISOString()},
+    {expires_at:new Date(0).toISOString()},{binding_version:null},{binding_version:0},
+    {binding_version:"-1"},{binding_version:"01"},{binding_version:"9223372036854775808"},
   ])("fails closed on corrupted state response %#",async patch=>{
     storage.rpc.mockResolvedValue({data:row(patch),error:null});
     await expect(consumeGoogleOAuthState(owner,state,session,client)).rejects.toThrow("GOOGLE_STATE_INVALID");
@@ -92,6 +93,10 @@ describe("persistent Google state boundary",()=>{
   it("restores captured Personal independently from companies",async()=>{
     storage.rpc.mockResolvedValue({data:row({mode:"personal",company_id:null,locale:"es"}),error:null});
     expect(await consumeGoogleOAuthState(owner,state,session,client)).toMatchObject({workspace:{userId:owner,mode:"personal",companyId:null},locale:"es"});
+  });
+  it("captures exact binding revisions as strings without rounding PostgreSQL bigint",async()=>{
+    storage.rpc.mockResolvedValue({data:row({binding_version:"9223372036854775806"}),error:null});
+    expect(await consumeGoogleOAuthState(owner,state,session,client)).toMatchObject({bindingVersion:"9223372036854775806"});
   });
   it("matches only the issued nonce and handles invalid hashes without leaking it",()=>{
     expect(googleOAuthNonceMatches(nonceHash,nonce)).toBe(true);

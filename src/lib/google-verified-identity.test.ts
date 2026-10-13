@@ -10,7 +10,7 @@ const owner="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",company="bbbbbbbb-bbbb-4bbb-8
 const clientId="fixture-client.apps.googleusercontent.com",nonce="n".repeat(43);
 const now=Date.parse("2026-10-13T12:00:00Z"),seconds=now/1000;
 const workspace:GoogleWorkspace={userId:owner,mode:"business",companyId:company};
-const pending:GooglePendingState={workspace,locale:"pt-BR",nonceHash:createHash("sha256").update("google-oauth-nonce\0"+nonce).digest("hex"),expiresAt:new Date(now+600_000).toISOString()};
+const pending:GooglePendingState={workspace,locale:"pt-BR",nonceHash:createHash("sha256").update("google-oauth-nonce\0"+nonce).digest("hex"),expiresAt:new Date(now+600_000).toISOString(),bindingVersion:"2"};
 const keys=generateKeyPairSync("rsa",{modulusLength:2048});
 const certs={fixture:keys.publicKey.export({type:"spki",format:"pem"}).toString()};
 function token(patch:Record<string,unknown>={},signingKey=keys.privateKey,headerPatch:Record<string,unknown>={}){
@@ -34,6 +34,7 @@ describe("verified Google identity boundary",()=>{
     const identity=await verifyGoogleIdentity(idToken,clientId,pending);
     expect(identity.subject).toBe("fictitious-google-subject");
     expect(identity.workspace).toEqual(workspace);
+    expect(identity.bindingVersion).toBe("2");
     expect(identity.clientFingerprint).toBe(createHash("sha256").update("google-oauth-client\0"+clientId).digest("hex"));
     expect(Object.isFrozen(identity)).toBe(true);expect(Object.isFrozen(identity.workspace)).toBe(true);
     expect(()=>assertVerifiedGoogleIdentity(identity,workspace,clientId)).not.toThrow();
@@ -84,6 +85,8 @@ describe("verified Google identity boundary",()=>{
   it.each([
     null,[],{...pending,expiresAt:new Date(now).toISOString()},{...pending,expiresAt:"invalid"},
     {...pending,expiresAt:new Date(now+660_001).toISOString()},
+    {...pending,bindingVersion:null},{...pending,bindingVersion:2},{...pending,bindingVersion:"-1"},
+    {...pending,bindingVersion:"9223372036854775808"},
     {...pending,nonceHash:"bad"},{...pending,workspace:{...workspace,userId:"bad"}},
     {...pending,workspace:{...workspace,companyId:null}},
   ])("rejects unusable captured state before retrieval %#",async invalid=>{
@@ -112,6 +115,15 @@ describe("verified Google identity boundary",()=>{
   it("rejects a state that expires during certificate retrieval",async()=>{
     certificates.mockImplementation(async()=>{vi.setSystemTime(now+600_000);return certificateResponse;});
     await expect(verifyGoogleIdentity(token(),clientId,pending)).rejects.toThrow("GOOGLE_IDENTITY_INVALID");
+  });
+  it("keeps the issued revision if caller state changes during asynchronous verification",async()=>{
+    let complete!:(result:CertificateResponse)=>void;
+    certificates.mockImplementation(()=>new Promise(resolve=>{complete=resolve;}));
+    const selected=structuredClone(pending);
+    const verifying=verifyGoogleIdentity(token(),clientId,selected);
+    (selected as {bindingVersion:string}).bindingVersion="9";
+    complete(certificateResponse);
+    expect((await verifying).bindingVersion).toBe("2");
   });
   it("does not keep the proof valid after a shorter-lived ID token expires",async()=>{
     const identity=await verifyGoogleIdentity(token({exp:seconds+60}),clientId,pending);

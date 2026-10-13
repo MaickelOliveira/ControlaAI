@@ -4,7 +4,7 @@ import {getSupabase} from "./supabase";
 import {googleWorkspaceKey,type GoogleWorkspace} from "./google-workspace-policy";
 
 type Locale="pt-BR"|"pt-PT"|"es";
-export type GooglePendingState=Readonly<{workspace:GoogleWorkspace;locale:Locale;nonceHash:string;expiresAt:string}>;
+export type GooglePendingState=Readonly<{workspace:GoogleWorkspace;locale:Locale;nonceHash:string;expiresAt:string;bindingVersion:string}>;
 const OPAQUE=/^[A-Za-z0-9_-]{43}$/;
 const HASH=/^[a-f0-9]{64}$/;
 function hash(kind:string,value:string):string {
@@ -17,6 +17,10 @@ function locale(value:unknown):Locale {
 export function googleOAuthClientFingerprint(clientId:string):string {
   if(typeof clientId!=="string"||!clientId||clientId.length>1024||/\s/.test(clientId))throw Error("GOOGLE_STATE_INVALID");
   return hash("client",clientId);
+}
+export function googleOAuthBindingVersion(value:unknown):string {
+  if(typeof value!=="string"||! /^(?:0|[1-9]\d{0,18})$/.test(value)||BigInt(value)>BigInt("9223372036854775807"))throw Error("GOOGLE_STATE_INVALID");
+  return value;
 }
 function identity(sessionId:string,clientId:string):{sessionHash:string;clientFingerprint:string} {
   if(typeof sessionId!=="string"||!sessionId||sessionId.length>16384)throw Error("GOOGLE_STATE_INVALID");
@@ -63,7 +67,7 @@ export async function consumeGoogleOAuthState(ownerId:string,state:string|null,s
     if(typeof row.user_id!=="string"||(row.mode!=="personal"&&row.mode!=="business")||(row.company_id!==null&&typeof row.company_id!=="string"))throw Error();
     const selected=workspace({userId:row.user_id,mode:row.mode,companyId:row.company_id});
     if(selected.userId!==owner||typeof row.nonce_hash!=="string"||!HASH.test(row.nonce_hash)||typeof row.expires_at!=="string"||!Number.isFinite(Date.parse(row.expires_at))||Date.parse(row.expires_at)<=Date.now())throw Error();
-    return Object.freeze({workspace:selected,locale:locale(row.locale),nonceHash:row.nonce_hash,expiresAt:row.expires_at});
+    return Object.freeze({workspace:selected,locale:locale(row.locale),nonceHash:row.nonce_hash,expiresAt:row.expires_at,bindingVersion:googleOAuthBindingVersion(row.binding_version)});
   }catch{throw Error("GOOGLE_STATE_INVALID");}
 }
 

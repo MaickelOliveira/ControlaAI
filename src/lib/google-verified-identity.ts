@@ -1,11 +1,11 @@
 import "server-only";
 import {google} from "googleapis";
-import {googleOAuthClientFingerprint,googleOAuthNonceMatches,type GooglePendingState} from "./google-oauth-state";
+import {googleOAuthBindingVersion,googleOAuthClientFingerprint,googleOAuthNonceMatches,type GooglePendingState} from "./google-oauth-state";
 import {assertGoogleWorkspaceMatch,googleWorkspaceKey,type GoogleWorkspace} from "./google-workspace-policy";
 
 declare const verifiedIdentity:unique symbol;
 export type VerifiedGoogleIdentity=Readonly<{
-  workspace:GoogleWorkspace;subject:string;clientFingerprint:string;
+  workspace:GoogleWorkspace;subject:string;clientFingerprint:string;bindingVersion:string;
   [verifiedIdentity]:true;
 }>;
 // A deserialized/caller-constructed object is not a verified provider identity.
@@ -22,7 +22,7 @@ export async function verifyGoogleIdentity(idToken:string,clientId:string,pendin
     if(!pending||typeof pending!=="object"||Array.isArray(pending)||typeof pending.expiresAt!=="string"||typeof pending.nonceHash!=="string"||! /^[a-f0-9]{64}$/.test(pending.nonceHash))throw Error();
     googleWorkspaceKey(pending.workspace);
     const workspace=Object.freeze({userId:pending.workspace.userId.toLowerCase(),mode:pending.workspace.mode,companyId:pending.workspace.companyId?.toLowerCase()??null});
-    const expiresAt=Date.parse(pending.expiresAt),nonceHash=pending.nonceHash,now=Date.now();
+    const expiresAt=Date.parse(pending.expiresAt),nonceHash=pending.nonceHash,bindingVersion=googleOAuthBindingVersion(pending.bindingVersion),now=Date.now();
     if(!Number.isFinite(expiresAt)||expiresAt<=now||expiresAt>now+660_000)throw Error();
     const client=new google.auth.OAuth2(clientId);
     const ticket=await client.verifyIdToken({idToken,audience:clientId});
@@ -33,7 +33,7 @@ export async function verifyGoogleIdentity(idToken:string,clientId:string,pendin
       ||payload.iat>Date.now()/1000+60||payload.iat>=payload.exp||payload.iat<(expiresAt-660_000)/1000)throw Error();
     const nonce=(payload as typeof payload & {nonce?:unknown}).nonce;
     if(typeof nonce!=="string"||!googleOAuthNonceMatches(nonceHash,nonce)||expiresAt<=Date.now())throw Error();
-    const proof=Object.freeze({workspace,subject:payload.sub,clientFingerprint:fingerprint}) as VerifiedGoogleIdentity;
+    const proof=Object.freeze({workspace,subject:payload.sub,clientFingerprint:fingerprint,bindingVersion}) as VerifiedGoogleIdentity;
     proofs.set(proof,Math.min(expiresAt,payload.exp*1000));
     return proof;
   }catch{throw Error("GOOGLE_IDENTITY_INVALID");}
