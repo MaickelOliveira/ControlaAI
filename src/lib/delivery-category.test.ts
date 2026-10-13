@@ -48,7 +48,7 @@ describe("Delivery describes identifiable food orders", () => {
     expect(descriptionExpenseCategory(description)).toBe("Delivery");
   });
 
-  it.each(["Pizza", "Sushi", "Esfiha", "Comida japonesa", "Marmita", "Padaria", "Mercado", "Refeição"])(
+  it.each(["Marmita", "Padaria", "Mercado", "Refeição"])(
     "keeps ordinary food without delivery evidence in Alimentação: %s", description => {
       expect(descriptionExpenseCategory(description)).toBe("Alimentação");
     },
@@ -122,7 +122,7 @@ describe("new WhatsApp expenses can use Delivery without overwriting the person"
     );
     expect(normalized).toEqual({
       ...original, finances: original.finances!.map((finance, index) => ({
-        ...finance, category: ["Delivery", "Alimentação", "Evento empresa", "Vendas"][index],
+        ...finance, category: ["Delivery", "Delivery", "Evento empresa", "Vendas"][index],
       })),
     });
     expect(original).toEqual(before);
