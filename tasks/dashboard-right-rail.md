@@ -1,0 +1,9 @@
+# Compact Dashboard with credit on the right
+
+The previous layout moved the wallet below the financial overview and aligned credit panels with different line counts, leaving large unused areas. The overview and wallet now share the first row, with credit on the right on desktop. Recent activity sits below in equally sized compact panels; longer lists and category details scroll inside keyboard-accessible regions. Planning is one compact strip rather than three large empty cards. The full financial analysis remains open below.
+
+The chosen card is visible in full at the front of the wallet, with other cards behind and a horizontal picker for every card. Native expandable details retain each credit line and bill link. Lower credit analysis uses vertical rows instead of uneven two-column panels; known, unknown and zero values remain distinct and shared credit is never added together. Empty line labels retain a visible fallback. A single account keeps its balance and label without an unnecessary comparison graph.
+
+Desktop QA at 1680px and mobile QA at 390px used fictitious data, four cards with unequal credit-line counts, more than five positive expense categories and a refund category. Desktop activity panels were both 365px without outer content overflow; the category region scrolls internally when needed. Wallet selection, native credit details, light/dark themes and Personal/Business mode were checked. Document-wide horizontal overflow was absent; full analysis remains in the document in mobile and desktop views. The fixture does not verify live customer authorization.
+
+Validation: 1,824 application tests passed (15 skipped), production build/TypeScript passed, lint had no errors and two existing warnings. Independent review ran 42 focused tests and approved. Renderer regressions for empty credit names failed before the fix; duplicate-source counts and all monetary values are preserved.
