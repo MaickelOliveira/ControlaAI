@@ -236,6 +236,10 @@ describe("localized WhatsApp help and errors", () => {
     expect(reply).toContain("Tuve un problema");
     expect(reply).not.toMatch(/Pode mandar|registrado do jeito certo|me avise/);
   });
+  it("asks the sender to verify an uncertain action before trying the same command again", () => {
+    expect(replyProcessingError("pt-BR")).toMatch(/confira.*plataforma.*antes.*enviar de novo/i);
+    expect(replyProcessingError("pt-BR")).toMatch(/duplicad/i);
+  });
 });
 
 describe("WhatsApp link flow expiration warning", () => {

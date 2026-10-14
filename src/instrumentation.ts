@@ -9,6 +9,8 @@ export async function register() {
   }
   const {startGoogleEventWorker}=await import("./lib/google-event-worker");
   startGoogleEventWorker();
+  const {startWabaInboxWorker}=await import("./lib/waba-worker");
+  startWabaInboxWorker();
   if(process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"){
     const {startOpenFinanceWorker}=await import("./lib/open-finance-worker");
     await runJob(async()=>startOpenFinanceWorker());

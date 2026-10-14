@@ -13,6 +13,7 @@ type Cfg = {
   aiIntentMode: "all" | "canary" | "rules-first" | null; aiProviderReady: boolean;
   appBaseUrl: string; wppBotNumber: string; connectionStatus: string;
   googleClientId: string; googleClientSecret: string; hasGoogleOAuth: boolean;
+  inboxAttentionCount: number | null;
 };
 
 const EMPTY_CFG: Cfg = {
@@ -23,6 +24,7 @@ const EMPTY_CFG: Cfg = {
   aiIntentMode: null, aiProviderReady: false,
   appBaseUrl: "", wppBotNumber: "", connectionStatus: "UNKNOWN",
   googleClientId: "", googleClientSecret: "", hasGoogleOAuth: false,
+  inboxAttentionCount: null,
 };
 
 export default function AdminWhatsappPage() {
@@ -120,6 +122,11 @@ export default function AdminWhatsappPage() {
         <PageTitle icon="repeat">WhatsApp Bot</PageTitle>
         <p className="text-subtle text-sm">Configure o número central que recebe as mensagens dos clientes</p>
       </div>
+
+      {cfg.inboxAttentionCount !== null && cfg.inboxAttentionCount > 0 &&
+        <p role="alert" className="rounded-xl border border-amber-500 bg-amber-500/10 p-3 text-sm text-amber-ink">
+          {cfg.inboxAttentionCount} mensagem(ns) do WhatsApp precisam de conferência. Nenhuma ação incerta será repetida automaticamente.
+        </p>}
 
       {/* Status */}
       <div className={clsx("border rounded-2xl p-4 flex items-center justify-between", statusInfo.bar)}>

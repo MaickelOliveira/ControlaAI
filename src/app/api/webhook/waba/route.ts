@@ -1,15 +1,11 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { handleIncomingMessage } from "@/lib/message-handler";
-import { sendText as wppSend } from "@/lib/whatsapp";
-import { downloadMedia, verifyToken, verifySignature } from "@/lib/waba";
-import { transcribeAudio } from "@/lib/ai-processor";
+import { verifyToken, verifySignature } from "@/lib/waba";
 import { getConfig } from "@/lib/whatsapp-config";
-import { alreadyProcessed } from "@/lib/webhook-dedup";
 import { beginWhatsAppActivity, type WhatsAppActivityLease } from "@/lib/whatsapp-activity";
-import { parseCreditPixAnswer } from "@/lib/credit-pix-question";
-import { getUserIdByPhone } from "@/lib/wpp-phone-links";
 import { readBankBody } from "@/lib/open-finance-body";
-import {googleWhatsAppProviderEnvelope} from "@/lib/google-whatsapp-message";
+import {enqueueWabaMessages} from "@/lib/waba-inbox";
+import {pumpWabaInbox, wakeWabaInboxWorker} from "@/lib/waba-worker";
+import {runWithTrustedCompanyJob} from "@/lib/company-context";
 
 /** Verificação do webhook exigida pela Meta ao cadastrar a URL no Business
  *  Manager — responde o hub.challenge em texto puro (não JSON) quando o
@@ -78,37 +74,54 @@ export async function POST(req: NextRequest) {
     try { body = rawBody ? JSON.parse(rawBody) : null; } catch { body = null; }
     if (!body) return NextResponse.json({ ok: true });
 
-    const value = body?.entry?.[0]?.changes?.[0]?.value;
-    const messages = value?.messages as WabaMessage[] | undefined;
-
-    if (!messages?.length) {
-      const statuses = value?.statuses as WabaStatus[] | undefined;
-      for (const st of statuses || []) {
-        if (st.status === "failed") {
-          console.error("[webhook/waba] Falha na entrega");
-        } else {
-          console.log("[webhook/waba] Atualização de status recebida");
+    const groups: Array<{messages: WabaMessage[]; contactName?: string}> = [];
+    for (const entry of Array.isArray(body.entry) ? body.entry : []) {
+      for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
+        const value = change?.value;
+        if (value?.messages != null && !Array.isArray(value.messages)) {
+          return NextResponse.json({ error: "Temporariamente indisponível" }, { status: 503 });
+        }
+        if (value?.messages?.length) {
+          groups.push({messages: value.messages as WabaMessage[], contactName: value.contacts?.[0]?.profile?.name});
+        }
+        const statuses = value?.statuses as WabaStatus[] | undefined;
+        for (const st of Array.isArray(statuses) ? statuses : []) {
+          if (st.status === "failed") console.error("[webhook/waba] Falha na entrega");
+          else console.log("[webhook/waba] Atualização de status recebida");
         }
       }
-      return NextResponse.json({ ok: true }); // status update, não mensagem
     }
+    if (!groups.length) return NextResponse.json({ ok: true });
 
-    const contact = value?.contacts?.[0];
-    const contactName = contact?.profile?.name as string | undefined;
-
-    // Registra atividade antes do ACK e da mídia. Se falhar, a Meta pode
-    // tentar novamente; dedup e processamento só começam após todas as leases.
+    // Registra atividade e salva a mensagem antes do ACK. Se qualquer etapa
+    // falhar, a Meta pode tentar novamente sem perder o conteúdo original.
     const receivedAt=Date.now();
     const leases: Array<WhatsAppActivityLease | undefined> = [];
     try {
-      for (const msg of messages) leases.push(msg.from && /^\d{8,20}$/.test(msg.from.replace(/\D/g,"")) ? await beginWhatsAppActivity(msg.from,"inbound") : undefined);
+      for (const group of groups) for (const msg of group.messages) {
+        leases.push(msg.from && /^\d{8,20}$/.test(msg.from.replace(/\D/g,"")) ? await beginWhatsAppActivity(msg.from,"inbound") : undefined);
+      }
     } catch {
       await Promise.allSettled(leases.map(lease=>lease?.finish()));
       return NextResponse.json({error:"Temporariamente indisponível"},{status:503});
     }
     try {
-      after(() => processMessages(messages, contactName, leases, receivedAt)
-        .catch(() => console.error("[webhook/waba] erro no processamento em background:")));
+      let offset = 0;
+      for (const group of groups) {
+        await enqueueWabaMessages(group.messages, group.contactName, receivedAt + offset);
+        offset += group.messages.length;
+      }
+    } catch {
+      await Promise.allSettled(leases.map(lease => lease?.finish()));
+      return NextResponse.json({ error: "Temporariamente indisponível" }, { status: 503 });
+    }
+    try {
+      after(async () => {
+        try { await runWithTrustedCompanyJob(pumpWabaInbox); }
+        catch { console.error("[webhook/waba] Recuperação adiada"); }
+        finally { await Promise.allSettled(leases.map(lease => lease?.finish())); }
+      });
+      wakeWabaInboxWorker();
     } catch {
       await Promise.allSettled(leases.map(lease => lease?.finish()));
       return NextResponse.json({ error: "Temporariamente indisponível" }, { status: 503 });
@@ -117,73 +130,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch  {
     console.error("[webhook/waba]");
-    return NextResponse.json({ ok: true });
-  }
-}
-
-async function processMessages(messages: WabaMessage[], contactName?: string, leases: Array<WhatsAppActivityLease | undefined> = [], receivedAt=Date.now()) {
-  for (const [index,msg] of messages.entries()) {
-   try {
-    if (await alreadyProcessed(msg.id)) { console.log("[webhook/waba] Reentrega já processada"); continue; }
-    const envelope=googleWhatsAppProviderEnvelope("waba",msg.id);
-
-    const from = (msg.from || "").replace(/\D/g, "");
-    if (!from) continue;
-
-    if (msg.type === "text") {
-      const text = msg.text?.body?.trim();
-      if (!text) continue;
-      await handleIncomingMessage({ ...envelope, receivedAt, from, text, contactName });
-      continue;
-    }
-
-    if (msg.type === "interactive" && msg.interactive?.button_reply) {
-      const reply=msg.interactive.button_reply;
-      const creditPixAnswer=parseCreditPixAnswer(reply.id);
-      await handleIncomingMessage({...envelope, receivedAt,from,text:reply.title,contactName,...(creditPixAnswer?{creditPixAnswer}:{})});
-      continue;
-    }
-
-    if (msg.type === "button" && msg.button?.text) {
-      await handleIncomingMessage({ ...envelope, receivedAt, from, text: msg.button.text, contactName });
-      continue;
-    }
-
-    if (msg.type === "audio" && msg.audio?.id) {
-      const media = await downloadMedia(msg.audio.id).catch(() => null);
-      if (!media) {
-        await wppSend(from, "🎤 Não consegui receber o áudio. Pode enviar novamente?");
-        continue;
-      }
-      const userId = await getUserIdByPhone(from).catch(() => null);
-      const transcript = await transcribeAudio(media.buffer, media.mimeType, userId || undefined).catch(() => null);
-      if (!transcript) {
-        await wppSend(from, "🎤 Não consegui entender o áudio. Pode digitar sua mensagem?");
-        continue;
-      }
-      await handleIncomingMessage({ ...envelope, receivedAt, from, text: transcript, contactName });
-      continue;
-    }
-
-    if (["image", "video", "document"].includes(msg.type)) {
-      const mediaField = msg[msg.type as "image" | "video" | "document"] as { id: string; caption?: string; filename?: string } | undefined;
-      if (!mediaField?.id) continue;
-      const media = await downloadMedia(mediaField.id).catch(() => null);
-      if (!media) {
-        await wppSend(from, "Não consegui receber o arquivo. Pode enviar novamente?");
-        continue;
-      }
-      await handleIncomingMessage({
-        ...envelope, receivedAt, from,
-        text: "",
-        contactName,
-        isFileMessage: true,
-        fileBuffer: media.buffer,
-        fileMimeType: media.mimeType,
-        fileCaption: mediaField.caption,
-        fileName: mediaField.filename || `arquivo_${Date.now()}`,
-      });
-    }
-   } catch { console.error("[webhook/waba] Processamento da mensagem não concluído"); } finally { await leases[index]?.finish().catch(()=>{}); }
+    return NextResponse.json({ error: "Temporariamente indisponível" }, { status: 503 });
   }
 }

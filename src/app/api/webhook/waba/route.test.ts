@@ -1,165 +1,105 @@
-import { NextRequest } from "next/server";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-vi.mock("server-only", () => ({}));
-const mocks = vi.hoisted(() => ({
-  begin: vi.fn(), finish: vi.fn(), handle: vi.fn(), dedup: vi.fn(), signature: vi.fn(),
-  media: vi.fn(), transcribe: vi.fn(), config: vi.fn(), user: vi.fn(), sendText: vi.fn(), after: vi.fn(),
-}));
-vi.mock("next/server", async importOriginal => ({
-  ...await importOriginal<typeof import("next/server")>(), after: mocks.after,
-}));
-vi.mock("@/lib/whatsapp-activity", () => ({ beginWhatsAppActivity: mocks.begin }));
-vi.mock("@/lib/message-handler", () => ({ handleIncomingMessage: mocks.handle }));
-vi.mock("@/lib/webhook-dedup", () => ({ alreadyProcessed: mocks.dedup }));
-vi.mock("@/lib/waba", () => ({ downloadMedia: mocks.media, verifySignature: mocks.signature, verifyToken: vi.fn() }));
-vi.mock("@/lib/ai-processor", () => ({ transcribeAudio: mocks.transcribe }));
-vi.mock("@/lib/whatsapp-config", () => ({ getConfig: mocks.config }));
-vi.mock("@/lib/wpp-phone-links", () => ({ getUserIdByPhone: mocks.user }));
-vi.mock("@/lib/whatsapp", () => ({ sendText: mocks.sendText }));
-import { POST } from "./route";
+import {NextRequest} from "next/server";
+import {afterEach,beforeEach,expect,it,vi} from "vitest";
+vi.mock("server-only",()=>({}));
+const m=vi.hoisted(()=>({begin:vi.fn(),finish:vi.fn(),enqueue:vi.fn(),pump:vi.fn(),wake:vi.fn(),signature:vi.fn(),config:vi.fn(),after:vi.fn()}));
+vi.mock("next/server",async original=>({...await original<typeof import("next/server")>(),after:m.after}));
+vi.mock("@/lib/whatsapp-activity",()=>({beginWhatsAppActivity:m.begin}));
+vi.mock("@/lib/waba-inbox",()=>({enqueueWabaMessages:m.enqueue}));
+vi.mock("@/lib/waba-worker",()=>({pumpWabaInbox:m.pump,wakeWabaInboxWorker:m.wake}));
+vi.mock("@/lib/company-context",()=>({runWithTrustedCompanyJob:(callback:()=>Promise<unknown>)=>callback()}));
+vi.mock("@/lib/waba",()=>({verifySignature:m.signature,verifyToken:vi.fn()}));
+vi.mock("@/lib/whatsapp-config",()=>({getConfig:m.config}));
+import {POST} from "./route";
 
-const from = "5511999990000";
-const questionId = "00000000-0000-4000-8000-000000000099";
-const textMessage = (id = "fictional-message") => ({ id, from, type: "text", text: { body: "mensagem fictícia" } });
-const request = (messages: unknown[]) => new NextRequest("https://zelo.test/api/webhook/waba", {
-  method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": `sha256=${"0".repeat(64)}` },
-  body: JSON.stringify({ entry: [{ changes: [{ value: { messages, contacts: [{ profile: { name: "Contato fictício" } }] } }] }] }),
+const from="5511999990000";
+const textMessage=(id="fixture-id")=>({id,from,type:"text",text:{body:"mensagem fictícia"}});
+const request=(messages:unknown[])=>new NextRequest("https://zelo.test/api/webhook/waba",{
+ method:"POST",headers:{"content-type":"application/json","x-hub-signature-256":`sha256=${"0".repeat(64)}`},
+ body:JSON.stringify({entry:[{changes:[{value:{messages,contacts:[{profile:{name:"Pessoa fictícia"}}]}}]}]}),
 });
-const settled = async (assertion: () => void) => vi.waitFor(assertion, { timeout: 150, interval: 1 });
-beforeEach(() => {
-  for (const mock of Object.values(mocks)) mock.mockReset();
-  mocks.signature.mockResolvedValue(true);
-  mocks.config.mockResolvedValue({ waba: { appSecret: "fake-app-secret" } });
-  mocks.finish.mockResolvedValue(undefined);
-  mocks.begin.mockResolvedValue({ finish: mocks.finish });
-  mocks.dedup.mockResolvedValue(false);
-  mocks.handle.mockResolvedValue(undefined);
-  mocks.media.mockResolvedValue({ buffer: Buffer.from("fake-media"), mimeType: "audio/ogg" });
-  mocks.transcribe.mockResolvedValue("áudio fictício");
-  mocks.user.mockResolvedValue("fictional-user");
-  mocks.sendText.mockResolvedValue(true);
-  mocks.after.mockImplementation(callback => { void callback(); });
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "log").mockImplementation(() => {});
+const settled=async(assertion:()=>void)=>vi.waitFor(assertion,{timeout:150,interval:1});
+beforeEach(()=>{
+ for(const mock of Object.values(m))mock.mockReset();
+ m.signature.mockResolvedValue(true);m.config.mockResolvedValue({waba:{appSecret:"fixture-secret"}});
+ m.finish.mockResolvedValue(undefined);m.begin.mockResolvedValue({finish:m.finish});
+ m.enqueue.mockResolvedValue(undefined);m.pump.mockResolvedValue(1);
+ m.after.mockImplementation(callback=>{void callback();});
+ vi.spyOn(console,"error").mockImplementation(()=>{});
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(()=>vi.restoreAllMocks());
 
-it("awaits inbound activity staging before ACK, dedup or handler and releases after handling", async () => {
-  let release!: (value: { finish: typeof mocks.finish }) => void;
-  mocks.begin.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
-  let acknowledged = false;
-  const response = POST(request([textMessage()])).then(value => { acknowledged = true; return value; });
-  await settled(() => expect(mocks.begin).toHaveBeenCalledWith(from, "inbound"));
-  expect(acknowledged).toBe(false);
-  expect(mocks.dedup).not.toHaveBeenCalled();
-  expect(mocks.handle).not.toHaveBeenCalled();
-  release({ finish: mocks.finish });
-  expect((await response).status).toBe(200);
-  expect(mocks.after).toHaveBeenCalledOnce();
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
-  expect(mocks.handle).toHaveBeenCalledWith(expect.objectContaining({ from, text: "mensagem fictícia", channel: "waba" }));
-  expect(mocks.begin.mock.invocationCallOrder[0]).toBeLessThan(mocks.handle.mock.invocationCallOrder[0]);
-  expect(mocks.finish.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.handle.mock.invocationCallOrder[0]);
+it("does not acknowledge a verified message until it has been saved for recovery",async()=>{
+ let save!:()=>void;m.enqueue.mockImplementationOnce(()=>new Promise<void>(resolve=>{save=resolve;}));
+ let acknowledged=false;
+ const response=POST(request([textMessage()])).then(value=>{acknowledged=true;return value;});
+ await settled(()=>expect(m.enqueue).toHaveBeenCalledOnce());
+ expect(acknowledged).toBe(false);expect(m.pump).not.toHaveBeenCalled();
+ save();expect((await response).status).toBe(200);
+ await settled(()=>expect(m.finish).toHaveBeenCalledOnce());
 });
 
-it("returns generic 503 when begin fails without marking a message processed", async () => {
-  mocks.begin.mockRejectedValueOnce(Error("PRIVATE_DATABASE_DETAIL"));
-  const response = await POST(request([textMessage()]));
-  expect(response.status).toBe(503);
-  expect(await response.text()).not.toContain("PRIVATE_DATABASE_DETAIL");
-  expect(mocks.dedup).not.toHaveBeenCalled();
-  expect(mocks.handle).not.toHaveBeenCalled();
+it("asks the provider to retry when verified input cannot be saved",async()=>{
+ m.enqueue.mockRejectedValueOnce(Error("PRIVATE_DATABASE_DETAIL"));
+ const response=await POST(request([textMessage()]));
+ expect(response.status).toBe(503);expect(await response.text()).not.toContain("PRIVATE_DATABASE_DETAIL");
+ expect(m.finish).toHaveBeenCalledOnce();expect(m.pump).not.toHaveBeenCalled();
 });
 
-it("returns 503 and releases staged activity if background work cannot be registered", async () => {
-  mocks.after.mockImplementationOnce(() => { throw Error("PRIVATE_SCHEDULER_FAILURE"); });
-  const response = await POST(request([textMessage()]));
-  expect(response.status).toBe(503);
-  expect(await response.text()).not.toContain("PRIVATE_SCHEDULER_FAILURE");
-  expect(mocks.finish).toHaveBeenCalledOnce();
-  expect(mocks.dedup).not.toHaveBeenCalled();
-  expect(mocks.handle).not.toHaveBeenCalled();
+it("stages all inbound activity before saving or acknowledging a batch",async()=>{
+ let release!:()=>void;m.begin.mockImplementationOnce(()=>new Promise(resolve=>{release=()=>resolve({finish:m.finish});}));
+ const response=POST(request([textMessage("one"),textMessage("two")]));
+ await settled(()=>expect(m.begin).toHaveBeenCalledOnce());
+ expect(m.enqueue).not.toHaveBeenCalled();release();
+ expect((await response).status).toBe(200);
+ expect(m.enqueue).toHaveBeenCalledWith([textMessage("one"),textMessage("two")],"Pessoa fictícia",expect.any(Number));
+ await settled(()=>expect(m.finish).toHaveBeenCalledTimes(2));
 });
 
-it("stages the entire valid batch before processing and releases earlier leases if staging fails", async () => {
-  const firstFinish = vi.fn().mockResolvedValue(undefined);
-  mocks.begin.mockResolvedValueOnce({ finish: firstFinish }).mockRejectedValueOnce(Error("PRIVATE_STAGE_FAILURE"));
-  const response = await POST(request([textMessage("first"), { ...textMessage("second"), from: "5511999990001" }]));
-  expect(response.status).toBe(503);
-  expect(firstFinish).toHaveBeenCalledOnce();
-  expect(mocks.dedup).not.toHaveBeenCalled();
-  expect(mocks.handle).not.toHaveBeenCalled();
-  expect(await response.text()).not.toContain("PRIVATE_STAGE_FAILURE");
+it("saves messages from every entry and change before acknowledging the webhook",async()=>{
+ const req=new NextRequest("https://zelo.test/api/webhook/waba",{
+  method:"POST",headers:{"x-hub-signature-256":`sha256=${"0".repeat(64)}`},
+  body:JSON.stringify({entry:[
+   {changes:[{value:{messages:[textMessage("first")],contacts:[{profile:{name:"Primeiro contato"}}]}},
+    {value:{statuses:[{id:"status",status:"delivered"}]}},
+    {value:{messages:[textMessage("second")],contacts:[{profile:{name:"Segundo contato"}}]}}]},
+   {changes:[{value:{messages:[textMessage("third")],contacts:[{profile:{name:"Terceiro contato"}}]}}]},
+  ]}),
+ });
+ expect((await POST(req)).status).toBe(200);
+ expect(m.enqueue).toHaveBeenCalledTimes(3);
+ expect(m.enqueue).toHaveBeenNthCalledWith(1,[textMessage("first")],"Primeiro contato",expect.any(Number));
+ expect(m.enqueue).toHaveBeenNthCalledWith(2,[textMessage("second")],"Segundo contato",expect.any(Number));
+ expect(m.enqueue).toHaveBeenNthCalledWith(3,[textMessage("third")],"Terceiro contato",expect.any(Number));
 });
 
-it("releases the exact staged lease even for a duplicate delivery", async () => {
-  mocks.dedup.mockResolvedValueOnce(true);
-  expect((await POST(request([textMessage()]))).status).toBe(200);
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
-  expect(mocks.begin).toHaveBeenCalledWith(from, "inbound");
-  expect(mocks.handle).not.toHaveBeenCalled();
+it("releases staged activity and returns 503 if background work cannot be registered",async()=>{
+ m.after.mockImplementationOnce(()=>{throw Error("PRIVATE_SCHEDULER_FAILURE");});
+ const response=await POST(request([textMessage()]));
+ expect(response.status).toBe(503);expect(m.enqueue).toHaveBeenCalledOnce();
+ expect(m.finish).toHaveBeenCalledOnce();expect(m.wake).not.toHaveBeenCalled();
 });
 
-it("releases the lease when the message handler fails", async () => {
-  mocks.handle.mockRejectedValueOnce(Error("fake handler failure"));
-  await POST(request([textMessage()]));
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
+it("returns 503 without storing input when inbound activity cannot be staged",async()=>{
+ m.begin.mockRejectedValueOnce(Error("PRIVATE_STAGE_FAILURE"));
+ const response=await POST(request([textMessage()]));
+ expect(response.status).toBe(503);expect(m.enqueue).not.toHaveBeenCalled();
 });
 
-it("protects the conversation before media download and transcription and preserves WABA source", async () => {
-  await POST(request([{ id: "audio", from, type: "audio", audio: { id: "fake-audio-id" } }]));
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
-  expect(mocks.begin.mock.invocationCallOrder[0]).toBeLessThan(mocks.media.mock.invocationCallOrder[0]);
-  expect(mocks.begin.mock.invocationCallOrder[0]).toBeLessThan(mocks.transcribe.mock.invocationCallOrder[0]);
-  expect(mocks.handle).toHaveBeenCalledWith(expect.objectContaining({ text: "áudio fictício", channel: "waba" }));
+it("does not save or process requests with an invalid signature",async()=>{
+ m.signature.mockResolvedValueOnce(false);
+ expect((await POST(request([textMessage()]))).status).toBe(403);
+ expect(m.begin).not.toHaveBeenCalled();expect(m.enqueue).not.toHaveBeenCalled();
 });
 
-it("asks for typed text when WABA cannot understand an audio message", async () => {
-  mocks.transcribe.mockResolvedValueOnce(null);
-  await POST(request([{ id: "unreadable-audio", from, type: "audio", audio: { id: "fake-audio-id" } }]));
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
-  expect(mocks.sendText).toHaveBeenCalledWith(from, expect.stringContaining("Pode digitar sua mensagem?"));
-  expect(mocks.handle).not.toHaveBeenCalled();
+it("returns a retryable error when verification infrastructure fails before storage",async()=>{
+ m.config.mockRejectedValueOnce(Error("PRIVATE_CONFIGURATION_FAILURE"));
+ const response=await POST(request([textMessage()]));
+ expect(response.status).toBe(503);
+ expect(await response.text()).not.toContain("PRIVATE_CONFIGURATION_FAILURE");
+ expect(m.enqueue).not.toHaveBeenCalled();
 });
 
-it("asks to resend when WABA cannot download an audio message", async () => {
-  mocks.media.mockRejectedValueOnce(Error("fake media failure"));
-  await POST(request([{ id: "audio", from, type: "audio", audio: { id: "fake-audio-id" } }]));
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
-  expect(mocks.sendText).toHaveBeenCalledWith(from, expect.stringContaining("enviar novamente"));
-  expect(mocks.handle).not.toHaveBeenCalled();
-});
-
-it("asks to resend when WABA cannot download a document", async () => {
-  mocks.media.mockResolvedValueOnce(null);
-  await POST(request([{ id: "document", from, type: "document", document: { id: "fake-document-id" } }]));
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
-  expect(mocks.sendText).toHaveBeenCalledWith(from, expect.stringContaining("enviar novamente"));
-  expect(mocks.handle).not.toHaveBeenCalled();
-});
-
-it("rejects an invalid signature without touching activity or processing", async () => {
-  mocks.signature.mockResolvedValueOnce(false);
-  expect((await POST(request([textMessage()]))).status).toBe(403);
-  expect(mocks.begin).not.toHaveBeenCalled();
-  expect(mocks.dedup).not.toHaveBeenCalled();
-  expect(mocks.handle).not.toHaveBeenCalled();
-});
-
-it("parses only a structured credit Pix button as the identified confirmation", async () => {
-  await POST(request([{ id: "button", from, type: "interactive", interactive: {
-    type: "button_reply", button_reply: { id: `zelo-credit-pix:${questionId}:yes`, title: "Sim, foi isso" },
-  } }]));
-  await settled(() => expect(mocks.handle).toHaveBeenCalledWith(expect.objectContaining({
-    from, channel: "waba", creditPixAnswer: { questionId, confirmed: true },
-  })));
-  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
-});
-
-it("leaves a generic text sim ordinary instead of inventing financial confirmation", async () => {
-  await POST(request([{ ...textMessage(), text: { body: "sim" } }]));
-  await settled(() => expect(mocks.handle).toHaveBeenCalledOnce());
-  const input = mocks.handle.mock.calls[0][0];
-  expect(input).toMatchObject({ text: "sim", channel: "waba" });
-  expect(input.creditPixAnswer).toBeUndefined();
+it("acknowledges status updates without putting them in the message inbox",async()=>{
+ const req=new NextRequest("https://zelo.test/api/webhook/waba",{method:"POST",headers:{"x-hub-signature-256":`sha256=${"0".repeat(64)}`},body:JSON.stringify({entry:[{changes:[{value:{statuses:[{id:"fixture",status:"delivered"}]}}]}]})});
+ expect((await POST(req)).status).toBe(200);expect(m.enqueue).not.toHaveBeenCalled();
 });

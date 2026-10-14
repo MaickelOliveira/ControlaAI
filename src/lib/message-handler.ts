@@ -345,12 +345,12 @@ async function researchImage(
 
 export function replyProcessingError(locale?: string): string {
   if (locale === "es") {
-    return "Tuve un problema al procesar esto. ¿Puedes enviarlo de nuevo? Si vuelve a ocurrir, avísame y confirmaré si quedó registrado correctamente.";
+    return "Tuve un problema al procesar esto. No sé si la acción terminó. Comprueba el resultado en la plataforma antes de enviarlo otra vez para evitar registros duplicados.";
   }
   if (locale === "pt-PT") {
-    return "Tive um problema ao processar isto. Podes enviar novamente? Se voltar a acontecer, avisa-me e confirmarei se ficou registado corretamente.";
+    return "Tive um problema ao processar isto. Não sei se a ação terminou. Confere o resultado na plataforma antes de enviar de novo, para evitar registos duplicados.";
   }
-  return "Tive um problema aqui ao processar isso. Pode mandar de novo? Se continuar acontecendo, me avise e eu confirmo se ficou registrado corretamente.";
+  return "Tive um problema ao processar isso. Não sei se a ação terminou. Confira o resultado na plataforma antes de enviar de novo, para evitar registros duplicados.";
 }
 
 /** Evita que mensagens excepcionais escritas no handler vazem em outro idioma. */
@@ -5376,7 +5376,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       if (!responseLocale) {
         try { responseLocale = (await getUserByWppPhone(from))?.locale; } catch { /* usa o DDI abaixo */ }
       }
-      try { await wppSend(from, replyProcessingError(responseLocale ?? localeForWhatsAppPhone(from))); } catch { /* ignora */ }
+      let reported = false;
+      try { await wppSend(from, replyProcessingError(responseLocale ?? localeForWhatsAppPhone(from))); reported = true; } catch { /* conserva o erro original */ }
+      if (!reported) throw Error("MESSAGE_HANDLER_UNREPORTED_FAILURE");
     }
     return;
   }
