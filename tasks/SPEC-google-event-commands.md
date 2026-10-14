@@ -62,10 +62,20 @@ HTTP. Fixed `GOOGLE_EVENT_COMMAND_CONFLICT` covers stale head/in-progress/forbid
 conference supersession; leased conflicts remain `GOOGLE_EVENT_ATTEMPT_CONFLICT`.
 Metadata carries `mutation_allowed` only inside a running lease; changed binding
 can reconcile a previously attempted command but cannot silently write again.
-The SQL fixture passed177 assertions including real row contention, owner erasure,
+The SQL fixture passed184 assertions including real row contention, owner erasure,
 head races, failed second-row atomicity, cancellation, strict immutable column
 ACLs and preserving rollback. The fixture corrects only its minimal public FK
 setup to match existing production owner-erasure cascades; it uses no real rows.
+
+Private adapter exposes scoped head/get/prepare, claim/finish/retry and strict-true
+active/preflight checks. It copies scope, operation, head/attempt/lease and outcomes
+before awaits, validates frozen storage DTOs, and exposes no credential/raw error.
+The actual SDK worker is `synchronizeGoogleEventCommand(scope,eventId,operationId)`;
+it returns event/operation UUID, fixed state/error and validated Meet link only.
+Fake SDK transport tests cover conditional PATCH/DELETE, expected ETag/HTTP412,
+signed payload reconciliation, ambiguous writes with one invitation, explicit
+stable conference request/pending polling, malformed/foreign responses, missing
+events, pre-runtime activity and post-read/pre-write/pre-publication conflicts.
 
 Each slice touches at most five files, passes focused Vitest/lint and is committed
 before dependent work. Parent runs full tests/build/types and independent review.
