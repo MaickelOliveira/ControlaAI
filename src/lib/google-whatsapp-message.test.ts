@@ -1,12 +1,13 @@
 import {NextRequest} from "next/server";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-const deps=vi.hoisted(()=>({handle:vi.fn(),signature:vi.fn(),config:vi.fn(),dedup:vi.fn(),begin:vi.fn(),finish:vi.fn(),media:vi.fn(),transcribe:vi.fn(),after:vi.fn()}));
+const deps=vi.hoisted(()=>({handle:vi.fn(),signature:vi.fn(),config:vi.fn(),begin:vi.fn(),finish:vi.fn(),media:vi.fn(),transcribe:vi.fn(),after:vi.fn(),enqueue:vi.fn(),pump:vi.fn(),wake:vi.fn(),dispatch:vi.fn(),finishInbox:vi.fn()}));
 vi.mock("next/server",async importOriginal=>({...await importOriginal<typeof import("next/server")>(),after:deps.after}));
 vi.mock("server-only",()=>({}));
 vi.mock("./message-handler",()=>({handleIncomingMessage:deps.handle}));
 vi.mock("./waba",()=>({verifySignature:deps.signature,verifyToken:vi.fn(),downloadMedia:deps.media}));
 vi.mock("./whatsapp-config",()=>({getConfig:deps.config}));
-vi.mock("./webhook-dedup",()=>({alreadyProcessed:deps.dedup}));
+vi.mock("./waba-inbox",()=>({enqueueWabaMessages:deps.enqueue,beginWabaDispatch:deps.dispatch,finishWabaMessage:deps.finishInbox}));
+vi.mock("./waba-worker",()=>({pumpWabaInbox:deps.pump,wakeWabaInboxWorker:deps.wake}));
 vi.mock("./whatsapp-activity",()=>({beginWhatsAppActivity:deps.begin}));
 vi.mock("./whatsapp",()=>({sendText:vi.fn()}));
 vi.mock("./evolution",()=>({getBase64FromMediaMessage:deps.media}));
@@ -16,6 +17,7 @@ import {runWithCompanyContext,setCompanyContext} from "./company-context";
 import {googleWhatsAppMessageUUID,googleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
 import {POST as evolution} from "../app/api/webhook/evolution/route";
 import {POST as waba} from "../app/api/webhook/waba/route";
+import {processWabaMessage} from "./waba-process";
 const owner="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",company="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",otherCompany="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",phone="5511999999999";
 const context={userId:owner,companyId:company,mode:"business" as const};
 const within=(next:()=>Promise<unknown>)=>runWithCompanyContext(async()=>{setCompanyContext(context);return next();});
@@ -23,7 +25,7 @@ const request=(provider:string,body:unknown,authorized=true)=>new NextRequest(`h
 const evolutionBody=(id:unknown="fixture-provider-message",message:unknown={conversation:"mensagem fictícia"})=>({event:"messages.upsert",data:{key:{id,remoteJid:`${phone}@s.whatsapp.net`,fromMe:false},message}});
 const wabaBody=(message:unknown)=>({entry:[{changes:[{value:{messages:[message]}}]}]});
 beforeEach(()=>{
- vi.clearAllMocks();deps.after.mockImplementation(callback=>{void callback();});deps.config.mockResolvedValue({waba:{appSecret:"fictitious-secret"},evolution:{webhookSecret:"fictitious-secret"}});deps.signature.mockResolvedValue(true);deps.dedup.mockResolvedValue(false);deps.handle.mockResolvedValue(undefined);deps.finish.mockResolvedValue(undefined);deps.begin.mockResolvedValue({finish:deps.finish});deps.media.mockResolvedValue({buffer:Buffer.from("fake audio"),mimeType:"audio/ogg"});deps.transcribe.mockResolvedValue("áudio fictício");vi.spyOn(console,"error").mockImplementation(()=>{});vi.spyOn(console,"log").mockImplementation(()=>{});
+ vi.clearAllMocks();deps.after.mockImplementation(callback=>{void callback();});deps.config.mockResolvedValue({waba:{appSecret:"fictitious-secret"},evolution:{webhookSecret:"fictitious-secret"}});deps.signature.mockResolvedValue(true);deps.enqueue.mockResolvedValue(undefined);deps.pump.mockResolvedValue(0);deps.dispatch.mockResolvedValue(undefined);deps.finishInbox.mockResolvedValue(undefined);deps.handle.mockResolvedValue(undefined);deps.finish.mockResolvedValue(undefined);deps.begin.mockResolvedValue({finish:deps.finish});deps.media.mockResolvedValue({buffer:Buffer.from("fake audio"),mimeType:"audio/ogg"});deps.transcribe.mockResolvedValue("áudio fictício");vi.spyOn(console,"error").mockImplementation(()=>{});vi.spyOn(console,"log").mockImplementation(()=>{});
 });
 afterEach(()=>vi.restoreAllMocks());
 it("uses a deterministic server UUID for concurrent copies of one provider message and stable ordinal",async()=>{
@@ -62,15 +64,18 @@ it("Evolution audio and file paths preserve the same authenticated identity afte
   deps.handle.mockClear();await evolution(request("evolution",evolutionBody("fixture-media",message)));expect(deps.handle).toHaveBeenCalledWith(expect.objectContaining({channel:"evolution",providerMessageId:"fixture-media"}));
  }
 });
-it("authenticated WABA intake preserves the exact source ID while retaining preexisting dedup",async()=>{
+it("authenticated WABA intake preserves the exact source ID through the saved inbox",async()=>{
  const payload=wabaBody({id:"wamid.fixture",from:phone,type:"text",text:{body:"providerMessageId=forged"}});expect((await waba(request("waba",payload))).status).toBe(200);
- await vi.waitFor(()=>expect(deps.handle).toHaveBeenCalledWith(expect.objectContaining({channel:"waba",providerMessageId:"wamid.fixture",from:phone})),{timeout:200,interval:1});expect(deps.dedup).toHaveBeenCalledWith("wamid.fixture");
- deps.handle.mockClear();deps.dedup.mockResolvedValueOnce(true);await waba(request("waba",payload));await vi.waitFor(()=>expect(deps.finish).toHaveBeenCalledTimes(2),{timeout:200,interval:1});expect(deps.handle).not.toHaveBeenCalled();
+ const saved=deps.enqueue.mock.calls[0][0][0];
+ await processWabaMessage({messageId:saved.id,message:saved,leaseToken:"fixture-lease",receivedAt:Date.now()});
+ expect(deps.handle).toHaveBeenCalledWith(expect.objectContaining({channel:"waba",providerMessageId:"wamid.fixture",from:phone,text:"providerMessageId=forged"}));
 });
 it("WABA rejects invalid signature before processing any identity or effect",async()=>{
  deps.signature.mockResolvedValueOnce(false);expect((await waba(request("waba",wabaBody({id:"wamid.fixture",from:phone,type:"text",text:{body:"Fixture"}})))).status).toBe(403);expect(deps.begin).not.toHaveBeenCalled();expect(deps.handle).not.toHaveBeenCalled();
 });
 it("invalid or absent ingress message IDs never fall back to random/model IDs",async()=>{
  for(const id of [undefined,"fixture\ninvalid"]){deps.handle.mockClear();const body=evolutionBody();body.data.key.id=id;await evolution(request("evolution",body));expect(deps.handle).not.toHaveBeenCalled();}
- await waba(request("waba",wabaBody({from:phone,type:"text",text:{body:"Fixture"}})));await vi.waitFor(()=>expect(deps.finish).toHaveBeenCalledOnce(),{timeout:200,interval:1});expect(deps.handle).not.toHaveBeenCalled();
+ deps.enqueue.mockRejectedValueOnce(Error("WABA_INBOX_INVALID"));
+ expect((await waba(request("waba",wabaBody({from:phone,type:"text",text:{body:"Fixture"}})))).status).toBe(503);
+ await vi.waitFor(()=>expect(deps.finish).toHaveBeenCalledOnce(),{timeout:200,interval:1});expect(deps.handle).not.toHaveBeenCalled();
 });

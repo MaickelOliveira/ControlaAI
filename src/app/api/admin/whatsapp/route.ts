@@ -15,6 +15,7 @@ import { sendTemplate } from "@/lib/waba";
 import { detectBotNumber } from "@/lib/bot-info";
 import { addMessage } from "@/lib/conversations";
 import { whatsAppAiMode } from "@/lib/whatsapp-ai-routing";
+import { wabaInboxAttentionCount } from "@/lib/waba-inbox";
 
 const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
 
@@ -24,6 +25,7 @@ export async function GET() {
 
   const cfg = await getConfig();
   const status = await checkConnection().catch(() => "UNKNOWN");
+  const inboxAttentionCount = await wabaInboxAttentionCount().catch(() => null);
 
   return NextResponse.json({
     provider: cfg.provider,
@@ -49,6 +51,7 @@ export async function GET() {
     googleClientSecret: cfg.googleClientSecret ? "••••••••" : "",
     hasGoogleOAuth: !!(cfg.googleClientId && cfg.googleClientSecret),
     connectionStatus: status,
+    inboxAttentionCount,
   });
 }
 
