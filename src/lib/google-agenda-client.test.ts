@@ -57,3 +57,37 @@ it("completion preserves its UUID and expected snapshot after an ambiguous respo
  await controller.setTarget(target);fetcher.mockRejectedValueOnce(Error("fixture lost response"));await controller.done(controller.state().appointments[0]);fetcher.mockResolvedValueOnce(reply({...record,status:"done"}));await controller.done(controller.state().appointments[0]);
  const calls=fetcher.mock.calls.filter(([,init])=>init?.method==="PATCH");expect(calls).toHaveLength(2);expect(calls[0][1]!.body).toBe(calls[1][1]!.body);expect(JSON.parse(calls[0][1]!.body as string)).toMatchObject({expectedGoogleSyncVersion:record.googleSyncVersion,clientMutationId:expect.any(String)});
 });
+const conflicted={...record,googleSyncState:"failed",googleSyncFailureCode:"ETAG_CONFLICT"} as const;
+it("a conflict eligibility read sends only the original revision and never submits an overwrite",async()=>{
+ await controller.setTarget(target);fetcher.mockResolvedValueOnce(reply({canOverwrite:true}));expect(await controller.checkConflict(conflicted as never)).toBe(true);
+ const call=fetcher.mock.calls.at(-1)!;expect(call[0]).toBe(`/api/agenda/${record.id}/conflict?expectedGoogleSyncVersion=v1%3A1%3A0%3A0`);expect(call[1]?.method).toBeUndefined();expect(controller.state().conflict).toMatchObject({appointmentId:record.id,expectedGoogleSyncVersion:record.googleSyncVersion,canOverwrite:true});expect(fetcher.mock.calls.some(([,init])=>init?.method==="POST")).toBe(false);
+});
+it("only an eligible explicit confirmation may submit a conflict request, with its own stable immutable UUID",async()=>{
+ await controller.setTarget(target);const start=fetcher.mock.calls.length;expect(await controller.confirmConflict(conflicted as never)).toBeNull();expect(fetcher.mock.calls).toHaveLength(start);
+ fetcher.mockResolvedValueOnce(reply({canOverwrite:true}));await controller.checkConflict(conflicted as never);fetcher.mockRejectedValueOnce(Error("fixture acknowledgement lost"));await controller.confirmConflict(conflicted as never);
+ fetcher.mockResolvedValueOnce(reply({...record,googleSyncState:"queued"}));await controller.confirmConflict(conflicted as never);
+ const calls=fetcher.mock.calls.filter(([url,init])=>url.endsWith("/conflict")&&init?.method==="POST");expect(calls).toHaveLength(2);expect(calls[0][1]!.body).toBe(calls[1][1]!.body);expect(JSON.parse(calls[0][1]!.body as string)).toEqual({expectedGoogleSyncVersion:record.googleSyncVersion,confirmOverwrite:true,clientMutationId:expect.any(String)});expect(controller.state().conflict).toBeNull();
+});
+it("denied eligibility and Back never confer overwrite permission",async()=>{
+ await controller.setTarget(target);fetcher.mockResolvedValueOnce(reply({canOverwrite:false}));expect(await controller.checkConflict(conflicted as never)).toBe(false);expect(controller.state().conflict?.canOverwrite).toBe(false);const count=fetcher.mock.calls.length;await controller.confirmConflict(conflicted as never);expect(fetcher.mock.calls).toHaveLength(count);
+ fetcher.mockResolvedValueOnce(reply({canOverwrite:true}));await controller.checkConflict(conflicted as never);controller.cancelConflict();expect(controller.state().conflict).toBeNull();const cancelled=fetcher.mock.calls.length;await controller.confirmConflict(conflicted as never);expect(fetcher.mock.calls).toHaveLength(cancelled);
+});
+it("strict eligibility and workspace echo reject provider metadata and another tab before granting consent",async()=>{
+ await controller.setTarget(target);fetcher.mockResolvedValueOnce(reply({canOverwrite:true,etag:"foreign"}));expect(await controller.checkConflict(conflicted as never)).toBe(false);expect(controller.state().errorCode).toBe("AGENDA_RESPONSE_INVALID");expect(controller.state().conflict?.canOverwrite).not.toBe(true);
+ const response=reply({canOverwrite:true},{headers:{"X-Zelo-Workspace-Key":"b".repeat(64)}}),decode=vi.spyOn(response,"json");fetcher.mockResolvedValueOnce(response);await controller.checkConflict(conflicted as never);expect(decode).not.toHaveBeenCalled();expect(controller.state().errorCode).toBe("AGENDA_WORKSPACE_CHANGED");expect(controller.state().conflict).toBeNull();
+});
+it("cancelled or obsolete eligibility loads cannot reopen confirmation after Back/logout",async()=>{
+ await controller.setTarget(target);let finish!:(response:Response)=>void;fetcher.mockReturnValueOnce(new Promise(resolve=>{finish=resolve;}));const first=controller.checkConflict(conflicted as never);controller.cancelConflict();finish(reply({canOverwrite:true}));expect(await first).toBe(false);expect(controller.state().conflict).toBeNull();
+ fetcher.mockReturnValueOnce(new Promise(resolve=>{finish=resolve;}));const second=controller.checkConflict(conflicted as never);await controller.setTarget(null);finish(reply({canOverwrite:true}));await second;expect(controller.state()).toMatchObject({target:null,conflict:null,busy:false,errorCode:null});
+});
+it("409 reload preserves the overwrite UUID and original revision without silently authorizing the new snapshot",async()=>{
+ await controller.setTarget(target);fetcher.mockResolvedValueOnce(reply({canOverwrite:true}));await controller.checkConflict(conflicted as never);fetcher.mockResolvedValueOnce(reply({code:"GOOGLE_EVENT_CONFLICT"},{status:409})).mockResolvedValueOnce(reply([{...conflicted,googleSyncVersion:"v1:1:2:0"}]));await controller.confirmConflict(conflicted as never);expect(controller.state().errorCode).toBe("AGENDA_CONFLICT");
+ const before=fetcher.mock.calls.length;expect(await controller.checkConflict({...conflicted,googleSyncVersion:"v1:1:2:0"} as never)).toBe(false);expect(fetcher.mock.calls).toHaveLength(before);
+ fetcher.mockResolvedValueOnce(reply({...record,googleSyncState:"queued"}));await controller.confirmConflict(conflicted as never);const calls=fetcher.mock.calls.filter(([url,init])=>url.endsWith("/conflict")&&init?.method==="POST");expect(calls).toHaveLength(2);expect(calls[0][1]!.body).toBe(calls[1][1]!.body);
+});
+it("ordinary retry cannot implicitly consent to an ETag overwrite and ineligible records are not probed",async()=>{
+ await controller.setTarget(target);const count=fetcher.mock.calls.length;await controller.retry(conflicted as never);await controller.checkConflict(record as never);await controller.checkConflict({...conflicted,googleSyncVersion:null,googleSyncState:"local"} as never);expect(fetcher.mock.calls).toHaveLength(count);
+});
+it("Back aborts eligibility and discards its delayed error/finally before the next action",async()=>{
+ await controller.setTarget(target);let reject!:(error:Error)=>void;fetcher.mockReturnValueOnce(new Promise((_resolve,fail)=>{reject=fail;}));const pending=controller.checkConflict(conflicted as never),signal=fetcher.mock.calls.at(-1)![1]!.signal!;controller.cancelConflict();expect(signal.aborted).toBe(true);expect(controller.state()).toMatchObject({busy:false,conflict:null,errorCode:null});reject(Error("fixture delayed failure"));await pending;expect(controller.state()).toMatchObject({busy:false,conflict:null,errorCode:null});
+});
