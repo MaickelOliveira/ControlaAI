@@ -60,3 +60,9 @@ current commands, both local state checks, supersession/deletion, attempt bounds
 safe all-owner references/limit, exact personal/company IDs and preserving rollback.
 The fixture accepts an optional activation-migration path only for this isolated
 branch; integrated repository runs use its standard migration12 dependency.
+
+Server pump verification:16 fake-selector/worker tests pass, including maximum
+concurrency3 across20 jobs, full-batch validation before effects, immutable scope
+capture, no diagnostics, safe failures and fixed counts. Both actual SDK transport
+suites also deny all HTTP when the last SQL preflight refuses a deactivated owner;
+the focused pump/creation/command run passes77 tests without real Google access.

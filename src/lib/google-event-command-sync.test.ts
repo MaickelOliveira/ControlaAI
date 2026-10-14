@@ -105,6 +105,9 @@ it("checks local current-head activity before credentials and rechecks before ev
 it("supersession/cancellation between GET and PATCH causes zero write or failure publication",async()=>{
  deps.lease.mockResolvedValueOnce(undefined).mockRejectedValueOnce(Error("GOOGLE_EVENT_COMMAND_CONFLICT"));await expect(synchronizeGoogleEventCommand(scope,eventId,operationId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport.mock.calls.map(([v])=>v.method)).toEqual(["GET"]);expect(deps.finish).not.toHaveBeenCalled();
 });
+it("makes zero HTTP calls when a selected owner's deactivation denies the last SQL preflight",async()=>{
+ deps.lease.mockRejectedValue(Error("GOOGLE_WORKSPACE_ACCESS_DENIED"));await expect(synchronizeGoogleEventCommand(scope,eventId,operationId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();
+});
 it("rejects stale head before HTTP without publishing a failure",async()=>{
  deps.head.mockResolvedValue({eventId,version:"2",operationId:"ffffffff-ffff-4fff-8fff-fffffffffff2",etag:'"other"',deleted:false});await expect(synchronizeGoogleEventCommand(scope,eventId,operationId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();
 });

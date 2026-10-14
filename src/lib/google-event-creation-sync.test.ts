@@ -146,6 +146,10 @@ it("does not turn a refused local preflight into a provider failure or another i
  deps.localLease.mockRejectedValue(Error("GOOGLE_EVENT_LOCAL_CONFLICT"));
  await expect(synchronizeGoogleEventCreation(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();
 });
+it("makes zero HTTP calls when a selected owner's deactivation denies the last SQL preflight",async()=>{
+ deps.localLease.mockRejectedValue(Error("GOOGLE_WORKSPACE_ACCESS_DENIED"));
+ await expect(synchronizeGoogleEventCreation(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();
+});
 it("does not report provider success after local cancellation refuses the atomic finish",async()=>{
  deps.finish.mockRejectedValue(Error("GOOGLE_EVENT_LOCAL_INACTIVE"));
  await expect(synchronizeGoogleEventCreation(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).toHaveBeenCalledTimes(1);expect(deps.finish).toHaveBeenCalledTimes(1);
