@@ -24,6 +24,14 @@ it("asks before using an ambiguous company and resumes a held request after sele
   expect(m.workspace).toHaveBeenCalledWith("owner", "5511", "b", "business"); expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({ companyId: "b" }));
   expect(next).toHaveBeenCalledWith(expect.objectContaining({ text: "gastei 50 em farmácia" }));
 });
+it("preserves original authenticated provider identity through company questions rather than adopting reply/model metadata",async()=>{
+ const next=vi.fn(),original={from:"5511",text:"agende uma reunião",channel:"waba" as const,providerMessageId:"wamid.original",receivedAt:123456};
+ await withWhatsAppCompany(original,next);let held=m.savePending.mock.calls.at(-1)![1];expect(held.resume).toMatchObject({channel:"waba",providerMessageId:"wamid.original",receivedAt:123456});
+ m.pending.mockResolvedValue({...held,userId:"owner"});await withWhatsAppCompany({from:"5511",text:"empresa inexistente",channel:"evolution",providerMessageId:"confirmation.invalid-choice"},next);
+ held=m.savePending.mock.calls.at(-1)![1];expect(held.resume).toMatchObject({channel:"waba",providerMessageId:"wamid.original"});
+ m.pending.mockResolvedValue({...held,userId:"owner"});await withWhatsAppCompany({from:"5511",text:"2",channel:"evolution",providerMessageId:"confirmation.selected"},next);
+ expect(next).toHaveBeenCalledExactlyOnceWith(expect.objectContaining(original));
+});
 it("switches only the sending participant and cancels the old pending action", async () => {
   m.links.mockResolvedValue([{ phone: "5511", access: "both", activeCompanyId: "a" }, { phone: "5522", access: "both", activeCompanyId: "a" }]);
   const next = vi.fn(); await withWhatsAppCompany({ from: "5511", text: "usar empresa Empresa B" }, next);

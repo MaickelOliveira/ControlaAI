@@ -15,6 +15,15 @@ confirmed request; the stored snapshot never grants authority or gets rebased.
 Control intents require an explicit revision snapshot, including null for local
 or legacy records; missing metadata never invents historical Google provenance.
 
+Authenticated WABA/Evolution intake carries the original provider message ID for
+text, audio and media. Missing/invalid IDs are ignored rather than replaced with
+random or model-derived identifiers. The server derives a UUIDv8 from a SHA-256
+namespace containing provider, verified owner/workspace, original message ID and
+stable item ordinal (0–29), excluding payload/operation/text. Concurrent copies and
+payload drift therefore retain the same identity and must meet the service's
+idempotence/conflict guard. Company-choice questions preserve the original envelope
+metadata; a later selection reply never becomes the original creation identity.
+
 `commitGoogleWhatsAppIntents` persists a bounded batch before any service effect,
 then stores only mutation/record IDs after each confirmed result. Replay performs
 an authorized service read for acknowledged items and repeats the exact original
