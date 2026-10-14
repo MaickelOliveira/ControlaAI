@@ -126,11 +126,11 @@ export async function getAuthClient() {
   const clientId = cfg.googleClientId || process.env.GOOGLE_CLIENT_ID;
   const clientSecret = cfg.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET;
   const appUrl = (cfg.appBaseUrl || process.env.APP_URL || "").replace(/\/$/, "");
-  return new google.auth.OAuth2(
+  return boundGoogleTransport(new google.auth.OAuth2(
     clientId,
     clientSecret,
     `${appUrl}/api/auth/google/callback`
-  );
+  ));
 }
 
 export async function getAuthUrl(userId: string, locale: PendingState["locale"] = "pt-BR"): Promise<string> {
@@ -266,3 +266,4 @@ export async function selectGoogleCalendar(userId: string, calendarId: string): 
   await saveEntry(userId, { ...entry, selectedCalendarId: selected.id, selectedCalendarName: selected.name });
   return selected;
 }
+import {boundGoogleTransport} from "./google-transport";
