@@ -12,6 +12,20 @@ const canceled:BankConnection={id:"old-business-consent",institution_name:"Banco
 const account:BankResource={id:"saved-account",connection_id:canceled.id,resource_type:"account",name:"Conta histórica da empresa",subtype:"accounts",card_network:null,identification_last4:null,currency:"BRL",available_amount:"123.45",gross_amount:null,net_amount:null,valuation_date:null,synced_at:"2026-10-10"};
 const data:BankOverview={connections:[canceled],resources:[account,{...account,id:"saved-card",resource_type:"card",name:"Cartão histórico da empresa"}],limits:[],bills:[],credit:[],sync:[]};
 
+it("offers an action on an inactive bank card and moves archived products into accessible history",()=>{
+  const inactive={...canceled,archived_at:null};
+  const visible=renderToStaticMarkup(React.createElement(OpenFinanceResources,{data:{...data,connections:[inactive]},mode:"business",onRemove:()=>{}}));
+  expect(visible).toContain("Remover da lista");
+  expect(visible).toContain("Conta histórica da empresa");
+  expect(visible).not.toContain("Desconectar banco");
+
+  const archived=renderToStaticMarkup(React.createElement(OpenFinanceResources,{data,mode:"business",onRemove:()=>{}}));
+  expect(archived).toContain("Bancos anteriores");
+  expect(archived).toContain("Conta histórica da empresa");
+  expect(archived).toContain("Cartão histórico da empresa");
+  expect(archived).not.toContain("Remover da lista");
+});
+
 it("labels retained products as historical/cancelled after the only bank authorization was revoked and archived",()=>{
   const html=renderToStaticMarkup(React.createElement(OpenFinanceResources,{data,mode:"business",onDisconnect:()=>{}}));
   expect(html).toContain("Conta histórica da empresa");expect(html).toContain("Cartão histórico da empresa");
