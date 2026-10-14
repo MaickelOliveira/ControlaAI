@@ -52,7 +52,7 @@ it("an old form cannot be silently re-targeted to another company or refreshed w
 }));
 it("missing provider identity and historical forms fail closed instead of creating a random/global event",()=>within(async()=>{
  await expect(beginSlotFill("agenda_create",ai(),{...ctx,googleMessage:undefined} as SlotCtx,"agende")).rejects.toThrow("GOOGLE_WHATSAPP_MESSAGE_INVALID");expect(m.save).not.toHaveBeenCalled();
- const old={type:"slot_fill",userId:owner,intent:"agenda_create",draft:{title:"Old",startDate:"2026-10-20"},missing:["startTime"],asked:0,mode:"business",originalText:"old"} as PendingSlotFill;
+ const old={type:"slot_fill",userId:owner,phone,expiresAt:Date.now()+60000,intent:"agenda_create",draft:{title:"Old",startDate:"2026-10-20"},missing:["startTime"],asked:0,mode:"business",originalText:"old"} as PendingSlotFill;
  await expect(runSlotFillTurn(old,"14:00",ctx)).rejects.toThrow("GOOGLE_WHATSAPP_SELECTION_EXPIRED");expect(m.api.createWorkspaceAppointment).not.toHaveBeenCalled();expect(m.legacy).not.toHaveBeenCalled();
 }));
 it("model metadata cannot supply the reserved operation or workspace",()=>within(async()=>{
