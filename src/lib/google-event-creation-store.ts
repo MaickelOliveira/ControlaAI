@@ -9,7 +9,7 @@ import {googleEventCreationPayload,type GoogleEventCreationPayload} from "./goog
 import type {GoogleWorkspace} from "./google-workspace-policy";
 const STATES=["queued","running","waiting","succeeded","failed"] as const;
 const FAILURES=["TEMPORARY","FOREIGN_EVENT","REMOTE_MISSING","CONFERENCE_FAILED","CONNECTION_CHANGED","ATTEMPTS_EXHAUSTED"] as const;
-const STORAGE_ERRORS=["GOOGLE_EVENT_INVALID","GOOGLE_EVENT_CONNECTION_CHANGED","GOOGLE_EVENT_ORIGIN_MISSING","GOOGLE_EVENT_PAYLOAD_CONFLICT","GOOGLE_EVENT_ATTEMPT_CONFLICT"];
+const STORAGE_ERRORS=["GOOGLE_EVENT_INVALID","GOOGLE_EVENT_CONNECTION_CHANGED","GOOGLE_EVENT_ORIGIN_MISSING","GOOGLE_EVENT_PAYLOAD_CONFLICT","GOOGLE_EVENT_ATTEMPT_CONFLICT","GOOGLE_EVENT_LOCAL_INACTIVE","GOOGLE_EVENT_LOCAL_CONFLICT"];
 const SAFE_ERRORS=[...STORAGE_ERRORS,"GOOGLE_EVENT_INPUT_INVALID","GOOGLE_EVENT_NOT_CONNECTED","GOOGLE_EVENT_ACCESS_DENIED","GOOGLE_EVENT_CONFIGURATION_INVALID","GOOGLE_EVENT_STORAGE_INVALID","GOOGLE_EVENT_STORAGE_UNAVAILABLE","GOOGLE_EVENT_PAYLOAD_INVALID"];
 export type GoogleEventCreationLease=Readonly<{id:string;expiresAt:string;bindingVersion:string;insertAllowed:boolean}>;
 export type GoogleEventCreationOutcome=Readonly<{result:"retry"|"waiting"|"succeeded"|"failed";remoteKnown:boolean;etag:string|null;meetLink:string|null;failureCode:typeof FAILURES[number]|null}>;
@@ -79,7 +79,7 @@ async function mutate(name:"claim"|"finish"|"retry",scope:GoogleWorkspace,eventI
  }catch{throw Error("GOOGLE_EVENT_INPUT_INVALID");}
  const intent=await loadGoogleEventIntent(selected.scope,selected.eventId);if(!intent)throw Error("GOOGLE_EVENT_ORIGIN_MISSING");
  googleEventOperationTarget(selected.scope,selected.eventId,intent,current);
- return creation(intent,await rpc("zelo_google_event_creation_"+name,{...args(selected.scope,selected.eventId),p_client_fingerprint:fingerprint,p_binding_version:current.version,p_attempt_version:version,...fields}));
+ return creation(intent,await rpc(name==="finish"?"zelo_google_event_local_finish":"zelo_google_event_creation_"+name,{...args(selected.scope,selected.eventId),p_client_fingerprint:fingerprint,p_binding_version:current.version,p_attempt_version:version,...fields}));
 }
 /** Call within the trusted scoped runtime after credentials are ready. Binding
  * and client ID must be the runtime's captured metadata, never a body/model. */
@@ -97,7 +97,8 @@ export async function retryGoogleEventCreation(scope:GoogleWorkspace,eventId:str
   if(saved.state!=="queued"||saved.roundAttempts!==0||saved.authorizedBindingVersion!==bindingVersion||BigInt(saved.attemptVersion)!==BigInt(version)+BigInt(1))throw Error("GOOGLE_EVENT_STORAGE_INVALID");return saved;
  }catch(error){throw safe(error);}
 }
-/** Only the server's verified provider result may complete its captured lease.
+/** Only the server's verified provider result may complete its captured lease
+ * and publish the provider fields to its linked active local records atomically.
  * All nullable fields are explicit; raw diagnostics are refused before storage. */
 export async function finishGoogleEventCreation(scope:GoogleWorkspace,eventId:string,binding:GoogleBinding,clientId:string,attemptVersion:string,lease:GoogleEventCreationLease,outcome:GoogleEventCreationOutcome):Promise<GoogleEventCreation>{
  try{

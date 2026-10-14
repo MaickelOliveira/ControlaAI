@@ -54,6 +54,16 @@ it("finishes with only fixed outcome fields and the original lease revision",asy
  expect(result.state).toBe("succeeded");expect(deps.rpc.mock.calls[0][1]).toMatchObject({p_lease_id:lease.id,p_attempt_version:"1",p_binding_version:"7",p_result:"succeeded"});
  deps.rpc.mockClear();await expect(finishGoogleEventCreation(scope,eventId,{...binding,version:"8"},clientId,"1",lease,{result:"succeeded",remoteKnown:true,etag:'"fixture-etag"',meetLink:null,failureCode:null})).rejects.toThrow("GOOGLE_EVENT_ATTEMPT_CONFLICT");expect(deps.rpc).not.toHaveBeenCalled();
 });
+it("publishes completion through the linked atomic finish RPC instead of only private lifecycle state",async()=>{
+ deps.rpc.mockResolvedValue({data:row({state:"succeeded",attempt_version:"1",round_attempts:1,was_attempted:true,remote_known:true,etag:'"fixture-etag"'}),error:null});
+ await finishGoogleEventCreation(scope,eventId,binding,clientId,"1",lease,{result:"succeeded",remoteKnown:true,etag:'"fixture-etag"',meetLink:null,failureCode:null});
+ expect(deps.rpc.mock.calls[0][0]).toBe("zelo_google_event_local_finish");
+});
+it.each(["GOOGLE_EVENT_LOCAL_INACTIVE","GOOGLE_EVENT_LOCAL_CONFLICT"])("keeps a denied linked completion fixed without retry or fallback: %s",async message=>{
+ deps.rpc.mockResolvedValue({data:null,error:{message}});
+ await expect(finishGoogleEventCreation(scope,eventId,binding,clientId,"1",lease,{result:"succeeded",remoteKnown:true,etag:'"fixture-etag"',meetLink:null,failureCode:null})).rejects.toThrow(message);
+ expect(deps.rpc).toHaveBeenCalledTimes(1);
+});
 it.each([{event_id:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2"},{payload:{...payload,accessToken:"forged"}},{payload_fingerprint:"bad"},{with_meet:true},{state:"unknown"},
  {attempt_version:0},{attempt_version:"00"},{round_attempts:1},{authorized_binding_version:"0"},{lease_id:lease.id},{insert_allowed:true},
  {remote_known:true},{etag:'"fixture-etag"'},{meet_link:"https://evil.example/test"},{failure_code:"RAW_PROVIDER_ERROR"},

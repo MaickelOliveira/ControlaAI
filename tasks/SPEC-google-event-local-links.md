@@ -104,3 +104,11 @@ event/calendar IDs, only a validated successful Meet link, and never rewrites lo
 title/description/attendees/minutes/reminders/status. A stale, unlinked, cancelled
 or failed second-row publication rolls back private completion and public fields.
 The rollback only revokes these new helpers/RPCs; prior records/access are intact.
+
+The server local store exposes active/leased assertions with strict true-only
+responses and fixed errors. The lease assertion copies the private runtime target,
+client fingerprint, original scoped ID and exact bigint attempt/UUID before await;
+malformed or unlinked/mismatched context fails before RPC. The creation store's
+finish uses only the linked atomic wrapper; it cannot fall back to private-only
+finish on local refusal. Existing claim/retry contracts remain unchanged. SDK guard
+integration follows before any consumer activation.
