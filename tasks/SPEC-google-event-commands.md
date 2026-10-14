@@ -54,6 +54,19 @@ Public DTOs contain operation/event UUID, fixed state/error and valid Meet link.
 3. Private server DTO adapter and validation tests.
 4. Actual SDK transport, pending/ambiguous/412/race recovery tests.
 
+Storage increment adds `20261013130000_google_event_commands.sql`. Head history
+uses `zelo_google_event_command_head`; private commands use scoped get/prepare,
+claim/preflight/finish and explicit retry RPCs. Preparation requires a captured
+head version, never adopts a race winner, and publishes desired local fields before
+HTTP. Fixed `GOOGLE_EVENT_COMMAND_CONFLICT` covers stale head/in-progress/forbidden
+conference supersession; leased conflicts remain `GOOGLE_EVENT_ATTEMPT_CONFLICT`.
+Metadata carries `mutation_allowed` only inside a running lease; changed binding
+can reconcile a previously attempted command but cannot silently write again.
+The SQL fixture passed177 assertions including real row contention, owner erasure,
+head races, failed second-row atomicity, cancellation, strict immutable column
+ACLs and preserving rollback. The fixture corrects only its minimal public FK
+setup to match existing production owner-erasure cascades; it uses no real rows.
+
 Each slice touches at most five files, passes focused Vitest/lint and is committed
 before dependent work. Parent runs full tests/build/types and independent review.
 Use `npx vitest run src/lib/google-event-command-policy.test.ts
