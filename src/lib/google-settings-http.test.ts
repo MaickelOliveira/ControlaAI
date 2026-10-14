@@ -53,8 +53,20 @@ beforeEach(()=>{
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllEnvs();});
 it("actual status route resolves the authenticated company and exposes only private scoped metadata",async()=>{
  const result=await invoke(status,request("status"));expect(result.status).toBe(200);expect(result.headers.get("cache-control")).toBe("private, no-store");
+ expect(result.headers.get("X-Zelo-Workspace-Key")).toBe(key(scope));
  expect(await result.json()).toMatchObject({workspace:googleSettingsWorkspaceView(scope),activated:true,connected:true,bindingVersion:"3"});
  expect(deps.company).toHaveBeenCalledWith(owner,company,"business");expect(deps.runtime).not.toHaveBeenCalled();expect(deps.global).not.toHaveBeenCalled();
+});
+it("status accepts optional matching correlation and rejects another tab's workspace before storage",async()=>{
+ const accepted=await invoke(status,request("status","GET",undefined,{"X-Zelo-Workspace-Key":key(scope)}));expect(accepted.status).toBe(200);expect(accepted.headers.get("X-Zelo-Workspace-Key")).toBe(key(scope));
+ deps.binding.mockClear();const stale=await invoke(status,request("status","GET",undefined,{"X-Zelo-Workspace-Key":key({...scope,companyId:otherCompany})}));
+ expect(stale.status).toBe(409);expect(await stale.json()).toMatchObject({code:"GOOGLE_SETTINGS_WORKSPACE_CHANGED"});expect(deps.binding).not.toHaveBeenCalled();
+ const empty=await invoke(status,request("status","GET",undefined,{"X-Zelo-Workspace-Key":""}));expect(empty.status).toBe(409);expect(deps.binding).not.toHaveBeenCalled();
+});
+it("settings writes keep mandatory body expectations and reject a mismatched optional correlation header",async()=>{
+ const stale=await invoke(unlink,request("disconnect","POST",expectView(scope),{"X-Zelo-Workspace-Key":key({...scope,companyId:otherCompany})}));expect(stale.status).toBe(409);expect(await stale.json()).toMatchObject({code:"GOOGLE_SETTINGS_WORKSPACE_CHANGED"});expect(deps.rpc).not.toHaveBeenCalled();
+ const missing=await invoke(unlink,request("disconnect","POST",{}, {"X-Zelo-Workspace-Key":key(scope)}));expect(missing.status).toBe(400);expect(deps.rpc).not.toHaveBeenCalled();
+ const accepted=await invoke(unlink,request("disconnect","POST",expectView(scope),{"X-Zelo-Workspace-Key":key(scope)}));expect(accepted.status).toBe(200);expect(accepted.headers.get("X-Zelo-Workspace-Key")).toBe(key(scope));
 });
 it("keeps concurrent personal and two same-name company requests isolated",async()=>{
  const clients=[base,{...base,company:otherCompany},{...base,mode:"personal" as const}];

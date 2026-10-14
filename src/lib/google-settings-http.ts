@@ -5,6 +5,7 @@ import {companyScopeFor,runWithCompanyRequest} from "./company-context";
 import {googleWorkspaceFromContext,type GoogleWorkspace} from "./google-workspace-policy";
 import {isSameOrigin} from "./request-origin";
 import {readBankBody} from "./open-finance-body";
+import {assertGoogleWorkspaceHeader} from "./google-events-http";
 
 const headers={"Cache-Control":"private, no-store"};
 const errors:Record<string,readonly [number,string]>={
@@ -38,8 +39,8 @@ export async function googleSettingsHttp(request:Request,action:(scope:GoogleWor
     const origin=process.env.APP_ORIGIN||process.env.OPEN_FINANCE_APP_ORIGIN;
     if(process.env.NODE_ENV==="production"&&!origin||!isSameOrigin(request,origin))throw Error("GOOGLE_SETTINGS_ORIGIN_DENIED");
    }
-   const scope=googleWorkspaceFromContext(owner,await companyScopeFor(owner));
-   return NextResponse.json(await action(scope),{headers});
+   const scope=googleWorkspaceFromContext(owner,await companyScopeFor(owner)),key=assertGoogleWorkspaceHeader(request,scope);
+   return NextResponse.json(await action(scope),{headers:{...headers,"X-Zelo-Workspace-Key":key}});
   });
  }catch(error){return failure(error);}
 }
