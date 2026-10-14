@@ -977,6 +977,8 @@ export type IncomingMessage = {
   text: string;
   contactName?: string;
   channel?: "waba"|"evolution";
+  /** Set only by authenticated provider intake, never by text/AI parsing. */
+  providerMessageId?:string;
   receivedAt?: number;
   creditPixAnswer?: {questionId:string;confirmed:boolean};
   isFileMessage?: boolean;

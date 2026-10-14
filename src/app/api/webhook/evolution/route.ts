@@ -6,6 +6,7 @@ import { transcribeAudio } from "@/lib/ai-processor";
 import { getConfig } from "@/lib/whatsapp-config";
 import { getUserIdByPhone } from "@/lib/wpp-phone-links";
 import { readBankBody } from "@/lib/open-finance-body";
+import {googleWhatsAppProviderEnvelope} from "@/lib/google-whatsapp-message";
 
 type EvolutionMessageData = {
   key?: { remoteJid?: string; remoteJidAlt?: string; senderPn?: string; fromMe?: boolean; id?: string };
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
 
     const from = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
     if (!from) return NextResponse.json({ ok: true });
+    const envelope=googleWhatsAppProviderEnvelope("evolution",data.key.id);
 
     // Filtra mensagens antigas (reimportadas em reconexão) — timestamp Baileys em segundos
     const ts = Number(data.messageTimestamp) || 0;
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest) {
         ? String(typeInfo.obj.text ?? "")
         : String(data.message?.conversation ?? "");
       if (!text.trim()) return NextResponse.json({ ok: true });
-      await handleIncomingMessage({ from, text: text.trim(), contactName });
+      await handleIncomingMessage({ ...envelope, from, text: text.trim(), contactName });
       return NextResponse.json({ ok: true });
     }
 
@@ -123,12 +125,13 @@ export async function POST(req: NextRequest) {
         await wppSend(from, "🎤 Não consegui entender o áudio. Pode digitar sua mensagem?");
         return NextResponse.json({ ok: true });
       }
-      await handleIncomingMessage({ from, text: transcript, contactName });
+      await handleIncomingMessage({ ...envelope, from, text: transcript, contactName });
       return NextResponse.json({ ok: true });
     }
 
     // imagem/vídeo/documento/sticker
     await handleIncomingMessage({
+      ...envelope,
       from,
       text: "",
       contactName,
