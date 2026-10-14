@@ -146,7 +146,7 @@ function diagnosticAttempt(attempt: WebhookAttempt, cfg?: DiagnosticConfig): Web
 
 /** Applies to reads and mutation responses, including diagnostics saved before hardening. */
 export function billingWebhookAdminView(cfg: BillingWebhookConfig): BillingWebhookConfig {
-  return { ...cfg, secretValue: cfg.secretValue ? "••••••••" : "", ...(cfg.lastAttempt ? { lastAttempt: diagnosticAttempt(cfg.lastAttempt, cfg) } : {}) };
+  return { ...cfg, activateValues: cfg.activateValues.filter(value => value !== "PURCHASE_COMPLETE"), secretValue: cfg.secretValue ? "••••••••" : "", ...(cfg.lastAttempt ? { lastAttempt: diagnosticAttempt(cfg.lastAttempt, cfg) } : {}) };
 }
 
 type Row = {
@@ -285,7 +285,7 @@ export const BILLING_WEBHOOK_PRESETS: Record<string, Omit<BillingWebhookConfig, 
     secretHeader: "X-HOTMART-HOTTOK",
     emailPath: "data.buyer.email",
     statusPath: "event",
-    activateValues: ["PURCHASE_APPROVED", "PURCHASE_COMPLETE", "SUBSCRIPTION_RENEWED"],
+    activateValues: ["PURCHASE_APPROVED", "SUBSCRIPTION_RENEWED"],
     deactivateValues: ["PURCHASE_DELAYED", "PURCHASE_PROTEST", "PURCHASE_CANCELED", "PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK", "PURCHASE_EXPIRED", "SUBSCRIPTION_CANCELLATION"],
     planPath: "data.product.id",
     planMap: {},
@@ -475,7 +475,9 @@ export function classifyBillingStatus(
   const forced = ALWAYS_DEACTIVATE_STATUSES.includes(status);
   return {
     isDeactivate: forced || cfg.deactivateValues.includes(status),
-    isActivate: !forced && cfg.activateValues.includes(status),
+    // PURCHASE_COMPLETE can arrive days after PURCHASE_APPROVED, even after
+    // the subscription was cancelled. The original approval already grants access.
+    isActivate: !forced && status !== "PURCHASE_COMPLETE" && cfg.activateValues.includes(status),
   };
 }
 
