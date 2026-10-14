@@ -9,6 +9,9 @@ import {googleSettingsWorkspaceView} from "./google-settings-service";
 import LayoutBR from "../app/dashboard/configuracoes/layout";
 import LayoutPT from "../app/pt/dashboard/configuracoes/layout";
 import LayoutES from "../app/es/dashboard/configuracoes/layout";
+import AgendaBR from "../app/dashboard/agenda/layout";
+import AgendaPT from "../app/pt/dashboard/agenda/layout";
+import AgendaES from "../app/es/dashboard/agenda/layout";
 import {GoogleSettingsWorkspaceProvider} from "../components/GoogleSettingsWorkspace";
 const owner="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",company="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1";
 const context={userId:owner,mode:"business" as const,companyId:company,companyName:"Fixture empresa",allowBusiness:true};
@@ -36,7 +39,7 @@ it("suppresses raw authentication and context diagnostics",async()=>{
  deps.auth.mockRejectedValueOnce(Error("private fixture authentication diagnostic"));expect(await loadGoogleSettingsPageTarget()).toBeNull();
  deps.scope.mockRejectedValueOnce(Error("private fixture database diagnostic"));expect(await loadGoogleSettingsPageTarget()).toBeNull();
 });
-it.each([LayoutBR,LayoutPT,LayoutES])("the actual localized settings layout keys the provider by server target",async Layout=>{
+it.each([LayoutBR,LayoutPT,LayoutES,AgendaBR,AgendaPT,AgendaES])("the actual localized workspace layout keys the provider by server target",async Layout=>{
  const element=await Layout({children:"fixture settings"});expect(isValidElement(element)).toBe(true);expect(element.type).toBe(GoogleSettingsWorkspaceProvider);
  expect(element.key).toBe(element.props.target!.workspaceKey);expect(element.props.target!.label).toBe("Fixture empresa");expect(element.props.children).toBe("fixture settings");
  deps.scope.mockResolvedValueOnce(undefined);const unavailable=await Layout({children:"fixture settings"});expect(unavailable.props.target).toBeNull();expect(unavailable.key).toBe("unavailable");expect(unavailable.props.children).toBe("fixture settings");
