@@ -2,7 +2,8 @@ import {afterEach,beforeEach,expect,it,vi} from "vitest";
 vi.mock("server-only",()=>({}));
 import {googleEventRetryIdentity} from "./google-event-policy";
 import type {GoogleEventIntent} from "./google-event-origin-store";
-import {assertGoogleEventProviderMarkers,googleEventProviderMarkers} from "./google-event-marker";
+import {assertGoogleEventProviderMarkers,googleEventProviderMarkers,googleEventCommandMarker,assertGoogleEventCommandMarker} from "./google-event-marker";
+import {googleEventCommandIdentity} from "./google-event-command-policy";
 const scope={userId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",mode:"business" as const,companyId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1"};
 const eventId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1",fingerprint="a".repeat(64);
 const intent:GoogleEventIntent={workspace:scope,eventId,bindingId:"cccccccc-cccc-4ccc-8ccc-ccccccccccc1",grantId:"dddddddd-dddd-4ddd-8ddd-ddddddddddd1",calendarId:"fixture-calendar",bindingVersion:"7",...googleEventRetryIdentity(scope,eventId)};
@@ -42,4 +43,17 @@ it.each([{...intent,remoteEventId:"0".repeat(64)},{...intent,conferenceRequestId
 it("fails closed without a configured key and hides the underlying configuration diagnostic",()=>{
  vi.stubEnv("DATA_ENCRYPTION_KEY","");
  try{googleEventProviderMarkers(intent,fingerprint,true);throw Error("unexpected success");}catch(error){expect((error as Error).message).toBe("GOOGLE_EVENT_MARKER_UNAVAILABLE");expect((error as Error).cause).toBeUndefined();}
+});
+it("binds a separate command marker to immutable origin and one explicit persisted command",()=>{
+ const operationId="ffffffff-ffff-4fff-8fff-fffffffffff1",command={operationId,headVersion:"3",kind:"conference" as const,payloadFingerprint:fingerprint,conferenceRequestId:googleEventCommandIdentity(scope,eventId,operationId)};
+ const original=googleEventProviderMarkers(intent,fingerprint,true),marker=googleEventCommandMarker(intent,command);
+ expect(marker).toMatch(/^[a-f0-9]{64}$/);expect(marker).not.toBe(original.zeloCreation);expect(marker).toBe(googleEventCommandMarker(intent,command));
+ expect(()=>assertGoogleEventCommandMarker(intent,command,{...original,zeloCommand:marker})).not.toThrow();
+ for(const changed of [{...command,headVersion:"4"},{...command,payloadFingerprint:"b".repeat(64)},{...command,kind:"update" as const,conferenceRequestId:null}]){
+  expect(()=>assertGoogleEventCommandMarker(intent,changed,{zeloCommand:marker})).toThrow("GOOGLE_EVENT_COMMAND_MARKER_INVALID");
+ }
+ for(const changed of [{...command,operationId:"bad"},{...command,headVersion:"0"},{...command,conferenceRequestId:"0".repeat(64)}])expect(()=>googleEventCommandMarker(intent,changed)).toThrow("GOOGLE_EVENT_COMMAND_MARKER_INVALID");
+ expect(()=>assertGoogleEventCommandMarker({...intent,calendarId:"other"},command,{zeloCommand:marker})).toThrow();
+ expect(()=>assertGoogleEventCommandMarker(intent,command,{zeloCommand:marker+"\n"})).toThrow();
+ expect(googleEventProviderMarkers(intent,fingerprint,true)).toEqual(original);
 });
