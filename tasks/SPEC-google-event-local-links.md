@@ -84,3 +84,23 @@ RPC and validates returned link/payload/original target. No partial legacy helpe
 provider operation, raw diagnostic, automatic CAS retry or production consumer is
 installed. The returned frozen allowlist contains local IDs/kind/source/attendees;
 it is private server data, not an effect authorization or public status serializer.
+
+## Local effect authorization and completion
+
+An invoker-only helper locks owner/company and then the mapped appointment/Meet
+with FOR UPDATE NOWAIT. Both rows must be scheduled, owned by the exact origin
+workspace and workspace_legacy=false. Contention becomes a fixed local conflict;
+cancelled, missing or unverified rows are inactive. No lock spans Google requests.
+An active check happens before credential runtime, and every Calendar request
+additionally checks the same captured binding/client/attempt/lease in storage with
+more than16seconds remaining. This authorization is private and never inferred
+from the old provider fields or readable history.
+
+The linked finish wrapper checks active records, runs the existing lease-CAS
+transition and publishes only provider fields to appointment and optional Meet in
+one transaction. It requires fresh remoteKnown=true/ETag for waiting/success;
+sticky known history alone never permits publication. It uses original remote
+event/calendar IDs, only a validated successful Meet link, and never rewrites local
+title/description/attendees/minutes/reminders/status. A stale, unlinked, cancelled
+or failed second-row publication rolls back private completion and public fields.
+The rollback only revokes these new helpers/RPCs; prior records/access are intact.
