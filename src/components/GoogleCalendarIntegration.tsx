@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useState,useSyncExternalStore} from "react";
 import Image from "next/image";
 import {createGoogleSettingsController,emptyGoogleClientState} from "@/lib/google-settings-client";
 import {useGoogleSettingsWorkspace} from "./GoogleSettingsWorkspace";
@@ -10,6 +10,7 @@ const COPY={
   description:"Sincronize compromissos e crie reuniões no Google Meet diretamente pelo Zelo",
   privacy:"Ao conectar, você autoriza o Zelo a criar, editar e excluir eventos conforme seus comandos.",privacyLink:"Política de Privacidade",
   reauthorize:"A conexão antiga expirou. Use Conectar Google para autorizar novamente neste espaço.",
+  callbackFailed:"A autorização do Google não foi concluída. Sua conta continua desconectada; tente conectar novamente.",callbackCancelled:"Conexão cancelada. Nenhuma alteração foi feita.",
   space:"Conexão deste espaço",connected:"Google conectado",choose:"Agenda usada pelo Zelo",loading:"Carregando suas agendas...",saved:"Agenda selecionada com sucesso.",
   connect:"Conectar Google",reconnect:"Reconectar Google",disconnect:"Desconectar deste espaço",unlinked:"Google desconectado deste espaço. O histórico foi preservado.",
   legacy:"Você tem uma conexão antiga que ainda não foi atribuída a um espaço. Escolha onde usá-la; os eventos antigos continuam guardados.",
@@ -20,6 +21,7 @@ const COPY={
   description:"Sincronize compromissos e crie reuniões no Google Meet diretamente pelo Zelo",
   privacy:"Ao ligar, autoriza o Zelo a criar, editar e eliminar eventos conforme os seus comandos.",privacyLink:"Política de Privacidade",
   reauthorize:"A ligação antiga expirou. Utilize Ligar Google para autorizar novamente neste espaço.",
+  callbackFailed:"A autorização do Google não foi concluída. A sua conta continua desligada; tente ligar novamente.",callbackCancelled:"Ligação cancelada. Não foi feita nenhuma alteração.",
   space:"Ligação deste espaço",connected:"Google ligado",choose:"Agenda utilizada pelo Zelo",loading:"A carregar as suas agendas...",saved:"Agenda selecionada com sucesso.",
   connect:"Ligar Google",reconnect:"Voltar a ligar Google",disconnect:"Desligar deste espaço",unlinked:"Google desligado deste espaço. O histórico foi preservado.",
   legacy:"Tem uma ligação antiga que ainda não foi atribuída a um espaço. Escolha onde utilizá-la; os eventos antigos continuam guardados.",
@@ -30,6 +32,7 @@ const COPY={
   description:"Sincroniza tus citas y crea reuniones de Google Meet directamente desde Zelo",
   privacy:"Al conectar, autorizas a Zelo a crear, editar y eliminar eventos según tus instrucciones.",privacyLink:"Política de Privacidad",
   reauthorize:"La conexión anterior ha caducado. Usa Conectar Google para autorizarla de nuevo en este espacio.",
+  callbackFailed:"La autorización de Google no se completó. Tu cuenta sigue desconectada; vuelve a intentarlo.",callbackCancelled:"Conexión cancelada. No se hizo ningún cambio.",
   space:"Conexión de este espacio",connected:"Google conectado",choose:"Calendario que usará Zelo",loading:"Cargando tus calendarios...",saved:"Calendario seleccionado correctamente.",
   connect:"Conectar Google",reconnect:"Volver a conectar Google",disconnect:"Desconectar de este espacio",unlinked:"Google desconectado de este espacio. El historial se conserva.",
   legacy:"Tienes una conexión antigua que todavía no está asignada a un espacio. Elige dónde usarla; los eventos anteriores se conservan.",
@@ -37,9 +40,15 @@ const COPY={
   unavailable:"No se pudo cargar la conexión. Actualiza la página o vuelve a intentarlo.",changed:"La conexión o el espacio cambió. Revisa los datos actualizados antes de volver a intentarlo.",auth:"Vuelve a entrar en tu cuenta para continuar.",missing:"Conecta Google en este espacio para continuar.",reload:"Actualizar página",retry:"Volver a intentar",primary:"principal",empty:"No se encontró un calendario con permiso de edición.",
  },
 } as const;
+function callbackResult(){
+ const result=new URLSearchParams(window.location.search).get("google");
+ return result==="failed"||result==="cancelled"?result:null;
+}
+function subscribeLocation(){return()=>{};}
 
 export default function GoogleCalendarIntegration({locale}:{locale:Locale}){
  const copy=COPY[locale],target=useGoogleSettingsWorkspace(),[state,setState]=useState(emptyGoogleClientState),[confirmation,setConfirmation]=useState<string|null>(null);
+ const returned=useSyncExternalStore(subscribeLocation,callbackResult,()=>null);
  const controller=useMemo(()=>createGoogleSettingsController({fetch:(url,init)=>fetch(url,init),navigate:url=>window.location.assign(url),changed:setState}),[]);
  useEffect(()=>{void controller.setTarget(target);return()=>controller.clear(false);},[controller,target]);
  useEffect(()=>{const clear=()=>controller.clear();window.addEventListener("pagehide",clear);window.addEventListener("beforeunload",clear);return()=>{window.removeEventListener("pagehide",clear);window.removeEventListener("beforeunload",clear);};},[controller]);
@@ -57,6 +66,7 @@ export default function GoogleCalendarIntegration({locale}:{locale:Locale}){
     <p className="mt-1 max-w-xl text-[11px] leading-4 text-subtle">{copy.privacy} <a href={privacyHref} className="font-semibold text-blue-ink underline">{copy.privacyLink}</a>.</p>
     {displayLabel&&<p className="mt-2 text-xs font-semibold text-ink">{copy.space}: {displayLabel}</p>}
     {state.status?.connected&&<p className="text-xs text-amber-ink mt-1 font-medium">✓ {copy.connected}{state.status.selectedCalendar?.name?` · ${state.status.selectedCalendar.name}`:""}</p>}
+    {returned&&!state.status?.connected&&<p className={`mt-2 max-w-xl text-xs ${returned==="failed"?"text-red-ink":"text-muted"}`} role="alert">{returned==="failed"?copy.callbackFailed:copy.callbackCancelled}</p>}
     {state.loading&&<p className="mt-3 text-xs text-muted" role="status">{copy.loading}</p>}
     {state.status?.connected&&!state.loading&&<div className="mt-3 max-w-md">
      {state.calendars.length>0?<label className="block text-xs font-semibold text-muted">{copy.choose}<select value={state.status.selectedCalendar?.id??""} onChange={event=>void controller.chooseCalendar(event.target.value)} disabled={busy} className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-blue-400 disabled:opacity-60">
