@@ -36,7 +36,7 @@ afterEach(()=>{vi.restoreAllMocks();vi.unstubAllEnvs();vi.useRealTimers();});
 it("uses actual SDK GET then conditional PATCH on original calendar, retaining creation markers",async()=>{
  const result=await synchronizeGoogleEventCommand(scope,eventId,operationId);expect(result).toEqual({eventId,operationId,state:"succeeded",meetLink:null,failureCode:null});expect(Object.isFrozen(result)).toBe(true);
  expect(transport.mock.calls.map(([v])=>v.method)).toEqual(["GET","PATCH"]);const options=transport.mock.calls[1][0],body=options.data as Record<string,unknown>;
- expect(new URL(String(options.url)).pathname).toContain("original-fixture-calendar/events/");expect(options.headers.get("If-Match")).toBe('"before"');expect(options.params).toMatchObject({sendUpdates:"all",conferenceDataVersion:1});
+ expect(new URL(String(options.url)).pathname).toContain("original-fixture-calendar/events/");expect(new Headers(options.headers).get("If-Match")).toBe('"before"');expect(options.params).toMatchObject({sendUpdates:"all",conferenceDataVersion:1});
  expect(body).toMatchObject(googleEventChangeBody(payload));expect(body).not.toHaveProperty("id");expect(body).not.toHaveProperty("conferenceData");expect(body.extendedProperties).toEqual({private:{...googleEventProviderMarkers(intent,current.creationFingerprint,false),zeloCommand:googleEventCommandMarker(intent,current)}});
  for(const [request] of transport.mock.calls){expect(request.retry).toBe(false);expect(request.timeout).toBe(15000);expect(String(request.url)).not.toContain(binding.calendarId);}
  expect(deps.lease).toHaveBeenCalledTimes(2);expect(JSON.stringify(result)).not.toContain("fictitious");
@@ -59,7 +59,7 @@ it("recovers ambiguous PATCH with GET only and one operation/invitation",async()
 it("performs conditional DELETE and reconciles ambiguous404 without another delete",async()=>{
  current={...current,kind:"delete",payload:null,localAttendees:null};let removed=false;
  transport.mockImplementation(async options=>{if(options.method==="GET"){if(removed)throw failure(404);return response(owned(),options);}removed=true;throw Error("fictitious lost delete response");});
- expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect(transport.mock.calls.find(([v])=>v.method==="DELETE")![0].headers.get("If-Match")).toBe('"before"');
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect(new Headers(transport.mock.calls.find(([v])=>v.method==="DELETE")![0].headers).get("If-Match")).toBe('"before"');
  expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("succeeded");expect(transport.mock.calls.filter(([v])=>v.method==="DELETE")).toHaveLength(1);
 });
 it.each([404,410])("treats delete missing%d as idempotent but never recreates an update",async code=>{
