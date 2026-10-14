@@ -87,6 +87,17 @@ begin
  select * into c from google_workspace.event_commands where event_id=p_event_id and operation_id=p_operation_id;
  if not found then return null;end if;return google_workspace.event_command_metadata(c);
 end;$$;
+-- Before credential runtime, including a logically canceled delete recovery.
+create function public.zelo_google_event_command_active(p_user_id uuid,p_mode text,p_company_id uuid,p_event_id uuid,p_operation_id uuid)
+returns boolean language plpgsql security invoker set search_path=pg_catalog as $$
+declare c google_workspace.event_commands%rowtype;h google_workspace.event_command_heads%rowtype;
+begin
+ perform google_workspace.lock_workspace(p_user_id,p_mode,p_company_id,true);
+ select * into c from google_workspace.event_commands where event_id=p_event_id and operation_id=p_operation_id;
+ select * into h from google_workspace.event_command_heads where event_id=p_event_id;
+ if c.operation_id is null or h.deleted or h.operation_id<>c.operation_id or h.version<>c.head_version then raise exception 'GOOGLE_EVENT_COMMAND_CONFLICT';end if;
+ perform google_workspace.event_command_local_context(p_user_id,p_mode,p_company_id,p_event_id,c.kind='delete');return true;
+end;$$;
 create function public.zelo_google_event_command_prepare(p_user_id uuid,p_mode text,p_company_id uuid,p_event_id uuid,p_operation_id uuid,p_head_version bigint,
  p_client_fingerprint text,p_binding_version bigint,p_kind text,p_payload jsonb,p_local_attendees jsonb)
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
@@ -245,13 +256,13 @@ begin
  return google_workspace.event_command_metadata(c);
 end;$$;
 revoke all on function google_workspace.event_command_metadata(google_workspace.event_commands),google_workspace.event_command_local_context(uuid,text,uuid,uuid,boolean),
- google_workspace.event_command_context(uuid,text,uuid,uuid,uuid,text,bigint),public.zelo_google_event_command_head(uuid,text,uuid,uuid),
+ google_workspace.event_command_context(uuid,text,uuid,uuid,uuid,text,bigint),public.zelo_google_event_command_head(uuid,text,uuid,uuid),public.zelo_google_event_command_active(uuid,text,uuid,uuid,uuid),
  public.zelo_google_event_command_get(uuid,text,uuid,uuid,uuid),public.zelo_google_event_command_prepare(uuid,text,uuid,uuid,uuid,bigint,text,bigint,text,jsonb,jsonb),
  public.zelo_google_event_command_claim(uuid,text,uuid,uuid,uuid,text,bigint,bigint),public.zelo_google_event_command_preflight(uuid,text,uuid,uuid,uuid,text,bigint,bigint,uuid),
  public.zelo_google_event_command_finish(uuid,text,uuid,uuid,uuid,text,bigint,bigint,uuid,text,text,text,text),public.zelo_google_event_command_retry(uuid,text,uuid,uuid,uuid,text,bigint,bigint)
  from public,anon,authenticated,service_role;
 grant execute on function google_workspace.event_command_metadata(google_workspace.event_commands),google_workspace.event_command_local_context(uuid,text,uuid,uuid,boolean),
- google_workspace.event_command_context(uuid,text,uuid,uuid,uuid,text,bigint),public.zelo_google_event_command_head(uuid,text,uuid,uuid),
+ google_workspace.event_command_context(uuid,text,uuid,uuid,uuid,text,bigint),public.zelo_google_event_command_head(uuid,text,uuid,uuid),public.zelo_google_event_command_active(uuid,text,uuid,uuid,uuid),
  public.zelo_google_event_command_get(uuid,text,uuid,uuid,uuid),public.zelo_google_event_command_prepare(uuid,text,uuid,uuid,uuid,bigint,text,bigint,text,jsonb,jsonb),
  public.zelo_google_event_command_claim(uuid,text,uuid,uuid,uuid,text,bigint,bigint),public.zelo_google_event_command_preflight(uuid,text,uuid,uuid,uuid,text,bigint,bigint,uuid),
  public.zelo_google_event_command_finish(uuid,text,uuid,uuid,uuid,text,bigint,bigint,uuid,text,text,text,text),public.zelo_google_event_command_retry(uuid,text,uuid,uuid,uuid,text,bigint,bigint)

@@ -21,6 +21,7 @@ FUNCTIONS=['google_workspace.event_command_metadata(google_workspace.event_comma
  'google_workspace.event_command_context(uuid,text,uuid,uuid,uuid,text,bigint)',
  'public.zelo_google_event_command_head(uuid,text,uuid,uuid)',
  'public.zelo_google_event_command_get(uuid,text,uuid,uuid,uuid)',
+ 'public.zelo_google_event_command_active(uuid,text,uuid,uuid,uuid)',
  'public.zelo_google_event_command_prepare(uuid,text,uuid,uuid,uuid,bigint,text,bigint,text,jsonb,jsonb)',
  'public.zelo_google_event_command_claim(uuid,text,uuid,uuid,uuid,text,bigint,bigint)',
  'public.zelo_google_event_command_preflight(uuid,text,uuid,uuid,uuid,text,bigint,bigint,uuid)',
@@ -84,10 +85,12 @@ def verify(f,baseline):
     f.rejected(prepare(a,event,1,payload=dict(change,summary='Other'),attendees=l.ATTENDEES),'Operation UUID accepted changed payload','service_role')
     f.rejected(prepare(a,event,2),'Stale head was silently adopted','service_role')
     lease=claim(a,event,1);check(f.read(preflight(a,lease),'service_role') is True,'Valid current command lease denied')
+    check(f.read(a.command('event_command_active',event,op(1)),'service_role') is True,'Command active check denied current scheduled row')
     contend(f,a,lease,'appointments');contend(f,a,lease,'meets')
     for table in ['appointments','meets']:
         f.sql('update public.'+table+" set status='cancelled' where id="+quote(event)+';');before=snapshot(f)
         f.rejected(preflight(a,lease),'Cancelled update authorized provider','service_role');f.rejected(finish(a,lease),'Cancelled update published result','service_role');check(snapshot(f)==before,'Cancelled completion partially committed')
+        f.rejected(a.command('event_command_active',event,op(1)),'Cancelled update entered credential runtime','service_role')
         f.sql('update public.'+table+" set status='scheduled' where id="+quote(event)+';')
     f.rejected(prepare(a,event,2,version='1'),'Unexpired worker was superseded','service_role')
     for patch in [dict(lease_id=op(80)),dict(attempt_version='0'),dict(lease_binding_version='99')]:f.rejected(preflight(a,dict(lease,**patch)),'Stale command lease authorized effect','service_role')
@@ -108,6 +111,7 @@ def verify(f,baseline):
     deletion=f.read(prepare(a,event,4,'delete','3'),'service_role');check(deletion['kind']=='delete','Logical delete preparation failed')
     check(f.sql("select a.status='cancelled' and m.status='cancelled' from public.appointments a join public.meets m using(id) where a.id="+quote(event)+';')=='t','Delete removed/failed to cancel linked history')
     cancellation=claim(a,event,4);check(f.read(preflight(a,cancellation),'service_role') is True,'Canceled delete cannot recover')
+    check(f.read(a.command('event_command_active',event,op(4)),'service_role') is True,'Canceled delete rejected before credential runtime')
     f.read(finish(a,cancellation,etag=None),'service_role');check(head(a,event)['deleted'],'Delete completion not retained')
     f.rejected(prepare(a,event,5,version='4'),'Deleted event accepted a mutation','service_role')
     conference_event=created(a,2,True,True);f.rejected(prepare(a,conference_event,10),'Failed creation became ordinary update','service_role')
