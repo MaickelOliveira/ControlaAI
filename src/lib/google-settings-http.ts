@@ -16,16 +16,22 @@ const errors:Record<string,readonly [number,string]>={
  GOOGLE_SETTINGS_WORKSPACE_CHANGED:[409,"O espaço mudou. Atualize a página e tente novamente."],
  GOOGLE_SETTINGS_CONFLICT:[409,"A conexão mudou. Atualize a página e tente novamente."],
  GOOGLE_SETTINGS_NOT_CONNECTED:[400,"Conecte o Google neste espaço para continuar."],
+ GOOGLE_SETTINGS_REAUTHORIZE_REQUIRED:[400,"A conexão antiga expirou. Use Conectar Google para autorizar novamente neste espaço."],
  GOOGLE_SETTINGS_STORAGE_UNAVAILABLE:[503,"Não foi possível consultar a conexão. Tente novamente."],
  GOOGLE_SETTINGS_STORAGE_INVALID:[503,"Não foi possível consultar a conexão. Tente novamente."],
  GOOGLE_SETTINGS_PROVIDER_INVALID:[502,"Não foi possível consultar as agendas do Google. Tente novamente."],
  GOOGLE_SETTINGS_PROVIDER_UNAVAILABLE:[502,"Não foi possível consultar as agendas do Google. Tente novamente."],
  GOOGLE_SETTINGS_UNAVAILABLE:[503,"Não foi possível concluir a ação. Tente novamente."],
 };
+const aliases:Record<string,string>={
+ GOOGLE_STATE_CONFLICT:"GOOGLE_SETTINGS_CONFLICT",GOOGLE_LEGACY_CONFLICT:"GOOGLE_SETTINGS_CONFLICT",GOOGLE_LEGACY_ALREADY_ASSIGNED:"GOOGLE_SETTINGS_CONFLICT",GOOGLE_LEGACY_TARGET_CONNECTED:"GOOGLE_SETTINGS_CONFLICT",
+ GOOGLE_LEGACY_MISSING:"GOOGLE_SETTINGS_NOT_CONNECTED",GOOGLE_LEGACY_REAUTHORIZE_REQUIRED:"GOOGLE_SETTINGS_REAUTHORIZE_REQUIRED",
+ GOOGLE_LEGACY_STORAGE_UNAVAILABLE:"GOOGLE_SETTINGS_STORAGE_UNAVAILABLE",GOOGLE_LEGACY_STORAGE_INVALID:"GOOGLE_SETTINGS_STORAGE_INVALID",
+};
 const denied=["COMPANY_CONTEXT_MISSING","COMPANY_OWNER_MISMATCH","COMPANY_ACCESS_DENIED","COMPANY_NOT_FOUND","COMPANY_REQUIRED","COMPANY_INVALID","GOOGLE_WORKSPACE_REQUIRED","GOOGLE_WORKSPACE_INVALID","GOOGLE_WORKSPACE_OWNER_MISMATCH","GOOGLE_WORKSPACE_ACCESS_DENIED","GOOGLE_WORKSPACE_MISMATCH"];
 function failure(error:unknown):NextResponse{
  const message=error instanceof Error?error.message:"";
- const code=Object.hasOwn(errors,message)?message:denied.includes(message)?"GOOGLE_SETTINGS_ACCESS_DENIED":"GOOGLE_SETTINGS_UNAVAILABLE";
+ const code=Object.hasOwn(errors,message)?message:Object.hasOwn(aliases,message)?aliases[message]:denied.includes(message)?"GOOGLE_SETTINGS_ACCESS_DENIED":"GOOGLE_SETTINGS_UNAVAILABLE";
  const [status,text]=errors[code];return NextResponse.json({error:text,code},{status,headers});
 }
 /** HTTP actions receive authority solely from the authenticated server context.
