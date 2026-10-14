@@ -30,3 +30,7 @@ it("reads exact private controlled snapshot and separates local phones from prov
 it.each([{kind:"legacy",payload:{}},{kind:"appointment",payload:{},local_attendees:[],token:"bad"}])("rejects substituted controlled snapshot %#",async data=>{
  const {loadGoogleEventControlledSnapshot}=await import("./google-event-user-store");deps.rpc.mockResolvedValue({data,error:null});await expect(loadGoogleEventControlledSnapshot(scope,event,expectation)).rejects.toThrow("GOOGLE_EVENT_STORAGE_INVALID");
 });
+it("reads original local partial replay input without latest row rebasing or configuration",async()=>{
+ const {loadGoogleAppointmentLocalMutation}=await import("./google-event-user-store");deps.rpc.mockResolvedValue({data:{payload:null,metadata:{ata_content:"Original"}},error:null});
+ expect(await loadGoogleAppointmentLocalMutation(scope,event,expectation)).toEqual({payload:null,metadata:{ata_content:"Original"}});expect(deps.auth).not.toHaveBeenCalled();
+});

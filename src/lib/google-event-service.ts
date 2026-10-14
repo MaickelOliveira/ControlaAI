@@ -1,4 +1,10 @@
 import "server-only";
+import {randomUUID} from "node:crypto";
+import {googleEventChangePayload,type GoogleEventChangePayload} from "./google-event-command-policy";
+import {loadGoogleEventCommand,prepareGoogleEventCommand} from "./google-event-command-store";
+import {synchronizeGoogleEventCommand} from "./google-event-command-sync";
+import {googleEventExpectation,googleEventSyncVersion,loadGoogleEventControlledSnapshot,loadGoogleAppointmentLocalMutation,loadGoogleEventUserRetry,retryGoogleEventUserIntent,patchGoogleAppointmentLocal,type GoogleEventExpectation,type GoogleAppointmentLocalMetadata,type GoogleEventControlledSnapshot} from "./google-event-user-store";
+export type {GoogleEventExpectation} from "./google-event-user-store";
 import type {Appointment,AppointmentRepeat,GoogleSyncMetadata} from "./agenda";
 import type {Meet} from "./meets";
 import {googleWorkspaceKey,type GoogleWorkspace} from "./google-workspace-policy";
@@ -11,7 +17,6 @@ import {loadGoogleOwnerActivation} from "./google-owner-activation";
 import {synchronizeGoogleEventCreation} from "./google-event-creation-sync";
 export type WorkspaceAppointment=Appointment&GoogleSyncMetadata;
 export type WorkspaceMeet=Meet&GoogleSyncMetadata;
-export type GoogleEventExpectation=Readonly<{clientMutationId:string;expectedGoogleSyncVersion:string|null}>;
 export type WorkspaceEventInput=Readonly<{title:string;description?:string;location?:string;startAt:string;endAt?:string;allDay?:boolean;repeat?:AppointmentRepeat;withMeet?:boolean;
  attendees?:readonly Readonly<{name?:string;displayName?:string;phone?:string;email?:string}>[]}>;
 export type WorkspaceMeetInput=Readonly<Pick<WorkspaceEventInput,"title"|"description"|"startAt"|"attendees">&{endAt:string}>;
@@ -76,3 +81,93 @@ async function create(scope:GoogleWorkspace,eventId:string,value:WorkspaceEventI
  * before effects. Historical global connections never select a destination. */
 export async function createWorkspaceAppointment(scope:GoogleWorkspace,eventId:string,value:WorkspaceEventInput,source:EventSource):Promise<WorkspaceAppointment>{const selected=capture(scope,eventId);await create(selected.scope,selected.eventId!,value,source,"appointment");const result=await getWorkspaceAppointment(selected.scope,selected.eventId!);if(!result)throw Error("GOOGLE_EVENT_UNAVAILABLE");return result;}
 export async function createWorkspaceMeet(scope:GoogleWorkspace,eventId:string,value:WorkspaceMeetInput,source:EventSource):Promise<WorkspaceMeet>{const selected=capture(scope,eventId);await create(selected.scope,selected.eventId!,value,source,"meet");const result=await getWorkspaceMeet(selected.scope,selected.eventId!);if(!result)throw Error("GOOGLE_EVENT_UNAVAILABLE");return result;}
+
+export type WorkspaceAppointmentPatch=Readonly<Partial<Pick<Appointment,"title"|"description"|"location"|"startAt"|"endAt"|"allDay"|"repeat"|"status"|"ataGenerated"|"ataContent"|"ataNotifiedAt"|"reminderSentAt"|"reminder15MinSentAt">>&{attendees?:WorkspaceEventInput["attendees"]}>;
+const CONTROLLED=["title","description","location","startAt","endAt","allDay","repeat","attendees"];
+const META:Record<string,string>={status:"status",ataGenerated:"ata_generated",ataContent:"ata_content",ataNotifiedAt:"ata_notified_at",reminderSentAt:"reminder_sent_at",reminder15MinSentAt:"reminder_15min_sent_at"};
+function patchInput(value:unknown):Readonly<Record<string,unknown>>{
+ try{const row=object(value,[...CONTROLLED,...Object.keys(META)]);if(!Object.keys(row).length||Object.keys(row).some(key=>CONTROLLED.includes(key))&&Object.keys(row).some(key=>key in META))throw Error();
+  const result:Record<string,unknown>={};for(const [key,entry] of Object.entries(row)){
+   if(key==="allDay"||key==="ataGenerated"){if(typeof entry!=="boolean")throw Error();}
+   else if(key==="status"){if(entry!=="scheduled"&&entry!=="done"&&entry!=="cancelled")throw Error();}
+   else if(key==="repeat"){if(!["none","daily","weekly","monthly","yearly"].includes(entry as string))throw Error();}
+   else if(key==="attendees"){
+    if(!Array.isArray(entry)||entry.length>100)throw Error();result[key]=Object.freeze(entry.map(value=>{const guest=object(value,["name","displayName","phone","email"]);return Object.freeze(Object.fromEntries(Object.entries(guest).map(([key,value])=>[key,text(value,key==="phone"?64:key==="email"?254:256)])));}));continue;
+   }else if(typeof entry!=="string"||entry.length>(key==="ataContent"?65536:key==="description"?8192:key==="location"?1024:512))throw Error();
+   if(key==="title"&&!String(entry).trim())throw Error();result[key]=entry;
+  }return Object.freeze(result);
+ }catch{throw Error("GOOGLE_EVENT_INPUT_INVALID");}
+}
+async function current(scope:GoogleWorkspace,eventId:string):Promise<WorkspaceAppointment>{const row=await getWorkspaceAppointment(scope,eventId);if(!row)throw Error("GOOGLE_EVENT_NOT_FOUND");return row;}
+function unchanged(row:WorkspaceAppointment,expectation:GoogleEventExpectation):void{if(row.googleSyncVersion!==expectation.expectedGoogleSyncVersion)throw Error("GOOGLE_EVENT_CONFLICT");}
+async function activeOwner(scope:GoogleWorkspace):Promise<void>{if(!await loadGoogleOwnerActivation(scope.userId))throw Error("GOOGLE_EVENT_NOT_CONNECTED");}
+function head(expectation:GoogleEventExpectation):string{return googleEventSyncVersion(expectation.expectedGoogleSyncVersion)[1];}
+async function commandEffect(scope:GoogleWorkspace,eventId:string,operationId:string):Promise<void>{try{await synchronizeGoogleEventCommand(scope,eventId,operationId);}catch(error){if(!(error instanceof Error&&error.message==="GOOGLE_EVENT_SYNC_UNAVAILABLE"))throw Error("GOOGLE_EVENT_UNAVAILABLE");}}
+function changedPayload(base:GoogleEventControlledSnapshot,patch:Readonly<Record<string,unknown>>):Readonly<{payload:GoogleEventChangePayload;attendees:readonly GoogleLocalAttendee[]}>{
+ const previous=base.payload,title=patch.title===undefined?previous.summary:patch.title;
+ const guests=patch.attendees??(base.kind==="meet"?base.attendees:previous.attendees);
+ const values={title:base.kind==="meet"&&typeof title==="string"&&title.startsWith("🎥 ")?title.slice(3):title,description:patch.description??previous.description,location:patch.location??previous.location,
+  startAt:patch.startAt??previous.startAt,endAt:patch.endAt??previous.endAt,allDay:patch.allDay??previous.allDay,repeat:patch.repeat??previous.repeat,attendees:guests};
+ const normalized=canonical(values,"appointment","web"),payload=googleEventChangePayload(Object.fromEntries(Object.entries(normalized.payload).filter(([key])=>key!=="withMeet")));
+ let attendees:readonly GoogleLocalAttendee[]=Object.freeze([]);
+ if(base.kind==="meet"){
+  if(payload.allDay||payload.repeat!=="none")throw Error("GOOGLE_EVENT_INPUT_INVALID");
+  const meeting=canonical({title:payload.summary,description:payload.description,startAt:payload.startAt,endAt:payload.endAt,attendees:guests},"meet","web");attendees=meeting.attendees;
+ }return Object.freeze({payload,attendees});
+}
+function localControlled(row:WorkspaceAppointment):GoogleEventControlledSnapshot{
+ const normalized=canonical({title:row.title,description:row.description??"",location:row.location??"",startAt:row.startAt,...(row.endAt===undefined?{}:{endAt:row.endAt}),allDay:row.allDay,repeat:row.repeat},"appointment","web");
+ return {kind:"appointment",payload:googleEventChangePayload(Object.fromEntries(Object.entries(normalized.payload).filter(([key])=>key!=="withMeet"))),attendees:[]};
+}
+/** Controlled edits use the original confirmed complete revision. Independent
+ * local minutes/status/reminders never enter configuration or Google runtime. */
+export async function updateWorkspaceAppointment(scope:GoogleWorkspace,eventId:string,value:WorkspaceAppointmentPatch,expectation?:GoogleEventExpectation):Promise<WorkspaceAppointment>{
+ const selected=capture(scope,eventId),id=selected.eventId!,patch=patchInput(value),confirmed=expectation===undefined?undefined:googleEventExpectation(expectation),controlled=Object.keys(patch).some(key=>CONTROLLED.includes(key));
+ if(patch.status==="cancelled"){if(Object.keys(patch).length!==1||!confirmed)throw Error("GOOGLE_EVENT_INPUT_INVALID");return await cancelWorkspaceAppointment(selected.scope,id,confirmed);}
+ if(controlled&&!confirmed)throw Error("GOOGLE_EVENT_INPUT_INVALID");const row=await current(selected.scope,id);
+ if(!controlled){const metadata=Object.fromEntries(Object.entries(patch).map(([key,value])=>[META[key],value])) as GoogleAppointmentLocalMetadata;
+  await patchGoogleAppointmentLocal(selected.scope,id,confirmed??{clientMutationId:randomUUID(),expectedGoogleSyncVersion:row.googleSyncVersion},null,metadata);return await current(selected.scope,id);
+ }
+ if(confirmed!.expectedGoogleSyncVersion===null){
+  const receipt=await loadGoogleAppointmentLocalMutation(selected.scope,id,confirmed!);if(receipt&&(receipt.payload===null||Object.keys(receipt.metadata).length))throw Error("GOOGLE_EVENT_CONFLICT");
+  const base=receipt?{kind:"appointment" as const,payload:googleEventChangePayload(Object.fromEntries(Object.entries(receipt.payload!).filter(([key])=>key!=="withMeet"))),attendees:[]}:localControlled(row);
+  const changed=changedPayload(base,patch);await patchGoogleAppointmentLocal(selected.scope,id,confirmed!,{...changed.payload,withMeet:false},{});return await current(selected.scope,id);
+ }
+ const prior=await loadGoogleEventCommand(selected.scope,id,confirmed!.clientMutationId);let base:GoogleEventControlledSnapshot;
+ if(prior){const link=await loadGoogleLocalEvent(selected.scope,id);if(!link||prior.kind!=="update"||!prior.payload)throw Error("GOOGLE_EVENT_CONFLICT");base={kind:link.kind,payload:prior.payload,attendees:prior.localAttendees??[]};}
+ else{unchanged(row,confirmed!);base=await loadGoogleEventControlledSnapshot(selected.scope,id,confirmed!);await activeOwner(selected.scope);}
+ const changed=changedPayload(base,patch);await prepareGoogleEventCommand(selected.scope,id,confirmed!.clientMutationId,head(confirmed!),{kind:"update",...changed},confirmed!.expectedGoogleSyncVersion!);
+ if(!prior)await commandEffect(selected.scope,id,confirmed!.clientMutationId);return await current(selected.scope,id);
+}
+/** Logical cancellation keeps history and cancels both linked local records
+ * before one original-target conditional DELETE. Local/legacy rows stay local. */
+export async function cancelWorkspaceAppointment(scope:GoogleWorkspace,eventId:string,expectation:GoogleEventExpectation):Promise<WorkspaceAppointment>{
+ const selected=capture(scope,eventId),id=selected.eventId!,confirmed=googleEventExpectation(expectation),row=await current(selected.scope,id);
+ if(confirmed.expectedGoogleSyncVersion===null){await patchGoogleAppointmentLocal(selected.scope,id,confirmed,null,{status:"cancelled"});return await current(selected.scope,id);}
+ const prior=await loadGoogleEventCommand(selected.scope,id,confirmed.clientMutationId);if(prior&&prior.kind!=="delete")throw Error("GOOGLE_EVENT_CONFLICT");
+ if(!prior){unchanged(row,confirmed);await activeOwner(selected.scope);}
+ await prepareGoogleEventCommand(selected.scope,id,confirmed.clientMutationId,head(confirmed),{kind:"delete"},confirmed.expectedGoogleSyncVersion);
+ if(!prior)await commandEffect(selected.scope,id,confirmed.clientMutationId);return await current(selected.scope,id);
+}
+/** A conference can only be added to explicit original private provenance. */
+export async function addWorkspaceAppointmentMeet(scope:GoogleWorkspace,eventId:string,expectation:GoogleEventExpectation):Promise<WorkspaceAppointment>{
+ const selected=capture(scope,eventId),id=selected.eventId!,confirmed=googleEventExpectation(expectation),row=await current(selected.scope,id);
+ if(confirmed.expectedGoogleSyncVersion===null)throw Error("GOOGLE_EVENT_ORIGIN_MISSING");
+ const prior=await loadGoogleEventCommand(selected.scope,id,confirmed.clientMutationId);if(prior&&prior.kind!=="conference")throw Error("GOOGLE_EVENT_CONFLICT");
+ if(!prior){unchanged(row,confirmed);if(row.meetLink)return row;await activeOwner(selected.scope);}
+ await prepareGoogleEventCommand(selected.scope,id,confirmed.clientMutationId,head(confirmed),{kind:"conference"},confirmed.expectedGoogleSyncVersion);
+ if(!prior)await commandEffect(selected.scope,id,confirmed.clientMutationId);return await current(selected.scope,id);
+}
+/** Explicit retry retains ambiguous operation identity. Only definitive matched
+ * conference failure permits a newly journaled conference request. */
+export async function retryWorkspaceGoogleEvent(scope:GoogleWorkspace,eventId:string,expectation:GoogleEventExpectation):Promise<WorkspaceAppointment>{
+ const selected=capture(scope,eventId),id=selected.eventId!,confirmed=googleEventExpectation(expectation,false),row=await current(selected.scope,id);
+ if(await loadGoogleEventUserRetry(selected.scope,id,confirmed))return row;
+ const prior=await loadGoogleEventCommand(selected.scope,id,confirmed.clientMutationId);
+ if(prior){if(prior.kind!=="conference")throw Error("GOOGLE_EVENT_CONFLICT");return await addWorkspaceAppointmentMeet(selected.scope,id,confirmed);}
+ unchanged(row,confirmed);
+ if(row.googleSyncFailureCode==="CONFERENCE_FAILED")return await addWorkspaceAppointmentMeet(selected.scope,id,confirmed);
+ await activeOwner(selected.scope);const retry=await retryGoogleEventUserIntent(selected.scope,id,confirmed);
+ if(!retry.replayed){if(retry.operationId===null)await synchronize(selected.scope,id);else await commandEffect(selected.scope,id,retry.operationId);}
+ return await current(selected.scope,id);
+}

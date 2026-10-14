@@ -29,3 +29,20 @@ commands retain original provenance and conditional ETag guards.
 
 Read/create verification: RED missing service module; GREEN25 focused tests and
 lint. Full build/types and browser/runtime integration belong to parent cutover.
+
+Mutation slice implements update/cancel/add conference/retry with stable UUID and
+original full revision. Replay lookup comes before stale-current conflict; partial
+controlled replay uses original journal/receipt payload, never rebases to latest
+fields. New controlled edits use exact SQL20 private snapshot and SQL19 atomic
+comparison. Guests/conference/local Meet phones are preserved. Local/legacy
+controlled/cancel work remains local and private origins never fall back locally.
+Minutes/reminders/done use strict local metadata only; combined metadata and
+controlled patches are rejected to keep each intention atomic. Internal metadata
+calls may omit expectation and receive a new local-only UUID; Web/Wpp controls
+provide the original confirmed UUID/revision. Definitive CONFERENCE_FAILED alone
+reserves new conference; ambiguous failures resume original operation/round.
+Parent handles separately confirmed external-ETag conflict reconciliation.
+
+Verification: RED missing mutation methods/private replay getter and all-day
+legacy regression, GREEN76 service/user DAL tests plus lint; native SQL19/20/22
+cover durable repeated intention, scope, full-token races and original values.

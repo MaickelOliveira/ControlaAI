@@ -88,3 +88,10 @@ export async function loadGoogleEventControlledSnapshot(scope:GoogleWorkspace,ev
   return Object.freeze({kind:row.kind,payload,attendees});
  }catch{throw Error("GOOGLE_EVENT_STORAGE_INVALID");}
 }
+
+export type GoogleAppointmentLocalMutation=Readonly<{payload:GoogleEventCreationPayload|null;metadata:GoogleAppointmentLocalMetadata}>;
+export async function loadGoogleAppointmentLocalMutation(scope:GoogleWorkspace,eventId:string,expectation:GoogleEventExpectation):Promise<GoogleAppointmentLocalMutation|null>{
+ const selected=capture(scope,eventId,expectation),data=await rpc("zelo_google_appointment_local_mutation_get",args(selected));if(data===null)return null;
+ try{const row=object(data,["payload","metadata"]),payload=row.payload===null?null:googleEventCreationPayload(row.payload);if(payload?.withMeet)throw Error();return Object.freeze({payload,metadata:metadata(row.metadata)});}
+ catch{throw Error("GOOGLE_EVENT_STORAGE_INVALID");}
+}
