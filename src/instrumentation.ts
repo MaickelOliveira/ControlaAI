@@ -7,6 +7,8 @@ export async function register() {
     configureCompanyDatabaseScope(resolveCompanyContext);
     runJob=runWithTrustedCompanyJob;
   }
+  const {startGoogleEventWorker}=await import("./lib/google-event-worker");
+  startGoogleEventWorker();
   if(process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"){
     const {startOpenFinanceWorker}=await import("./lib/open-finance-worker");
     await runJob(async()=>startOpenFinanceWorker());
