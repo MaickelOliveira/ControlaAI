@@ -106,7 +106,7 @@ async function commandEffect(scope:GoogleWorkspace,eventId:string,operationId:st
 function changedPayload(base:GoogleEventControlledSnapshot,patch:Readonly<Record<string,unknown>>):Readonly<{payload:GoogleEventChangePayload;attendees:readonly GoogleLocalAttendee[]}>{
  const previous=base.payload,title=patch.title===undefined?previous.summary:patch.title;
  const guests=patch.attendees??(base.kind==="meet"?base.attendees:previous.attendees);
- const values={title:base.kind==="meet"&&typeof title==="string"&&title.startsWith("🎥 ")?title.slice(3):title,description:patch.description??previous.description,location:patch.location??previous.location,
+ const values={title:base.kind==="meet"&&patch.title!==undefined&&typeof title==="string"&&title.startsWith("🎥 ")?title.slice(3):title,description:patch.description??previous.description,location:patch.location??previous.location,
   startAt:patch.startAt??previous.startAt,endAt:patch.endAt??previous.endAt,allDay:patch.allDay??previous.allDay,repeat:patch.repeat??previous.repeat,attendees:guests};
  const normalized=canonical(values,"appointment","web"),payload=googleEventChangePayload(Object.fromEntries(Object.entries(normalized.payload).filter(([key])=>key!=="withMeet")));
  let attendees:readonly GoogleLocalAttendee[]=Object.freeze([]);

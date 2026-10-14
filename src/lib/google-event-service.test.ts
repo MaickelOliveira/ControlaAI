@@ -58,3 +58,9 @@ it("captures the confirmed patch/version before asynchronous reads",async()=>{li
 
 it("replays a local partial edit against original receipt after newer date changes",async()=>{const local={...expectation,expectedGoogleSyncVersion:null};deps.appointments.mockResolvedValue([row({start_at:"2070-01-02T10:00:00Z",end_at:"2070-01-02T11:00:00Z"})]);deps.localMutation.mockResolvedValue({payload:{...controlled().payload,summary:"Accepted",withMeet:false},metadata:{}});await updateWorkspaceAppointment(scope,event,{title:"Accepted"},local);expect(deps.localPatch.mock.calls[0][3].startAt).toBe("2070-01-01T10:00:00.000Z");});
 it("normalizes historical all-day same-date endpoints during a local title edit",async()=>{deps.appointments.mockResolvedValue([row({all_day:true,start_at:"2070-01-01T03:00:00Z",end_at:"2070-01-01T03:00:00Z",workspace_legacy:true,google_sync_state:"legacy"})]);await updateWorkspaceAppointment(scope,event,{title:"Edited legacy day"},{...expectation,expectedGoogleSyncVersion:null});expect(deps.localPatch.mock.calls[0][3]).toMatchObject({startAt:"2070-01-01",endAt:"2070-01-02",allDay:true});});
+it("preserves a legitimate Meet title emoji when editing only its time",async()=>{
+ linked();const attendees=[{name:"Guest",email:"guest@example.test",phone:"+5511999990000"}];
+ deps.controlled.mockResolvedValue({...controlled(),kind:"meet",payload:{...controlled().payload,summary:"🎥 Revisão"},attendees});
+ await updateWorkspaceAppointment(scope,event,{startAt:"2070-01-01T12:00:00Z",endAt:"2070-01-01T13:00:00Z"},expectation);
+ expect(deps.command.mock.calls[0][4]).toMatchObject({kind:"update",payload:{summary:"🎥 Revisão",startAt:"2070-01-01T12:00:00.000Z",endAt:"2070-01-01T13:00:00.000Z"},attendees});
+});
