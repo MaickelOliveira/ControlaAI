@@ -23,7 +23,7 @@ export default function OpenFinanceAccounts({mode}:{mode:"personal"|"business"})
   async function action(id:string,name:BankConnectionAction) {
     if(busy)return;
     if(name==="revoke"&&!confirm("Desconectar este banco? O compartilhamento de dados com a Zelo será cancelado. O histórico recebido permanecerá disponível."))return;
-    if(name==="remove"&&!confirm("Remover esta conexão da lista? O compartilhamento será cancelado antes da remoção. As transações e demais dados recebidos serão mantidos, e o registro ficará em Histórico de conexões."))return;
+    if(name==="remove"&&!confirm("Remover esta conexão da lista? Se ainda houver compartilhamento, ele será cancelado antes da remoção. As transações e demais dados recebidos serão mantidos, e o registro ficará em Histórico de conexões."))return;
     if(name==="recreate"&&!confirm("Gerar uma nova autorização com as mesmas categorias e condições já aceitas? Você precisará autorizar novamente no banco."))return;
     setBusy(id);setError("");setAuthorizations(previous=>({...previous,[id]:{authorizationUrl:null}}));
     try {
@@ -45,7 +45,7 @@ export default function OpenFinanceAccounts({mode}:{mode:"personal"|"business"})
     {!data.connectAvailable&&<p role="status" className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink">Novas conexões aguardam a conclusão da configuração.</p>}
     {(error||updatesError)&&<p role="alert" className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink">{error||updatesError}</p>}
     {connecting&&<OpenFinanceConnect mode={mode} contactEmail={data.contactEmail} onClose={()=>{setConnecting(false);void load();}}/>}
-    <OpenFinanceResources data={data} mode={mode} busy={!!busy} onDisconnect={id=>void action(id,"revoke")}/>
+    <OpenFinanceResources data={data} mode={mode} busy={!!busy} onDisconnect={id=>void action(id,"revoke")} onRemove={id=>void action(id,"remove")}/>
     {pending.length>0&&<section className="z-card"><h3 className="text-sm font-semibold">Conexões em andamento e tentativas</h3><p className="mt-1 text-xs text-muted">Continue a autorização ou remova uma tentativa que não concluiu.</p>{pending.map(renderConnection)}</section>}
     {(active.length>0||archived.length>0)&&<details className="z-finance-details"><summary>Permissões e histórico de conexões <span className="text-xs font-normal text-muted">{active.length} ativa(s)</span></summary><div className="mt-3 rounded-2xl border border-line bg-surface p-4"><p className="text-xs leading-5 text-muted">Consulte as autorizações e o histórico. Desconectar interrompe o compartilhamento e preserva os dados recebidos.</p>{active.map(renderConnection)}
       {archived.length>0&&<details className="mt-4 rounded-xl border border-line bg-surface-muted p-4"><summary className="cursor-pointer text-xs font-semibold">Conexões removidas · {archived.length}</summary>{archived.map(renderConnection)}</details>}
