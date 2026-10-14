@@ -28,3 +28,7 @@ active owner/company checks and owner cascade. No live DB or provider is used.
 
 Verification: baseline rejects missing RPC (SQLSTATE42883); migration passes64
 disposable PostgreSQL assertions with no real user/provider data.
+
+Server DAL captures/freeze-validates exact scope, UUID and canonical input before
+awaits; rejects substituted/extra stored fields, conference data and diagnostics.
+RED missing module, GREEN23 focused tests plus lint.
