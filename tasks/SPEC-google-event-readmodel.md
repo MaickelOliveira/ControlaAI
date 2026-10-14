@@ -57,3 +57,10 @@ Focused: `npx vitest run src/lib/google-event-readmodel.test.ts`; lint:
 `npx eslint src/lib/google-event-readmodel.ts src/lib/google-event-readmodel.test.ts`.
 Parent performs full test/build/type/security checks and independent review before
 live integration. Never apply fixture DDL to production or infer legacy provenance.
+
+Verification:27 focused server tests and101 disposable PostgreSQL assertions pass.
+The SQL fixture proves unchanged rows/credentials/ACLs through migration and
+preserving rollback, private-only function execution, both row schemas, exact
+creation/command revisions with desired local fields, pending Meet/cancellation,
+legacy/public-ID history without inferred provenance, archive/foreign visibility,
+bounded limits and racing read/prepare consistency. No N queries or provider call.
