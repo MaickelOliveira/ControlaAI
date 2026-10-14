@@ -55,6 +55,23 @@ it("stages all inbound activity before saving or acknowledging a batch",async()=
  await settled(()=>expect(m.finish).toHaveBeenCalledTimes(2));
 });
 
+it("saves messages from every entry and change before acknowledging the webhook",async()=>{
+ const req=new NextRequest("https://zelo.test/api/webhook/waba",{
+  method:"POST",headers:{"x-hub-signature-256":`sha256=${"0".repeat(64)}`},
+  body:JSON.stringify({entry:[
+   {changes:[{value:{messages:[textMessage("first")],contacts:[{profile:{name:"Primeiro contato"}}]}},
+    {value:{statuses:[{id:"status",status:"delivered"}]}},
+    {value:{messages:[textMessage("second")],contacts:[{profile:{name:"Segundo contato"}}]}}]},
+   {changes:[{value:{messages:[textMessage("third")],contacts:[{profile:{name:"Terceiro contato"}}]}}]},
+  ]}),
+ });
+ expect((await POST(req)).status).toBe(200);
+ expect(m.enqueue).toHaveBeenCalledTimes(3);
+ expect(m.enqueue).toHaveBeenNthCalledWith(1,[textMessage("first")],"Primeiro contato",expect.any(Number));
+ expect(m.enqueue).toHaveBeenNthCalledWith(2,[textMessage("second")],"Segundo contato",expect.any(Number));
+ expect(m.enqueue).toHaveBeenNthCalledWith(3,[textMessage("third")],"Terceiro contato",expect.any(Number));
+});
+
 it("releases staged activity and returns 503 if background work cannot be registered",async()=>{
  m.after.mockImplementationOnce(()=>{throw Error("PRIVATE_SCHEDULER_FAILURE");});
  const response=await POST(request([textMessage()]));

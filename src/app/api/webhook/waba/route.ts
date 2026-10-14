@@ -74,36 +74,43 @@ export async function POST(req: NextRequest) {
     try { body = rawBody ? JSON.parse(rawBody) : null; } catch { body = null; }
     if (!body) return NextResponse.json({ ok: true });
 
-    const value = body?.entry?.[0]?.changes?.[0]?.value;
-    const messages = value?.messages as WabaMessage[] | undefined;
-
-    if (!messages?.length) {
-      const statuses = value?.statuses as WabaStatus[] | undefined;
-      for (const st of statuses || []) {
-        if (st.status === "failed") {
-          console.error("[webhook/waba] Falha na entrega");
-        } else {
-          console.log("[webhook/waba] Atualização de status recebida");
+    const groups: Array<{messages: WabaMessage[]; contactName?: string}> = [];
+    for (const entry of Array.isArray(body.entry) ? body.entry : []) {
+      for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
+        const value = change?.value;
+        if (value?.messages != null && !Array.isArray(value.messages)) {
+          return NextResponse.json({ error: "Temporariamente indisponível" }, { status: 503 });
+        }
+        if (value?.messages?.length) {
+          groups.push({messages: value.messages as WabaMessage[], contactName: value.contacts?.[0]?.profile?.name});
+        }
+        const statuses = value?.statuses as WabaStatus[] | undefined;
+        for (const st of Array.isArray(statuses) ? statuses : []) {
+          if (st.status === "failed") console.error("[webhook/waba] Falha na entrega");
+          else console.log("[webhook/waba] Atualização de status recebida");
         }
       }
-      return NextResponse.json({ ok: true }); // status update, não mensagem
     }
-
-    const contact = value?.contacts?.[0];
-    const contactName = contact?.profile?.name as string | undefined;
+    if (!groups.length) return NextResponse.json({ ok: true });
 
     // Registra atividade e salva a mensagem antes do ACK. Se qualquer etapa
     // falhar, a Meta pode tentar novamente sem perder o conteúdo original.
     const receivedAt=Date.now();
     const leases: Array<WhatsAppActivityLease | undefined> = [];
     try {
-      for (const msg of messages) leases.push(msg.from && /^\d{8,20}$/.test(msg.from.replace(/\D/g,"")) ? await beginWhatsAppActivity(msg.from,"inbound") : undefined);
+      for (const group of groups) for (const msg of group.messages) {
+        leases.push(msg.from && /^\d{8,20}$/.test(msg.from.replace(/\D/g,"")) ? await beginWhatsAppActivity(msg.from,"inbound") : undefined);
+      }
     } catch {
       await Promise.allSettled(leases.map(lease=>lease?.finish()));
       return NextResponse.json({error:"Temporariamente indisponível"},{status:503});
     }
     try {
-      await enqueueWabaMessages(messages, contactName, receivedAt);
+      let offset = 0;
+      for (const group of groups) {
+        await enqueueWabaMessages(group.messages, group.contactName, receivedAt + offset);
+        offset += group.messages.length;
+      }
     } catch {
       await Promise.allSettled(leases.map(lease => lease?.finish()));
       return NextResponse.json({ error: "Temporariamente indisponível" }, { status: 503 });
