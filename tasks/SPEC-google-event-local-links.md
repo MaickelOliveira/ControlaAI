@@ -65,3 +65,22 @@ error codes. No new dependency, invitation, account revocation or legacy inferen
 3. Migrate web/WhatsApp/jobs and settings together; explicit per-owner activation
    preserves the legacy choice. Activated owners never fall back to global tokens.
    Account selection/Google consent belongs to the human in settings.
+
+## Server local adapter
+
+`google-event-local-store.ts` captures verified scope, logical UUID, canonical
+payload and local input before its first await. Its input accepts only kind,
+source, payload and attendees; no body owner/company/provider IDs. Local metadata
+is copied/frozen and capped at 8KiB to leave room for JSONB escaping. A Meet's
+provider guests must exactly match local attendees with an email (displayName=name);
+phone-only contacts remain local. The canonical payload validator verifies emails.
+Appointment kind does not accept unused local attendee metadata.
+
+Private history loading uses only the scoped linkage RPC. Identical prepare replay
+compares linkage metadata and immutable creation payload before any configuration
+or binding read. Missing creation is corrupt storage, not permission to recreate.
+A new prepare loads the configured client and exact binding, then uses the atomic
+RPC and validates returned link/payload/original target. No partial legacy helper,
+provider operation, raw diagnostic, automatic CAS retry or production consumer is
+installed. The returned frozen allowlist contains local IDs/kind/source/attendees;
+it is private server data, not an effect authorization or public status serializer.
