@@ -1,11 +1,14 @@
 import { randomUUID } from "crypto";
+import type {GoogleSyncMetadata} from "./agenda";
 import { getSupabase } from "./supabase";
 
 export type MeetAttendee = { name: string; phone?: string; email?: string };
 
 export type MeetStatus = "scheduled" | "ended" | "cancelled";
 
-export type Meet = {
+export type Meet = Partial<GoogleSyncMetadata> & {
+  companyId?: string;
+  workspaceLegacy?: boolean;
   id: string;
   userId: string;
   title: string;
