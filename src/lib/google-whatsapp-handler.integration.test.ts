@@ -96,3 +96,19 @@ it("actual connection wiring consults private scoped settings without provider/g
  await runWithCompanyContext(async()=>{setCompanyContext(m.scope);expect(await real.loadGoogleWhatsAppConnected(owner)).toBe(true);expect(m.settings).toHaveBeenCalledWith(m.scope);m.settings.mockImplementationOnce(async()=>{setCompanyContext({...m.scope,mode:"personal"});return {connected:true};});await expect(real.loadGoogleWhatsAppConnected(owner)).rejects.toThrow("GOOGLE_WHATSAPP_WORKSPACE_CHANGED");});
  expect(m.global).not.toHaveBeenCalled();expect(m.globalMeet).not.toHaveBeenCalled();
 });
+it("actual Agenda creation passes the authenticated source identity and acknowledges before clearing",async()=>{
+ m.process.mockResolvedValue({intent:"agenda_create",confidence:.99,agendaData:{title:"Fixture create",startDate:"2026-10-20",startTime:"12:00"}});await receive("agende Fixture create amanhã às12","fixture-agenda-create");
+ expect(m.api.createWorkspaceAppointment).toHaveBeenCalledExactlyOnceWith(m.scope,await mutationId("fixture-agenda-create"),expect.objectContaining({title:"Fixture create",startAt:"2026-10-20T15:00:00.000Z"}),"whatsapp");expect(m.legacy).not.toHaveBeenCalled();expect(m.global).not.toHaveBeenCalled();expect(saved).toBeNull();expect(m.clear.mock.invocationCallOrder.at(-1)).toBeGreaterThan(m.send.mock.invocationCallOrder.at(-1)!);
+});
+it("actual Agenda question keeps the original identity through a later time answer",async()=>{
+ m.process.mockResolvedValue({intent:"agenda_create",confidence:.99,agendaData:{title:"Fixture create",startDate:"2026-10-20"}});await receive("agende Fixture create amanhã","fixture-agenda-question");expect(saved).toMatchObject({type:"slot_fill",missing:["startTime"]});expect(m.api.createWorkspaceAppointment).not.toHaveBeenCalled();
+ await receive("14:30","fixture-agenda-answer");expect(m.api.createWorkspaceAppointment).toHaveBeenCalledWith(m.scope,await mutationId("fixture-agenda-question"),expect.objectContaining({startAt:"2026-10-20T17:30:00.000Z"}),"whatsapp");expect(saved).toBeNull();expect(m.legacy).not.toHaveBeenCalled();
+});
+it("actual Agenda response loss is explained safely and explicit retry retains exact source UUID/payload",async()=>{
+ m.process.mockResolvedValue({intent:"agenda_create",confidence:.99,agendaData:{title:"Fixture create",startDate:"2026-10-20",startTime:"12:00"}});m.api.createWorkspaceAppointment.mockRejectedValueOnce(Error("GOOGLE_EVENT_STORAGE_UNAVAILABLE"));await receive("agende Fixture create amanhã às12","fixture-agenda-retry");const original=m.api.createWorkspaceAppointment.mock.calls[0];expect(saved).toMatchObject({type:"google_agenda_commit",receipts:[]});expect(reply()).toContain("tentar novamente");
+ await receive("tentar novamente","fixture-agenda-new-response");expect(m.api.createWorkspaceAppointment.mock.calls[1]).toEqual(original);expect(saved).toBeNull();expect(m.legacy).not.toHaveBeenCalled();
+});
+it("a failed owner acknowledgement retains a confirmed receipt and retries only an authorized read",async()=>{
+ m.process.mockResolvedValue({intent:"agenda_create",confidence:.99,agendaData:{title:"Fixture create",startDate:"2026-10-20",startTime:"12:00"}});m.send.mockRejectedValueOnce(Error("FIXTURE_ACK_LOST"));await receive("agende Fixture create amanhã às12","fixture-agenda-ack");const id=await mutationId("fixture-agenda-ack");expect(saved).toMatchObject({type:"google_agenda_commit",receipts:[{clientMutationId:id,recordId:id}]});
+ m.api.getWorkspaceAppointment.mockResolvedValue({...record,id,title:"Fixture create"});await receive("tentar novamente","fixture-agenda-ack-reply");expect(m.api.createWorkspaceAppointment).toHaveBeenCalledOnce();expect(m.api.getWorkspaceAppointment).toHaveBeenCalledWith(m.scope,id);expect(saved).toBeNull();
+});

@@ -66,5 +66,25 @@ replays. Pending links receive no invitation and no later notification automatio
 is added. A partially completed batch/failed invitation may require the user to
 share a ready link from Agenda; this journal confirms records, not delivery.
 
+Agenda slot filling reserves an unattempted creation plan from the original
+authenticated envelope and stable item ordinal before any question. Only explicit
+slot answers fill its fields; model metadata and follow-up message IDs cannot
+replace identity or destination. Completing a single form or a batch validates
+every reserved workspace, freezes the exact service input and persists the commit
+before creation. Service/read/owner-ack failures retain the same attempted batch
+and confirmed receipts. Human retry reads confirmed rows and repeats only the
+original unacknowledged operation. Old forms lacking reservations fail closed.
+The existing all-day fallback, timezone/repeat formats and automatic Agenda
+reminders remain. The existing explicit local reminder branch is retained for
+callers that supply an offset; receipt replay skips it rather than claiming a new
+delivery journal. A failed explicit reminder can require a separate reminder
+request, while the already saved appointment remains available in Agenda.
+
+The actual WhatsApp handler and slot engine invoke no global Google connection,
+calendar creation, update, deletion or Meet creation helper. New Google effects
+use only the approved service and confirmed participant workspace, with the fixed
+`whatsapp` source. Plain creation without a scoped binding stays local; it never
+falls back to an old global Google account.
+
 Tests use fictitious participants, contexts, IDs and services only. No WhatsApp,
 Google, invitation or customer storage operation is used for verification.

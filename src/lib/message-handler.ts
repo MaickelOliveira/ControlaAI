@@ -56,7 +56,7 @@ import type { Appointment } from "@/lib/agenda";
 import {googleWhatsAppConfirmation,googleWhatsAppReadyMeetLink,type GoogleWhatsAppRecord} from "./google-whatsapp-consumer";
 import {loadGoogleWhatsAppConsumer,loadGoogleWhatsAppConnected} from "./google-whatsapp-service";
 import {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
-import {googleWhatsAppMessageUUID} from "./google-whatsapp-message";
+import {googleWhatsAppMessageUUID,googleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
 import {googleAgendaSyncVersion} from "./google-agenda-client-contract";
 import type {GoogleWhatsAppReceipt} from "./google-whatsapp-commit";
 import { formatReminderOffset, isAgendaReminderTarget, isStandaloneAppointmentReminderRequest, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
@@ -2754,9 +2754,17 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // Precisa estar depois de getPendingAction e antes de processMessage:
     // uma resposta como "12" ou "dia 10" nunca pode chegar ao classificador.
     if (pending?.type === "slot_fill" && pending.userId === user.id) {
-      const out = await runSlotFillTurn(pending, messageText, { user, userId: user.id, phone: from, mode });
-      if (out.reply) await wppSend(from, out.reply);
-      if (!out.fallThrough) return;
+      try {
+        const out = await runSlotFillTurn(pending, messageText, { user, userId: user.id, phone: from, mode });
+        if (out.reply) {
+          await wppSend(from, out.reply);
+          if(out.googleCommit) await clearPendingAction(from);
+        }
+        if (!out.fallThrough) return;
+      }catch(error){
+        if(pending.intent!=="agenda_create")throw error;
+        await wppSend(from,googleWhatsAppFailure(error,user.locale));return;
+      }
       // fallThrough → usuário mudou de assunto; segue o turno normalmente com esta mensagem
     }
 
@@ -5067,8 +5075,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "agenda_create": {
         const agendaAis = ai.agendaItems?.length ? ai.agendaItems.map(agendaData => ({ ...ai, agendaData, agendaItems: undefined })) : [ai];
-        const { reply: agendaReply } = await beginBatchSlotFill("agenda_create", agendaAis, { user, userId: user.id, phone: from, mode }, messageText);
-        await wppSend(from, agendaReply);
+        try{
+          const out = await beginBatchSlotFill("agenda_create", agendaAis, { user, userId: user.id, phone: from, mode, googleMessage:googleWhatsAppProviderEnvelope(msg.channel,msg.providerMessageId) }, messageText);
+          await wppSend(from, out.reply);
+          if(out.googleCommit) await clearPendingAction(from);
+        }catch(error){await wppSend(from,googleWhatsAppFailure(error,user.locale));}
         break;
       }
 
