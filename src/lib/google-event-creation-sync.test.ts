@@ -106,7 +106,7 @@ it("preserves all-day exclusive dates and none invitation setting with no guests
 });
 it("exposes only a fixed failure for invalid provider Meet URLs, no raw diagnostics",async()=>{
  transport.mockImplementation(async options=>response({...owned(),conferenceData:{...owned().conferenceData,entryPoints:[{entryPointType:"video",uri:"https://evil.example/raw"}]}},options) as never);
- const result=await synchronizeGoogleEventCreation(scope,eventId);expect(result.failureCode).toBe("CONFERENCE_FAILED");expect(JSON.stringify(result)).not.toContain("evil");expect(result.meetLink).toBeNull();
+ const result=await synchronizeGoogleEventCreation(scope,eventId);expect(result.failureCode).toBe("TEMPORARY");expect(result.state).toBe("queued");expect(JSON.stringify(result)).not.toContain("evil");expect(result.meetLink).toBeNull();
 });
 it("never inserts after a200 null response, which is not an authorized404",async()=>{
  transport.mockImplementation(async options=>response(options.method==="GET"?null:owned(),options) as never);
@@ -114,13 +114,19 @@ it("never inserts after a200 null response, which is not an authorized404",async
 });
 it.each(["malformed",[null]])("keeps verified known creation when conference entry points are malformed (%s)",async points=>{
  transport.mockImplementation(async options=>response({...owned(),conferenceData:{...owned().conferenceData,entryPoints:points}},options) as never);
- expect((await synchronizeGoogleEventCreation(scope,eventId)).failureCode).toBe("CONFERENCE_FAILED");expect(current.remoteKnown).toBe(true);expect(current.etag).toBe('"fixture-etag"');
+ expect((await synchronizeGoogleEventCreation(scope,eventId)).failureCode).toBe("TEMPORARY");expect(current.remoteKnown).toBe(true);expect(current.etag).toBe('"fixture-etag"');
  transport.mockRejectedValue(failure(404));await synchronizeGoogleEventCreation(scope,eventId);expect(transport.mock.calls.filter(([v])=>v.method==="POST")).toHaveLength(0);
 });
 it("accepts a completed signed Google Meet when the provider omits optional createRequest",async()=>{
  const complete=owned(),conferenceData={conferenceSolution:complete.conferenceData.conferenceSolution,entryPoints:complete.conferenceData.entryPoints};
  transport.mockImplementation(async options=>response({...complete,conferenceData},options) as never);
  expect((await synchronizeGoogleEventCreation(scope,eventId)).state).toBe("succeeded");expect(transport).toHaveBeenCalledTimes(1);
+});
+it.each(["missing","mismatched_failure","unknown_status"])("keeps ambiguous creation conference %s recoverable with original IDs and no new invitation",async variant=>{
+ const event=owned(),conferenceData=variant==="missing"?null:{...event.conferenceData,createRequest:{requestId:variant==="mismatched_failure"?"other-fictitious-request":intent.conferenceRequestId,status:{statusCode:variant==="mismatched_failure"?"failure":"unrecognized"}}};
+ transport.mockImplementation(async options=>response({...event,conferenceData},options) as never);
+ expect((await synchronizeGoogleEventCreation(scope,eventId)).failureCode).toBe("TEMPORARY");expect(current.state).toBe("queued");expect(current.remoteKnown).toBe(true);expect(current.etag).toBe('"fixture-etag"');
+ transport.mockRejectedValue(failure(404));expect((await synchronizeGoogleEventCreation(scope,eventId)).failureCode).toBe("REMOTE_MISSING");expect(transport.mock.calls.every(([v])=>v.method==="GET")).toBe(true);
 });
 it("denies a known cancelled/missing local record before credential runtime, claiming or provider work",async()=>{
  deps.active.mockRejectedValue(Error("GOOGLE_EVENT_LOCAL_INACTIVE"));

@@ -82,6 +82,17 @@ it("retains an ambiguous conference request ID and terminal definitive failure",
  transport.mockImplementation(async options=>{if(options.method==="GET")return response(owned(applied,"failure"),options);applied=true;throw Error("fictitious lost conference response");});
  expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("CONFERENCE_FAILED");const count=transport.mock.calls.length;await synchronizeGoogleEventCommand(scope,eventId,operationId);expect(transport).toHaveBeenCalledTimes(count);
 });
+it.each(["missing","mismatched_failure","unknown_status","bad_entries"])("retains ambiguous command conference %s without granting a new conference identity",async variant=>{
+ current={...current,kind:"conference",payload:null,localAttendees:null,conferenceRequestId:googleEventCommandIdentity(scope,eventId,operationId)};
+ const stable=current.conferenceRequestId;
+ transport.mockImplementation(async options=>{const event=owned(options.method==="PATCH");if(options.method==="GET")return response(event,options);
+  const original=(event as ReturnType<typeof owned>&{conferenceData:Record<string,unknown>}).conferenceData;
+  const conferenceData=variant==="missing"?null:variant==="bad_entries"?{...original,entryPoints:[null]}:{...original,createRequest:{requestId:variant==="mismatched_failure"?"other-fictitious-request":stable,status:{statusCode:variant==="mismatched_failure"?"failure":"unrecognized"}}};
+  return response({...event,conferenceData},options);
+ });
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("TEMPORARY");expect(current.state).toBe("queued");expect(current.etag).toBe('"after"');
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("TEMPORARY");expect(current.conferenceRequestId).toBe(stable);expect(transport.mock.calls.map(([v])=>v.method)).toEqual(["GET","PATCH","GET"]);
+});
 it.each([null,{},[]])("never treats malformed successful response as missing or effect authority",async value=>{
  transport.mockImplementation(async options=>response(value,options));expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("FOREIGN_EVENT");expect(transport).toHaveBeenCalledTimes(1);
 });
