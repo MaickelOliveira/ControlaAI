@@ -35,7 +35,7 @@ export async function GET() {
     waba: {
       phoneNumberId: cfg.waba?.phoneNumberId ?? "",
       accessToken: cfg.waba?.accessToken ? "••••••••" : "",
-      verifyToken: cfg.waba?.verifyToken ?? "",
+      verifyToken: cfg.waba?.verifyToken ? "••••••••" : "",
       appSecret: cfg.waba?.appSecret ? "••••••••" : "",
     },
     geminiApiKey: cfg.geminiApiKey ? "••••••••" : "",
@@ -67,7 +67,7 @@ export async function PUT(req: NextRequest) {
     waba: {
       phoneNumberId: body.waba?.phoneNumberId ?? current.waba?.phoneNumberId,
       accessToken: !isMasked(body.waba?.accessToken) && body.waba?.accessToken ? body.waba.accessToken : current.waba?.accessToken,
-      verifyToken: body.waba?.verifyToken ?? current.waba?.verifyToken,
+      verifyToken: !isMasked(body.waba?.verifyToken) && body.waba?.verifyToken ? body.waba.verifyToken : current.waba?.verifyToken,
       appSecret: !isMasked(body.waba?.appSecret) && body.waba?.appSecret ? body.waba.appSecret : current.waba?.appSecret,
     },
     geminiApiKey: !isMasked(body.geminiApiKey) && body.geminiApiKey ? body.geminiApiKey : current.geminiApiKey,

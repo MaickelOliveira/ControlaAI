@@ -212,7 +212,7 @@ export default function AdminWhatsappPage() {
             </div>
             <div>
               <label className="block text-[11px] text-subtle mb-1">Verify Token</label>
-              <input value={cfg.waba.verifyToken} onChange={e => setCfg(c => ({ ...c, waba: { ...c.waba, verifyToken: e.target.value } }))}
+              <input type="password" value={cfg.waba.verifyToken} onChange={e => setCfg(c => ({ ...c, waba: { ...c.waba, verifyToken: e.target.value } }))}
                 placeholder="zelo-webhook-verify"
                 className="w-full bg-surface-muted border border-line text-ink rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 transition" />
               <p className="text-[11px] text-subtle mt-1">Escolha um valor qualquer e use o mesmo ao cadastrar o webhook no Meta Business</p>
