@@ -112,3 +112,12 @@ malformed or unlinked/mismatched context fails before RPC. The creation store's
 finish uses only the linked atomic wrapper; it cannot fall back to private-only
 finish on local refusal. Existing claim/retry contracts remain unchanged. SDK guard
 integration follows before any consumer activation.
+
+The dormant real-SDK creation worker now invokes the active local-record guard
+before credential runtime and the leased SQL guard immediately before every
+Calendar GET/insert/409 reconciliation. It retains the private lease/payload and
+binding checks; local refusal aborts without a provider failure transition or
+another invitation. Its finish uses the linked atomic wrapper. Tests use the real
+SDK with a fictitious transport and prove cancellation before runtime, between GET
+and INSERT, local lease refusal and refused post-provider completion. Terminal
+history status remains a read without another effect. No consumer is activated yet.

@@ -1,8 +1,9 @@
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {google} from "googleapis";
-const deps=vi.hoisted(()=>({load:vi.fn(),claim:vi.fn(),finish:vi.fn(),runtime:vi.fn(),binding:vi.fn()}));
+const deps=vi.hoisted(()=>({load:vi.fn(),claim:vi.fn(),finish:vi.fn(),runtime:vi.fn(),binding:vi.fn(),active:vi.fn(),localLease:vi.fn()}));
 vi.mock("server-only",()=>({}));vi.mock("./google-event-creation-store",()=>({loadGoogleEventCreation:deps.load,claimGoogleEventCreation:deps.claim,finishGoogleEventCreation:deps.finish}));
 vi.mock("./google-workspace-runtime",()=>({withGoogleWorkspaceClient:deps.runtime}));vi.mock("./google-binding-store",()=>({loadGoogleBinding:deps.binding}));
+vi.mock("./google-event-local-store",()=>({assertGoogleLocalEventActive:deps.active,assertGoogleLocalEventLease:deps.localLease}));
 import {googleEventCreationPayload} from "./google-event-payload";
 import {googleEventRetryIdentity} from "./google-event-policy";
 import {googleEventProviderMarkers} from "./google-event-marker";
@@ -25,6 +26,7 @@ beforeEach(()=>{
  auth=new google.auth.OAuth2(clientId);auth.setCredentials({access_token:"fictitious-test-access",expiry_date:now+3600_000});auth.eagerRefreshThresholdMillis=0;auth.forceRefreshOnFailure=false;
  transport.mockReset().mockImplementation(async options=>response(owned(),options));vi.spyOn(auth.transporter,"request").mockImplementation(transport as never);
  deps.load.mockReset().mockImplementation(async()=>current);deps.binding.mockReset().mockResolvedValue(binding);
+ deps.active.mockReset().mockResolvedValue(undefined);deps.localLease.mockReset().mockResolvedValue(undefined);
  deps.runtime.mockReset().mockImplementation(async(_scope,_reference,callback)=>callback(auth,binding));
  deps.claim.mockReset().mockImplementation(async()=>{current={...current,state:"running",attemptVersion:String(BigInt(current.attemptVersion)+BigInt(1)),roundAttempts:current.roundAttempts+1,wasAttempted:true,lease:{id:"ffffffff-ffff-4fff-8fff-fffffffffff1",expiresAt:new Date(now+60_000).toISOString(),bindingVersion:"7",insertAllowed:current.authorizedBindingVersion==="7"&&!current.remoteKnown}};return current;});
  deps.finish.mockReset().mockImplementation(async(_scope,_id,_binding,_client,_version,_lease,outcome:GoogleEventCreationOutcome)=>{current={...current,state:outcome.result==="retry"?"queued":outcome.result,lease:null,remoteKnown:current.remoteKnown||outcome.remoteKnown,etag:outcome.etag??current.etag,meetLink:outcome.meetLink,failureCode:outcome.failureCode};return current;});
@@ -119,4 +121,26 @@ it("accepts a completed signed Google Meet when the provider omits optional crea
  const complete=owned(),conferenceData={conferenceSolution:complete.conferenceData.conferenceSolution,entryPoints:complete.conferenceData.entryPoints};
  transport.mockImplementation(async options=>response({...complete,conferenceData},options) as never);
  expect((await synchronizeGoogleEventCreation(scope,eventId)).state).toBe("succeeded");expect(transport).toHaveBeenCalledTimes(1);
+});
+it("denies a known cancelled/missing local record before credential runtime, claiming or provider work",async()=>{
+ deps.active.mockRejectedValue(Error("GOOGLE_EVENT_LOCAL_INACTIVE"));
+ await expect(synchronizeGoogleEventCreation(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");
+ expect(deps.runtime).not.toHaveBeenCalled();expect(deps.claim).not.toHaveBeenCalled();expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();
+});
+it("requires private local leased authorization before every Calendar GET/insert/reconciliation",async()=>{
+ let calls=0;transport.mockImplementation(async options=>{calls++;expect(deps.localLease).toHaveBeenCalledTimes(calls);if(calls===1)throw failure(404);if(calls===2)throw failure(409);return response(owned(),options) as never;});
+ expect((await synchronizeGoogleEventCreation(scope,eventId)).state).toBe("succeeded");expect(deps.active).toHaveBeenCalledWith(scope,eventId);expect(deps.localLease).toHaveBeenCalledTimes(3);
+ for(const [selected,claimed,runtime,configured] of deps.localLease.mock.calls){expect(selected).toEqual(scope);expect(claimed.intent.calendarId).toBe(intent.calendarId);expect(runtime).toEqual(binding);expect(configured).toBe(clientId);}
+});
+it("stops before insert when local cancellation occurs after the first GET",async()=>{
+ transport.mockImplementation(async()=>{deps.localLease.mockRejectedValue(Error("GOOGLE_EVENT_LOCAL_INACTIVE"));throw failure(404);});
+ await expect(synchronizeGoogleEventCreation(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).toHaveBeenCalledTimes(1);expect(deps.finish).not.toHaveBeenCalled();
+});
+it("does not turn a refused local preflight into a provider failure or another invitation",async()=>{
+ deps.localLease.mockRejectedValue(Error("GOOGLE_EVENT_LOCAL_CONFLICT"));
+ await expect(synchronizeGoogleEventCreation(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();
+});
+it("does not report provider success after local cancellation refuses the atomic finish",async()=>{
+ deps.finish.mockRejectedValue(Error("GOOGLE_EVENT_LOCAL_INACTIVE"));
+ await expect(synchronizeGoogleEventCreation(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).toHaveBeenCalledTimes(1);expect(deps.finish).toHaveBeenCalledTimes(1);
 });

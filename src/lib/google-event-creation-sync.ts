@@ -5,6 +5,7 @@ import {withGoogleWorkspaceClient} from "./google-workspace-runtime";
 import {googleEventOperationTarget,googleEventRetryIdentity} from "./google-event-policy";
 import {assertGoogleEventProviderMarkers,googleEventProviderMarkers} from "./google-event-marker";
 import {claimGoogleEventCreation,finishGoogleEventCreation,loadGoogleEventCreation,type GoogleEventCreation,type GoogleEventCreationOutcome} from "./google-event-creation-store";
+import {assertGoogleLocalEventActive,assertGoogleLocalEventLease} from "./google-event-local-store";
 import type {GoogleWorkspace} from "./google-workspace-policy";
 export type GoogleEventCreationStatus=Readonly<{eventId:string;state:GoogleEventCreation["state"];meetLink:string|null;failureCode:GoogleEventCreation["failureCode"]}>;
 class CreationGuardError extends Error{}
@@ -18,13 +19,14 @@ function failed(creation:GoogleEventCreation,code:NonNullable<GoogleEventCreatio
  return {result:"failed",remoteKnown:creation.remoteKnown,etag:creation.etag,meetLink:null,failureCode:code};
 }
 function temporary(creation:GoogleEventCreation):GoogleEventCreationOutcome{return {...failed(creation,"TEMPORARY"),result:"retry"};}
-async function guard(scope:GoogleWorkspace,creation:GoogleEventCreation,runtime:GoogleBinding):Promise<void>{
+async function guard(scope:GoogleWorkspace,creation:GoogleEventCreation,runtime:GoogleBinding,clientId:string):Promise<void>{
  try{
   const current=await loadGoogleEventCreation(scope,creation.intent.eventId),binding=await loadGoogleBinding(scope);
   googleEventOperationTarget(scope,creation.intent.eventId,creation.intent,binding);
   if(!current||!current.lease||!creation.lease||current.state!=="running"||current.attemptVersion!==creation.attemptVersion
    ||current.lease.id!==creation.lease.id||current.payloadFingerprint!==creation.payloadFingerprint||current.lease.bindingVersion!==runtime.version
    ||binding?.version!==runtime.version||Date.parse(current.lease.expiresAt)<=Date.now()+16000)throw Error();
+  await assertGoogleLocalEventLease(scope,creation,runtime,clientId);
  }catch{throw new CreationGuardError();}
 }
 function body(creation:GoogleEventCreation,markers:ReturnType<typeof googleEventProviderMarkers>):calendar_v3.Schema$Event{
@@ -72,13 +74,14 @@ export async function synchronizeGoogleEventCreation(scope:GoogleWorkspace,event
   const pending=await loadGoogleEventCreation(selected,id);if(!pending)throw Error();
   if(pending.state==="succeeded"||pending.state==="failed"||(pending.lease&&Date.parse(pending.lease.expiresAt)>Date.now()))return status(pending);
   if(pending.roundAttempts>=10)return Object.freeze({...status(pending),state:"failed",failureCode:"ATTEMPTS_EXHAUSTED"});
+  await assertGoogleLocalEventActive(selected,id);
   const markers=googleEventProviderMarkers(pending.intent,pending.payloadFingerprint,pending.payload.withMeet);
   return await withGoogleWorkspaceClient(selected,{bindingId:pending.intent.bindingId,grantId:pending.intent.grantId},async(auth,binding)=>{
    if(typeof auth._clientId!=="string")throw Error();const clientId=auth._clientId;
    const claimed=await claimGoogleEventCreation(selected,id,binding,clientId,pending.attemptVersion);
    if(!claimed.lease||claimed.payloadFingerprint!==pending.payloadFingerprint||JSON.stringify(claimed.payload)!==JSON.stringify(pending.payload))throw Error();
    const calendar=google.calendar({version:"v3",auth});
-   const get=async()=>{await guard(selected,claimed,binding);return (await calendar.events.get({calendarId:claimed.intent.calendarId,eventId:claimed.intent.remoteEventId},OPTIONS)).data;};
+   const get=async()=>{await guard(selected,claimed,binding,clientId);return (await calendar.events.get({calendarId:claimed.intent.calendarId,eventId:claimed.intent.remoteEventId},OPTIONS)).data;};
    let outcome:GoogleEventCreationOutcome;
    try{
     let event:calendar_v3.Schema$Event|null,missing=false;
@@ -87,7 +90,7 @@ export async function synchronizeGoogleEventCreation(scope:GoogleWorkspace,event
      if(claimed.remoteKnown)outcome=failed(claimed,"REMOTE_MISSING");
      else if(!claimed.lease.insertAllowed)outcome=failed(claimed,"CONNECTION_CHANGED");
      else{
-      await guard(selected,claimed,binding);
+      await guard(selected,claimed,binding,clientId);
       try{event=(await calendar.events.insert({calendarId:claimed.intent.calendarId,conferenceDataVersion:claimed.payload.withMeet?1:0,
        sendUpdates:claimed.payload.attendees.length?"all":"none",requestBody:body(claimed,markers)},OPTIONS)).data;}
       catch(error){if(httpStatus(error)!==409)throw error;event=await get();}
