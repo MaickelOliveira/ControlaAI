@@ -152,7 +152,12 @@ export async function updateAppointment(
 ): Promise<Appointment | null> {
   const current = await getAppointmentById(id, userId);
   if (!current) return null;
-  if (current.calendarEventId) {
+  const calendarFields = ["title", "description", "location", "startAt", "endAt", "allDay", "repeat"] as const;
+  const calendarChanged = calendarFields.some(key => patch[key] !== undefined && patch[key] !== current[key]);
+  const cancellation = patch.status === "cancelled" && current.status !== "cancelled";
+  // Reminders, minutes, completion and provider-result publication stay local.
+  // Jobs may update these fields without acquiring any Google credentials.
+  if (current.calendarEventId && (calendarChanged || cancellation)) {
     const next = { ...current, ...patch };
     try {
       if (next.status === "cancelled") {
