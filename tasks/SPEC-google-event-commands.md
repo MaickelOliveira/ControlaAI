@@ -62,7 +62,7 @@ HTTP. Fixed `GOOGLE_EVENT_COMMAND_CONFLICT` covers stale head/in-progress/forbid
 conference supersession; leased conflicts remain `GOOGLE_EVENT_ATTEMPT_CONFLICT`.
 Metadata carries `mutation_allowed` only inside a running lease; changed binding
 can reconcile a previously attempted command but cannot silently write again.
-The SQL fixture passed200 assertions including real row contention, owner erasure,
+The SQL fixture passed211 assertions including real row contention, owner erasure,
 head races, failed second-row atomicity, cancellation, strict immutable column
 ACLs and preserving rollback. The fixture corrects only its minimal public FK
 setup to match existing production owner-erasure cascades; it uses no real rows.
@@ -88,6 +88,11 @@ Once a pending conference was observed, its verified ETag is sticky evidence;
 even a stale GET lacking the current command marker permits read-only recovery,
 never another conference PATCH. The DELETE header regression asserts outside the
 fake transport so the worker's network-error handling cannot mask an assertion.
+Only the exact matching request's explicit `statusCode='failure'` is definitive.
+Malformed/missing/unknown conference data, mismatched request ID or invalid entry
+points/link remains TEMPORARY with known ETag; recovery retains the original ID.
+SQL rejects fresh IDs after both known ambiguous creation and nondefinitive queued
+or failed conference commands, including exhausted/changed-connection outcomes.
 
 Each slice touches at most five files, passes focused Vitest/lint and is committed
 before dependent work. Parent runs full tests/build/types and independent review.
