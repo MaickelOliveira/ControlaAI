@@ -2,6 +2,15 @@ import {expect,it} from "vitest";
 import {googleAgendaAppointment,googleAgendaAppointments,googleAgendaSyncVersion,safeGoogleMeetHref} from "./google-agenda-client-contract";
 const fixture={id:"11111111-1111-4111-8111-111111111111",title:"Fixture",startAt:"2026-10-14T12:00:00Z",allDay:false,repeat:"none",status:"scheduled",source:"web",createdAt:"2026-10-13T12:00:00Z",googleSyncVersion:"v1:9007199254740993:0:0",googleSyncState:"waiting",googleSyncFailureCode:null,googleMeetPending:true,googleCancellationPending:false,meetLink:""};
 it("keeps exact revisions and safely projects a pending Meet without an empty URL",()=>{const value=googleAgendaAppointment({...fixture,privateCredential:"fixture-secret"});expect(value.googleSyncVersion).toBe(fixture.googleSyncVersion);expect(value.googleMeetPending).toBe(true);expect(safeGoogleMeetHref(value.meetLink)).toBeNull();expect(JSON.stringify(value)).not.toContain("fixture-secret");expect(Object.isFrozen(value)).toBe(true);});
+it("loads maximum canonical titles and a prefixed Meet title together without rejecting the agenda",()=>{
+ const canonical="a".repeat(512),meet=`🎥 ${canonical}`;expect(meet).toHaveLength(515);
+ const records=googleAgendaAppointments([{...fixture,title:canonical},{...fixture,id:"22222222-2222-4222-8222-222222222222",title:meet}]);
+ expect(records.map(record=>record.title)).toEqual([canonical,meet]);
+});
+it("permits bounded historical title values while keeping an upper response bound",()=>{
+ expect(googleAgendaAppointment({...fixture,title:"a".repeat(2048)}).title).toHaveLength(2048);
+ expect(()=>googleAgendaAppointment({...fixture,title:"a".repeat(2049)})).toThrow("AGENDA_RESPONSE_INVALID");
+});
 it.each(["v1:01:0:0","v2:1:0:0","v1:9223372036854775808:0:0",{},1])("rejects malformed or inexact versions %#",version=>expect(()=>googleAgendaSyncVersion(version)).toThrow());
 it("accepts local/legacy history only with null version and no pending effects",()=>{for(const state of ["local","legacy"]){expect(googleAgendaAppointment({...fixture,googleSyncVersion:null,googleSyncState:state,googleMeetPending:false}).googleSyncVersion).toBeNull();expect(()=>googleAgendaAppointment({...fixture,googleSyncState:state})).toThrow();}});
 it("keeps only Google cancellation work visible among cancelled records",()=>{const pending={...fixture,id:"22222222-2222-4222-8222-222222222222",status:"cancelled",googleCancellationPending:true,googleSyncState:"failed",googleSyncFailureCode:"TEMPORARY"};expect(googleAgendaAppointments([fixture,pending,{...fixture,id:"33333333-3333-4333-8333-333333333333",status:"cancelled"}])).toHaveLength(2);});
