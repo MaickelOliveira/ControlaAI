@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import { randomUUID } from "crypto";
-import { getSelectedCalendar, getValidClient } from "./google-oauth";
+import { assertLegacyGoogleAllowed, getSelectedCalendar, getValidClient } from "./google-oauth";
 import type { MeetAttendee } from "./meets";
 
 export type GoogleCalendarEventInput = {
@@ -77,12 +77,13 @@ export async function createGoogleCalendarEvent(input: GoogleCalendarEventInput)
       },
     } : {}),
   };
+  await assertLegacyGoogleAllowed(input.userId);
   const { data } = await calendar.events.insert({
     calendarId: selected.id,
     conferenceDataVersion: input.withMeet ? 1 : 0,
     sendUpdates: attendees.length ? "all" : "none",
     requestBody,
-  });
+  }, {retry:false,timeout:15000});
   if (!data.id) throw new Error("Google Calendar não retornou o identificador do evento");
   const meetLink = data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri || data.hangoutLink || undefined;
   if (input.withMeet && !meetLink) throw new Error("Google Meet não retornou o link da reunião");
@@ -97,6 +98,7 @@ export async function updateGoogleCalendarEvent(input: GoogleCalendarEventInput 
   const calendar = google.calendar({ version: "v3", auth });
   const selected = input.googleCalendarId || (await getSelectedCalendar(input.userId)).id;
   const times = eventTimes(input);
+  await assertLegacyGoogleAllowed(input.userId);
   await calendar.events.patch({
     calendarId: selected,
     eventId: input.calendarEventId,
@@ -109,7 +111,7 @@ export async function updateGoogleCalendarEvent(input: GoogleCalendarEventInput 
       recurrence: recurrenceFor(input.repeat),
       status: input.repeat === undefined ? undefined : "confirmed",
     },
-  });
+  }, {retry:false,timeout:15000});
 }
 
 export async function deleteGoogleCalendarEvent(userId: string, calendarEventId: string, googleCalendarId?: string): Promise<void> {
@@ -117,7 +119,8 @@ export async function deleteGoogleCalendarEvent(userId: string, calendarEventId:
   const calendar = google.calendar({ version: "v3", auth });
   const selected = googleCalendarId || (await getSelectedCalendar(userId)).id;
   try {
-    await calendar.events.delete({ calendarId: selected, eventId: calendarEventId, sendUpdates: "all" });
+    await assertLegacyGoogleAllowed(userId);
+    await calendar.events.delete({ calendarId: selected, eventId: calendarEventId, sendUpdates: "all" }, {retry:false,timeout:15000});
   } catch (error) {
     const status = (error as { code?: number; response?: { status?: number } }).code || (error as { response?: { status?: number } }).response?.status;
     if (status !== 404 && status !== 410) throw error;
@@ -132,6 +135,7 @@ export async function addMeetToGoogleCalendarEvent(params: {
   const auth = await getValidClient(params.userId);
   const calendar = google.calendar({ version: "v3", auth });
   const calendarId = params.googleCalendarId || (await getSelectedCalendar(params.userId)).id;
+  await assertLegacyGoogleAllowed(params.userId);
   const { data } = await calendar.events.patch({
     calendarId,
     eventId: params.calendarEventId,
@@ -145,7 +149,7 @@ export async function addMeetToGoogleCalendarEvent(params: {
         },
       },
     },
-  });
+  }, {retry:false,timeout:15000});
   const meetLink = data.conferenceData?.entryPoints?.find(entry => entry.entryPointType === "video")?.uri || data.hangoutLink;
   if (!meetLink) throw new Error("Google Meet não retornou o link da reunião");
   return meetLink;

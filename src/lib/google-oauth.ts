@@ -3,6 +3,32 @@ import { randomUUID } from "crypto";
 import { getConfig } from "./whatsapp-config";
 import { encryptField, decryptField } from "./crypto-store";
 import { getSupabase } from "./supabase";
+import { loadGoogleOwnerActivation } from "./google-owner-activation";
+
+/** Only a verified false from private storage permits legacy compatibility. */
+export async function assertLegacyGoogleAllowed(userId: string): Promise<void> {
+  let activated: unknown;
+  try { activated = await loadGoogleOwnerActivation(userId); }
+  catch { throw new Error("GOOGLE_GLOBAL_CHECK_UNAVAILABLE"); }
+  if (activated === true) throw new Error("GOOGLE_GLOBAL_DISABLED");
+  if (activated !== false) throw new Error("GOOGLE_GLOBAL_CHECK_UNAVAILABLE");
+}
+
+/** Dedicated old-connection transport; never modify the scoped OAuth clients. */
+export async function getLegacyAuthClient(userId: string) {
+  await assertLegacyGoogleAllowed(userId);
+  const client = await getAuthClient();
+  // Gaxios prepares its AbortSignal before request interceptors run.
+  client.transporter.defaults.timeout = 15000;
+  client.transporter.interceptors.request.add({ resolved: async options => {
+    await assertLegacyGoogleAllowed(userId);
+    options.retry = false;
+    options.retryConfig = { retry: 0 };
+    options.timeout = 15000;
+    return options;
+  }});
+  return client;
+}
 
 export const GOOGLE_OAUTH_SCOPES = Object.freeze([
   "https://www.googleapis.com/auth/calendar.events",
@@ -46,6 +72,7 @@ function decodeStoredAccessToken(value: string): StoredAccessToken {
 }
 
 async function loadEntry(userId: string): Promise<TokenEntry | null> {
+  await assertLegacyGoogleAllowed(userId);
   const { data, error } = await getSupabase().from("google_tokens").select("*").eq("user_id", userId).maybeSingle();
   if (error || !data) return null;
   const row = data as Row;
@@ -60,7 +87,8 @@ async function loadEntry(userId: string): Promise<TokenEntry | null> {
 }
 
 async function saveEntry(userId: string, entry: TokenEntry): Promise<void> {
-  await getSupabase().from("google_tokens").upsert({
+  await assertLegacyGoogleAllowed(userId);
+  const { error } = await getSupabase().from("google_tokens").upsert({
     user_id: userId,
     access_token: encryptField(JSON.stringify({
       token: entry.accessToken,
@@ -70,6 +98,7 @@ async function saveEntry(userId: string, entry: TokenEntry): Promise<void> {
     refresh_token: encryptField(entry.refreshToken),
     expires_at: entry.expiresAt,
   });
+  if (error) throw new Error("GOOGLE_GLOBAL_STORAGE_UNAVAILABLE");
 }
 
 /** state=userId direto (sem nonce) deixava o callback confiar em qualquer
@@ -105,7 +134,8 @@ export async function getAuthClient() {
 }
 
 export async function getAuthUrl(userId: string, locale: PendingState["locale"] = "pt-BR"): Promise<string> {
-  const client = await getAuthClient();
+  await assertLegacyGoogleAllowed(userId);
+  const client = await getLegacyAuthClient(userId);
   const state = randomUUID();
   pendingStates.set(state, { userId, locale, expiresAt: Date.now() + STATE_TTL_MS });
   return client.generateAuthUrl({
@@ -117,7 +147,9 @@ export async function getAuthUrl(userId: string, locale: PendingState["locale"] 
 }
 
 export async function exchangeCode(code: string, userId: string): Promise<void> {
-  const client = await getAuthClient();
+  await assertLegacyGoogleAllowed(userId);
+  const client = await getLegacyAuthClient(userId);
+  await assertLegacyGoogleAllowed(userId);
   const { tokens } = await client.getToken(code);
   const previous = await loadEntry(userId);
   await saveEntry(userId, {
@@ -133,7 +165,7 @@ export async function getValidClient(userId: string) {
   const entry = await loadEntry(userId);
   if (!entry) throw new Error("Google não conectado para este usuário");
 
-  const client = await getAuthClient();
+  const client = await getLegacyAuthClient(userId);
   client.setCredentials({
     access_token: entry.accessToken,
     refresh_token: entry.refreshToken,
@@ -142,6 +174,7 @@ export async function getValidClient(userId: string) {
 
   // Refresh se expirado ou faltando menos de 5 minutos
   if (new Date(entry.expiresAt).getTime() < Date.now() + 5 * 60_000) {
+    await assertLegacyGoogleAllowed(userId);
     const { credentials } = await client.refreshAccessToken();
     await saveEntry(userId, {
       accessToken: credentials.access_token!,
@@ -150,9 +183,15 @@ export async function getValidClient(userId: string) {
       selectedCalendarId: entry.selectedCalendarId,
       selectedCalendarName: entry.selectedCalendarName,
     });
-    client.setCredentials(credentials);
+    client.setCredentials({ access_token: credentials.access_token, expiry_date: credentials.expiry_date });
   }
-
+  // All later provider effects recheck activation. Do not hand the SDK a refresh
+  // capability that could bypass that boundary after an old client was issued.
+  client.setCredentials({ access_token: client.credentials.access_token, expiry_date: client.credentials.expiry_date });
+  client.refreshHandler = undefined;
+  client.eagerRefreshThresholdMillis = 0;
+  client.forceRefreshOnFailure = false;
+  await assertLegacyGoogleAllowed(userId);
   return client;
 }
 
@@ -160,11 +199,14 @@ export async function revokeTokens(userId: string): Promise<void> {
   const entry = await loadEntry(userId);
   if (entry) {
     try {
-      const client = await getAuthClient();
+      const client = await getLegacyAuthClient(userId);
       client.setCredentials({ access_token: entry.accessToken });
+      await assertLegacyGoogleAllowed(userId);
       await client.revokeCredentials();
     } catch { /* ignora erro de revogação */ }
-    await getSupabase().from("google_tokens").delete().eq("user_id", userId);
+    await assertLegacyGoogleAllowed(userId);
+    const { error } = await getSupabase().from("google_tokens").delete().eq("user_id", userId);
+    if (error) throw new Error("GOOGLE_GLOBAL_STORAGE_UNAVAILABLE");
   }
 }
 
@@ -177,7 +219,8 @@ export async function getConnectedEmail(userId: string): Promise<string | null> 
   try {
     const client = await getValidClient(userId);
     const oauth2 = google.oauth2({ version: "v2", auth: client });
-    const { data } = await oauth2.userinfo.get();
+    await assertLegacyGoogleAllowed(userId);
+    const { data } = await oauth2.userinfo.get({}, {retry:false,timeout:15000});
     return data.email ?? null;
   } catch { return null; }
 }
@@ -193,11 +236,12 @@ export async function listGoogleCalendars(userId: string): Promise<GoogleCalenda
   const items: GoogleCalendarOption[] = [];
   let pageToken: string | undefined;
   do {
+    await assertLegacyGoogleAllowed(userId);
     const { data } = await calendar.calendarList.list({
       minAccessRole: "writer",
       pageToken,
       showHidden: false,
-    });
+    }, {retry:false,timeout:15000});
     for (const item of data.items || []) {
       if (!item.id) continue;
       items.push({
