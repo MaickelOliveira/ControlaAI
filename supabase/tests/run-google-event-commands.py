@@ -112,6 +112,12 @@ def verify(f,baseline):
     check(f.sql("select a.status='cancelled' and m.status='cancelled' from public.appointments a join public.meets m using(id) where a.id="+quote(event)+';')=='t','Delete removed/failed to cancel linked history')
     cancellation=claim(a,event,4);check(f.read(preflight(a,cancellation),'service_role') is True,'Canceled delete cannot recover')
     check(f.read(a.command('event_command_active',event,op(4)),'service_role') is True,'Canceled delete rejected before credential runtime')
+    for table in ['appointments','meets']:
+        f.sql('update public.'+table+" set status='scheduled' where id="+quote(event)+';');before=snapshot(f)
+        f.rejected(a.command('event_command_active',event,op(4)),'Older cancellation entered runtime after local reschedule','service_role')
+        f.rejected(preflight(a,cancellation),'Older cancellation deleted a rescheduled local record','service_role');f.rejected(finish(a,cancellation,etag=None),'Older delete completed after local reschedule','service_role')
+        check(snapshot(f)==before,'Rescheduled cancellation denial partly committed')
+        f.sql('update public.'+table+" set status='cancelled' where id="+quote(event)+';')
     f.read(finish(a,cancellation,etag=None),'service_role');check(head(a,event)['deleted'],'Delete completion not retained')
     f.rejected(prepare(a,event,5,version='4'),'Deleted event accepted a mutation','service_role')
     conference_event=created(a,2,True,True);f.rejected(prepare(a,conference_event,10),'Failed creation became ordinary update','service_role')

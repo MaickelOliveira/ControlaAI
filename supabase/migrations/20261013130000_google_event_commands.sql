@@ -90,13 +90,16 @@ end;$$;
 -- Before credential runtime, including a logically canceled delete recovery.
 create function public.zelo_google_event_command_active(p_user_id uuid,p_mode text,p_company_id uuid,p_event_id uuid,p_operation_id uuid)
 returns boolean language plpgsql security invoker set search_path=pg_catalog as $$
-declare c google_workspace.event_commands%rowtype;h google_workspace.event_command_heads%rowtype;
+declare c google_workspace.event_commands%rowtype;h google_workspace.event_command_heads%rowtype;l google_workspace.event_links%rowtype;
 begin
  perform google_workspace.lock_workspace(p_user_id,p_mode,p_company_id,true);
  select * into c from google_workspace.event_commands where event_id=p_event_id and operation_id=p_operation_id;
  select * into h from google_workspace.event_command_heads where event_id=p_event_id;
  if c.operation_id is null or h.deleted or h.operation_id<>c.operation_id or h.version<>c.head_version then raise exception 'GOOGLE_EVENT_COMMAND_CONFLICT';end if;
- perform google_workspace.event_command_local_context(p_user_id,p_mode,p_company_id,p_event_id,c.kind='delete');return true;
+ l=google_workspace.event_command_local_context(p_user_id,p_mode,p_company_id,p_event_id,c.kind='delete');
+ if c.kind='delete' and(not exists(select 1 from public.appointments where id=l.appointment_id and status='cancelled')
+  or(l.kind='meet' and not exists(select 1 from public.meets where id=l.meet_id and status='cancelled'))) then raise exception 'GOOGLE_EVENT_LOCAL_INACTIVE';end if;
+ return true;
 end;$$;
 create function public.zelo_google_event_command_prepare(p_user_id uuid,p_mode text,p_company_id uuid,p_event_id uuid,p_operation_id uuid,p_head_version bigint,
  p_client_fingerprint text,p_binding_version bigint,p_kind text,p_payload jsonb,p_local_attendees jsonb)
@@ -178,14 +181,16 @@ begin
 end;$$;
 create function google_workspace.event_command_context(p_user_id uuid,p_mode text,p_company_id uuid,p_event_id uuid,p_operation_id uuid,p_client_fingerprint text,p_binding_version bigint)
 returns google_workspace.event_commands language plpgsql security invoker set search_path=pg_catalog as $$
-declare c google_workspace.event_commands%rowtype;h google_workspace.event_command_heads%rowtype;
+declare c google_workspace.event_commands%rowtype;h google_workspace.event_command_heads%rowtype;l google_workspace.event_links%rowtype;
 begin
  perform google_workspace.lock_workspace(p_user_id,p_mode,p_company_id,true);
  if p_operation_id is null then raise exception 'GOOGLE_EVENT_INVALID';end if;
  select * into c from google_workspace.event_commands where event_id=p_event_id and operation_id=p_operation_id;
  select * into h from google_workspace.event_command_heads where event_id=p_event_id;
  if c.operation_id is null or h.deleted or h.operation_id<>c.operation_id or h.version<>c.head_version then raise exception 'GOOGLE_EVENT_COMMAND_CONFLICT';end if;
- perform google_workspace.event_command_local_context(p_user_id,p_mode,p_company_id,p_event_id,c.kind='delete');
+ l=google_workspace.event_command_local_context(p_user_id,p_mode,p_company_id,p_event_id,c.kind='delete');
+ if c.kind='delete' and(not exists(select 1 from public.appointments where id=l.appointment_id and status='cancelled')
+  or(l.kind='meet' and not exists(select 1 from public.meets where id=l.meet_id and status='cancelled'))) then raise exception 'GOOGLE_EVENT_LOCAL_INACTIVE';end if;
  perform google_workspace.event_creation_context(p_user_id,p_mode,p_company_id,p_event_id,p_client_fingerprint,p_binding_version);
  return c;
 end;$$;

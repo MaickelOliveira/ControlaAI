@@ -62,10 +62,13 @@ HTTP. Fixed `GOOGLE_EVENT_COMMAND_CONFLICT` covers stale head/in-progress/forbid
 conference supersession; leased conflicts remain `GOOGLE_EVENT_ATTEMPT_CONFLICT`.
 Metadata carries `mutation_allowed` only inside a running lease; changed binding
 can reconcile a previously attempted command but cannot silently write again.
-The SQL fixture passed184 assertions including real row contention, owner erasure,
+The SQL fixture passed192 assertions including real row contention, owner erasure,
 head races, failed second-row atomicity, cancellation, strict immutable column
 ACLs and preserving rollback. The fixture corrects only its minimal public FK
 setup to match existing production owner-erasure cascades; it uses no real rows.
+Delete preparation can cancel scheduled or canceled linked rows. Subsequent active,
+claim/preflight/finish requires both rows remain canceled; a public reschedule
+cannot give an older queued cancellation authority to delete the active event.
 
 Private adapter exposes scoped head/get/prepare, claim/finish/retry and strict-true
 active/preflight checks. It copies scope, operation, head/attempt/lease and outcomes
