@@ -8,6 +8,7 @@ import { beginWhatsAppActivity, type WhatsAppActivityLease } from "@/lib/whatsap
 import { parseCreditPixAnswer } from "@/lib/credit-pix-question";
 import { getUserIdByPhone } from "@/lib/wpp-phone-links";
 import { readBankBody } from "@/lib/open-finance-body";
+import {googleWhatsAppProviderEnvelope} from "@/lib/google-whatsapp-message";
 
 /** Verificação do webhook exigida pela Meta ao cadastrar a URL no Business
  *  Manager — responde o hub.challenge em texto puro (não JSON) quando o
@@ -117,6 +118,7 @@ async function processMessages(messages: WabaMessage[], contactName?: string, le
   for (const [index,msg] of messages.entries()) {
    try {
     if (await alreadyProcessed(msg.id)) { console.log("[webhook/waba] Reentrega já processada"); continue; }
+    const envelope=googleWhatsAppProviderEnvelope("waba",msg.id);
 
     const from = (msg.from || "").replace(/\D/g, "");
     if (!from) continue;
@@ -124,19 +126,19 @@ async function processMessages(messages: WabaMessage[], contactName?: string, le
     if (msg.type === "text") {
       const text = msg.text?.body?.trim();
       if (!text) continue;
-      await handleIncomingMessage({ channel:"waba", receivedAt, from, text, contactName });
+      await handleIncomingMessage({ ...envelope, receivedAt, from, text, contactName });
       continue;
     }
 
     if (msg.type === "interactive" && msg.interactive?.button_reply) {
       const reply=msg.interactive.button_reply;
       const creditPixAnswer=parseCreditPixAnswer(reply.id);
-      await handleIncomingMessage({channel:"waba", receivedAt,from,text:reply.title,contactName,...(creditPixAnswer?{creditPixAnswer}:{})});
+      await handleIncomingMessage({...envelope, receivedAt,from,text:reply.title,contactName,...(creditPixAnswer?{creditPixAnswer}:{})});
       continue;
     }
 
     if (msg.type === "button" && msg.button?.text) {
-      await handleIncomingMessage({ channel:"waba", receivedAt, from, text: msg.button.text, contactName });
+      await handleIncomingMessage({ ...envelope, receivedAt, from, text: msg.button.text, contactName });
       continue;
     }
 
@@ -146,7 +148,7 @@ async function processMessages(messages: WabaMessage[], contactName?: string, le
       const userId = await getUserIdByPhone(from).catch(() => null);
       const transcript = await transcribeAudio(media.buffer, media.mimeType, userId || undefined).catch(() => null);
       if (!transcript) continue;
-      await handleIncomingMessage({ channel:"waba", receivedAt, from, text: transcript, contactName });
+      await handleIncomingMessage({ ...envelope, receivedAt, from, text: transcript, contactName });
       continue;
     }
 
@@ -156,7 +158,7 @@ async function processMessages(messages: WabaMessage[], contactName?: string, le
       const media = await downloadMedia(mediaField.id);
       if (!media) continue;
       await handleIncomingMessage({
-        channel:"waba", receivedAt, from,
+        ...envelope, receivedAt, from,
         text: "",
         contactName,
         isFileMessage: true,

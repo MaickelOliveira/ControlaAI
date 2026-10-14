@@ -52,10 +52,15 @@ import { replyFinanceDetail } from "@/lib/finance-detail";
 import {readFinancialAgenda} from "@/lib/financial-agenda";
 import {formatBankAgenda} from "@/lib/open-finance-schedules";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
-import { createAppointment, getUpcomingAppointments, getAppointmentsInRange, updateAppointment, deleteAppointment, findAppointmentsByKeyword, getAppointmentById, type Appointment } from "@/lib/agenda";
+import { createAppointment, type Appointment } from "@/lib/agenda";
+import {googleWhatsAppConfirmation,googleWhatsAppReadyMeetLink,type GoogleWhatsAppRecord} from "./google-whatsapp-consumer";
+import {loadGoogleWhatsAppConsumer} from "./google-whatsapp-service";
+import {prepareGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
+import {googleWhatsAppMessageUUID} from "./google-whatsapp-message";
+import {googleAgendaSyncVersion} from "./google-agenda-client-contract";
+import type {GoogleWhatsAppReceipt} from "./google-whatsapp-commit";
 import { formatReminderOffset, isAgendaReminderTarget, isStandaloneAppointmentReminderRequest, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
 import { createMeetEvent } from "@/lib/google-meet";
-import { addMeetToGoogleCalendarEvent } from "@/lib/google-calendar";
 import { isConnected } from "@/lib/google-oauth";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
@@ -69,7 +74,7 @@ import {
   replyTrialExpired, replyAccountInactive, replyUnknown, replyLowConfidence,
   replyRecurringAlreadyPosted, replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
-  replyAgendaList, replyAgendaUpdated, replyAgendaDeleted, replyAgendaReminderPolicy,
+  replyAgendaList, replyAgendaReminderPolicy,
   replyMeetCreated, replyMeetInvite,
   replyPersonNotFound, replyWppNameSaved,
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
@@ -607,11 +612,11 @@ const BARE_CANCEL_RE = /^(cancela(r)?|deixa( pra l[áa])?|esquece|para|sair|nada
  *  escolher por número ou nome. */
 async function askWhichAppointment(
   from: string, userId: string,
-  matches: Appointment[], action: "update" | "delete" | "done" | "add_meet" | "set_reminder",
+  matches: WhatsAppAppointment[], action: "update" | "delete" | "done" | "add_meet" | "set_reminder",
   actionLabel: string, patch?: Record<string, unknown>,
   options?: { reminderOffsetMinutes?: number; mode?: "personal" | "business"; locale?: string },
 ): Promise<void> {
-  const list = matches.map(a => ({ id: a.id, title: a.title, startAt: a.startAt, location: a.location }));
+  const list = matches.map(a => ({ id: a.id, title: a.title, startAt: a.startAt, location: a.location, googleSyncVersion:a.googleSyncVersion }));
   await setPendingAction(from, { type: "appointment_selection", userId, action, patch, appointments: list, ...options });
   // O rótulo do lembrete é derivado da própria ação pendente. Assim, mesmo
   // que um classificador tenha chamado este fluxo como edição, nunca exibimos
@@ -695,9 +700,9 @@ function localTimePart(iso: string): string {
   return new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 }
 
-export function appointmentPatchFromAi(ai: AIResult, current?: Appointment): Parameters<typeof updateAppointment>[2] {
+export function appointmentPatchFromAi(ai: AIResult, current?: Appointment): AppointmentPatch {
   const data = ai.agendaData ?? {};
-  const patch: Parameters<typeof updateAppointment>[2] = {};
+  const patch: AppointmentPatch = {};
   if (data.allDay === true) {
     const date = data.startDate || (current ? localDatePart(current.startAt) : undefined);
     if (date) patch.startAt = spToUTC(`${date}T00:00:00`);
@@ -720,60 +725,43 @@ export function appointmentPatchFromAi(ai: AIResult, current?: Appointment): Par
   return patch;
 }
 
-/** Cria o link do Google Meet pra um compromisso já existente — extraído
- *  pra ser reaproveitado tanto no caminho direto (1 compromisso encontrado)
- *  quanto na resolução da desambiguação (usuário escolheu entre vários). */
-async function performAddMeet(appt: Appointment, userId: string, from: string, locale?: string): Promise<void> {
-  if (appt.meetLink) {
-    await wppSend(from, localized(locale,
-      `ℹ️ *${appt.title}* já tem um link do Meet:\n🔗 ${appt.meetLink}`,
-      `ℹ️ *${appt.title}* ya tiene un enlace de Meet:\n🔗 ${appt.meetLink}`));
-    return;
-  }
-  if (!appt.endAt) {
-    await wppSend(from, localized(locale,
-      `⚠️ O compromisso *${appt.title}* não tem horário de fim definido. Edite-o pela agenda para adicionar a hora de término e tente novamente.`,
-      `⚠️ La cita *${appt.title}* no tiene una hora de finalización. Edítala en la agenda, añade la hora de finalización e inténtalo de nuevo.`));
-    return;
-  }
-  if (!await isConnected(userId)) {
-    await wppSend(from, localized(locale,
-      "🔗 Sua conta Google não está conectada.\n\nAcesse *Configurações → Integrações* para conectar e criar links do Meet.",
-      "🔗 Tu cuenta de Google no está conectada.\n\nEntra en *Configuración → Integraciones* para conectarla y crear enlaces de Meet."));
-    return;
-  }
-  await wppSend(from, localized(locale,
-    `⏳ Criando link do Google Meet para *${appt.title}*...`,
-    `⏳ Creando el enlace de Google Meet para *${appt.title}*...`));
-  try {
-    const result = appt.calendarEventId
-      ? {
-          meetLink: await addMeetToGoogleCalendarEvent({
-            userId,
-            calendarEventId: appt.calendarEventId,
-            googleCalendarId: appt.googleCalendarId,
-          }),
-          calendarEventId: appt.calendarEventId,
-          googleCalendarId: appt.googleCalendarId,
-        }
-      : await createMeetEvent({
-          userId, title: appt.title, description: appt.description,
-          startAt: appt.startAt, endAt: appt.endAt, attendees: [],
-        });
-    await updateAppointment(appt.id, userId, {
-      meetLink: result.meetLink,
-      calendarEventId: result.calendarEventId,
-      googleCalendarId: result.googleCalendarId,
-    });
-    await wppSend(from, localized(locale,
-      `✅ *Meet adicionado!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${result.meetLink}`,
-      `✅ *¡Meet añadido!*\n\n📅 *${appt.title}*\n🕒 ${formatDateTimeBR(appt.startAt)}\n🔗 ${result.meetLink}`));
-  } catch {
-    console.error("[agenda_add_meet]");
-    await wppSend(from, localized(locale,
-      "❌ Não consegui criar o Google Meet. Verifique se sua conta Google ainda está conectada em Configurações.",
-      "❌ No pude crear el Google Meet. Comprueba en Configuración que tu cuenta de Google siga conectada."));
-  }
+type AppointmentPatch=Partial<Omit<Appointment,"id"|"userId"|"createdAt">>;
+type WhatsAppAppointment=Appointment&{googleSyncVersion?:string|null};
+const googleWhatsAppConsumer=loadGoogleWhatsAppConsumer;
+async function getUpcomingAppointments(userId:string,days=7){return (await googleWhatsAppConsumer()).upcoming(userId,days);}
+async function getAppointmentsInRange(userId:string,from:string,to:string){return (await googleWhatsAppConsumer()).inRange(userId,from,to);}
+async function findAppointmentsByKeyword(userId:string,keyword:string){return (await googleWhatsAppConsumer()).byKeyword(userId,keyword);}
+async function getAppointmentById(id:string,userId:string){return (await googleWhatsAppConsumer()).appointment(userId,id);}
+function googleWhatsAppFailure(error:unknown,locale?:string):string {
+ const code=error instanceof Error?error.message:"";
+ if(["GOOGLE_WHATSAPP_SCOPE_DENIED","GOOGLE_WHATSAPP_WORKSPACE_CHANGED"].includes(code))return localized(locale,"O espaço do pedido mudou ou não está disponível. Faça um novo pedido no modo Pessoal ou na empresa correta.","El espacio del pedido cambió o no está disponible. Haz un nuevo pedido en modo Personal o en la empresa correcta.");
+ if(code==="GOOGLE_WHATSAPP_SELECTION_EXPIRED")return localized(locale,"Essa escolha é antiga. Peça a lista de compromissos novamente antes de alterar.","Esta selección es antigua. Pide de nuevo la lista de citas antes de cambiarla.");
+ if(code==="GOOGLE_WHATSAPP_MESSAGE_INVALID")return localized(locale,"Essa mensagem não tem uma identificação válida para retomar. Faça um novo pedido; nenhuma nova ação foi iniciada.","Este mensaje no tiene una identificación válida para retomarlo. Haz un nuevo pedido; no se inició ninguna acción nueva.");
+ if(code==="GOOGLE_EVENT_NOT_CONNECTED"||code==="GOOGLE_RUNTIME_NOT_CONNECTED")return localized(locale,"Conecte o Google neste espaço em Configurações → Integrações. O pedido continua guardado; responda *tentar novamente* depois de conectar.","Conecta Google en este espacio en Configuración → Integraciones. El pedido sigue guardado; responde *intentar de nuevo* después de conectarlo.");
+ if(["GOOGLE_EVENT_COMMAND_CONFLICT","GOOGLE_EVENT_CONNECTION_CHANGED","GOOGLE_EVENT_ORIGIN_CONFLICT","GOOGLE_EVENT_LOCAL_CONFLICT","GOOGLE_EVENT_ATTEMPT_CONFLICT","GOOGLE_EVENT_CONFLICT","GOOGLE_RUNTIME_CHANGED"].includes(code))return localized(locale,"O compromisso ou a conexão mudou. Confira a Agenda e faça um novo pedido com os dados atuais. A tentativa original continua guardada; responda *cancelar* para interrompê-la.","La cita o la conexión cambió. Consulta Agenda y haz un nuevo pedido con los datos actuales. El intento original sigue guardado; responde *cancelar* para detenerlo.");
+ if(["GOOGLE_EVENT_ORIGIN_MISSING","GOOGLE_EVENT_ACCESS_DENIED"].includes(code))return localized(locale,"Não posso alterar esse evento no Google por esta conexão. Confira o compromisso na Agenda antes de fazer outro pedido.","No puedo modificar este evento en Google con esta conexión. Consulta la cita en Agenda antes de hacer otro pedido.");
+ return localized(locale,"Não consegui confirmar a ação. Confira a Agenda para ver o que já foi salvo. Responda *tentar novamente* para retomar o mesmo pedido, ou *cancelar* para interromper esta tentativa.","No pude confirmar la acción. Consulta Agenda para ver lo ya guardado. Responde *intentar de nuevo* para retomar el mismo pedido, o *cancelar* para detener este intento.");
+}
+async function sendGoogleWhatsAppCommit(userId:string,from:string,intents:readonly GoogleWhatsAppIntent[],locale?:string,receipts:readonly GoogleWhatsAppReceipt[]=[]):Promise<void>{
+ try {
+  const results=await (await googleWhatsAppConsumer()).commit(userId,from,intents,receipts);
+  await wppSend(from,results.map(row=>googleWhatsAppConfirmation(row.intent,row.result,locale)).join("\n\n────────\n\n"));
+  await clearPendingAction(from);
+ }catch(error){await wppSend(from,googleWhatsAppFailure(error,locale));}
+}
+async function performGoogleWhatsAppControl(appt:Pick<WhatsAppAppointment,"id"|"googleSyncVersion">,userId:string,from:string,operation:GoogleWhatsAppOperation,payload:Record<string,unknown>,message:IncomingMessage,locale?:string):Promise<void>{
+ try {
+  if(appt.googleSyncVersion===undefined)throw Error("GOOGLE_WHATSAPP_SELECTION_EXPIRED");
+  const intent=prepareGoogleWhatsAppIntent(userId,operation,payload,{appointmentId:appt.id,expectedGoogleSyncVersion:googleAgendaSyncVersion(appt.googleSyncVersion),clientMutationId:googleWhatsAppMessageUUID(userId,message,0)});
+  await sendGoogleWhatsAppCommit(userId,from,[intent],locale);
+ }catch(error){if(error instanceof Error&&["GOOGLE_WHATSAPP_SELECTION_EXPIRED","GOOGLE_WHATSAPP_MESSAGE_INVALID"].includes(error.message))await clearPendingAction(from);await wppSend(from,googleWhatsAppFailure(error,locale));}
+}
+/** Add a conference only through the original owned event's scoped command. */
+async function performAddMeet(appt:WhatsAppAppointment,userId:string,from:string,message:IncomingMessage,locale?:string):Promise<void>{
+ const link=googleWhatsAppReadyMeetLink(appt as GoogleWhatsAppRecord);
+ if(link){await wppSend(from,localized(locale,`ℹ️ *${appt.title}* já tem um link do Meet:\n🔗 ${link}`,`ℹ️ *${appt.title}* ya tiene un enlace de Meet:\n🔗 ${link}`));await clearPendingAction(from);return;}
+ if(!appt.endAt){await clearPendingAction(from);await wppSend(from,localized(locale,`O compromisso *${appt.title}* não tem horário de fim. Adicione-o na Agenda antes de pedir o Meet.`,`La cita *${appt.title}* no tiene hora de finalización. Añádela en Agenda antes de pedir el Meet.`));return;}
+ await performGoogleWhatsAppControl(appt,userId,from,"add_meet",{},message,locale);
 }
 
 // Label do modo (pessoal/empresa) pra deixar claro em listas e confirmações
@@ -977,6 +965,8 @@ export type IncomingMessage = {
   text: string;
   contactName?: string;
   channel?: "waba"|"evolution";
+  /** Set only by authenticated provider intake, never by text/AI parsing. */
+  providerMessageId?:string;
   receivedAt?: number;
   creditPixAnswer?: {questionId:string;confirmed:boolean};
   isFileMessage?: boolean;
@@ -1480,6 +1470,16 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     const pending = await getPendingAction(from);
     if(pending?.type==="nfse_draft"||(!pending&&(/\b(nota fiscal|notas fiscais|nfs[ -]?e)\b/i.test(messageText)||isFiscalCertificateQuestion(messageText)))){setVirtualAgentIntent("nfse_draft");if(await handleFiscalWhatsApp(user,mode,from,messageText,pending))return;}
     if(pending?.userId===user.id)setVirtualAgent(agentForPendingAction(pending));
+    if(pending?.type==="google_agenda_commit"&&pending.userId===user.id){
+      if(BARE_CANCEL_RE.test(messageText.trim())||/^(?:n[ãa]o|no|n|0)[.!\s]*$/i.test(messageText.trim())){
+        await clearPendingAction(from);await wppSend(from,localized(user.locale,"Interrompi esta tentativa. Os itens já salvos continuam na Agenda.","Detuve este intento. Los elementos ya guardados siguen en Agenda."));return;
+      }
+      if(/^(?:sim|s[ií]|yes|tentar novamente|tente novamente|continuar|continue|retomar|de novo|intentar de nuevo|reintentar)[.!\s]*$/i.test(messageText.trim())){
+        await sendGoogleWhatsAppCommit(user.id,from,pending.intents,user.locale,pending.receipts);return;
+      }
+      if(looksLikeNewCommand(messageText))await clearPendingAction(from);
+      else {await wppSend(from,localized(user.locale,"O pedido original continua guardado. Confira a Agenda. Responda *tentar novamente* para conferir a mesma tentativa, ou *cancelar* para interrompê-la.","El pedido original sigue guardado. Consulta Agenda. Responde *intentar de nuevo* para consultar el mismo intento, o *cancelar* para detenerlo."));return;}
+    }
     let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
     let accountSelectionResume: AIResult | null = null;
     let employeeSelectionResume: AIResult | null = null;
@@ -2368,9 +2368,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           await wppSend(from, `❓ Não identifiquei o que mudar em *${full.title}*.\n\nExemplos:\n• _muda para dia 10 às 15h_\n• _altera o local para Escritório_\n• _me avisa 1 hora antes_\n\nOu responda *cancelar*.`);
           return;
         }
-        await clearPendingAction(from);
-        const updated = await updateAppointment(full.id, user.id, editPatch);
-        await wppSend(from, updated ? replyAgendaUpdated(updated, user.locale) : "❌ Não consegui alterar o compromisso agora. Nada foi modificado; tente novamente.");
+        await performGoogleWhatsAppControl(chosenAppt,user.id,from,"update_appointment",editPatch,msg,user.locale);
         return;
       }
 
@@ -2378,7 +2376,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       if (apptChoiceIdx >= 0) {
         const chosenAppt = pending.appointments[apptChoiceIdx];
         if (pending.action === "update") {
-          const patch = (pending.patch || {}) as Parameters<typeof updateAppointment>[2];
+          const patch = (pending.patch || {}) as AppointmentPatch;
           if (Object.keys(patch).length === 0) {
             await setPendingAction(from, {
               type: "appointment_selection", userId: user.id, action: "update", patch: {},
@@ -2387,21 +2385,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             await wppSend(from, `Certo, você escolheu *${chosenAppt.title}*. O que deseja alterar?\n\nExemplos:\n• _muda para dia 10 às 15h_\n• _altera o local para Escritório_\n• _me avisa 1 hora antes_`);
             return;
           }
-          await clearPendingAction(from);
-          const updated = await updateAppointment(chosenAppt.id, user.id, patch);
-          await wppSend(from, updated ? replyAgendaUpdated(updated, user.locale) : "❌ Não consegui alterar o compromisso agora. Nada foi modificado; tente novamente.");
+          await performGoogleWhatsAppControl(chosenAppt,user.id,from,"update_appointment",patch,msg,user.locale);
         } else if (pending.action === "delete") {
-          await clearPendingAction(from);
-          const deleted = await deleteAppointment(chosenAppt.id, user.id);
-          await wppSend(from, deleted ? replyAgendaDeleted(chosenAppt.title, user.locale) : "❌ Não consegui cancelar esse compromisso agora. Tente novamente.");
+          await performGoogleWhatsAppControl(chosenAppt,user.id,from,"cancel_appointment",{},msg,user.locale);
         } else if (pending.action === "done") {
-          await clearPendingAction(from);
-          const updated = await updateAppointment(chosenAppt.id, user.id, { status: "done" });
-          await wppSend(from, updated ? `✅ Marquei como realizado.\n\n📅 ${chosenAppt.title}` : "❌ Não consegui marcar esse compromisso como realizado. Tente novamente.");
+          await performGoogleWhatsAppControl(chosenAppt,user.id,from,"update_appointment",{status:"done"},msg,user.locale);
         } else if (pending.action === "add_meet") {
-          await clearPendingAction(from);
           const full = await getAppointmentById(chosenAppt.id, user.id);
-          if (full) await performAddMeet(full, user.id, from, user.locale);
+          if (full) await performAddMeet({...full,googleSyncVersion:chosenAppt.googleSyncVersion}, user.id, from, msg, user.locale);
           else await wppSend(from, "❌ Não consegui mais localizar esse compromisso. Digite *meus compromissos* para conferir.");
         } else if (pending.action === "set_reminder") {
           await clearPendingAction(from);
@@ -5125,14 +5116,13 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           if (Object.keys(patch).length === 0) {
             await setPendingAction(from, {
               type: "appointment_selection", userId: user.id, action: "update", patch: {},
-              appointments: [{ id: matches[0].id, title: matches[0].title, startAt: matches[0].startAt, location: matches[0].location }],
+              appointments: [{ id: matches[0].id, title: matches[0].title, startAt: matches[0].startAt, location: matches[0].location, googleSyncVersion:matches[0].googleSyncVersion }],
               awaitingPatch: true, mode,
             });
             await wppSend(from, localized(user.locale, `Certo, encontrei *${matches[0].title}*. O que deseja alterar?\n\nExemplos:\n• _muda para dia 10 às 15h_\n• _altera o local para Escritório_\n• _me avisa 1 hora antes_`, `Encontré *${matches[0].title}*. ¿Qué quieres cambiar?\n\nEjemplos:\n• _cámbiala al día 10 a las 15:00_\n• _cambia el lugar a Oficina_\n• _avísame 1 hora antes_`));
             break;
           }
-          const updated = await updateAppointment(matches[0].id, user.id, patch);
-          await wppSend(from, updated ? replyAgendaUpdated(updated, user.locale) : localized(user.locale, "❌ Não consegui alterar o compromisso agora. Nada foi modificado; tente novamente.", "❌ No pude cambiar esta cita. No se modificó nada; inténtalo de nuevo."));
+          await performGoogleWhatsAppControl(matches[0],user.id,from,"update_appointment",patch,msg,user.locale);
         } else {
           const patch = appointmentPatchFromAi(ai);
           await askWhichAppointment(from, user.id, matches, "update", user.locale === "es" ? "reprogramar o cambiar" : "reagendar/alterar", patch, { locale: user.locale });
@@ -5147,8 +5137,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (matches.length === 0) {
           await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${keyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
-          const deleted = await deleteAppointment(matches[0].id, user.id);
-          await wppSend(from, deleted ? replyAgendaDeleted(matches[0].title, user.locale) : localized(user.locale, "❌ Não consegui cancelar esse compromisso agora. Tente novamente.", "❌ No pude cancelar esta cita. Inténtalo de nuevo."));
+          await performGoogleWhatsAppControl(matches[0],user.id,from,"cancel_appointment",{},msg,user.locale);
         } else {
           await askWhichAppointment(from, user.id, matches, "delete", "cancelar", undefined, { locale: user.locale });
         }
@@ -5162,10 +5151,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (matches.length === 0) {
           await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${doneKeyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${doneKeyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
-          const updated = await updateAppointment(matches[0].id, user.id, { status: "done" });
-          await wppSend(from, updated
-            ? localized(user.locale, `✅ Marquei como realizado.\n\n📅 ${matches[0].title}`, `✅ La marqué como realizada.\n\n📅 ${matches[0].title}`)
-            : localized(user.locale, "❌ Não consegui marcar esse compromisso como realizado. Tente novamente.", "❌ No pude marcar esta cita como realizada. Inténtalo de nuevo."));
+          await performGoogleWhatsAppControl(matches[0],user.id,from,"update_appointment",{status:"done"},msg,user.locale);
         } else {
           await askWhichAppointment(from, user.id, matches, "done", user.locale === "es" ? "marcar como realizada" : "marcar como feito", undefined, { locale: user.locale });
         }
@@ -5184,7 +5170,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             `❓ No encontré la cita${addMeetKeyword ? ` con *"${addMeetKeyword}"*` : ""}.\n\nEscribe *mis citas* para ver la lista.`,
           ));
         } else if (addMeetMatches.length === 1) {
-          await performAddMeet(addMeetMatches[0], user.id, from, user.locale);
+          await performAddMeet(addMeetMatches[0], user.id, from, msg, user.locale);
         } else {
           await askWhichAppointment(from, user.id, addMeetMatches, "add_meet", user.locale === "es" ? "añadir Google Meet" : "adicionar o Meet", undefined, { locale: user.locale });
         }

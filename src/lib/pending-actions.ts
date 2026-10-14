@@ -2,6 +2,7 @@ import { getSupabase,resolveCompanyDatabaseScope } from "./supabase";
 import { VehicleExpenseType, type VehicleUpdateInput } from "./vehicles";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode } from "./finances";
 import type { AIResult, RecurringData } from "./ai-processor";
+import type {GoogleWhatsAppIntent} from "./google-whatsapp-intent";
 
 const TTL_MS = 5 * 60 * 1000; // 5 minutos
 const TTL_RECURRING_MS = 12 * 60 * 60 * 1000; // 12 horas
@@ -133,8 +134,17 @@ export type PendingAppointmentSelection = {
   awaitingPatch?: boolean;
   reminderOffsetMinutes?: number;
   mode?: "personal" | "business";
-  appointments: Array<{ id: string; title: string; startAt: string; location?: string }>;
+  appointments: Array<{ id: string; title: string; startAt: string; location?: string; googleSyncVersion?:string|null }>;
   expiresAt: string;
+};
+
+/** Retain attempted identities until the scoped service confirms each item.
+ * Receipts are lookup hints only; the current participant still authorizes reads. */
+export type PendingGoogleAgendaCommit={
+  type:"google_agenda_commit";intent:"agenda_create";phone:string;userId:string;
+  intents:readonly GoogleWhatsAppIntent[];
+  receipts:readonly Readonly<{clientMutationId:string;recordId:string}>[];
+  expiresAt:string;
 };
 
 export type PendingFinanceSelect = {
@@ -419,7 +429,7 @@ export type PendingAccountCreateConfirm = {
   expiresAt: string;
 };
 
-export type PendingCompanySelection={type:"company_selection";phone:string;userId:string;expiresAt:string;resume?:{text:string;fileBase64?:string;fileMimeType?:string;fileName?:string;isFileMessage?:boolean;contactName?:string}};
+export type PendingCompanySelection={type:"company_selection";phone:string;userId:string;expiresAt:string;resume?:{text:string;channel?:"waba"|"evolution";providerMessageId?:string;receivedAt?:number;fileBase64?:string;fileMimeType?:string;fileName?:string;isFileMessage?:boolean;contactName?:string}};
 export type PendingFiscalDraft = {
  type: "nfse_draft"; phone: string; userId: string; expiresAt: string;
  stage: "service" | "new_service" | "recipient" | "document" | "amount" | "competence";
@@ -427,7 +437,7 @@ export type PendingFiscalDraft = {
  recipientName?: string; recipientDocument?: string; amount?: number;
 };
 
-export type PendingAction = (PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft) & {companyId?:string;workspaceMode?:"personal"|"business"};
+export type PendingAction = (PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft | PendingGoogleAgendaCommit) & {companyId?:string;workspaceMode?:"personal"|"business"};
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -466,9 +476,11 @@ type PendingActionInput = (
   | Omit<PendingClearHistory, "phone" | "expiresAt">
   | Omit<PendingSlotCorrection, "phone" | "expiresAt">
   | Omit<PendingCompanySelection,"phone"|"expiresAt">
-  | Omit<PendingFiscalDraft,"phone"|"expiresAt">) & {companyId?:string;workspaceMode?:"personal"|"business"};
+  | Omit<PendingFiscalDraft,"phone"|"expiresAt">
+  | Omit<PendingGoogleAgendaCommit,"phone"|"expiresAt">) & {companyId?:string;workspaceMode?:"personal"|"business"};
 
 const TTL_BY_TYPE: Partial<Record<PendingAction["type"], number>> = {
+  google_agenda_commit: 24 * 60 * 60 * 1000,
   recurring_confirmation: TTL_RECURRING_MS,
   meet_ata: TTL_MEET_ATA_MS,
   invoice_import: TTL_INVOICE_MS,
