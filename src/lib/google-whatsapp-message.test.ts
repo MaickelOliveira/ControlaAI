@@ -1,6 +1,7 @@
 import {NextRequest} from "next/server";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-const deps=vi.hoisted(()=>({handle:vi.fn(),signature:vi.fn(),config:vi.fn(),dedup:vi.fn(),begin:vi.fn(),finish:vi.fn(),media:vi.fn(),transcribe:vi.fn()}));
+const deps=vi.hoisted(()=>({handle:vi.fn(),signature:vi.fn(),config:vi.fn(),dedup:vi.fn(),begin:vi.fn(),finish:vi.fn(),media:vi.fn(),transcribe:vi.fn(),after:vi.fn()}));
+vi.mock("next/server",async importOriginal=>({...await importOriginal<typeof import("next/server")>(),after:deps.after}));
 vi.mock("server-only",()=>({}));
 vi.mock("./message-handler",()=>({handleIncomingMessage:deps.handle}));
 vi.mock("./waba",()=>({verifySignature:deps.signature,verifyToken:vi.fn(),downloadMedia:deps.media}));
@@ -22,7 +23,7 @@ const request=(provider:string,body:unknown,authorized=true)=>new NextRequest(`h
 const evolutionBody=(id:unknown="fixture-provider-message",message:unknown={conversation:"mensagem fictícia"})=>({event:"messages.upsert",data:{key:{id,remoteJid:`${phone}@s.whatsapp.net`,fromMe:false},message}});
 const wabaBody=(message:unknown)=>({entry:[{changes:[{value:{messages:[message]}}]}]});
 beforeEach(()=>{
- vi.clearAllMocks();deps.config.mockResolvedValue({waba:{appSecret:"fictitious-secret"},evolution:{webhookSecret:"fictitious-secret"}});deps.signature.mockResolvedValue(true);deps.dedup.mockResolvedValue(false);deps.handle.mockResolvedValue(undefined);deps.finish.mockResolvedValue(undefined);deps.begin.mockResolvedValue({finish:deps.finish});deps.media.mockResolvedValue({buffer:Buffer.from("fake audio"),mimeType:"audio/ogg"});deps.transcribe.mockResolvedValue("áudio fictício");vi.spyOn(console,"error").mockImplementation(()=>{});vi.spyOn(console,"log").mockImplementation(()=>{});
+ vi.clearAllMocks();deps.after.mockImplementation(callback=>{void callback();});deps.config.mockResolvedValue({waba:{appSecret:"fictitious-secret"},evolution:{webhookSecret:"fictitious-secret"}});deps.signature.mockResolvedValue(true);deps.dedup.mockResolvedValue(false);deps.handle.mockResolvedValue(undefined);deps.finish.mockResolvedValue(undefined);deps.begin.mockResolvedValue({finish:deps.finish});deps.media.mockResolvedValue({buffer:Buffer.from("fake audio"),mimeType:"audio/ogg"});deps.transcribe.mockResolvedValue("áudio fictício");vi.spyOn(console,"error").mockImplementation(()=>{});vi.spyOn(console,"log").mockImplementation(()=>{});
 });
 afterEach(()=>vi.restoreAllMocks());
 it("uses a deterministic server UUID for concurrent copies of one provider message and stable ordinal",async()=>{

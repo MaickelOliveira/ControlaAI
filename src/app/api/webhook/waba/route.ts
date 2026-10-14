@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { handleIncomingMessage } from "@/lib/message-handler";
+import { sendText as wppSend } from "@/lib/whatsapp";
 import { downloadMedia, verifyToken, verifySignature } from "@/lib/waba";
 import { transcribeAudio } from "@/lib/ai-processor";
 import { getConfig } from "@/lib/whatsapp-config";
@@ -105,7 +106,13 @@ export async function POST(req: NextRequest) {
       await Promise.allSettled(leases.map(lease=>lease?.finish()));
       return NextResponse.json({error:"Temporariamente indisponível"},{status:503});
     }
-    processMessages(messages, contactName, leases, receivedAt).catch(() => console.error("[webhook/waba] erro no processamento em background:"));
+    try {
+      after(() => processMessages(messages, contactName, leases, receivedAt)
+        .catch(() => console.error("[webhook/waba] erro no processamento em background:")));
+    } catch {
+      await Promise.allSettled(leases.map(lease => lease?.finish()));
+      return NextResponse.json({ error: "Temporariamente indisponível" }, { status: 503 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch  {
@@ -143,11 +150,17 @@ async function processMessages(messages: WabaMessage[], contactName?: string, le
     }
 
     if (msg.type === "audio" && msg.audio?.id) {
-      const media = await downloadMedia(msg.audio.id);
-      if (!media) continue;
+      const media = await downloadMedia(msg.audio.id).catch(() => null);
+      if (!media) {
+        await wppSend(from, "🎤 Não consegui receber o áudio. Pode enviar novamente?");
+        continue;
+      }
       const userId = await getUserIdByPhone(from).catch(() => null);
       const transcript = await transcribeAudio(media.buffer, media.mimeType, userId || undefined).catch(() => null);
-      if (!transcript) continue;
+      if (!transcript) {
+        await wppSend(from, "🎤 Não consegui entender o áudio. Pode digitar sua mensagem?");
+        continue;
+      }
       await handleIncomingMessage({ ...envelope, receivedAt, from, text: transcript, contactName });
       continue;
     }
@@ -155,8 +168,11 @@ async function processMessages(messages: WabaMessage[], contactName?: string, le
     if (["image", "video", "document"].includes(msg.type)) {
       const mediaField = msg[msg.type as "image" | "video" | "document"] as { id: string; caption?: string; filename?: string } | undefined;
       if (!mediaField?.id) continue;
-      const media = await downloadMedia(mediaField.id);
-      if (!media) continue;
+      const media = await downloadMedia(mediaField.id).catch(() => null);
+      if (!media) {
+        await wppSend(from, "Não consegui receber o arquivo. Pode enviar novamente?");
+        continue;
+      }
       await handleIncomingMessage({
         ...envelope, receivedAt, from,
         text: "",
