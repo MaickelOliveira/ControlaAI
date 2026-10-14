@@ -54,12 +54,16 @@ Each slice has at most five files and focused checks before commit. Parent owns
 full tests/build/types and independent review. Do not apply real DDL/credentials,
 publish/deploy, add dependencies or notifications from this isolated worktree.
 
-Storage verification:94 disposable PostgreSQL assertions pass, including original
+Storage verification:126 disposable PostgreSQL assertions pass, including original
 active binding/activation/access filters, queued/waiting/expired creation and
 current commands, both local state checks, supersession/deletion, attempt bounds,
 safe all-owner references/limit, exact personal/company IDs and preserving rollback.
 The fixture accepts an optional activation-migration path only for this isolated
 branch; integrated repository runs use its standard migration12 dependency.
+Untouched queued intents also require their authorized binding revision still
+match the active connection. Previously attempted intents retain reconciliation
+eligibility. Twenty old denied claims cannot monopolize a batch of twenty and
+prevent a newer authorized event from being processed.
 
 Server pump verification:16 fake-selector/worker tests pass, including maximum
 concurrency3 across20 jobs, full-batch validation before effects, immutable scope

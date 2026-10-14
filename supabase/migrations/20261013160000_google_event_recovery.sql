@@ -25,9 +25,10 @@ begin
   left join google_workspace.event_commands command on command.operation_id=head.operation_id and command.event_id=head.event_id and command.head_version=head.version
   where(origin.company_id is null or(company.id is not null and company.archived_at is null))
    and(link.kind='appointment' or(meet.id is not null and meet.company_id is not distinct from origin.company_id and not meet.workspace_legacy))
-   and((head.operation_id is null and creation.round_attempts<10 and(creation.state in ('queued','waiting') or(creation.state='running' and creation.lease_until<=statement_timestamp()))
+   and((head.operation_id is null and creation.round_attempts<10 and(creation.was_attempted or creation.authorized_binding_version=binding.version)
+    and(creation.state in ('queued','waiting') or(creation.state='running' and creation.lease_until<=statement_timestamp()))
     and appointment.status='scheduled' and(link.kind='appointment' or meet.status='scheduled'))
-    or(command.operation_id is not null and not head.deleted and command.round_attempts<10
+    or(command.operation_id is not null and not head.deleted and command.round_attempts<10 and(command.was_attempted or command.authorized_binding_version=binding.version)
      and(command.state in ('queued','waiting') or(command.state='running' and command.lease_until<=statement_timestamp()))
      and((command.kind='delete' and appointment.status='cancelled' and(link.kind='appointment' or meet.status='cancelled'))
       or(command.kind<>'delete' and appointment.status='scheduled' and(link.kind='appointment' or meet.status='scheduled')))))

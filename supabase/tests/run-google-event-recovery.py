@@ -65,7 +65,17 @@ def verify(f,baseline):
     other.save(subject='fictitious-recovery-new-account',binding_version=other.binding()['version']);check(other_event not in ids(f),'Changed Google account adopted old intent')
     f.sql('update public.companies set archived_at=clock_timestamp() where id='+quote(s.COMPANY_A)+';');check(not any(row['company_id']==s.COMPANY_A for row in pending(f)),'Archived company selected jobs');check(own in ids(f),'Archiving company hid independent personal job')
     check(l.eid(900) not in ids(f) and l.eid(901) not in ids(f),'Historical rows inferred recovery provenance')
-    for index in range(10,35):queued(personal,index)
+    # A calendar choice changes the binding revision without moving originals.
+    # Twenty untouched old intents must not monopolize the bounded batch.
+    for index in range(10,30):queued(personal,index)
+    previous=personal.binding();personal.call('binding_select_calendar',previous['version'],'fictitious-new-calendar','New choice')
+    eligible=queued(personal,30);rows=pending(f);check(any(row['event_id']==eligible for row in rows) and not any(row['event_id'] in {l.eid(index) for index in range(10,30)} for row in rows),'Unattempted stale binding intents starved eligible recovery')
+    stale_command=j.created(personal,56);f.read(j.prepare(personal,stale_command,56),'service_role')
+    attempted=x.prepare(personal,58);f.read(x.finish(personal,attempted,'retry',known=False,etag=None,error='TEMPORARY'),'service_role')
+    previous=personal.binding();personal.call('binding_select_calendar',previous['version'],'fictitious-third-calendar','Third choice');latest=queued(personal,57)
+    rows=pending(f);check(stale_command not in {row['event_id'] for row in rows},'Unattempted stale command selected despite permanently denied claim')
+    check(latest in {row['event_id'] for row in rows} and attempted['event_id'] in {row['event_id'] for row in rows},'Binding revision filter denied eligible or previously attempted reconciliation')
+    for index in range(60,85):queued(personal,index)
     rows=pending(f);check(len(rows)==20 and all(set(row)==KEYS for row in rows),'Recovery limit/private reference allowlist violated')
     check(len(pending(f,1))==1,'Requested bounded limit ignored')
     for limit in [0,21]:f.rejected('select public.zelo_google_event_pending('+str(limit)+');','Out-of-bounds recovery limit accepted','service_role')
