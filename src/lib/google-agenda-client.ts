@@ -1,15 +1,17 @@
 import {googleAgendaAppointment,googleAgendaAppointments,type GoogleAgendaAppointment} from "./google-agenda-client-contract";
 import type {GoogleSettingsTarget} from "./google-settings-client";
-export type GoogleAgendaClientState=Readonly<{target:GoogleSettingsTarget|null;appointments:readonly GoogleAgendaAppointment[];loading:boolean;busy:boolean;googleConnected:boolean;errorCode:string|null}>;
+export type GoogleAgendaConflictChoice=Readonly<{appointmentId:string;expectedGoogleSyncVersion:string;cancellation:boolean;canOverwrite:boolean|null}>;
+export type GoogleAgendaConflictActions=Readonly<{choice:GoogleAgendaConflictChoice|null;check:(record:GoogleAgendaAppointment)=>Promise<boolean>;confirm:(choice:GoogleAgendaConflictChoice)=>Promise<GoogleAgendaAppointment|null>;cancel:()=>void}>;
+export type GoogleAgendaClientState=Readonly<{target:GoogleSettingsTarget|null;appointments:readonly GoogleAgendaAppointment[];loading:boolean;busy:boolean;googleConnected:boolean;errorCode:string|null;conflict:GoogleAgendaConflictChoice|null}>;
 type Dependencies={fetch:(url:string,init?:RequestInit)=>Promise<Response>;uuid:()=>string;changed:(state:GoogleAgendaClientState)=>void};
-export function emptyGoogleAgendaState():GoogleAgendaClientState{return Object.freeze({target:null,appointments:Object.freeze([]),loading:false,busy:false,googleConnected:false,errorCode:null});}
+export function emptyGoogleAgendaState():GoogleAgendaClientState{return Object.freeze({target:null,appointments:Object.freeze([]),loading:false,busy:false,googleConnected:false,errorCode:null,conflict:null});}
 function payload(value:Record<string,unknown>):string{return JSON.stringify(Object.fromEntries(Object.entries(value).filter(([,value])=>value!==undefined).sort(([a],[b])=>a.localeCompare(b))));}
 /** Identities stay in memory for this explicit form/action intent; they confer
  * no record ownership. Ambiguous responses never replace UUID or payload. */
 export function createGoogleAgendaController(deps:Dependencies){
- let state=emptyGoogleAgendaState(),generation=0,pending:AbortController|undefined;const intents=new Map<string,{id:string;url:string;method:string;body:string}>();
+ let state=emptyGoogleAgendaState(),generation=0,pending:AbortController|undefined,conflictReadGeneration:number|null=null;const intents=new Map<string,{id:string;url:string;method:string;body:string}>();
  const publish=(patch:Partial<GoogleAgendaClientState>)=>{state=Object.freeze({...state,...patch});deps.changed(state);};
- const clear=(notify=true)=>{generation++;pending?.abort();pending=undefined;intents.clear();state=emptyGoogleAgendaState();if(notify)deps.changed(state);};
+ const clear=(notify=true)=>{generation++;pending?.abort();pending=undefined;conflictReadGeneration=null;intents.clear();state=emptyGoogleAgendaState();if(notify)deps.changed(state);};
  const valid=(token:number)=>generation===token&&!pending?.signal.aborted&&state.target!==null;
  async function read(url:string,init:RequestInit={}):Promise<{value:unknown;status:number}>{
   const workspaceKey=state.target?.workspaceKey;if(!workspaceKey)throw Error("AGENDA_WORKSPACE_CHANGED");
@@ -22,7 +24,7 @@ export function createGoogleAgendaController(deps:Dependencies){
    throw Object.assign(Error(response.status===401?"AGENDA_AUTH_REQUIRED":scopeChanged?"AGENDA_WORKSPACE_CHANGED":response.status===409?"AGENDA_CONFLICT":response.status===403?"AGENDA_ACCESS_DENIED":"AGENDA_UNAVAILABLE"),{status:response.status});
   }return {value,status:response.status};
  }
- function failed(token:number,error:unknown){if(!valid(token))return;const code=error instanceof Error&&["AGENDA_RESPONSE_INVALID","AGENDA_CONFLICT","AGENDA_INTENT_CHANGED","AGENDA_AUTH_REQUIRED","AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(error.message)?error.message:"AGENDA_UNAVAILABLE";if(code==="AGENDA_AUTH_REQUIRED"){clear(false);publish({errorCode:code});}else publish({errorCode:code,...(["AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(code)?{appointments:Object.freeze([]),googleConnected:false}:{})});}
+ function failed(token:number,error:unknown){if(!valid(token))return;const code=error instanceof Error&&["AGENDA_RESPONSE_INVALID","AGENDA_CONFLICT","AGENDA_INTENT_CHANGED","AGENDA_AUTH_REQUIRED","AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(error.message)?error.message:"AGENDA_UNAVAILABLE";if(code==="AGENDA_AUTH_REQUIRED"){clear(false);publish({errorCode:code});}else publish({errorCode:code,...(["AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(code)?{appointments:Object.freeze([]),googleConnected:false,conflict:null}:{})});}
  async function refresh(token:number){const {value}=await read("/api/agenda");if(valid(token))publish({appointments:googleAgendaAppointments(value)});}
  async function reload(){
   if(!state.target||state.busy||state.loading)return;const token=++generation;pending?.abort();pending=new AbortController();publish({loading:true,errorCode:null});
@@ -51,11 +53,41 @@ export function createGoogleAgendaController(deps:Dependencies){
   }catch(error){if(valid(token)&&(error as {status?:unknown})?.status===409){try{await refresh(token);}catch(refreshError){failed(token,refreshError);}}failed(token,error);return null;}
   finally{if(valid(token))publish({busy:false});}
  }
+ function conflictBody(version:string){return {expectedGoogleSyncVersion:version,confirmOverwrite:true};}
+ function conflictRecord(record:GoogleAgendaAppointment){return record.googleSyncVersion!==null&&record.googleSyncState==="failed"&&record.googleSyncFailureCode==="ETAG_CONFLICT";}
+ /** This GET is private metadata only. It never submits or grants permission to
+  * overwrite until a separate human action invokes confirmConflict. */
+ async function checkConflict(record:GoogleAgendaAppointment):Promise<boolean>{
+  if(!state.target||state.busy||state.loading||["AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(state.errorCode??"")||!conflictRecord(record))return false;
+  const appointmentId=record.id,version=record.googleSyncVersion!,existing=intents.get(`overwrite:${appointmentId}`);
+  if(existing&&existing.body!==payload(conflictBody(version))){publish({errorCode:"AGENDA_INTENT_CHANGED"});return false;}
+  const choice=Object.freeze({appointmentId,expectedGoogleSyncVersion:version,cancellation:record.googleCancellationPending,canOverwrite:null});
+  const token=++generation;pending?.abort();pending=new AbortController();conflictReadGeneration=token;publish({busy:true,errorCode:null,conflict:choice});
+  try{
+   const query=new URLSearchParams({expectedGoogleSyncVersion:version});
+   const {value}=await read(`/api/agenda/${appointmentId}/conflict?${query}`);
+   if(!valid(token)||state.conflict!==choice)return false;
+   if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).length!==1||typeof (value as {canOverwrite?:unknown}).canOverwrite!=="boolean")throw Error("AGENDA_RESPONSE_INVALID");
+   const canOverwrite=(value as {canOverwrite:boolean}).canOverwrite;publish({conflict:Object.freeze({...choice,canOverwrite})});return canOverwrite;
+  }catch(error){if(valid(token)&&state.conflict===choice){publish({conflict:null});failed(token,error);}return false;}
+  finally{if(conflictReadGeneration===token)conflictReadGeneration=null;if(valid(token))publish({busy:false});}
+ }
+ async function confirmConflict(selected:GoogleAgendaConflictChoice):Promise<GoogleAgendaAppointment|null>{
+  const choice=state.conflict;
+  if(!choice?.canOverwrite||choice!==selected)return null;
+  const confirmed=await execute(`overwrite:${choice.appointmentId}`,`/api/agenda/${choice.appointmentId}/conflict`,"POST",conflictBody(choice.expectedGoogleSyncVersion));
+  if(confirmed&&state.conflict===choice)publish({conflict:null});return confirmed;
+ }
+ function cancelConflict(){
+  if(conflictReadGeneration===generation){generation++;pending?.abort();pending=undefined;conflictReadGeneration=null;publish({conflict:null,busy:false});}
+  else publish({conflict:null});
+ }
  return Object.freeze({state:()=>state,newIntent,setTarget,reload,clear,clearError:()=>{if(!["AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(state.errorCode??""))publish({errorCode:null});},
+  checkConflict,confirmConflict,cancelConflict,
   create:(id:string,body:Record<string,unknown>)=>execute(id,"/api/agenda","POST",body,true),
   patch:(id:string,record:GoogleAgendaAppointment,body:Record<string,unknown>)=>{const clean={...body};delete clean.withMeet;return execute(id,`/api/agenda/${record.id}`,"PATCH",{...clean,expectedGoogleSyncVersion:record.googleSyncVersion});},
   done:(record:GoogleAgendaAppointment)=>execute(`done:${record.id}`,`/api/agenda/${record.id}`,"PATCH",{status:"done",expectedGoogleSyncVersion:record.googleSyncVersion}),
   remove:(record:GoogleAgendaAppointment)=>execute(`delete:${record.id}`,`/api/agenda/${record.id}`,"DELETE",{expectedGoogleSyncVersion:record.googleSyncVersion}),
-  retry:(record:GoogleAgendaAppointment)=>execute(`retry:${record.id}`,`/api/agenda/${record.id}/retry`,"POST",{expectedGoogleSyncVersion:record.googleSyncVersion}),
+  retry:(record:GoogleAgendaAppointment)=>conflictRecord(record)?Promise.resolve(null):execute(`retry:${record.id}`,`/api/agenda/${record.id}/retry`,"POST",{expectedGoogleSyncVersion:record.googleSyncVersion}),
  });
 }

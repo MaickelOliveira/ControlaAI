@@ -3,6 +3,7 @@ import PageTitle from "@/components/PageTitle";
 import { useState, useMemo } from "react";
 import {useGoogleAgenda} from "@/components/useGoogleAgenda";
 import GoogleAgendaSyncStatus from "@/components/GoogleAgendaSyncStatus";
+import type {GoogleAgendaConflictActions} from "@/lib/google-agenda-client";
 import {safeGoogleMeetHref,type GoogleAgendaAppointment} from "@/lib/google-agenda-client-contract";
 
 type AppointmentRepeat = "none" | "daily" | "weekly" | "monthly" | "yearly";
@@ -114,7 +115,7 @@ export default function AgendaPagePt() {
   const today = todaySP();
   const [year, month] = getYearMonth(today);
 
-  const {state:agenda,controller}=useGoogleAgenda();
+  const {state:agenda,controller,conflictActions}=useGoogleAgenda();
   const appointments=agenda.appointments,loading=agenda.loading,saving=agenda.busy,googleConnected=agenda.googleConnected;
   const [formIntent,setFormIntent]=useState<string|null>(null);
   const [formError,setFormError]=useState(false);
@@ -355,7 +356,7 @@ export default function AgendaPagePt() {
                       onEdit={openEdit}
                       onDone={handleDone}
                       onDelete={handleDelete}
-          onRetry={handleRetry} busy={saving||loading}
+          onRetry={handleRetry} conflictActions={conflictActions} busy={saving||loading}
                     />
                   ))}
                 </div>
@@ -371,12 +372,12 @@ export default function AgendaPagePt() {
           onEdit={openEdit}
           onDone={handleDone}
           onDelete={handleDelete}
-          onRetry={handleRetry} busy={saving||loading}
+          onRetry={handleRetry} conflictActions={conflictActions} busy={saving||loading}
           loading={loading}
         />
       )}
 
-      {appointments.some(row=>row.googleCancellationPending)&&<section className="mb-4 rounded-xl border border-line bg-surface p-4"><h2 className="text-sm font-semibold text-ink">Cancelamentos aguardando o Google</h2>{appointments.filter(row=>row.googleCancellationPending).map(row=><div key={row.id} className="mt-3"><p className="text-sm text-ink">{row.title}</p><GoogleAgendaSyncStatus appointment={row} locale="pt-PT" onRetry={()=>void handleRetry(row.id)} busy={saving||loading}/></div>)}</section>}
+      {appointments.some(row=>row.googleCancellationPending)&&<section className="mb-4 rounded-xl border border-line bg-surface p-4"><h2 className="text-sm font-semibold text-ink">Cancelamentos aguardando o Google</h2>{appointments.filter(row=>row.googleCancellationPending).map(row=><div key={row.id} className="mt-3"><p className="text-sm text-ink">{row.title}</p><GoogleAgendaSyncStatus appointment={row} locale="pt-PT" onRetry={()=>void handleRetry(row.id)} conflictActions={conflictActions} busy={saving||loading}/></div>)}</section>}
 
       {/* Modal */}
       {showModal && (
@@ -476,7 +477,7 @@ export default function AgendaPagePt() {
                   ))}
                 </select>
               </div>
-              {editing&&<GoogleAgendaSyncStatus appointment={editingDisplay!} locale="pt-PT" onRetry={()=>void handleRetry(editing.id)} busy={saving||loading}/>}
+              {editing&&<GoogleAgendaSyncStatus appointment={editingDisplay!} locale="pt-PT" onRetry={()=>void handleRetry(editing.id)} conflictActions={conflictActions} busy={saving||loading}/>}
               {(agenda.errorCode||formError)&&<p className="text-xs text-red-ink" role="alert">Os dados mudaram ou não foi possível confirmar o pedido. Reabra o formulário para alterá-lo, ou tente novamente o mesmo pedido.</p>}
               <div className="flex gap-2 justify-end pt-1">
                 <button onClick={() => { setShowModal(false); setEditing(null); }}
@@ -496,12 +497,13 @@ export default function AgendaPagePt() {
   );
 }
 
-function DayEventRow({ evt, onEdit, onDone, onDelete,onRetry,busy }: {
+function DayEventRow({ evt, onEdit, onDone, onDelete,onRetry,conflictActions,busy }: {
   evt: Appointment;
   onEdit: (a: Appointment) => void;
   onDone: (id: string) => void;
   onDelete: (id: string) => void;
   onRetry: (id:string)=>void;
+  conflictActions:GoogleAgendaConflictActions;
   busy:boolean;
 }) {
   const color = colorForId(evt.id);
@@ -515,7 +517,7 @@ function DayEventRow({ evt, onEdit, onDone, onDelete,onRetry,busy }: {
           {evt.endAt && !evt.allDay && ` – ${formatTimeSP(evt.endAt)}`}
           {evt.location && ` · 📍${evt.location}`}
         </p>
-        <GoogleAgendaSyncStatus appointment={evt} locale="pt-PT" onRetry={()=>onRetry(evt.id)} busy={busy}/>
+        <GoogleAgendaSyncStatus appointment={evt} locale="pt-PT" onRetry={()=>onRetry(evt.id)} conflictActions={conflictActions} busy={busy}/>
       </div>
       <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
         {safeGoogleMeetHref(evt.meetLink) && (
@@ -543,13 +545,14 @@ function DayEventRow({ evt, onEdit, onDone, onDelete,onRetry,busy }: {
   );
 }
 
-function ListView({ appointments, today, onEdit, onDone, onDelete, loading,onRetry,busy }: {
+function ListView({ appointments, today, onEdit, onDone, onDelete, loading,onRetry,conflictActions,busy }: {
   appointments: readonly Appointment[];
   today: string;
   onEdit: (a: Appointment) => void;
   onDone: (id: string) => void;
   onDelete: (id: string) => void;
   onRetry: (id:string)=>void;
+  conflictActions:GoogleAgendaConflictActions;
   busy:boolean;
   loading: boolean;
 }) {
@@ -606,7 +609,7 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, loading,onRet
                       {evt.location && ` · 📍${evt.location}`}
                       {evt.repeat !== "none" && ` · 🔁${REPEAT_LABEL[evt.repeat]}`}
                     </p>
-                    <GoogleAgendaSyncStatus appointment={evt} locale="pt-PT" onRetry={()=>onRetry(evt.id)} busy={busy}/>
+                    <GoogleAgendaSyncStatus appointment={evt} locale="pt-PT" onRetry={()=>onRetry(evt.id)} conflictActions={conflictActions} busy={busy}/>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                     {safeGoogleMeetHref(evt.meetLink) && (

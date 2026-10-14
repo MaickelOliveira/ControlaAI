@@ -1,5 +1,6 @@
 import "server-only";
 import {confirmGoogleEventConflict,inspectGoogleEventConflict,type GoogleEventConflictConfirmation} from "./google-event-conflict";
+import {wakeGoogleEventWorker} from "./google-event-worker";
 import {randomUUID} from "node:crypto";
 import {googleEventChangePayload,type GoogleEventChangePayload} from "./google-event-command-policy";
 import {loadGoogleEventCommand,prepareGoogleEventCommand} from "./google-event-command-store";
@@ -64,7 +65,7 @@ function canonical(value:unknown,kind:"appointment"|"meet",source:EventSource):R
   return Object.freeze({payload,attendees:kind==="meet"?attendees:Object.freeze([]),source});
  }catch{throw Error("GOOGLE_EVENT_INPUT_INVALID");}
 }
-async function synchronize(scope:GoogleWorkspace,eventId:string):Promise<void>{try{await synchronizeGoogleEventCreation(scope,eventId);}catch(error){if(!(error instanceof Error&&error.message==="GOOGLE_EVENT_SYNC_UNAVAILABLE"))throw Error("GOOGLE_EVENT_UNAVAILABLE");}}
+async function synchronize(scope:GoogleWorkspace,eventId:string):Promise<void>{try{const result=await synchronizeGoogleEventCreation(scope,eventId);if(["queued","running","waiting"].includes(result.state))wakeGoogleEventWorker();}catch(error){wakeGoogleEventWorker();if(!(error instanceof Error&&error.message==="GOOGLE_EVENT_SYNC_UNAVAILABLE"))throw Error("GOOGLE_EVENT_UNAVAILABLE");}}
 async function create(scope:GoogleWorkspace,eventId:string,value:WorkspaceEventInput|WorkspaceMeetInput,source:EventSource,kind:"appointment"|"meet"):Promise<void>{
  const selected=capture(scope,eventId),id=selected.eventId!,input=canonical(value,kind,source);
  const existing=await loadGoogleLocalEvent(selected.scope,id);
@@ -103,7 +104,7 @@ async function current(scope:GoogleWorkspace,eventId:string):Promise<WorkspaceAp
 function unchanged(row:WorkspaceAppointment,expectation:GoogleEventExpectation):void{if(row.googleSyncVersion!==expectation.expectedGoogleSyncVersion)throw Error("GOOGLE_EVENT_CONFLICT");}
 async function activeOwner(scope:GoogleWorkspace):Promise<void>{if(!await loadGoogleOwnerActivation(scope.userId))throw Error("GOOGLE_EVENT_NOT_CONNECTED");}
 function head(expectation:GoogleEventExpectation):string{return googleEventSyncVersion(expectation.expectedGoogleSyncVersion)[1];}
-async function commandEffect(scope:GoogleWorkspace,eventId:string,operationId:string):Promise<void>{try{await synchronizeGoogleEventCommand(scope,eventId,operationId);}catch(error){if(!(error instanceof Error&&error.message==="GOOGLE_EVENT_SYNC_UNAVAILABLE"))throw Error("GOOGLE_EVENT_UNAVAILABLE");}}
+async function commandEffect(scope:GoogleWorkspace,eventId:string,operationId:string):Promise<void>{try{const result=await synchronizeGoogleEventCommand(scope,eventId,operationId);if(["queued","running","waiting"].includes(result.state))wakeGoogleEventWorker();}catch(error){wakeGoogleEventWorker();if(!(error instanceof Error&&error.message==="GOOGLE_EVENT_SYNC_UNAVAILABLE"))throw Error("GOOGLE_EVENT_UNAVAILABLE");}}
 function changedPayload(base:GoogleEventControlledSnapshot,patch:Readonly<Record<string,unknown>>):Readonly<{payload:GoogleEventChangePayload;attendees:readonly GoogleLocalAttendee[]}>{
  const previous=base.payload,title=patch.title===undefined?previous.summary:patch.title;
  const guests=patch.attendees??(base.kind==="meet"?base.attendees:previous.attendees);

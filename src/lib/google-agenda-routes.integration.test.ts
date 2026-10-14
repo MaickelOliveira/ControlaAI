@@ -1,15 +1,16 @@
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-const m=vi.hoisted(()=>({session:vi.fn(),scope:vi.fn(),settings:vi.fn(),list:vi.fn(),create:vi.fn(),update:vi.fn(),cancel:vi.fn(),retry:vi.fn()}));
+const m=vi.hoisted(()=>({session:vi.fn(),scope:vi.fn(),settings:vi.fn(),list:vi.fn(),create:vi.fn(),update:vi.fn(),cancel:vi.fn(),retry:vi.fn(),inspect:vi.fn(),confirm:vi.fn()}));
 vi.mock("server-only",()=>({}));
 vi.mock("@/lib/auth",()=>({getSession:m.session}));
 vi.mock("@/lib/company-context",async original=>({...await original<typeof import("./company-context")>(),companyScopeFor:m.scope}));
-vi.mock("@/lib/google-event-service",()=>({listWorkspaceAppointments:m.list,createWorkspaceAppointment:m.create,getWorkspaceAppointment:vi.fn(),updateWorkspaceAppointment:m.update,cancelWorkspaceAppointment:m.cancel,retryWorkspaceGoogleEvent:m.retry}));
+vi.mock("@/lib/google-event-service",()=>({listWorkspaceAppointments:m.list,createWorkspaceAppointment:m.create,getWorkspaceAppointment:vi.fn(),updateWorkspaceAppointment:m.update,cancelWorkspaceAppointment:m.cancel,retryWorkspaceGoogleEvent:m.retry,inspectWorkspaceGoogleEventConflict:m.inspect,confirmWorkspaceGoogleEventConflict:m.confirm}));
 vi.mock("@/lib/google-settings-service",async original=>({...await original<typeof import("./google-settings-service")>(),loadGoogleSettings:m.settings}));
 import {createGoogleAgendaController} from "./google-agenda-client";
 import {googleSettingsWorkspaceView} from "./google-settings-service";
 import {GET as list,POST as create} from "../app/api/agenda/route";
 import {PATCH,DELETE} from "../app/api/agenda/[id]/route";
 import {POST as retry} from "../app/api/agenda/[id]/retry/route";
+import {GET as inspectConflict,POST as confirmConflict} from "../app/api/agenda/[id]/conflict/route";
 import {GET as status} from "../app/api/google/status/route";
 const owner="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",company="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",id="cccccccc-cccc-4ccc-8ccc-ccccccccccc1";
 const scope={userId:owner,companyId:company,mode:"business" as const},target={...googleSettingsWorkspaceView(scope),label:"Fixture company"};
@@ -26,6 +27,7 @@ async function transport(url:string,init:RequestInit={}):Promise<Response>{
  else if(url===`/api/agenda/${id}`&&request.method==="PATCH")response=await PATCH(request,context);
  else if(url===`/api/agenda/${id}`&&request.method==="DELETE")response=await DELETE(request,context);
  else if(url===`/api/agenda/${id}/retry`&&request.method==="POST")response=await retry(request,context);
+ else if(new URL(request.url).pathname===`/api/agenda/${id}/conflict`)response=request.method==="GET"?await inspectConflict(request,context):await confirmConflict(request,context);
  else throw Error("FIXTURE_ROUTE_NOT_FOUND");
  if(lost===request.method){lost=null;throw Error("FIXTURE_RESPONSE_LOST");}return response;
 }
@@ -63,3 +65,6 @@ it("real conflict refresh keeps the original revision/UUID even after the list h
 it("local metadata includes explicit null expectation through the actual route",async()=>{
  m.list.mockResolvedValue([{...record,googleSyncVersion:null,googleSyncState:"local"}]);await controller.setTarget(target);m.update.mockResolvedValue({...record,status:"done",googleSyncVersion:null,googleSyncState:"local"});await controller.done(controller.state().appointments[0]);expect(m.update).toHaveBeenCalledWith(scope,id,{status:"done"},{clientMutationId:expect.any(String),expectedGoogleSyncVersion:null});
 });
+
+it("human conflict choice reaches actual strict route and keeps its original receipt after lost response",async()=>{m.list.mockResolvedValue([{...record,googleSyncState:"failed",googleSyncFailureCode:"ETAG_CONFLICT"}]);m.inspect.mockResolvedValue({canOverwrite:true});m.confirm.mockResolvedValue({...record,googleSyncState:"queued"});await controller.setTarget(target);await controller.checkConflict(controller.state().appointments[0]);const choice=controller.state().conflict!;expect(m.confirm).not.toHaveBeenCalled();expect(m.inspect).toHaveBeenCalledWith(scope,id,record.googleSyncVersion);lost="POST";expect(await controller.confirmConflict(choice)).toBeNull();expect(await controller.confirmConflict(choice)).toMatchObject({googleSyncState:"queued"});expect(m.confirm.mock.calls[0]).toEqual(m.confirm.mock.calls[1]);expect(m.confirm.mock.calls[0]).toEqual([scope,id,{clientMutationId:expect.any(String),expectedGoogleSyncVersion:record.googleSyncVersion,confirmOverwrite:true}]);});
+it("actual conflict409 refresh preserves the frozen human choice instead of adopting a new version",async()=>{m.list.mockResolvedValue([{...record,googleSyncState:"failed",googleSyncFailureCode:"ETAG_CONFLICT"}]);m.inspect.mockResolvedValue({canOverwrite:true});m.confirm.mockRejectedValueOnce(Error("GOOGLE_EVENT_COMMAND_CONFLICT")).mockResolvedValue({...record,googleSyncState:"queued"});await controller.setTarget(target);await controller.checkConflict(controller.state().appointments[0]);const choice=controller.state().conflict!;m.list.mockResolvedValue([{...record,googleSyncVersion:"v1:9007199254740993:2:1"}]);await controller.confirmConflict(choice);expect(controller.state().conflict).toBe(choice);await controller.confirmConflict(choice);expect(m.confirm.mock.calls[0]).toEqual(m.confirm.mock.calls[1]);expect(m.confirm.mock.calls[1][2].expectedGoogleSyncVersion).toBe(record.googleSyncVersion);});
