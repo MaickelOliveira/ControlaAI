@@ -41,5 +41,13 @@ This increment adds no later WhatsApp invitation/notification automation: reliab
 future delivery would require its own journal and deduplication contract. Existing
 minutes/reminders remain metadata operations and must acquire no Google credentials.
 
+The consumer factory dispatches creation/control only to the approved scoped
+service, with the fixed `whatsapp` source, stable UUID and original exact revision.
+Confirmed replay uses scoped reads, and list/range/keyword consumers share the same
+authorized read contract. Read completion revalidates the participant context.
+Confirmation text distinguishes saved Zelo rows from Google work still pending or
+failed. Only a valid Meet URL with succeeded sync state and no conference pending
+can be offered as a newly confirmed invitation/link.
+
 Tests use fictitious participants, contexts, IDs and services only. No WhatsApp,
 Google, invitation or customer storage operation is used for verification.
