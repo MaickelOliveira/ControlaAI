@@ -17,6 +17,10 @@ UUIDs and the captured exact Google version. Changed attempted payloads require 
 new explicit form intent. Lost responses retain the original intent. Confirmed rows
 are upserted by ID to avoid duplicates after reload/retry. Ordinary edits never
 send `withMeet:false` as a conference removal; completion is local metadata only.
+All PATCH/DELETE/retry bodies carry `clientMutationId` and the captured snapshot as
+`expectedGoogleSyncVersion`, including explicit null for local/legacy records.
+Completion carries the same required expectation/identity while its service action
+remains local metadata; lost acknowledgements reuse the original UUID and payload.
 Conflict 409 reloads confirmed records and retains the form/intent rather than
 upgrading its version or overwriting another change. Expired sessions and SSR
 target changes clear local state, abort pending requests and invalidate all success,
@@ -48,10 +52,14 @@ UTF-8, projected to only present keys and frozen. Field-value validation belongs
 the scoped service. Errors normalize an exact code allowlist to fixed public
 messages/statuses; unknown diagnostics and internal causes are never returned.
 
-Retry is explicit POST `/api/agenda/[id]/google-retry` with version/request UUID.
+Retry is explicit POST `/api/agenda/[id]/retry` with version/request UUID.
 DELETE accepts a current appointment snapshot or an acknowledged `{ok:true}` then
 reloads pending cancellation snapshots. The UI must preserve cancelled pending
 records in a separate recovery list; no empty Meet link is opened.
 
-Tests use fake fetch, fictitious UUIDs and delayed responses only. Parent integration
-validates types/build/server contracts and reviews the full cutover before deploy.
+Controller tests use fake fetch, fictitious UUIDs and delayed responses. A separate
+integration test dispatches browser requests into the actual Agenda/status route
+handlers and HTTP guards, mocking only authenticated scope and private service
+calls. It proves creation, editing, completion, cancellation, retry, lost responses,
+exact big integer/null versions, stale workspace denial and conflict reload without
+rebasing. Parent integration validates types/build and reviews before deploy.

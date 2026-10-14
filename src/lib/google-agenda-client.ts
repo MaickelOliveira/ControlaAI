@@ -12,10 +12,17 @@ export function createGoogleAgendaController(deps:Dependencies){
  const clear=(notify=true)=>{generation++;pending?.abort();pending=undefined;intents.clear();state=emptyGoogleAgendaState();if(notify)deps.changed(state);};
  const valid=(token:number)=>generation===token&&!pending?.signal.aborted&&state.target!==null;
  async function read(url:string,init:RequestInit={}):Promise<{value:unknown;status:number}>{
-  const response=await deps.fetch(url,{...init,cache:"no-store",signal:pending?.signal});let value:unknown;try{value=await response.json();}catch{throw Error("AGENDA_RESPONSE_INVALID");}
-  if(!response.ok)throw Object.assign(Error(response.status===409?"AGENDA_CONFLICT":response.status===401?"AGENDA_AUTH_REQUIRED":"AGENDA_UNAVAILABLE"),{status:response.status});return {value,status:response.status};
+  const workspaceKey=state.target?.workspaceKey;if(!workspaceKey)throw Error("AGENDA_WORKSPACE_CHANGED");
+  const headers=new Headers(init.headers);headers.set("X-Zelo-Workspace-Key",workspaceKey);
+  const response=await deps.fetch(url,{...init,headers,cache:"no-store",signal:pending?.signal});
+  if(response.ok&&response.headers.get("X-Zelo-Workspace-Key")!==workspaceKey)throw Error("AGENDA_WORKSPACE_CHANGED");
+  let value:unknown;try{value=await response.json();}catch{throw Error("AGENDA_RESPONSE_INVALID");}
+  if(!response.ok){
+   const scopeChanged=value&&typeof value==="object"&&["GOOGLE_SETTINGS_WORKSPACE_CHANGED","GOOGLE_EVENT_WORKSPACE_CHANGED"].includes((value as {code?:string}).code??"");
+   throw Object.assign(Error(response.status===401?"AGENDA_AUTH_REQUIRED":scopeChanged?"AGENDA_WORKSPACE_CHANGED":response.status===409?"AGENDA_CONFLICT":response.status===403?"AGENDA_ACCESS_DENIED":"AGENDA_UNAVAILABLE"),{status:response.status});
+  }return {value,status:response.status};
  }
- function failed(token:number,error:unknown){if(!valid(token))return;const code=error instanceof Error&&["AGENDA_RESPONSE_INVALID","AGENDA_CONFLICT","AGENDA_INTENT_CHANGED","AGENDA_AUTH_REQUIRED"].includes(error.message)?error.message:"AGENDA_UNAVAILABLE";if(code==="AGENDA_AUTH_REQUIRED"){clear(false);publish({errorCode:code});}else publish({errorCode:code});}
+ function failed(token:number,error:unknown){if(!valid(token))return;const code=error instanceof Error&&["AGENDA_RESPONSE_INVALID","AGENDA_CONFLICT","AGENDA_INTENT_CHANGED","AGENDA_AUTH_REQUIRED","AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(error.message)?error.message:"AGENDA_UNAVAILABLE";if(code==="AGENDA_AUTH_REQUIRED"){clear(false);publish({errorCode:code});}else publish({errorCode:code,...(["AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(code)?{appointments:Object.freeze([]),googleConnected:false}:{})});}
  async function refresh(token:number){const {value}=await read("/api/agenda");if(valid(token))publish({appointments:googleAgendaAppointments(value)});}
  async function reload(){
   if(!state.target||state.busy||state.loading)return;const token=++generation;pending?.abort();pending=new AbortController();publish({loading:true,errorCode:null});
@@ -30,7 +37,7 @@ export function createGoogleAgendaController(deps:Dependencies){
  function newIntent(){const id=deps.uuid();if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))throw Error("AGENDA_INTENT_CHANGED");return id.toLowerCase();}
  function upsert(record:GoogleAgendaAppointment){const rows=state.appointments.filter(value=>value.id!==record.id);if(record.status!=="cancelled"||record.googleCancellationPending)rows.push(record);publish({appointments:Object.freeze(rows.sort((a,b)=>a.startAt.localeCompare(b.startAt)))});}
  async function execute(intentKey:string,url:string,method:string,body:Record<string,unknown>,creation=false,metadata=false):Promise<GoogleAgendaAppointment|null>{
-  if(!state.target||state.busy||state.loading)return null;const serialized=payload(body),existing=intents.get(intentKey);
+  if(!state.target||state.busy||state.loading||["AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(state.errorCode??""))return null;const serialized=payload(body),existing=intents.get(intentKey);
   if(existing&&(existing.url!==url||existing.method!==method||existing.body!==serialized)){publish({errorCode:"AGENDA_INTENT_CHANGED"});return null;}
   let intent=existing;
   if(!intent){intent={id:creation?intentKey:newIntent(),url,method,body:serialized};intents.set(intentKey,intent);}
@@ -44,7 +51,7 @@ export function createGoogleAgendaController(deps:Dependencies){
   }catch(error){if(valid(token)&&(error as {status?:unknown})?.status===409){try{await refresh(token);}catch(refreshError){failed(token,refreshError);}}failed(token,error);return null;}
   finally{if(valid(token))publish({busy:false});}
  }
- return Object.freeze({state:()=>state,newIntent,setTarget,reload,clear,clearError:()=>publish({errorCode:null}),
+ return Object.freeze({state:()=>state,newIntent,setTarget,reload,clear,clearError:()=>{if(!["AGENDA_WORKSPACE_CHANGED","AGENDA_ACCESS_DENIED"].includes(state.errorCode??""))publish({errorCode:null});},
   create:(id:string,body:Record<string,unknown>)=>execute(id,"/api/agenda","POST",body,true),
   patch:(id:string,record:GoogleAgendaAppointment,body:Record<string,unknown>)=>{const clean={...body};delete clean.withMeet;return execute(id,`/api/agenda/${record.id}`,"PATCH",{...clean,googleSyncVersion:record.googleSyncVersion});},
   done:(record:GoogleAgendaAppointment)=>execute(`done:${record.id}`,`/api/agenda/${record.id}`,"PATCH",{status:"done"},false,true),
