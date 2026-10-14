@@ -92,13 +92,23 @@ export async function loadGoogleEventCommand(scope:GoogleWorkspace,eventId:strin
 }
 /** Explicit authorized action only; immutable command and desired linked local
  * fields commit before any provider mutation. A stale head is never adopted. */
-export async function prepareGoogleEventCommand(scope:GoogleWorkspace,eventId:string,operationId:string,headVersion:string,value:unknown):Promise<GoogleEventCommand>{
+export async function prepareGoogleEventCommand(scope:GoogleWorkspace,eventId:string,operationId:string,headVersion:string,value:unknown,expectedSyncVersion?:string):Promise<GoogleEventCommand>{
  try{
   const selected=capture(scope,eventId,operationId),normalized=input(value),revision=version(headVersion);
+  if(expectedSyncVersion!==undefined){
+   try{if(typeof expectedSyncVersion!=="string"||!/^v1:(?:0|[1-9]\d*):(?:0|[1-9]\d*):(?:0|[1-9]\d*)$/.test(expectedSyncVersion))throw Error();
+    const parts=expectedSyncVersion.split(":").slice(1).map(part=>version(part));if(parts[1]!==revision)throw Error();
+   }catch{throw Error("GOOGLE_EVENT_COMMAND_INVALID");}
+  }
   const creation=await loadGoogleEventCreation(selected.scope,selected.eventId);if(!creation)throw Error("GOOGLE_EVENT_ORIGIN_MISSING");
-  const client=await getAuthClient();if(typeof client._clientId!=="string")throw Error("GOOGLE_EVENT_CONFIGURATION_INVALID");const fingerprint=googleOAuthClientFingerprint(client._clientId),binding=await loadGoogleBinding(selected.scope);
-  if(!binding||binding.unlinkedAt!==null)throw Error("GOOGLE_EVENT_NOT_CONNECTED");googleEventOperationTarget(selected.scope,selected.eventId,creation.intent,binding);
-  const saved=command(creation.intent,creation.payloadFingerprint,creation.payload.withMeet,selected.operationId!,await rpc("prepare",{...args(selected.scope,selected.eventId,selected.operationId),p_head_version:revision,p_client_fingerprint:fingerprint,p_binding_version:binding.version,p_kind:normalized.kind,p_payload:normalized.payload,p_local_attendees:normalized.attendees}));
+  let fingerprint:string|null=null,bindingVersion:string|null=null;
+  const existing=expectedSyncVersion===undefined?null:await rpc("get",args(selected.scope,selected.eventId,selected.operationId));
+  if(existing!==null){command(creation.intent,creation.payloadFingerprint,creation.payload.withMeet,selected.operationId!,existing);}
+  else{
+   const client=await getAuthClient();if(typeof client._clientId!=="string")throw Error("GOOGLE_EVENT_CONFIGURATION_INVALID");fingerprint=googleOAuthClientFingerprint(client._clientId);const binding=await loadGoogleBinding(selected.scope);
+   if(!binding||binding.unlinkedAt!==null)throw Error("GOOGLE_EVENT_NOT_CONNECTED");googleEventOperationTarget(selected.scope,selected.eventId,creation.intent,binding);bindingVersion=binding.version;
+  }
+  const saved=command(creation.intent,creation.payloadFingerprint,creation.payload.withMeet,selected.operationId!,await rpc(expectedSyncVersion===undefined?"prepare":"prepare_expected",{...args(selected.scope,selected.eventId,selected.operationId),...(expectedSyncVersion===undefined?{p_head_version:revision}:{p_expected_sync_version:expectedSyncVersion}),p_client_fingerprint:fingerprint,p_binding_version:bindingVersion,p_kind:normalized.kind,p_payload:normalized.payload,p_local_attendees:normalized.attendees}));
   if(BigInt(saved.headVersion)!==BigInt(revision)+BigInt(1)||saved.kind!==normalized.kind||JSON.stringify(saved.payload)!==JSON.stringify(normalized.payload)||JSON.stringify(saved.localAttendees)!==JSON.stringify(normalized.attendees))throw Error("GOOGLE_EVENT_STORAGE_INVALID");return saved;
  }catch(error){throw safe(error);}
 }

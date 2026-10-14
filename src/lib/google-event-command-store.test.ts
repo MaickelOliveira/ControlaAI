@@ -76,3 +76,17 @@ it("captures finish outcome and lease before an awaited storage read",async()=>{
  const result=finishGoogleEventCommand(scope,eventId,operationId,binding,clientId,"1",lease,outcome);outcome.result="failed";outcome.etag='"mutated"';lease.id=operationId;unblock();
  expect((await result).state).toBe("succeeded");expect(deps.rpc).toHaveBeenLastCalledWith("zelo_google_event_command_finish",expect.objectContaining({p_result:"succeeded",p_etag:'"new"',p_lease_id:running.lease_id}));
 });
+it("prepares confirmed consumer edit with full captured version in atomic wrapper",async()=>{
+ await prepareGoogleEventCommand(scope,eventId,operationId,"0",{kind:"update",payload,attendees:[]},"v1:1:0:0");
+ expect(deps.rpc).toHaveBeenLastCalledWith("zelo_google_event_command_prepare_expected",expect.objectContaining({p_expected_sync_version:"v1:1:0:0",p_operation_id:operationId}));
+ expect(deps.rpc.mock.calls.at(-1)?.[1]).not.toHaveProperty("p_head_version");
+});
+it.each(["v1:1:1:0","v1:01:0:0","v1:9223372036854775808:0:0"])("rejects inconsistent full confirmed token before configuration: %s",async expected=>{
+ await expect(prepareGoogleEventCommand(scope,eventId,operationId,"0",{kind:"update",payload,attendees:[]},expected)).rejects.toThrow("GOOGLE_EVENT_COMMAND_INVALID");expect(deps.auth).not.toHaveBeenCalled();expect(deps.rpc).not.toHaveBeenCalled();
+});
+it("validates accepted confirmed command replay after unlink without reading configuration",async()=>{
+ deps.binding.mockResolvedValue(null);deps.auth.mockRejectedValue(Error("private fixture configuration"));
+ const saved=await prepareGoogleEventCommand(scope,eventId,operationId,"0",{kind:"update",payload,attendees:[]},"v1:1:0:0");
+ expect(saved.operationId).toBe(operationId);expect(deps.auth).not.toHaveBeenCalled();expect(deps.binding).not.toHaveBeenCalled();
+ expect(deps.rpc).toHaveBeenLastCalledWith("zelo_google_event_command_prepare_expected",expect.objectContaining({p_expected_sync_version:"v1:1:0:0",p_client_fingerprint:null,p_binding_version:null}));
+});

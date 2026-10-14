@@ -39,3 +39,9 @@ Verification: RED missing wrapper42883, GREEN127 disposable PostgreSQL assertion
 including unchanged-head/stale-attempt refusal, original full-token replay,
 concurrent retry, failed receipt insert rollback, local replay after newer edit,
 ACL/RLS on all three tables and account erasure. No live provider/database used.
+
+Server DAL captures exact scope/UUID/full token and canonical fields before await,
+validates strict acknowledgments/allowlisted refs and removes diagnostics. New
+confirmed command option uses prepare_expected; accepted operation replay validates
+stored journal and original token without configuration/binding reads after unlink.
+RED full-version/replay/diagnostic tests; GREEN55 focused DAL tests plus lint.
