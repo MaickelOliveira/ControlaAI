@@ -53,15 +53,16 @@ function observed(creation:GoogleEventCreation,value:unknown):GoogleEventCreatio
  if(verified.status!=="confirmed"&&verified.status!=="tentative")return {...known,result:"failed",failureCode:"FOREIGN_EVENT"};
  if(!creation.payload.withMeet)return {...known,result:"succeeded",failureCode:null};
  const conference=object(verified.conferenceData),request=object(conference?.createRequest),requestStatus=object(request?.status)?.statusCode;
- const invalid=()=>({...known,result:"failed" as const,failureCode:"CONFERENCE_FAILED" as const});
- if(!conference||(conference.createRequest!=null&&!request)||(request&&request.requestId!==creation.intent.conferenceRequestId))return invalid();
+ const uncertain=()=>({...known,result:"retry" as const,failureCode:"TEMPORARY" as const});
+ if(!conference||(conference.createRequest!=null&&!request)||(request&&request.requestId!==creation.intent.conferenceRequestId))return uncertain();
  if(requestStatus==="pending")return {...known,result:"waiting",failureCode:null};
- if(requestStatus==="failure"||(request&&requestStatus!=="success"))return invalid();
+ if(requestStatus==="failure")return {...known,result:"failed",failureCode:"CONFERENCE_FAILED"};
+ if(request&&requestStatus!=="success")return uncertain();
  const points=conference.entryPoints;
- if(!Array.isArray(points)||!points.every(point=>object(point)!==null))return invalid();
+ if(!Array.isArray(points)||!points.every(point=>object(point)!==null))return uncertain();
  const entries=points.map(point=>object(point)!).filter(point=>point.entryPointType==="video"),link=entries[0]?.uri;
  if(object(object(conference.conferenceSolution)?.key)?.type!=="hangoutsMeet"||entries.length!==1
-  ||typeof link!=="string"||/\p{Cc}/u.test(link)||!/^https:\/\/meet[.]google[.]com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(link))return {...known,result:"failed",failureCode:"CONFERENCE_FAILED"};
+  ||typeof link!=="string"||/\p{Cc}/u.test(link)||!/^https:\/\/meet[.]google[.]com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(link))return uncertain();
  return {...known,result:"succeeded",meetLink:link,failureCode:null};
 }
 /** Trusted authenticated workspace and authorized persisted logical event only.

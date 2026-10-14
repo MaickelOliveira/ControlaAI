@@ -82,6 +82,17 @@ it("retains an ambiguous conference request ID and terminal definitive failure",
  transport.mockImplementation(async options=>{if(options.method==="GET")return response(owned(applied,"failure"),options);applied=true;throw Error("fictitious lost conference response");});
  expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("CONFERENCE_FAILED");const count=transport.mock.calls.length;await synchronizeGoogleEventCommand(scope,eventId,operationId);expect(transport).toHaveBeenCalledTimes(count);
 });
+it.each(["missing","mismatched_failure","unknown_status","bad_entries"])("retains ambiguous command conference %s without granting a new conference identity",async variant=>{
+ current={...current,kind:"conference",payload:null,localAttendees:null,conferenceRequestId:googleEventCommandIdentity(scope,eventId,operationId)};
+ const stable=current.conferenceRequestId;
+ transport.mockImplementation(async options=>{const event=owned(options.method==="PATCH");if(options.method==="GET")return response(event,options);
+  const original=(event as ReturnType<typeof owned>&{conferenceData:Record<string,unknown>}).conferenceData;
+  const conferenceData=variant==="missing"?null:variant==="bad_entries"?{...original,entryPoints:[null]}:{...original,createRequest:{requestId:variant==="mismatched_failure"?"other-fictitious-request":stable,status:{statusCode:variant==="mismatched_failure"?"failure":"unrecognized"}}};
+  return response({...event,conferenceData},options);
+ });
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("TEMPORARY");expect(current.state).toBe("queued");expect(current.etag).toBe('"after"');
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("TEMPORARY");expect(current.conferenceRequestId).toBe(stable);expect(transport.mock.calls.map(([v])=>v.method)).toEqual(["GET","PATCH","GET"]);
+});
 it.each([null,{},[]])("never treats malformed successful response as missing or effect authority",async value=>{
  transport.mockImplementation(async options=>response(value,options));expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("FOREIGN_EVENT");expect(transport).toHaveBeenCalledTimes(1);
 });
@@ -93,6 +104,9 @@ it("checks local current-head activity before credentials and rechecks before ev
 });
 it("supersession/cancellation between GET and PATCH causes zero write or failure publication",async()=>{
  deps.lease.mockResolvedValueOnce(undefined).mockRejectedValueOnce(Error("GOOGLE_EVENT_COMMAND_CONFLICT"));await expect(synchronizeGoogleEventCommand(scope,eventId,operationId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport.mock.calls.map(([v])=>v.method)).toEqual(["GET"]);expect(deps.finish).not.toHaveBeenCalled();
+});
+it("makes zero HTTP calls when a selected owner's deactivation denies the last SQL preflight",async()=>{
+ deps.lease.mockRejectedValue(Error("GOOGLE_WORKSPACE_ACCESS_DENIED"));await expect(synchronizeGoogleEventCommand(scope,eventId,operationId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();
 });
 it("rejects stale head before HTTP without publishing a failure",async()=>{
  deps.head.mockResolvedValue({eventId,version:"2",operationId:"ffffffff-ffff-4fff-8fff-fffffffffff2",etag:'"other"',deleted:false});await expect(synchronizeGoogleEventCommand(scope,eventId,operationId)).rejects.toThrow("GOOGLE_EVENT_SYNC_UNAVAILABLE");expect(transport).not.toHaveBeenCalled();expect(deps.finish).not.toHaveBeenCalled();

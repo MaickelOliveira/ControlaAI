@@ -30,12 +30,14 @@ function observed(command:GoogleEventCommand,event:Record<string,unknown>):Googl
  if(event.status!=="confirmed"&&event.status!=="tentative")return failed("FOREIGN_EVENT");
  if(command.kind==="update")return command.payload&&googleEventChangeMatches(command.payload,event)?succeeded(etag):failed("ETAG_CONFLICT");
  const conference=object(event.conferenceData),request=object(conference?.createRequest),requestStatus=object(request?.status)?.statusCode;
- if(!conference||(conference.createRequest!=null&&!request)||(request&&request.requestId!==command.conferenceRequestId))return failed("CONFERENCE_FAILED",etag);
+ const uncertain=():GoogleEventCommandOutcome=>({result:"retry",etag,meetLink:null,failureCode:"TEMPORARY"});
+ if(!conference||(conference.createRequest!=null&&!request)||(request&&request.requestId!==command.conferenceRequestId))return uncertain();
  if(requestStatus==="pending")return {result:"waiting",etag,meetLink:null,failureCode:null};
- if(requestStatus==="failure"||(request&&requestStatus!=="success"))return failed("CONFERENCE_FAILED",etag);
- const points=conference.entryPoints;if(!Array.isArray(points)||!points.every(point=>object(point)!==null))return failed("CONFERENCE_FAILED",etag);
+ if(requestStatus==="failure")return failed("CONFERENCE_FAILED",etag);
+ if(request&&requestStatus!=="success")return uncertain();
+ const points=conference.entryPoints;if(!Array.isArray(points)||!points.every(point=>object(point)!==null))return uncertain();
  const entries=points.map(point=>object(point)!).filter(point=>point.entryPointType==="video"),link=entries[0]?.uri;
- if(object(object(conference.conferenceSolution)?.key)?.type!=="hangoutsMeet"||entries.length!==1||typeof link!=="string"||/\p{Cc}/u.test(link)||!/^https:\/\/meet[.]google[.]com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(link))return failed("CONFERENCE_FAILED",etag);
+ if(object(object(conference.conferenceSolution)?.key)?.type!=="hangoutsMeet"||entries.length!==1||typeof link!=="string"||/\p{Cc}/u.test(link)||!/^https:\/\/meet[.]google[.]com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(link))return uncertain();
  return succeeded(etag,link);
 }
 async function guard(scope:GoogleWorkspace,command:GoogleEventCommand,runtime:GoogleBinding,clientId:string):Promise<void>{
