@@ -7,7 +7,15 @@ import { isConnected } from "./google-oauth";
 export type AppointmentRepeat = "none" | "daily" | "weekly" | "monthly" | "yearly";
 export type AppointmentStatus = "scheduled" | "done" | "cancelled";
 
-export type Appointment = {
+export type GoogleSyncMetadata = {
+  googleSyncVersion: string | null;
+  googleSyncState: "queued" | "running" | "waiting" | "succeeded" | "failed" | "local" | "legacy";
+  googleSyncFailureCode: "TEMPORARY" | "FOREIGN_EVENT" | "REMOTE_MISSING" | "CONFERENCE_FAILED" | "CONNECTION_CHANGED" | "ATTEMPTS_EXHAUSTED" | "ETAG_CONFLICT" | "SUPERSEDED" | null;
+  googleMeetPending: boolean;
+  googleCancellationPending: boolean;
+};
+
+export type Appointment = Partial<GoogleSyncMetadata> & {
   companyId?: string;
   workspaceLegacy?: boolean;
   id: string;
