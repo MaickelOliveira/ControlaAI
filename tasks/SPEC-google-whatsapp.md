@@ -56,5 +56,15 @@ never upgrades that revision. An ambiguous failure leaves its frozen commit;
 only an explicit retry repeats it. Explanations/unrecognized replies do not call
 Google. Cancelling a retry stops that attempt and does not undo saved records.
 
+Meeting questions store frozen, unattempted scoped plans with UUIDs derived from
+the original authenticated message. The human's yes/no chooses Meet or a plain
+appointment before that selected intent becomes an attempted commit. No scoped
+connection asks for explicit local-only consent; declining it creates nothing.
+Once attempted, later answers cannot change payload, kind, UUID or workspace.
+Ready immediate phone invitations use only confirmed valid links and skip receipt
+replays. Pending links receive no invitation and no later notification automation
+is added. A partially completed batch/failed invitation may require the user to
+share a ready link from Agenda; this journal confirms records, not delivery.
+
 Tests use fictitious participants, contexts, IDs and services only. No WhatsApp,
 Google, invitation or customer storage operation is used for verification.

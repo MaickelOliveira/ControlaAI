@@ -52,16 +52,14 @@ import { replyFinanceDetail } from "@/lib/finance-detail";
 import {readFinancialAgenda} from "@/lib/financial-agenda";
 import {formatBankAgenda} from "@/lib/open-finance-schedules";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
-import { createAppointment, type Appointment } from "@/lib/agenda";
+import type { Appointment } from "@/lib/agenda";
 import {googleWhatsAppConfirmation,googleWhatsAppReadyMeetLink,type GoogleWhatsAppRecord} from "./google-whatsapp-consumer";
-import {loadGoogleWhatsAppConsumer} from "./google-whatsapp-service";
-import {prepareGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
+import {loadGoogleWhatsAppConsumer,loadGoogleWhatsAppConnected} from "./google-whatsapp-service";
+import {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
 import {googleWhatsAppMessageUUID} from "./google-whatsapp-message";
 import {googleAgendaSyncVersion} from "./google-agenda-client-contract";
 import type {GoogleWhatsAppReceipt} from "./google-whatsapp-commit";
 import { formatReminderOffset, isAgendaReminderTarget, isStandaloneAppointmentReminderRequest, parseAppointmentReminderRequest } from "@/lib/appointment-reminders";
-import { createMeetEvent } from "@/lib/google-meet";
-import { isConnected } from "@/lib/google-oauth";
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
 import { getConfig } from "@/lib/whatsapp-config";
@@ -75,7 +73,7 @@ import {
   replyRecurringAlreadyPosted, replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
   replyAgendaList, replyAgendaReminderPolicy,
-  replyMeetCreated, replyMeetInvite,
+  replyMeetInvite,
   replyPersonNotFound, replyWppNameSaved,
   replyGroceryListAdded, replyGroceryList, replyGroceryItemChecked, replyGrocerySpend,
   replyEmployeeList, replyEmployeeUpdated, replyEmployeeDeactivated,
@@ -745,6 +743,14 @@ function googleWhatsAppFailure(error:unknown,locale?:string):string {
 async function sendGoogleWhatsAppCommit(userId:string,from:string,intents:readonly GoogleWhatsAppIntent[],locale?:string,receipts:readonly GoogleWhatsAppReceipt[]=[]):Promise<void>{
  try {
   const results=await (await googleWhatsAppConsumer()).commit(userId,from,intents,receipts);
+  for(const row of results){
+   const link=row.result?googleWhatsAppReadyMeetLink(row.result):null;
+   if(!link||row.replayed||row.intent.operation!=="create_meet"||!Array.isArray(row.intent.payload.attendees))continue;
+   for(const value of row.intent.payload.attendees){
+    if(!value||typeof value!=="object"||Array.isArray(value))continue;const attendee=value as Record<string,unknown>;
+    if(typeof attendee.phone==="string"&&attendee.phone)await wppSend(attendee.phone,replyMeetInvite({...row.result!,meetLink:link},typeof attendee.name==="string"?attendee.name:"Participante",locale));
+   }
+  }
   await wppSend(from,results.map(row=>googleWhatsAppConfirmation(row.intent,row.result,locale)).join("\n\n────────\n\n"));
   await clearPendingAction(from);
  }catch(error){await wppSend(from,googleWhatsAppFailure(error,locale));}
@@ -2620,63 +2626,30 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       await clearPendingAction(from);
     }
 
-    // ── Confirmação de Meet (sim/não) ──
+    // A human's answer selects an unattempted plan. An attempted commit is
+    // handled earlier and never changes its payload/UUID based on a new answer.
     if (pending?.type === "meet_confirm" && pending.userId === user.id) {
-      const lower = messageText.toLowerCase().trim();
-      const yes = /^(?:sim|s|s[ií]|yes|y|1|quero|pode|ok|confirmar)\b/.test(lower);
-      const no = /^(?:n[ãa]o|n|no|0|sem|cancela)\b/.test(lower);
-      if (yes || no) {
-        await clearPendingAction(from);
-        const meetItems = pending.items?.length ? pending.items : [{
-          title: pending.title, description: pending.description, startAt: pending.startAt,
-          endAt: pending.endAt, attendees: pending.attendees,
-        }];
-        const connected = yes ? await isConnected(user.id) : false;
-        if (yes && !connected) {
-          await wppSend(from, user.locale === "es"
-            ? "⚠️ Tu cuenta de Google no está conectada. Crearé la cita sin enlace de Meet."
-            : user.locale === "pt-PT"
-              ? "⚠️ A tua conta Google não está ligada. Vou criar o compromisso sem ligação do Meet."
-              : "⚠️ Sua conta Google não está conectada. Criando o compromisso sem link Meet.");
-        }
-        const confirmations: string[] = [];
-        let failedMeetLinks = 0;
-        for (const item of meetItems) {
-          let meetLink: string | undefined;
-          let calendarEventId: string | undefined;
-          let googleCalendarId: string | undefined;
-          if (yes && connected) {
-            try {
-              const r = await createMeetEvent({ userId: user.id, ...item });
-              meetLink = r.meetLink;
-              calendarEventId = r.calendarEventId;
-              googleCalendarId = r.googleCalendarId;
-            } catch {
-              console.error("[meet_confirm]");
-              failedMeetLinks++;
-            }
-          }
-          const apt = await createAppointment({
-            userId: user.id, title: item.title, description: item.description,
-            startAt: item.startAt, endAt: item.endAt, allDay: false, repeat: "none",
-            status: "scheduled", source: "whatsapp", meetLink, calendarEventId, googleCalendarId,
+      const answer=parseYesNo(messageText);
+      if(typeof pending.withMeetAvailable!=="boolean"||!pending.googleDrafts?.length){
+        await clearPendingAction(from);await wppSend(from,localized(user.locale,"Essa pergunta é antiga. Faça um novo pedido para escolher o espaço e a reunião novamente.","Esta pregunta es antigua. Haz un nuevo pedido para elegir de nuevo el espacio y la reunión."));return;
+      }
+      if(BARE_CANCEL_RE.test(messageText.trim())||answer===false&&!pending.withMeetAvailable){
+        await clearPendingAction(from);await wppSend(from,localized(user.locale,"Cancelado — não criei a reunião.","Cancelado; no creé la reunión."));return;
+      }
+      if(answer!==null){
+        try {
+          const wantMeet=answer&&pending.withMeetAvailable;
+          const intents=pending.googleDrafts.map(stored=>{
+            const original=replayGoogleWhatsAppIntent(user.id,stored);if(wantMeet)return original;
+            const data=original.payload;
+            return prepareGoogleWhatsAppIntent(user.id,"create_appointment",{title:data.title,description:data.description,startAt:data.startAt,endAt:data.endAt,allDay:false,repeat:"none",withMeet:false},{clientMutationId:original.clientMutationId});
           });
-          confirmations.push(replyMeetCreated(apt, undefined, user.locale));
-          for (const attendee of item.attendees.filter(attendee => attendee.phone)) {
-            await wppSend(attendee.phone!, replyMeetInvite(apt, attendee.name, user.locale));
-          }
-        }
-        const failedMeetWarning = failedMeetLinks === 0 ? "" : user.locale === "es"
-          ? `⚠️ No pude generar el enlace de Meet en ${failedMeetLinks === 1 ? "una reunión" : `${failedMeetLinks} reuniones`}; las citas sí quedaron creadas.`
-          : user.locale === "pt-PT"
-            ? `⚠️ Não consegui gerar a ligação do Meet em ${failedMeetLinks === 1 ? "uma reunião" : `${failedMeetLinks} reuniões`}; os compromissos ficaram criados.`
-            : `⚠️ Não consegui gerar o link do Meet em ${failedMeetLinks === 1 ? "uma reunião" : `${failedMeetLinks} reuniões`}; os compromissos foram criados.`;
-        await wppSend(from, [failedMeetWarning, confirmations.join("\n\n────────\n\n")].filter(Boolean).join("\n\n"));
+          await sendGoogleWhatsAppCommit(user.id,from,intents,user.locale);
+        }catch(error){await wppSend(from,googleWhatsAppFailure(error,user.locale));}
         return;
       }
-      await clearPendingAction(from);
-      // Não respondeu sim/não: descarta a confirmação do Meet e processa o
-      // texto como um novo pedido.
+      if(looksLikeNewCommand(messageText))await clearPendingAction(from);
+      else {await wppSend(from,localized(user.locale,"Responda *sim* ou *não* à pergunta da reunião, ou *cancelar* para interromper.","Responde *sí* o *no* a la pregunta de la reunión, o *cancelar* para detenerla."));return;}
     }
 
     // ── Escolha entre recorrentes vencidos com descrições parecidas ──
@@ -5194,30 +5167,10 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         });
         const firstMeet = pendingMeetItems[0];
 
-        if (!await isConnected(user.id)) {
-          // Sem Google conectado não tem como gerar link — perguntar "quer
-          // link do Meet?" só pra depois dizer que não dá é atrito à toa.
-          // Cria o(s) compromisso(s) direto, sem o link.
-          const confirmations: string[] = [];
-          for (const item of pendingMeetItems) {
-            const apt = await createAppointment({
-              userId: user.id, title: item.title, description: item.description,
-              startAt: item.startAt, endAt: item.endAt, allDay: false, repeat: "none",
-              status: "scheduled", source: "whatsapp",
-            });
-            confirmations.push(replyMeetCreated(apt, undefined, user.locale));
-            for (const attendee of item.attendees.filter(attendee => attendee.phone)) {
-              await wppSend(attendee.phone!, replyMeetInvite(apt, attendee.name, user.locale));
-            }
-          }
-          const notConnectedNote = localized(user.locale,
-            "🔗 Sua conta Google não está conectada, então criei sem link do Meet. Para conectar, acesse Configurações → Integrações.",
-            "🔗 Tu cuenta de Google no está conectada, así que lo creé sin enlace de Meet. Para conectarla, entra en Configuración → Integraciones.");
-          await wppSend(from, [notConnectedNote, confirmations.join("\n\n────────\n\n")].filter(Boolean).join("\n\n"));
-          break;
-        }
+        const withMeetAvailable=await loadGoogleWhatsAppConnected(user.id);
+        const googleDrafts=pendingMeetItems.map((item,index)=>prepareGoogleWhatsAppIntent(user.id,"create_meet",item,{clientMutationId:googleWhatsAppMessageUUID(user.id,msg,index)}));
 
-        // Pergunta se quer link do Google Meet (só quando o Google está conectado)
+        // A scoped connection is never inferred from the old global account.
         const { formatDateTimeBR } = await import("@/lib/date-br");
         const timeStr = formatDateTimeBR(firstMeet.startAt);
         await setPendingAction(from, {
@@ -5229,7 +5182,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           endAt: firstMeet.endAt,
           attendees: firstMeet.attendees,
           items: pendingMeetItems,
-          mode,
+          mode,googleDrafts,withMeetAvailable,
         });
         const title = pendingMeetItems.length === 1
           ? `📅 *${firstMeet.title}*\n🕒 ${timeStr}`
@@ -5241,7 +5194,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           : user.locale === "pt-PT"
             ? `Queres incluir uma ligação do *Google Meet* em ${pendingMeetItems.length === 1 ? "esta reunião" : "todas"}?\n\nResponde *Sim* ou *Não*`
             : `Deseja incluir link do *Google Meet* em ${pendingMeetItems.length === 1 ? "esta reunião" : "todas"}?\n\nResponda *Sim* ou *Não*`;
-        await wppSend(from, `${title}\n${firstMeet.attendees.length > 0 ? `👥 ${firstMeet.attendees.map(a => a.name).join(", ")}\n` : ""}\n${question}`);
+        const localQuestion=localized(user.locale,"O Google não está conectado neste espaço. Deseja salvar a reunião sem link do Meet?\n\nResponda *Sim* ou *Não*. Para conectar o Google, abra Configurações → Integrações.","Google no está conectado en este espacio. ¿Quieres guardar la reunión sin enlace de Meet?\n\nResponde *Sí* o *No*. Para conectar Google, abre Configuración → Integraciones.","O Google não está ligado neste espaço. Queres guardar a reunião sem ligação do Meet?\n\nResponde *Sim* ou *Não*. Para ligar o Google, abre Configurações → Integrações.");
+        await wppSend(from, `${title}\n${firstMeet.attendees.length > 0 ? `👥 ${firstMeet.attendees.map(a => a.name).join(", ")}\n` : ""}\n${withMeetAvailable?question:localQuestion}`);
         break;
       }
 

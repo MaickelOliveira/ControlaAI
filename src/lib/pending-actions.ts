@@ -120,6 +120,10 @@ export type PendingMeetConfirm = {
     attendees: Array<{ name: string; phone?: string; email?: string }>;
   }>;
   mode: string;
+  /** These are unattempted plans; the human chooses Meet vs plain before the
+   * selected immutable intent is persisted as google_agenda_commit. */
+  googleDrafts?:readonly GoogleWhatsAppIntent[];
+  withMeetAvailable?:boolean;
   expiresAt: string;
 };
 
