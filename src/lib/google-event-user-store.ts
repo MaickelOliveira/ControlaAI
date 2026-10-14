@@ -1,4 +1,6 @@
 import "server-only";
+import {googleEventChangePayload,type GoogleEventChangePayload} from "./google-event-command-policy";
+import type {GoogleLocalAttendee} from "./google-event-local-store";
 import {getSupabase} from "./supabase";
 import {getAuthClient} from "./google-oauth";
 import {loadGoogleBinding} from "./google-binding-store";
@@ -10,7 +12,7 @@ import {googleEventCreationPayload,type GoogleEventCreationPayload} from "./goog
 export type GoogleEventExpectation=Readonly<{clientMutationId:string;expectedGoogleSyncVersion:string|null}>;
 export type GoogleEventUserRetry=Readonly<{eventId:string;operationId:string|null}>;
 export type GoogleAppointmentLocalMetadata=Readonly<{status?:"scheduled"|"done"|"cancelled";ata_generated?:boolean;ata_content?:string|null;ata_notified_at?:string|null;reminder_sent_at?:string|null;reminder_15min_sent_at?:string|null}>;
-const SAFE=["GOOGLE_EVENT_INVALID","GOOGLE_EVENT_COMMAND_CONFLICT","GOOGLE_EVENT_NOT_FOUND","GOOGLE_EVENT_LOCAL_CONFLICT","GOOGLE_EVENT_LOCAL_INACTIVE","GOOGLE_EVENT_ATTEMPT_CONFLICT","GOOGLE_EVENT_CONNECTION_CHANGED","GOOGLE_WORKSPACE_ACCESS_DENIED"];
+const SAFE=["GOOGLE_EVENT_INVALID","GOOGLE_EVENT_COMMAND_CONFLICT","GOOGLE_EVENT_NOT_FOUND","GOOGLE_EVENT_ORIGIN_MISSING","GOOGLE_EVENT_LOCAL_CONFLICT","GOOGLE_EVENT_LOCAL_INACTIVE","GOOGLE_EVENT_ATTEMPT_CONFLICT","GOOGLE_EVENT_CONNECTION_CHANGED","GOOGLE_WORKSPACE_ACCESS_DENIED"];
 function object(value:unknown,keys:readonly string[]):Record<string,unknown>{if(!value||typeof value!=="object"||Array.isArray(value))throw Error();const row=value as Record<string,unknown>;if(Object.keys(row).some(key=>!keys.includes(key)))throw Error();return row;}
 function uuid(value:unknown):string{if(typeof value!=="string"||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value))throw Error();return value.toLowerCase();}
 export function googleEventSyncVersion(value:unknown):readonly [string,string,string]{
@@ -62,4 +64,27 @@ export async function patchGoogleAppointmentLocal(scope:GoogleWorkspace,eventId:
  const selected=capture(scope,eventId,expectation);let payload:GoogleEventCreationPayload|null,fields:GoogleAppointmentLocalMetadata;
  try{payload=value===null?null:googleEventCreationPayload(value);if(payload?.withMeet)throw Error();fields=metadata(patch);}catch{throw Error("GOOGLE_EVENT_INPUT_INVALID");}
  if(await rpc("zelo_google_appointment_local_patch",{...args(selected),p_payload:payload,p_patch:fields})!==true)throw Error("GOOGLE_EVENT_STORAGE_INVALID");
+}
+
+export type GoogleEventControlledSnapshot=Readonly<{kind:"appointment"|"meet";payload:GoogleEventChangePayload;attendees:readonly GoogleLocalAttendee[]}>;
+/** Private controlled values/desired guests from one exact confirmed snapshot.
+ * This is server input for a later guarded command, never provider authority. */
+export async function loadGoogleEventControlledSnapshot(scope:GoogleWorkspace,eventId:string,expectation:GoogleEventExpectation):Promise<GoogleEventControlledSnapshot>{
+ const selected=capture(scope,eventId,expectation,false);
+ const data=await rpc("zelo_google_event_controlled_snapshot",{p_user_id:selected.scope.userId,p_mode:selected.scope.mode,p_company_id:selected.scope.companyId,p_event_id:selected.eventId,p_expected_sync_version:selected.expectation.expectedGoogleSyncVersion});
+ try{
+  const row=object(data,["kind","payload","local_attendees"]);if(row.kind!=="appointment"&&row.kind!=="meet"||!Array.isArray(row.local_attendees)||row.local_attendees.length>100)throw Error();
+  const payload=googleEventChangePayload(row.payload),attendees=Object.freeze(row.local_attendees.map(value=>{const entry=object(value,["name","phone","email"]);
+   if(typeof entry.name!=="string"||entry.name.length>256||/\p{Cc}/u.test(entry.name))throw Error();
+   for(const key of ["phone","email"])if(entry[key]!==undefined&&(typeof entry[key]!=="string"||(entry[key] as string).length>(key==="phone"?64:254)||/\p{Cc}/u.test(entry[key] as string)))throw Error();
+   return Object.freeze({name:entry.name,...(entry.phone===undefined?{}:{phone:entry.phone as string}),...(entry.email===undefined?{}:{email:entry.email as string})});
+  }));
+  if(row.kind==="appointment"&&attendees.length)throw Error();
+  if(row.kind==="meet"){
+   if(payload.allDay||payload.repeat!=="none")throw Error();
+   const guests=googleEventCreationPayload({...payload,withMeet:true,attendees:attendees.filter(entry=>entry.email!==undefined).map(entry=>({email:entry.email,displayName:entry.name}))});
+   if(JSON.stringify(guests.attendees)!==JSON.stringify(payload.attendees))throw Error();
+  }
+  return Object.freeze({kind:row.kind,payload,attendees});
+ }catch{throw Error("GOOGLE_EVENT_STORAGE_INVALID");}
 }

@@ -23,3 +23,7 @@ conference, same-head attempt changes, scopes, inactive/archive checks and ACLs.
 Verification: RED missing RPC42883; GREEN35 disposable PostgreSQL assertions for
 guest updates followed by conference, Meet phone separation, full-token conflicts,
 readonly byte preservation, scopes/access/ACLs and preserving rollback.
+
+Server DAL captures scope/full-token and validates frozen canonical payload/local
+attendees with exact Meet guest correspondence. RED missing export, GREEN27
+focused user DAL tests plus lint. Metadata paths never use this private reader.

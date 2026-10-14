@@ -21,3 +21,12 @@ it("captures original expectation before the first await",async()=>{const mutabl
 it("strips arbitrary storage diagnostic and preserves safe conflict",async()=>{deps.rpc.mockRejectedValue(Error("fictitious private diagnostic"));await expect(loadGoogleEventUserRetry(scope,event,expectation)).rejects.toThrow("GOOGLE_EVENT_STORAGE_UNAVAILABLE");deps.rpc.mockResolvedValue({data:null,error:{message:"GOOGLE_EVENT_COMMAND_CONFLICT"}});await expect(loadGoogleEventUserRetry(scope,event,expectation)).rejects.toThrow("GOOGLE_EVENT_COMMAND_CONFLICT");});
 
 it("does not propagate private configuration diagnostics from explicit retry",async()=>{deps.auth.mockRejectedValue(Error("fictitious private configuration diagnostic"));await expect(retryGoogleEventUserIntent(scope,event,expectation)).rejects.toThrow("GOOGLE_EVENT_CONFIGURATION_INVALID");});
+it("reads exact private controlled snapshot and separates local phones from provider guests",async()=>{
+ const {loadGoogleEventControlledSnapshot}=await import("./google-event-user-store");
+ const payload={summary:"Fixture",description:"",location:"",startAt:"2070-01-01T10:00:00.000Z",endAt:"2070-01-01T11:00:00.000Z",allDay:false,repeat:"none",attendees:[{email:"fixture@example.test",displayName:"Fixture"}]};
+ const attendees=[{name:"Fixture",email:"fixture@example.test",phone:"+5511999990000"}];deps.rpc.mockResolvedValue({data:{kind:"meet",payload,local_attendees:attendees},error:null});
+ const result=await loadGoogleEventControlledSnapshot(scope,event,expectation);expect(result).toEqual({kind:"meet",payload,attendees});expect(Object.isFrozen(result.attendees[0])).toBe(true);expect(JSON.stringify(result.payload)).not.toContain("phone");expect(deps.auth).not.toHaveBeenCalled();expect(deps.rpc.mock.calls[0][1]).not.toHaveProperty("p_mutation_id");
+});
+it.each([{kind:"legacy",payload:{}},{kind:"appointment",payload:{},local_attendees:[],token:"bad"}])("rejects substituted controlled snapshot %#",async data=>{
+ const {loadGoogleEventControlledSnapshot}=await import("./google-event-user-store");deps.rpc.mockResolvedValue({data,error:null});await expect(loadGoogleEventControlledSnapshot(scope,event,expectation)).rejects.toThrow("GOOGLE_EVENT_STORAGE_INVALID");
+});
