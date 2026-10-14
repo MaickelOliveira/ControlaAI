@@ -55,3 +55,9 @@ uses ISO startAt/endAt. PATCH is flattened patch plus original UUID/version.
 DELETE returns cancellation DTO so pending/failed remote cancellation stays visible.
 GET by ID retains scoped history. No route uses old global create/update/delete.
 RED old routes/global helper trap; GREEN13 HTTP/route tests plus lint.
+
+Final Web action routes POST /api/agenda/:id/meet and /retry accept only original
+clientMutationId/expectedGoogleSyncVersion. They return public pending status and
+reject provider IDs/ETags/force flags; explicit ETag reconciliation belongs to the
+separate reviewed human-confirmation action. RED missing action routes; GREEN20
+HTTP route tests (96 with service/user DAL) plus lint. No real provider/DB calls.
