@@ -4,7 +4,7 @@ import {getAuthClient} from "./google-oauth";
 import {getSupabase} from "./supabase";
 import {encryptField,decryptField} from "./crypto-store";
 import {googleWorkspaceKey,type GoogleWorkspace} from "./google-workspace-policy";
-import {googleOAuthClientFingerprint} from "./google-oauth-state";
+import {googleOAuthBindingVersion,googleOAuthClientFingerprint} from "./google-oauth-state";
 import {captureGoogleGrantVersions,googleCapturedGrantVersion,googleBindingFromStorage,googleCredentialCiphertext,googleCredentialValue,type GoogleBinding} from "./google-binding-store";
 
 export type GoogleLegacyStatus=Readonly<{exists:boolean;assigned:boolean;assignedHere:boolean}>;
@@ -35,10 +35,12 @@ function decodedLegacy(value:unknown):{token:string;calendarId:string}{
 /** Only an explicit authenticated, CSRF-protected selection may call this server
  * adapter. No production route is installed yet; the old row remains untouched.
  * Legacy assignment creates no ownership claim over historical Calendar events. */
-export async function assignLegacyGoogleConnection(scope:GoogleWorkspace):Promise<GoogleBinding>{
+export async function assignLegacyGoogleConnection(scope:GoogleWorkspace,expectedBindingVersion:string):Promise<GoogleBinding>{
  let client:Awaited<ReturnType<typeof getAuthClient>>|undefined;
  try{
-  const selected=target(scope);client=await getAuthClient();if(typeof client._clientId!=="string")throw Error();
+  const selected=target(scope);let expected:string;
+  try{expected=googleOAuthBindingVersion(expectedBindingVersion);}catch{throw Error("GOOGLE_LEGACY_CONFLICT");}
+  client=await getAuthClient();if(typeof client._clientId!=="string")throw Error();
   const clientId=client._clientId,fingerprint=googleOAuthClientFingerprint(clientId);
   const raw=await rpc("zelo_google_legacy_snapshot",args(selected));if(raw===null)throw Error("GOOGLE_LEGACY_MISSING");
   let access:string,refresh:string,calendarId:string,expiry:number,sourceFingerprint:string,original:GoogleBinding|null;
@@ -47,8 +49,9 @@ export async function assignLegacyGoogleConnection(scope:GoogleWorkspace):Promis
    sourceFingerprint=row.source_fingerprint;
    if(typeof row.expires_at!=="string"||!Number.isFinite(Date.parse(row.expires_at)))throw Error();expiry=Date.parse(row.expires_at);
    original=row.binding===null?null:googleBindingFromStorage(row.binding,selected);if(original?.unlinkedAt===null)throw Error();
+   if((original?.version??"0")!==expected)throw Error("GOOGLE_LEGACY_CONFLICT");
    ({token:access,calendarId}=decodedLegacy(row.access_ciphertext));refresh=googleCredentialValue(decryptField(googleCredentialCiphertext(row.refresh_ciphertext)));
-  }catch{throw Error("GOOGLE_LEGACY_STORAGE_INVALID");}
+  }catch(error){if(error instanceof Error&&error.message==="GOOGLE_LEGACY_CONFLICT")throw error;throw Error("GOOGLE_LEGACY_STORAGE_INVALID");}
   if(expiry<=Date.now())throw Error("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
   const snapshot=await captureGoogleGrantVersions(selected,clientId);
   let subject:string;

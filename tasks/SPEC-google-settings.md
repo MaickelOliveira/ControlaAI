@@ -94,3 +94,16 @@ review before publication. No dependencies change.
 Next increments install explicit legacy destination/OAuth expected-revision guards,
 scoped authenticated/CSRF-protected routes and stale-response-safe UI, then migrate
 every web/WhatsApp/job consumer before reviewed migrations and full activation.
+# Confirmed connect and legacy actions
+
+Connect requires the displayed workspace digest, exact decimal binding revision,
+and one supported locale. The persistent issuer atomically rechecks the revision;
+no stale request can silently replace a newer connection. Only the HTTP boundary
+supplies the validated client session.
+
+Legacy assignment additionally requires `confirmTarget: true`. Its adapter compares
+the confirmed target revision before decrypting or verifying an old credential,
+then retains the original source/grant/binding compare-and-swap. It returns fresh
+public settings only if the committed connection and selected calendar still match.
+Neither action accepts owner, mode, company, provider subject or grant identifiers
+from the submitted body. Errors use an exact fixed allowlist and carry no cause.

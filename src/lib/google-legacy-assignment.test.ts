@@ -31,8 +31,17 @@ beforeEach(()=>{
  deps.rpc.mockReset().mockImplementation(async name=>({data:name==="zelo_google_legacy_snapshot"?stored:name==="zelo_google_grant_versions"?[{subject,version:"7"}]:name==="zelo_google_legacy_assign"?binding():{exists:true,assigned:false,assignedHere:false},error:null}));
 });
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllEnvs();vi.useRealTimers();});
+it.each([undefined,null,"01",1,"9223372036854775808"])("rejects a missing or invalid confirmed legacy target revision (%s)",async revision=>{
+ await expect(assignLegacyGoogleConnection(scope,revision as string)).rejects.toThrow("GOOGLE_LEGACY_CONFLICT");expect(deps.auth).not.toHaveBeenCalled();expect(deps.rpc).not.toHaveBeenCalled();expect(transport).not.toHaveBeenCalled();
+});
+it("rejects a changed target before verifying any old credential",async()=>{
+ await expect(assignLegacyGoogleConnection(scope,"2")).rejects.toThrow("GOOGLE_LEGACY_CONFLICT");expect(transport).not.toHaveBeenCalled();expect(deps.rpc.mock.calls.map(([name])=>name)).toEqual(["zelo_google_legacy_snapshot"]);
+});
+it("uses the exact confirmed tombstone revision with original legacy CAS",async()=>{
+ const result=await assignLegacyGoogleConnection(scope,"3");expect(result.version).toBe("4");expect(deps.rpc.mock.calls[2][1].p_binding_version).toBe("3");
+});
 it("uses real SDK token-info and Calendar transport, exact pre-call revisions, and only returns binding metadata",async()=>{
- const original=JSON.stringify(stored);const result=await assignLegacyGoogleConnection(scope);
+ const original=JSON.stringify(stored);const result=await assignLegacyGoogleConnection(scope,"3");
  expect(deps.rpc.mock.calls.map(([name])=>name)).toEqual(["zelo_google_legacy_snapshot","zelo_google_grant_versions","zelo_google_legacy_assign"]);
  const args=deps.rpc.mock.calls[2][1];
  expect(args).toMatchObject({p_user_id:owner,p_mode:"business",p_company_id:company,p_subject:subject,p_client_fingerprint:googleOAuthClientFingerprint(clientId),p_source_fingerprint:source,p_binding_version:"3",p_grant_version:"7",p_calendar_id:"fixture-calendar",p_calendar_name:"Fixture",p_expires_at:new Date(now+1800_000).toISOString()});
@@ -48,76 +57,76 @@ it("returns only immutable legacy flags without loading credentials or contactin
 });
 it("requires an explicit new connection for expired legacy without renewing or changing it",async()=>{
  stored.expires_at=new Date(now).toISOString();const original=JSON.stringify(stored);
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
  expect(transport).not.toHaveBeenCalled();expect(JSON.stringify(stored)).toBe(original);expect(deps.rpc).toHaveBeenCalledTimes(1);
 });
 it("refuses a token-info subject missing even when an email and user_id are provided",async()=>{
  delete providerInfo.sub;providerInfo.user_id="fixture-user-id";
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
  expect(transport).toHaveBeenCalledTimes(1);expect(deps.rpc.mock.calls.some(([name])=>name==="zelo_google_legacy_assign")).toBe(false);
 });
 it.each([{aud:"other-client"},{azp:"other-client"},{sub:""},{sub:"bad subject"},{sub:"x".repeat(256)},{expires_in:0},{expires_in:"bad"},{expiry_date:null},{scope:"openid email"},{scope:"https://www.googleapis.com/auth/calendar.events"}])("refuses unverified identity, client, expiry or permissions before Calendar or assignment %#",async patch=>{
  Object.assign(providerInfo,patch);
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
  expect(transport).toHaveBeenCalledTimes(1);expect(deps.rpc).toHaveBeenCalledTimes(2);expect(client.credentials).toEqual({});
 });
 it("accepts the legacy full-calendar permission without requesting new permissions",async()=>{
- providerInfo.scope="https://www.googleapis.com/auth/calendar";await assignLegacyGoogleConnection(scope);
+ providerInfo.scope="https://www.googleapis.com/auth/calendar";await assignLegacyGoogleConnection(scope,"3");
  expect(transport).toHaveBeenCalledTimes(2);expect(deps.rpc.mock.calls[2][1].p_subject).toBe(subject);
 });
 it.each([{accessRole:"reader"},{accessRole:"freeBusyReader"},{accessRole:null},{deleted:true},{id:"different-calendar"},{id:""},{summary:"bad\nsummary"}])("refuses inaccessible or different calendars without substituting primary %#",async patch=>{
  Object.assign(calendar,patch);
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");
  expect(transport).toHaveBeenCalledTimes(2);expect(deps.rpc).toHaveBeenCalledTimes(2);expect(client.credentials).toEqual({});
 });
 it("resolves a raw legacy access token's primary calendar to its verified stable ID",async()=>{
  stored.access_ciphertext=encryptField("fixture-access");stored.binding=null as never;
  deps.rpc.mockImplementation(async name=>({data:name==="zelo_google_legacy_snapshot"?stored:name==="zelo_google_grant_versions"?[]:binding({version:"1",calendar_id:"fixture-primary",calendar_name:null}),error:null}));
  calendar={id:"fixture-primary",accessRole:"owner",primary:true};
- const result=await assignLegacyGoogleConnection(scope);
+ const result=await assignLegacyGoogleConnection(scope,"0");
  expect(String(transport.mock.calls[1][0].url)).toContain("/primary");expect(result.calendarId).toBe("fixture-primary");
  expect(deps.rpc.mock.calls[2][1]).toMatchObject({p_binding_version:"0",p_grant_version:"0",p_calendar_name:null});
 });
 it.each([false,undefined])("refuses a calendar not explicitly confirmed as primary when resolving that alias: %s",async primary=>{
  stored.access_ciphertext=encryptField("fixture-access");calendar={id:"fixture-secondary",summary:"Fixture",accessRole:"writer",primary};
  deps.rpc.mockImplementation(async name=>({data:name==="zelo_google_legacy_snapshot"?stored:name==="zelo_google_grant_versions"?[]:binding({calendar_id:"fixture-secondary"}),error:null}));
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");expect(deps.rpc).toHaveBeenCalledTimes(2);
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");expect(deps.rpc).toHaveBeenCalledTimes(2);
 });
 it.each([{user_id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"},{source_fingerprint:"bad"},{expires_at:"bad"},{access_ciphertext:"fixture-plaintext"},{refresh_ciphertext:"fixture-plaintext"},{access_ciphertext:"enc:"+"QUFB".repeat(12)}])("rejects foreign, plaintext or corrupt storage before provider calls %#",async patch=>{
- Object.assign(stored,patch);await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");
+ Object.assign(stored,patch);await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");
  expect(transport).not.toHaveBeenCalled();expect(deps.rpc).toHaveBeenCalledTimes(1);
 });
 it.each([{token:"fixture-access",selectedCalendarId:""},{token:"fixture-access",selectedCalendarId:null},{token:"fixture-access",selectedCalendarId:42},{token:"fixture-access",selectedCalendarId:"bad\nid"},{token:""},[],"fixture-access"])("refuses malformed legacy envelopes rather than changing the chosen calendar %#",async value=>{
  stored.access_ciphertext=encryptField(JSON.stringify(value));
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");expect(transport).not.toHaveBeenCalled();
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");expect(transport).not.toHaveBeenCalled();
 });
 it("rejects a broken JSON envelope without treating its bytes as an access token",async()=>{
  stored.access_ciphertext=encryptField('{"token":');
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");expect(transport).not.toHaveBeenCalled();
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");expect(transport).not.toHaveBeenCalled();
 });
 it("does not overwrite a target that the storage snapshot already reports as active",async()=>{
- stored.binding=binding();await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");expect(transport).not.toHaveBeenCalled();
+ stored.binding=binding();await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");expect(transport).not.toHaveBeenCalled();
 });
 it.each(["GOOGLE_LEGACY_ALREADY_ASSIGNED","GOOGLE_LEGACY_TARGET_CONNECTED"])("keeps a rejected original target untouched: %s",async message=>{
  deps.rpc.mockResolvedValue({data:null,error:{message}});
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow(message);expect(transport).not.toHaveBeenCalled();
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow(message);expect(transport).not.toHaveBeenCalled();
 });
 it("does not manufacture a connection when the legacy row is absent",async()=>{
- deps.rpc.mockResolvedValue({data:null,error:null});await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_MISSING");expect(transport).not.toHaveBeenCalled();
+ deps.rpc.mockResolvedValue({data:null,error:null});await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_MISSING");expect(transport).not.toHaveBeenCalled();
 });
 it.each(["GOOGLE_LEGACY_CONFLICT","GOOGLE_LEGACY_ALREADY_ASSIGNED","GOOGLE_LEGACY_TARGET_CONNECTED"])("does not retry a lost source/binding/grant or assignment race: %s",async message=>{
  const original=JSON.stringify(stored);
  deps.rpc.mockImplementation(async name=>({data:name==="zelo_google_legacy_snapshot"?stored:name==="zelo_google_grant_versions"?[{subject,version:"9007199254740992"}]:null,error:name==="zelo_google_legacy_assign"?{message}:null}));
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow(message);
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow(message);
  expect(deps.rpc.mock.calls[2][1].p_grant_version).toBe("9007199254740992");expect(deps.rpc).toHaveBeenCalledTimes(3);expect(JSON.stringify(stored)).toBe(original);
 });
 it.each([{company_id:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"},{unlinked_at:new Date(now).toISOString()},{version:"3"},{id:"cccccccc-cccc-4ccc-8ccc-ccccccccccc2"},{calendar_id:"different"},{calendar_name:"Other"}])("does not report inconsistent committed metadata as success %#",async patch=>{
  deps.rpc.mockImplementation(async name=>({data:name==="zelo_google_legacy_snapshot"?stored:name==="zelo_google_grant_versions"?[]:binding(patch),error:null}));
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");
 });
 it("captures the authenticated target before configuration or storage awaits",async()=>{
  const mutable={...scope};deps.auth.mockImplementation(async()=>{mutable.companyId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2";return client;});
- const result=await assignLegacyGoogleConnection(mutable);expect(result.workspace.companyId).toBe(company);
+ const result=await assignLegacyGoogleConnection(mutable,"3");expect(result.workspace.companyId).toBe(company);
  expect(deps.rpc.mock.calls.every(([,args])=>args.p_company_id===company)).toBe(true);
 });
 it("uses the captured legacy source/revisions when caller memory changes during verification",async()=>{
@@ -125,26 +134,26 @@ it("uses the captured legacy source/revisions when caller memory changes during 
   stored.source_fingerprint="b".repeat(64);stored.binding.version="12";
   return {data:String(options?.url).endsWith("tokeninfo")?providerInfo:calendar,status:200,statusText:"OK",headers:new Headers(),config:options} as never;
  });
- await assignLegacyGoogleConnection(scope);expect(deps.rpc.mock.calls[2][1]).toMatchObject({p_source_fingerprint:source,p_binding_version:"3",p_grant_version:"7"});
+ await assignLegacyGoogleConnection(scope,"3");expect(deps.rpc.mock.calls[2][1]).toMatchObject({p_source_fingerprint:source,p_binding_version:"3",p_grant_version:"7"});
 });
 it("fails after an expired revision snapshot without adopting newer revisions",async()=>{
  transport.mockImplementation(async(options:TransportOptions)=>{vi.setSystemTime(now+600_000);return {data:String(options?.url).endsWith("tokeninfo")?providerInfo:calendar,status:200,statusText:"OK",headers:new Headers(),config:options} as never;});
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_FAILED");expect(deps.rpc).toHaveBeenCalledTimes(2);
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_FAILED");expect(deps.rpc).toHaveBeenCalledTimes(2);
 });
 it("does not persist a token that expires during calendar verification",async()=>{
  stored.expires_at=new Date(now+300_000).toISOString();
  transport.mockImplementation(async(options:TransportOptions)=>{const isInfo=String(options?.url).endsWith("tokeninfo");if(!isInfo)vi.setSystemTime(now+300_000);return {data:isInfo?providerInfo:calendar,status:200,statusText:"OK",headers:new Headers(),config:options} as never;});
- await expect(assignLegacyGoogleConnection(scope)).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");expect(deps.rpc).toHaveBeenCalledTimes(2);
+ await expect(assignLegacyGoogleConnection(scope,"3")).rejects.toThrow("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");expect(deps.rpc).toHaveBeenCalledTimes(2);
 });
 it.each([401,403])("real SDK Calendar failure never refreshes the unassigned grant: %s",async status=>{
  const failure=Object.assign(Error("fictitious private provider diagnostic"),{response:{status,config:{url:"https://www.googleapis.com/calendar/v3/users/me/calendarList/fixture-calendar",data:undefined}}});let observed=false;
  transport.mockImplementation(async(options:TransportOptions)=>{if(String(options?.url).endsWith("tokeninfo"))return {data:providerInfo,status:200,statusText:"OK",headers:new Headers(),config:options} as never;observed=true;throw failure;});
- const error=await assignLegacyGoogleConnection(scope).catch(e=>e);
+ const error=await assignLegacyGoogleConnection(scope,"3").catch(e=>e);
  expect(observed).toBe(true);expect(error.message).toBe("GOOGLE_LEGACY_REAUTHORIZE_REQUIRED");expect(error.stack).not.toContain("provider diagnostic");expect(error).not.toHaveProperty("cause");expect(transport).toHaveBeenCalledTimes(2);expect(deps.rpc).toHaveBeenCalledTimes(2);expect(client.credentials).toEqual({});
 });
 it("hides transport and database details including malformed status responses",async()=>{
  deps.rpc.mockRejectedValue(Error("fictitious private database diagnostic"));
- const error=await assignLegacyGoogleConnection(scope).catch(e=>e);expect(error.message).toBe("GOOGLE_LEGACY_STORAGE_UNAVAILABLE");expect(error.stack).not.toContain("database diagnostic");expect(error).not.toHaveProperty("cause");
+ const error=await assignLegacyGoogleConnection(scope,"3").catch(e=>e);expect(error.message).toBe("GOOGLE_LEGACY_STORAGE_UNAVAILABLE");expect(error.stack).not.toContain("database diagnostic");expect(error).not.toHaveProperty("cause");
  deps.rpc.mockResolvedValue({data:{exists:true,assigned:false,assignedHere:true,refresh_ciphertext:"fictitious-private"},error:null});
  await expect(loadGoogleLegacyStatus(scope)).rejects.toThrow("GOOGLE_LEGACY_STORAGE_INVALID");
 });
@@ -154,5 +163,5 @@ it("drops private fields from status instead of exposing storage objects",async(
 });
 it("does not write plaintext if encryption becomes unavailable during verification",async()=>{
  transport.mockImplementation(async(options:TransportOptions)=>{if(!String(options?.url).endsWith("tokeninfo"))vi.stubEnv("DATA_ENCRYPTION_KEY",undefined);return {data:String(options?.url).endsWith("tokeninfo")?providerInfo:calendar,status:200,statusText:"OK",headers:new Headers(),config:options} as never;});
- const error=await assignLegacyGoogleConnection(scope).catch(e=>e);expect(error.message).toBe("GOOGLE_LEGACY_FAILED");expect(error.stack).not.toContain("DATA_ENCRYPTION_KEY");expect(deps.rpc).toHaveBeenCalledTimes(2);expect(client.credentials).toEqual({});
+ const error=await assignLegacyGoogleConnection(scope,"3").catch(e=>e);expect(error.message).toBe("GOOGLE_LEGACY_FAILED");expect(error.stack).not.toContain("DATA_ENCRYPTION_KEY");expect(deps.rpc).toHaveBeenCalledTimes(2);expect(client.credentials).toEqual({});
 });
