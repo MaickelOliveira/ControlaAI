@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import {
   BILLING_WEBHOOK_PRESETS,
+  billingWebhookAdminView,
   classifyBillingStatus,
+  evaluateBillingWebhook,
   inferCheckoutLocale,
   isStaleActivation,
   isBlockedByInactivePhone,
@@ -141,9 +143,20 @@ describe("eventos que desativam o cliente", () => {
     expect(classifyBillingStatus(saved, "PURCHASE_PROTEST")).toEqual({ isActivate: false, isDeactivate: true });
   });
 
-  it("aprovação e compra completa continuam ativando", () => {
+  it("aprovação ativa, mas conclusão da compra antiga não reativa após cancelamento", () => {
     expect(classifyBillingStatus(saved, "PURCHASE_APPROVED")).toEqual({ isActivate: true, isDeactivate: false });
-    expect(classifyBillingStatus(saved, "PURCHASE_COMPLETE")).toEqual({ isActivate: true, isDeactivate: false });
+    expect(classifyBillingStatus(saved, "PURCHASE_COMPLETE")).toEqual({ isActivate: false, isDeactivate: false });
+    expect(BILLING_WEBHOOK_PRESETS.hotmart.activateValues).not.toContain("PURCHASE_COMPLETE");
+    expect(billingWebhookAdminView(makeConfig(saved)).activateValues).toEqual(["PURCHASE_APPROVED"]);
+  });
+
+  it("ignora o evento de conclusão já autorizado, mesmo com a configuração antiga", async () => {
+    const result = await evaluateBillingWebhook(makeConfig(saved), {
+      event: "PURCHASE_COMPLETE",
+      creation_date: new Date("2026-10-13T02:27:00Z").getTime(),
+      data: { buyer: { email: "comprador@example.com" }, purchase: { transaction: "compra-antiga" } },
+    });
+    expect(result).toMatchObject({ ok: true, action: "ignored" });
   });
 });
 
