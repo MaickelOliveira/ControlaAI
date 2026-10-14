@@ -15,6 +15,16 @@ confirmed request; the stored snapshot never grants authority or gets rebased.
 Control intents require an explicit revision snapshot, including null for local
 or legacy records; missing metadata never invents historical Google provenance.
 
+`commitGoogleWhatsAppIntents` persists a bounded batch before any service effect,
+then stores only mutation/record IDs after each confirmed result. Replay performs
+an authorized service read for acknowledged items and repeats the exact original
+operation for unacknowledged items. Both initial-save and acknowledgement-save
+failures retain idempotent identities. Participant scope is rechecked after waits
+and before every effect; it never rewrites an old intent into a new workspace.
+The temporary `google_agenda_commit` pending record expires after 24 hours and
+is cleared only after the caller's acknowledgement is sent. This record does not
+claim exactly-once notification delivery or replace the service's SQL receipt.
+
 The public five sync fields describe confirmation/pending state. A saved meeting
 with a pending conference says **Preparando link** and is available in Agenda.
 No empty or unconfirmed Meet link becomes an invitation or a claim of success.
