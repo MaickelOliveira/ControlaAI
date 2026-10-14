@@ -62,13 +62,18 @@ HTTP. Fixed `GOOGLE_EVENT_COMMAND_CONFLICT` covers stale head/in-progress/forbid
 conference supersession; leased conflicts remain `GOOGLE_EVENT_ATTEMPT_CONFLICT`.
 Metadata carries `mutation_allowed` only inside a running lease; changed binding
 can reconcile a previously attempted command but cannot silently write again.
-The SQL fixture passed192 assertions including real row contention, owner erasure,
+The SQL fixture passed200 assertions including real row contention, owner erasure,
 head races, failed second-row atomicity, cancellation, strict immutable column
 ACLs and preserving rollback. The fixture corrects only its minimal public FK
 setup to match existing production owner-erasure cascades; it uses no real rows.
 Delete preparation can cancel scheduled or canceled linked rows. Subsequent active,
 claim/preflight/finish requires both rows remain canceled; a public reschedule
 cannot give an older queued cancellation authority to delete the active event.
+New conference identities require a first add to a creation without Meet and no
+prior conference command, or a stored definitive CONFERENCE_FAILED outcome.
+Ambiguous/exhausted/connection failures retain their existing command/request.
+Recovery after a creation conference failure publishes original event IDs and the
+new verified link to both local rows atomically; it cannot lose original calendar.
 
 Private adapter exposes scoped head/get/prepare, claim/finish/retry and strict-true
 active/preflight checks. It copies scope, operation, head/attempt/lease and outcomes
@@ -79,6 +84,10 @@ Fake SDK transport tests cover conditional PATCH/DELETE, expected ETag/HTTP412,
 signed payload reconciliation, ambiguous writes with one invitation, explicit
 stable conference request/pending polling, malformed/foreign responses, missing
 events, pre-runtime activity and post-read/pre-write/pre-publication conflicts.
+Once a pending conference was observed, its verified ETag is sticky evidence;
+even a stale GET lacking the current command marker permits read-only recovery,
+never another conference PATCH. The DELETE header regression asserts outside the
+fake transport so the worker's network-error handling cannot mask an assertion.
 
 Each slice touches at most five files, passes focused Vitest/lint and is committed
 before dependent work. Parent runs full tests/build/types and independent review.

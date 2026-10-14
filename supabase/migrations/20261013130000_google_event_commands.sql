@@ -127,6 +127,9 @@ begin
  select * into prior from google_workspace.event_commands where operation_id=h.operation_id;
  if (prior.state='running' and prior.lease_until>clock_timestamp())
   or(p_kind<>'delete' and prior.kind='conference' and prior.state<>'succeeded' and prior.failure_code is distinct from 'CONFERENCE_FAILED') then raise exception 'GOOGLE_EVENT_COMMAND_CONFLICT';end if;
+ if p_kind='conference' and not coalesce((creation.state='failed' and creation.failure_code='CONFERENCE_FAILED')
+  or(prior.kind='conference' and prior.state='failed' and prior.failure_code='CONFERENCE_FAILED')
+  or(not creation.with_meet and not exists(select 1 from google_workspace.event_commands where event_id=p_event_id and kind='conference')),false) then raise exception 'GOOGLE_EVENT_COMMAND_CONFLICT';end if;
  if p_kind='update' then
   if p_payload is null or jsonb_typeof(p_payload)<>'object' or octet_length(p_payload::text)>32768
    or(p_payload-array['summary','description','location','startAt','endAt','allDay','repeat','attendees'])<>'{}'::jsonb
@@ -219,7 +222,7 @@ end;$$;
 create function public.zelo_google_event_command_finish(p_user_id uuid,p_mode text,p_company_id uuid,p_event_id uuid,p_operation_id uuid,p_client_fingerprint text,p_binding_version bigint,
  p_attempt_version bigint,p_lease_id uuid,p_result text,p_etag text,p_meet_link text,p_failure_code text)
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
-declare c google_workspace.event_commands%rowtype;l google_workspace.event_links%rowtype;next_state text;next_error text;
+declare c google_workspace.event_commands%rowtype;l google_workspace.event_links%rowtype;e google_workspace.event_origins%rowtype;next_state text;next_error text;
 begin
  c=google_workspace.event_command_context(p_user_id,p_mode,p_company_id,p_event_id,p_operation_id,p_client_fingerprint,p_binding_version);
  if p_attempt_version is null or p_lease_id is null or c.state<>'running' or c.attempt_version<>p_attempt_version or c.lease_id<>p_lease_id
@@ -241,8 +244,9 @@ begin
  update google_workspace.event_command_heads set etag=coalesce(p_etag,etag),deleted=(p_result='succeeded' and c.kind='delete') where event_id=p_event_id;
  if c.kind='conference' and p_etag is not null and(p_result in ('waiting','succeeded') or p_failure_code='CONFERENCE_FAILED') then
   select * into l from google_workspace.event_links where event_id=p_event_id;
-  update public.appointments set meet_link=p_meet_link where id=l.appointment_id and user_id=p_user_id;
-  if l.kind='meet' then update public.meets set meet_link=coalesce(p_meet_link,'') where id=l.meet_id and user_id=p_user_id;end if;
+  select * into e from google_workspace.event_origins where event_id=p_event_id;
+  update public.appointments set meet_link=p_meet_link,calendar_event_id=case when p_result in ('waiting','succeeded') then 'gcal:'||jsonb_build_object('eventId',e.remote_event_id,'calendarId',e.calendar_id)::text else calendar_event_id end where id=l.appointment_id and user_id=p_user_id;
+  if l.kind='meet' then update public.meets set meet_link=coalesce(p_meet_link,''),calendar_event_id=case when p_result in ('waiting','succeeded') then e.remote_event_id else calendar_event_id end where id=l.meet_id and user_id=p_user_id;end if;
   if p_result='succeeded' then
    update google_workspace.event_creations set state='succeeded',etag=p_etag,meet_link=p_meet_link,failure_code=null where event_id=p_event_id and with_meet;
   end if;

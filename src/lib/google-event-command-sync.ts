@@ -69,6 +69,9 @@ export async function synchronizeGoogleEventCommand(scope:GoogleWorkspace,eventI
     else if(event.status==="cancelled")outcome=claimed.kind==="delete"?succeeded():failed("REMOTE_MISSING");
     else if(event.status!=="confirmed"&&event.status!=="tentative")outcome=failed("FOREIGN_EVENT");
     else if(claimed.kind!=="delete"&&applied(claimed,event))outcome=observed(claimed,event);
+    // A prior verified pending response is sticky evidence that this conference
+    // was submitted. A stale GET cannot authorize another PATCH/invitation.
+    else if(claimed.kind==="conference"&&claimed.etag!==null)outcome={result:"retry",etag:null,meetLink:null,failureCode:"TEMPORARY"};
     else if(event.etag!==claimed.expectedEtag)outcome=failed("ETAG_CONFLICT");
     else if(!claimed.lease.mutationAllowed)outcome=failed("CONNECTION_CHANGED");
     else{

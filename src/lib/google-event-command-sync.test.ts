@@ -58,8 +58,9 @@ it("recovers ambiguous PATCH with GET only and one operation/invitation",async()
 });
 it("performs conditional DELETE and reconciles ambiguous404 without another delete",async()=>{
  current={...current,kind:"delete",payload:null,localAttendees:null};let removed=false;
- transport.mockImplementation(async options=>{if(options.method==="GET"){if(removed)throw failure(404);return response(owned(),options);}removed=true;expect(options.headers.get("If-Match")).toBe('"before"');throw Error("fictitious lost delete response");});
- expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("succeeded");expect(transport.mock.calls.filter(([v])=>v.method==="DELETE")).toHaveLength(1);
+ transport.mockImplementation(async options=>{if(options.method==="GET"){if(removed)throw failure(404);return response(owned(),options);}removed=true;throw Error("fictitious lost delete response");});
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect(transport.mock.calls.find(([v])=>v.method==="DELETE")![0].headers.get("If-Match")).toBe('"before"');
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("succeeded");expect(transport.mock.calls.filter(([v])=>v.method==="DELETE")).toHaveLength(1);
 });
 it.each([404,410])("treats delete missing%d as idempotent but never recreates an update",async code=>{
  transport.mockRejectedValue(failure(code));expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("REMOTE_MISSING");current={...current,kind:"delete",payload:null,localAttendees:null,state:"queued",failureCode:null};expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("succeeded");expect(transport.mock.calls.every(([v])=>v.method==="GET")).toBe(true);
@@ -68,6 +69,13 @@ it("creates only the persisted explicit conference ID and polls pending without 
  current={...current,kind:"conference",payload:null,localAttendees:null,conferenceRequestId:googleEventCommandIdentity(scope,eventId,operationId)};let applied=false,pending=true;
  transport.mockImplementation(async options=>{if(options.method==="PATCH"){const body=options.data as {conferenceData:{createRequest:{requestId:string}}};expect(body.conferenceData.createRequest.requestId).toBe(current.conferenceRequestId);applied=true;}return response(owned(applied,pending?"pending":"success"),options);});
  expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("waiting");expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("waiting");pending=false;expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).meetLink).toBe("https://meet.google.com/abc-defg-hij");expect(transport.mock.calls.filter(([v])=>v.method==="PATCH")).toHaveLength(1);
+});
+it("retains observed pending evidence through a stale GET without another conference PATCH",async()=>{
+ current={...current,kind:"conference",payload:null,localAttendees:null,conferenceRequestId:googleEventCommandIdentity(scope,eventId,operationId)};
+ transport.mockImplementation(async options=>response(owned(options.method==="PATCH","pending"),options));
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("waiting");expect(current.etag).toBe('"after"');
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect(current.etag).toBe('"after"');
+ expect(transport.mock.calls.map(([v])=>v.method)).toEqual(["GET","PATCH","GET"]);
 });
 it("retains an ambiguous conference request ID and terminal definitive failure",async()=>{
  current={...current,kind:"conference",payload:null,localAttendees:null,conferenceRequestId:googleEventCommandIdentity(scope,eventId,operationId)};let applied=false;
