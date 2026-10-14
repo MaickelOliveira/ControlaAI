@@ -1,4 +1,5 @@
 import "server-only";
+import {boundGoogleTransport} from "./google-transport";
 import {google} from "googleapis";
 import {googleOAuthBindingVersion,googleOAuthClientFingerprint,googleOAuthNonceMatches,type GooglePendingState} from "./google-oauth-state";
 import {assertGoogleWorkspaceMatch,googleWorkspaceKey,type GoogleWorkspace} from "./google-workspace-policy";
@@ -24,7 +25,7 @@ export async function verifyGoogleIdentity(idToken:string,clientId:string,pendin
     const workspace=Object.freeze({userId:pending.workspace.userId.toLowerCase(),mode:pending.workspace.mode,companyId:pending.workspace.companyId?.toLowerCase()??null});
     const expiresAt=Date.parse(pending.expiresAt),nonceHash=pending.nonceHash,bindingVersion=googleOAuthBindingVersion(pending.bindingVersion),now=Date.now();
     if(!Number.isFinite(expiresAt)||expiresAt<=now||expiresAt>now+660_000)throw Error();
-    const client=new google.auth.OAuth2(clientId);
+    const client=boundGoogleTransport(new google.auth.OAuth2(clientId));
     const ticket=await client.verifyIdToken({idToken,audience:clientId});
     const payload=ticket.getPayload();
     if(!payload||(payload.iss!=="accounts.google.com"&&payload.iss!=="https://accounts.google.com")||payload.aud!==clientId

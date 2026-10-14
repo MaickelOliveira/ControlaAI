@@ -1,65 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { createAppointment, getAppointments } from "@/lib/agenda";
-import { createMeetEvent } from "@/lib/google-meet";
-import { isConnected } from "@/lib/google-oauth";
-import type { MeetAttendee } from "@/lib/meets";
-
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const appointments = await getAppointments(session.sub);
-  return NextResponse.json(appointments);
-}
-
-export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const body = await req.json();
-  const { title, description, location, startAt, endAt, allDay, repeat, withMeet, attendees } = body;
-  if (!title || !startAt) {
-    return NextResponse.json({ error: "title e startAt são obrigatórios" }, { status: 400 });
-  }
-
-  let meetLink: string | undefined;
-  let calendarEventId: string | undefined;
-  let googleCalendarId: string | undefined;
-
-  if (withMeet && endAt) {
-    if (!(await isConnected(session.sub))) {
-      return NextResponse.json({ error: "Google não conectado. Acesse Configurações → Integrações." }, { status: 400 });
-    }
-    try {
-      const result = await createMeetEvent({
-        userId: session.sub, title, description, startAt, endAt,
-        attendees: (attendees as MeetAttendee[]) || [],
-      });
-      meetLink = result.meetLink;
-      calendarEventId = result.calendarEventId;
-      googleCalendarId = result.googleCalendarId;
-    } catch  {
-      console.error("[agenda POST meet]");
-      return NextResponse.json({ error: "Erro ao criar Google Meet. Verifique a conexão Google." }, { status: 500 });
-    }
-  }
-
-  const appointment = await createAppointment({
-    userId: session.sub,
-    title,
-    description: description || undefined,
-    location: location || undefined,
-    startAt,
-    endAt: endAt || undefined,
-    allDay: allDay ?? false,
-    repeat: repeat || "none",
-    status: "scheduled",
-    source: "web",
-    meetLink,
-    calendarEventId,
-    googleCalendarId,
-  });
-
-  return NextResponse.json(appointment, { status: 201 });
-}
+import {googleEventsBody,googleEventsHttp,googleEventsQuery} from "@/lib/google-events-http";
+import {createWorkspaceAppointment,listWorkspaceAppointments,type WorkspaceEventInput} from "@/lib/google-event-service";
+const KEYS=["clientMutationId","title","description","location","startAt","endAt","allDay","repeat","withMeet","attendees"];
+export async function GET(request:Request){return await googleEventsHttp(request,async scope=>{googleEventsQuery(request);return await listWorkspaceAppointments(scope);});}
+export async function POST(request:Request){return await googleEventsHttp(request,async scope=>{
+ googleEventsQuery(request);const {clientMutationId,...input}=await googleEventsBody(request,KEYS,["clientMutationId","title","startAt"]);
+ if(typeof clientMutationId!=="string")throw Error("GOOGLE_EVENT_INPUT_INVALID");
+ return await createWorkspaceAppointment(scope,clientMutationId,input as WorkspaceEventInput,"web");
+},true,201);}

@@ -9,6 +9,7 @@ const COPY={
  "pt-BR":{
   description:"Sincronize compromissos e crie reuniões no Google Meet diretamente pelo Zelo",
   privacy:"Ao conectar, você autoriza o Zelo a criar, editar e excluir eventos conforme seus comandos.",privacyLink:"Política de Privacidade",
+  reauthorize:"A conexão antiga expirou. Use Conectar Google para autorizar novamente neste espaço.",
   space:"Conexão deste espaço",connected:"Google conectado",choose:"Agenda usada pelo Zelo",loading:"Carregando suas agendas...",saved:"Agenda selecionada com sucesso.",
   connect:"Conectar Google",reconnect:"Reconectar Google",disconnect:"Desconectar deste espaço",unlinked:"Google desconectado deste espaço. O histórico foi preservado.",
   legacy:"Você tem uma conexão antiga que ainda não foi atribuída a um espaço. Escolha onde usá-la; os eventos antigos continuam guardados.",
@@ -18,6 +19,7 @@ const COPY={
  "pt-PT":{
   description:"Sincronize compromissos e crie reuniões no Google Meet diretamente pelo Zelo",
   privacy:"Ao ligar, autoriza o Zelo a criar, editar e eliminar eventos conforme os seus comandos.",privacyLink:"Política de Privacidade",
+  reauthorize:"A ligação antiga expirou. Utilize Ligar Google para autorizar novamente neste espaço.",
   space:"Ligação deste espaço",connected:"Google ligado",choose:"Agenda utilizada pelo Zelo",loading:"A carregar as suas agendas...",saved:"Agenda selecionada com sucesso.",
   connect:"Ligar Google",reconnect:"Voltar a ligar Google",disconnect:"Desligar deste espaço",unlinked:"Google desligado deste espaço. O histórico foi preservado.",
   legacy:"Tem uma ligação antiga que ainda não foi atribuída a um espaço. Escolha onde utilizá-la; os eventos antigos continuam guardados.",
@@ -27,6 +29,7 @@ const COPY={
  es:{
   description:"Sincroniza tus citas y crea reuniones de Google Meet directamente desde Zelo",
   privacy:"Al conectar, autorizas a Zelo a crear, editar y eliminar eventos según tus instrucciones.",privacyLink:"Política de Privacidad",
+  reauthorize:"La conexión anterior ha caducado. Usa Conectar Google para autorizarla de nuevo en este espacio.",
   space:"Conexión de este espacio",connected:"Google conectado",choose:"Calendario que usará Zelo",loading:"Cargando tus calendarios...",saved:"Calendario seleccionado correctamente.",
   connect:"Conectar Google",reconnect:"Volver a conectar Google",disconnect:"Desconectar de este espacio",unlinked:"Google desconectado de este espacio. El historial se conserva.",
   legacy:"Tienes una conexión antigua que todavía no está asignada a un espacio. Elige dónde usarla; los eventos anteriores se conservan.",
@@ -45,7 +48,7 @@ export default function GoogleCalendarIntegration({locale}:{locale:Locale}){
  const legacy=available&&state.status!.legacy.exists&&!state.status!.legacy.assigned,canAssignLegacy=legacy&&!state.status!.connected;
  const confirming=canAssignLegacy&&confirmation===state.target!.workspaceKey;
  const displayLabel=state.target?.mode==="personal"?(locale==="es"?"Personal":"Pessoal"):state.target?.label;
- const error=state.errorCode==="GOOGLE_SETTINGS_AUTH_REQUIRED"?copy.auth:state.errorCode==="GOOGLE_SETTINGS_NOT_CONNECTED"?copy.missing:["GOOGLE_SETTINGS_CONFLICT","GOOGLE_SETTINGS_WORKSPACE_CHANGED"].includes(state.errorCode??"")?copy.changed:copy.unavailable;
+ const error=state.errorCode==="GOOGLE_SETTINGS_REAUTHORIZE_REQUIRED"?copy.reauthorize:state.errorCode==="GOOGLE_SETTINGS_AUTH_REQUIRED"?copy.auth:state.errorCode==="GOOGLE_SETTINGS_NOT_CONNECTED"?copy.missing:["GOOGLE_SETTINGS_CONFLICT","GOOGLE_SETTINGS_WORKSPACE_CHANGED"].includes(state.errorCode??"")?copy.changed:copy.unavailable;
  return <div className="flex flex-col gap-4 p-4 rounded-xl border border-line bg-surface-muted sm:flex-row sm:items-start sm:justify-between">
   <div className="flex min-w-0 items-start gap-3">
    <div className="w-10 h-10 rounded-xl bg-white border border-line flex items-center justify-center shadow-sm shrink-0"><Image src="/brand/google-calendar.png" alt="Google Agenda" width={30} height={30}/></div>

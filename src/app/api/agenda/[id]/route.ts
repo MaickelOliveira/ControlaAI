@@ -1,27 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { updateAppointment, deleteAppointment } from "@/lib/agenda";
-
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const { id } = await params;
-  const body = await req.json();
-
-  const updated = await updateAppointment(id, session.sub, body);
-  if (!updated) return NextResponse.json({ error: "Compromisso não encontrado" }, { status: 404 });
-
-  return NextResponse.json(updated);
-}
-
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const { id } = await params;
-  const ok = await deleteAppointment(id, session.sub);
-  if (!ok) return NextResponse.json({ error: "Compromisso não encontrado" }, { status: 404 });
-
-  return NextResponse.json({ ok: true });
-}
+import {googleEventsBody,googleEventsHttp,googleEventsQuery} from "@/lib/google-events-http";
+import {cancelWorkspaceAppointment,getWorkspaceAppointment,updateWorkspaceAppointment,type GoogleEventExpectation,type WorkspaceAppointmentPatch} from "@/lib/google-event-service";
+type Context=Readonly<{params:Promise<{id:string}>}>;
+const EXPECTED=["clientMutationId","expectedGoogleSyncVersion"];
+const PATCH_KEYS=[...EXPECTED,"title","description","location","startAt","endAt","allDay","repeat","attendees","status","ataGenerated","ataContent","ataNotifiedAt","reminderSentAt","reminder15MinSentAt"];
+export async function GET(request:Request,context:Context){return await googleEventsHttp(request,async scope=>{
+ googleEventsQuery(request);const {id}=await context.params,result=await getWorkspaceAppointment(scope,id);if(!result)throw Error("GOOGLE_EVENT_NOT_FOUND");return result;
+});}
+export async function PATCH(request:Request,context:Context){return await googleEventsHttp(request,async scope=>{
+ googleEventsQuery(request);const {id}=await context.params,{clientMutationId,expectedGoogleSyncVersion,...patch}=await googleEventsBody(request,PATCH_KEYS,EXPECTED);
+ return await updateWorkspaceAppointment(scope,id,patch as WorkspaceAppointmentPatch,{clientMutationId,expectedGoogleSyncVersion} as GoogleEventExpectation);
+},true);}
+export async function DELETE(request:Request,context:Context){return await googleEventsHttp(request,async scope=>{
+ googleEventsQuery(request);const {id}=await context.params,expectation=await googleEventsBody(request,EXPECTED);
+ return await cancelWorkspaceAppointment(scope,id,expectation as GoogleEventExpectation);
+},true);}

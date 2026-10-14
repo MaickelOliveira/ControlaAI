@@ -95,3 +95,8 @@ it("does not accept a malformed authorization URL",async()=>{
  await controller.setTarget(personal);fetcher.mockResolvedValueOnce(Response.json({authorizationUrl:"not a url"}));await controller.connect("pt-BR");
  expect(controller.state().errorCode).toBe("GOOGLE_SETTINGS_RESPONSE_INVALID");expect(navigate).not.toHaveBeenCalled();
 });
+it("preserves the unassigned connection and exposes the explicit reconnect instruction after expiry",async()=>{
+ fetcher.mockResolvedValueOnce(Response.json(status(personal,{activated:false,connected:false,bindingVersion:"0",selectedCalendar:null})));
+ await controller.setTarget(personal);fetcher.mockResolvedValueOnce(Response.json({code:"GOOGLE_SETTINGS_REAUTHORIZE_REQUIRED"},{status:400}));await controller.assignLegacy(personal.workspaceKey);
+ expect(controller.state()).toMatchObject({status:{activated:false,connected:false,legacy:{assigned:false}},errorCode:"GOOGLE_SETTINGS_REAUTHORIZE_REQUIRED",notice:null,busy:false});expect(navigate).not.toHaveBeenCalled();
+});
