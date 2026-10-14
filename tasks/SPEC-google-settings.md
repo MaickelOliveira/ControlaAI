@@ -94,7 +94,7 @@ review before publication. No dependencies change.
 Next increments install explicit legacy destination/OAuth expected-revision guards,
 scoped authenticated/CSRF-protected routes and stale-response-safe UI, then migrate
 every web/WhatsApp/job consumer before reviewed migrations and full activation.
-# Confirmed connect and legacy actions
+## Confirmed connect and legacy actions
 
 Connect requires the displayed workspace digest, exact decimal binding revision,
 and one supported locale. The persistent issuer atomically rechecks the revision;
@@ -107,3 +107,33 @@ then retains the original source/grant/binding compare-and-swap. It returns fres
 public settings only if the committed connection and selected calendar still match.
 Neither action accepts owner, mode, company, provider subject or grant identifiers
 from the submitted body. Errors use an exact fixed allowlist and carry no cause.
+
+## Client controller and UI
+
+The settings UI requires a server-confirmed `{mode,companyId,workspaceKey,label}`
+target delivered through a narrow client context. An absent target disables all
+Google actions without disrupting other settings. Company names are display-only;
+the owner-inclusive digest and UUID tuple correlate status with the open space.
+No email or account identity is invented. The existing logo, privacy links and
+Portuguese/Brazil, Portuguese/Portugal and Spanish wording remain available.
+
+The pure controller resets synchronously on target change/logout, aborts previous
+requests and assigns a generation to every load/action. All success, failure and
+finally handlers check the generation, abort signal and exact target. Wrong-space
+responses never supply calendars or a connected UI. An expired session clears all
+confirmed connection state; page exit and component cleanup abort pending work.
+Single-flight actions block rapid selections. The selector stays at its confirmed
+value until an exact next-revision response confirms the requested calendar.
+Failures retain confirmed state; a 409 reloads authoritative status/calendar data.
+All response DTOs are validated and copied; raw server/provider diagnostics are
+never put into client state or notifications.
+
+Connect/reconnect uses POST with scoped expected revision and locale, then only
+navigates to HTTPS `accounts.google.com/o/oauth2/v2/auth`, without userinfo, custom
+port or fragment. Legacy assignment requires a separate human confirmation naming
+the currently displayed space; its captured key must still match at submission.
+No default personal/company assignment occurs. Local disconnect changes UI only
+after a confirmed response. Client tests use fake fetch and delayed promises,
+covering workspace changes, logout, rapid selection, failures, stale conflicts,
+legacy confirmation and rejected authorization destinations. These UI changes are
+not deployed until server targets and the complete consumer cutover are ready.

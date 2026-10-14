@@ -3,7 +3,9 @@ import {createHmac,timingSafeEqual} from "node:crypto";
 import {googleEventOriginFromStorage,googleEventRetryIdentity} from "./google-event-policy";
 import {googleOAuthBindingVersion} from "./google-oauth-state";
 import type {GoogleEventIntent} from "./google-event-origin-store";
+import {googleEventCommandIdentity,type GoogleEventCommandKind} from "./google-event-command-policy";
 export type GoogleEventProviderMarkers=Readonly<{zeloOrigin:string;zeloCreation:string}>;
+export type GoogleEventCommandMarkerContext=Readonly<{operationId:string;headVersion:string;kind:GoogleEventCommandKind;payloadFingerprint:string;conferenceRequestId:string|null}>;
 const HEX=/^[a-f0-9]{64}$/;
 function hex(value:unknown):string{if(typeof value!=="string"||value.length!==64||!HEX.test(value))throw Error();return value;}
 function context(intent:GoogleEventIntent,fingerprint:string,withMeet:boolean){
@@ -35,4 +37,24 @@ export function assertGoogleEventProviderMarkers(intent:GoogleEventIntent,finger
   if(!value||typeof value!=="object"||Array.isArray(value))throw Error();const row=value as Record<string,unknown>;
   for(const name of ["zeloOrigin","zeloCreation"] as const){if(!timingSafeEqual(Buffer.from(hex(row[name]),"hex"),Buffer.from(expected[name],"hex")))throw Error();}
  }catch{throw Error("GOOGLE_EVENT_MARKER_INVALID");}
+}
+/** A separate persisted mutation marker leaves immutable creation markers intact.
+ * Its opaque signature is never a permission check or a provider payload check. */
+export function googleEventCommandMarker(intent:GoogleEventIntent,command:GoogleEventCommandMarkerContext):string{
+ let captured:unknown;
+ try{
+  const original=context(intent,command.payloadFingerprint,false),version=googleOAuthBindingVersion(command.headVersion);
+  const requestId=googleEventCommandIdentity(intent.workspace,intent.eventId,command.operationId);
+  if(version==="0"||!["update","delete","conference"].includes(command.kind)||(command.kind==="conference"?command.conferenceRequestId!==requestId:command.conferenceRequestId!==null))throw Error();
+  captured=[original.origin,command.operationId.toLowerCase(),version,command.kind,hex(command.payloadFingerprint),command.conferenceRequestId];
+ }catch{throw Error("GOOGLE_EVENT_COMMAND_MARKER_INVALID");}
+ const secret=process.env.DATA_ENCRYPTION_KEY;if(!secret)throw Error("GOOGLE_EVENT_MARKER_UNAVAILABLE");
+ try{const key=createHmac("sha256",secret).update("zelo-google-event-marker-key-v1").digest();return createHmac("sha256",key).update("zelo-google-command-v1\0"+JSON.stringify(captured)).digest("hex");}
+ catch{throw Error("GOOGLE_EVENT_MARKER_UNAVAILABLE");}
+}
+export function assertGoogleEventCommandMarker(intent:GoogleEventIntent,command:GoogleEventCommandMarkerContext,value:unknown):void{
+ const expected=googleEventCommandMarker(intent,command);
+ try{if(!value||typeof value!=="object"||Array.isArray(value))throw Error();
+  if(!timingSafeEqual(Buffer.from(hex((value as Record<string,unknown>).zeloCommand),"hex"),Buffer.from(expected,"hex")))throw Error();
+ }catch{throw Error("GOOGLE_EVENT_COMMAND_MARKER_INVALID");}
 }
