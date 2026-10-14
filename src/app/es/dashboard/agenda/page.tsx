@@ -1,26 +1,13 @@
 "use client";
 import PageTitle from "@/components/PageTitle";
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
+import {useGoogleAgenda} from "@/components/useGoogleAgenda";
+import GoogleAgendaSyncStatus from "@/components/GoogleAgendaSyncStatus";
+import {safeGoogleMeetHref,type GoogleAgendaAppointment} from "@/lib/google-agenda-client-contract";
 
 type AppointmentRepeat = "none" | "daily" | "weekly" | "monthly" | "yearly";
-type AppointmentStatus = "scheduled" | "done" | "cancelled";
 
-type Appointment = {
-  id: string;
-  title: string;
-  description?: string;
-  location?: string;
-  startAt: string;
-  endAt?: string;
-  allDay: boolean;
-  repeat: AppointmentRepeat;
-  status: AppointmentStatus;
-  source: string;
-  createdAt: string;
-  meetLink?: string;
-  ataGenerated?: boolean;
-  ataContent?: string;
-};
+type Appointment = GoogleAgendaAppointment;
 
 const TZ = "America/Sao_Paulo";
 
@@ -127,92 +114,52 @@ export default function AgendaPageEs() {
   const today = todaySP();
   const [year, month] = getYearMonth(today);
 
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {state:agenda,controller}=useGoogleAgenda();
+  const appointments=agenda.appointments,loading=agenda.loading,saving=agenda.busy,googleConnected=agenda.googleConnected;
+  const [formIntent,setFormIntent]=useState<string|null>(null);
+  const [formError,setFormError]=useState(false);
   const [view, setView] = useState<ViewMode>("month");
   const [curYear, setCurYear] = useState(year);
   const [curMonth, setCurMonth] = useState(month);
   const [selectedDay, setSelectedDay] = useState<string | null>(today);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Appointment | null>(null);
+  const editingDisplay=editing?appointments.find(row=>row.id===editing.id)??editing:null;
   const [form, setForm] = useState<FormState>(emptyForm());
-  const [saving, setSaving] = useState(false);
-  const [googleConnected, setGoogleConnected] = useState(false);
-
-  function load() {
-    fetch("/api/agenda").then(r => r.json()).then(data => {
-      setAppointments(Array.isArray(data) ? data : []);
-    }).finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    load();
-    fetch("/api/google/status").then(r => r.json()).then(d => setGoogleConnected(d.connected)).catch(() => {});
-  }, []);
 
   function openNew(date?: string) {
+    if(!agenda.target||agenda.loading||agenda.busy)return;
+    setFormIntent(controller.newIntent());setFormError(false);controller.clearError();
     setEditing(null);
     setForm(emptyForm(date));
     setShowModal(true);
   }
 
   function openEdit(a: Appointment) {
+    if(agenda.busy)return;
+    setFormIntent(controller.newIntent());setFormError(false);controller.clearError();
     setEditing(a);
     setForm(aptToForm(a));
     setShowModal(true);
   }
 
   async function handleSave() {
-    if (!form.title.trim() || !form.startDate) return;
-    setSaving(true);
+    if (!form.title.trim() || !form.startDate || !formIntent || saving) return;
+    setFormError(false);
     try {
       const startAt = new Date(`${form.startDate}T${form.startTime || "00:00"}:00-03:00`).toISOString();
-      const endAt = form.endDate
-        ? new Date(`${form.endDate}T${form.endTime || "00:00"}:00-03:00`).toISOString()
-        : undefined;
-      const body = {
-        title: form.title.trim(),
-        description: form.description.trim() || undefined,
-        location: form.location.trim() || undefined,
-        startAt, endAt, allDay: form.allDay, repeat: form.repeat,
-        withMeet: !editing && form.withMeet && !!endAt,
-      };
-      if (editing) {
-        const res = await fetch(`/api/agenda/${editing.id}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          const updated = await res.json();
-          setAppointments(prev => prev.map(a => a.id === editing.id ? updated : a));
-        }
-      } else {
-        const res = await fetch("/api/agenda", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          const created = await res.json();
-          setAppointments(prev => [...prev, created].sort((a, b) => a.startAt.localeCompare(b.startAt)));
-        }
-      }
-      setShowModal(false); setEditing(null);
-    } finally {
-      setSaving(false);
-    }
+      const endAt = form.endDate ? new Date(`${form.endDate}T${form.endTime || "00:00"}:00-03:00`).toISOString() : undefined;
+      const body = {title:form.title.trim(),description:form.description.trim()||undefined,location:form.location.trim()||undefined,startAt,endAt,allDay:form.allDay,repeat:form.repeat,withMeet:!editing&&form.withMeet&&!!endAt};
+      const confirmed=editing?await controller.patch(formIntent,editing,body):await controller.create(formIntent,body);
+      if(confirmed){setShowModal(false);setEditing(null);setFormIntent(null);}
+    } catch {setFormError(true);}
   }
-
-  async function handleDone(id: string) {
-    const res = await fetch(`/api/agenda/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "done" }),
-    });
-    if (res.ok) setAppointments(prev => prev.filter(a => a.id !== id));
+  async function handleDone(id:string){const record=appointments.find(row=>row.id===id);if(record)await controller.done(record);}
+  async function handleDelete(id:string){
+    const record=appointments.find(row=>row.id===id);if(!record||saving||!confirm("¿Eliminar este compromisso?"))return;
+    await controller.remove(record);
   }
-
-  async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar este compromiso?")) return;
-    const res = await fetch(`/api/agenda/${id}`, { method: "DELETE" });
-    if (res.ok) setAppointments(prev => prev.filter(a => a.id !== id));
-  }
+  async function handleRetry(id:string){const record=appointments.find(row=>row.id===id);if(record)await controller.retry(record);}
 
   function prevMonth() {
     if (curMonth === 1) { setCurYear(y => y - 1); setCurMonth(12); }
@@ -279,12 +226,15 @@ export default function AgendaPageEs() {
             </button>
           </div>
           <button
+            disabled={saving||loading||!agenda.target}
             onClick={() => openNew(selectedDay || today)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:bg-primary transition">
             <span className="text-base leading-none">+</span> Nuevo
           </button>
         </div>
       </div>
+
+      {(agenda.errorCode||formError||!agenda.target)&&<p className="mb-3 text-sm text-red-ink" role="alert">{agenda.target?"Los datos cambiaron o no se pudo confirmar el pedido. Vuelve a abrir el formulario para cambiarlo, o repite el mismo pedido.":"Este espacio no está disponible. Actualiza la página."}</p>}
 
       {view === "month" ? (
         <div className="bg-surface rounded-2xl border border-line shadow-sm overflow-hidden">
@@ -405,6 +355,7 @@ export default function AgendaPageEs() {
                       onEdit={openEdit}
                       onDone={handleDone}
                       onDelete={handleDelete}
+          onRetry={handleRetry} busy={saving||loading}
                     />
                   ))}
                 </div>
@@ -420,15 +371,18 @@ export default function AgendaPageEs() {
           onEdit={openEdit}
           onDone={handleDone}
           onDelete={handleDelete}
+          onRetry={handleRetry} busy={saving||loading}
           loading={loading}
         />
       )}
+
+      {appointments.some(row=>row.googleCancellationPending)&&<section className="mb-4 rounded-xl border border-line bg-surface p-4"><h2 className="text-sm font-semibold text-ink">Cancelaciones pendientes en Google</h2>{appointments.filter(row=>row.googleCancellationPending).map(row=><div key={row.id} className="mt-3"><p className="text-sm text-ink">{row.title}</p><GoogleAgendaSyncStatus appointment={row} locale="es" onRetry={()=>void handleRetry(row.id)} busy={saving||loading}/></div>)}</section>}
 
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[90vh]">
-            <div className="p-6 space-y-4">
+            <fieldset disabled={saving} className="p-6 space-y-4">
               <h3 className="text-base font-bold text-ink">
                 {editing ? "Editar compromiso" : "Nuevo compromiso"}
               </h3>
@@ -500,8 +454,8 @@ export default function AgendaPageEs() {
                   className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               {/* Botão Entrar no Meet — visível ao editar compromisso com meet link */}
-              {editing?.meetLink && (
-                <a href={editing.meetLink} target="_blank" rel="noopener noreferrer"
+              {safeGoogleMeetHref(editingDisplay?.meetLink) && (
+                <a href={safeGoogleMeetHref(editingDisplay?.meetLink)??undefined} target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-primary hover:bg-primary text-on-primary text-sm font-semibold transition">
                   🎥 Entrar a Google Meet
                 </a>
@@ -522,17 +476,19 @@ export default function AgendaPageEs() {
                   ))}
                 </select>
               </div>
+              {editing&&<GoogleAgendaSyncStatus appointment={editingDisplay!} locale="es" onRetry={()=>void handleRetry(editing.id)} busy={saving||loading}/>}
+              {(agenda.errorCode||formError)&&<p className="text-xs text-red-ink" role="alert">Los datos cambiaron o no se pudo confirmar el pedido. Vuelve a abrir el formulario para cambiarlo, o repite el mismo pedido.</p>}
               <div className="flex gap-2 justify-end pt-1">
                 <button onClick={() => { setShowModal(false); setEditing(null); }}
                   className="px-4 py-2 text-sm text-muted hover:text-ink transition">
                   Cancelar
                 </button>
-                <button onClick={handleSave} disabled={saving || !form.title.trim() || !form.startDate}
+                <button onClick={handleSave} disabled={saving || loading || !form.title.trim() || !form.startDate}
                   className="px-5 py-2 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:bg-primary transition disabled:opacity-60">
                   {saving ? "Guardando..." : editing ? "Guardar" : "Crear"}
                 </button>
               </div>
-            </div>
+            </fieldset>
           </div>
         </div>
       )}
@@ -540,11 +496,13 @@ export default function AgendaPageEs() {
   );
 }
 
-function DayEventRow({ evt, onEdit, onDone, onDelete }: {
+function DayEventRow({ evt, onEdit, onDone, onDelete,onRetry,busy }: {
   evt: Appointment;
   onEdit: (a: Appointment) => void;
   onDone: (id: string) => void;
   onDelete: (id: string) => void;
+  onRetry: (id:string)=>void;
+  busy:boolean;
 }) {
   const color = colorForId(evt.id);
   return (
@@ -557,22 +515,23 @@ function DayEventRow({ evt, onEdit, onDone, onDelete }: {
           {evt.endAt && !evt.allDay && ` – ${formatTimeSP(evt.endAt)}`}
           {evt.location && ` · 📍${evt.location}`}
         </p>
+        <GoogleAgendaSyncStatus appointment={evt} locale="es" onRetry={()=>onRetry(evt.id)} busy={busy}/>
       </div>
       <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-        {evt.meetLink && (
-          <a href={evt.meetLink} target="_blank" rel="noopener noreferrer"
+        {safeGoogleMeetHref(evt.meetLink) && (
+          <a href={safeGoogleMeetHref(evt.meetLink)??undefined} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-soft text-blue-ink hover:bg-blue-soft transition text-xs font-medium">
             🎥 Entrar
           </a>
         )}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-          <button onClick={() => onDone(evt.id)} title="Completado"
+          <button disabled={busy} onClick={() => onDone(evt.id)} title="Completado"
             className="p-1 rounded text-subtle hover:text-amber-ink hover:bg-amber-soft transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </button>
-          <button onClick={() => onDelete(evt.id)} title="Eliminar"
+          <button disabled={busy} onClick={() => onDelete(evt.id)} title="Eliminar"
             className="p-1 rounded text-subtle hover:text-red-500 hover:bg-red-soft transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -584,12 +543,14 @@ function DayEventRow({ evt, onEdit, onDone, onDelete }: {
   );
 }
 
-function ListView({ appointments, today, onEdit, onDone, onDelete, loading }: {
-  appointments: Appointment[];
+function ListView({ appointments, today, onEdit, onDone, onDelete, loading,onRetry,busy }: {
+  appointments: readonly Appointment[];
   today: string;
   onEdit: (a: Appointment) => void;
   onDone: (id: string) => void;
   onDelete: (id: string) => void;
+  onRetry: (id:string)=>void;
+  busy:boolean;
   loading: boolean;
 }) {
   const scheduled = appointments.filter(a => a.status === "scheduled");
@@ -645,22 +606,23 @@ function ListView({ appointments, today, onEdit, onDone, onDelete, loading }: {
                       {evt.location && ` · 📍${evt.location}`}
                       {evt.repeat !== "none" && ` · 🔁${REPEAT_LABEL[evt.repeat]}`}
                     </p>
+                    <GoogleAgendaSyncStatus appointment={evt} locale="es" onRetry={()=>onRetry(evt.id)} busy={busy}/>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-                    {evt.meetLink && (
-                      <a href={evt.meetLink} target="_blank" rel="noopener noreferrer"
+                    {safeGoogleMeetHref(evt.meetLink) && (
+                      <a href={safeGoogleMeetHref(evt.meetLink)??undefined} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-soft text-blue-ink hover:bg-blue-soft transition text-xs font-medium">
                         🎥 Entrar
                       </a>
                     )}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                      <button onClick={() => onDone(evt.id)} title="Completado"
+                      <button disabled={busy} onClick={() => onDone(evt.id)} title="Completado"
                         className="p-1.5 rounded-lg text-subtle hover:text-amber-ink hover:bg-amber-soft transition">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                       </button>
-                      <button onClick={() => onDelete(evt.id)} title="Eliminar"
+                      <button disabled={busy} onClick={() => onDelete(evt.id)} title="Eliminar"
                         className="p-1.5 rounded-lg text-subtle hover:text-red-500 hover:bg-red-soft transition">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
