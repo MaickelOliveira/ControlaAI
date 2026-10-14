@@ -46,3 +46,12 @@ Parent handles separately confirmed external-ETag conflict reconciliation.
 Verification: RED missing mutation methods/private replay getter and all-day
 legacy regression, GREEN76 service/user DAL tests plus lint; native SQL19/20/22
 cover durable repeated intention, scope, full-token races and original values.
+
+Web read/create/edit/cancel slice uses reviewed googleEventsHttp for authenticated
+client scope, mutation same-origin and workspace correlation. Strict body/query
+allowlists reject owner/provider/source authority and omitted UUID/expectation.
+Agenda/Meets POST use clientMutationId as logical UUID and force source web; Meets
+uses ISO startAt/endAt. PATCH is flattened patch plus original UUID/version.
+DELETE returns cancellation DTO so pending/failed remote cancellation stays visible.
+GET by ID retains scoped history. No route uses old global create/update/delete.
+RED old routes/global helper trap; GREEN13 HTTP/route tests plus lint.
