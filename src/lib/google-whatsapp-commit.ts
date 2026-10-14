@@ -32,6 +32,7 @@ export async function commitGoogleWhatsAppIntents<T extends {id:string}>(userId:
   const intent=replayGoogleWhatsAppIntent(userId,stored),scope=captureGoogleWhatsAppWorkspace(userId),receipt=receipts.find(receipt=>receipt.clientMutationId===intent.clientMutationId);
   if(receipt){
    const result=await effects.read(scope,intent,receipt.recordId);
+   replayGoogleWhatsAppIntent(userId,intent);
    if(result!==null&&(!result||typeof result.id!=="string"||result.id.toLowerCase()!==receipt.recordId))throw Error("GOOGLE_WHATSAPP_RESULT_INVALID");
    results.push(Object.freeze({intent,result,replayed:true}));continue;
   }
@@ -40,7 +41,7 @@ export async function commitGoogleWhatsAppIntents<T extends {id:string}>(userId:
   // Recheck before persisting: a changed participant context must never rewrite
   // the outer pending-action scope and make an old intent appear current.
   replayGoogleWhatsAppIntent(userId,intent);
-  receipts=Object.freeze([...receipts,Object.freeze({clientMutationId:intent.clientMutationId,recordId:result.id.toLowerCase()})]);await save();
+  receipts=Object.freeze([...receipts,Object.freeze({clientMutationId:intent.clientMutationId,recordId:result.id.toLowerCase()})]);await save();replayGoogleWhatsAppIntent(userId,intent);
   results.push(Object.freeze({intent,result,replayed:false}));
  }
  return Object.freeze(results);

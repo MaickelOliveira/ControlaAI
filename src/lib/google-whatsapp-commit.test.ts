@@ -81,3 +81,18 @@ it("acknowledged items stay confirmed if a later authorized lookup returns no vi
   expect(await commitGoogleWhatsAppIntents(owner,phone,[intent],{execute,read},[receipt])).toMatchObject([{replayed:true,result:null}]);expect(execute).not.toHaveBeenCalled();
  });
 });
+it.each(["mode","company"])("rejects a scope change while the single acknowledged item is read: %s",async field=>{
+ await within(async()=>{
+  const intent=prepareGoogleWhatsAppIntent(owner,"create_appointment",body,{clientMutationId:mutation}),execute=vi.fn(),read=vi.fn(async()=>{setCompanyContext(field==="mode"?{...context,mode:"personal"}:{...context,companyId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"});return {id:event};});
+  const receipt={clientMutationId:mutation,recordId:event};await expect(commitGoogleWhatsAppIntents(owner,phone,[intent],{execute,read},[receipt])).rejects.toThrow("GOOGLE_WHATSAPP_WORKSPACE_CHANGED");
+  expect(execute).not.toHaveBeenCalled();expect(persisted).toMatchObject({intents:[intent],receipts:[receipt]});
+ });
+});
+it.each(["mode","company"])("rejects a scope change during the final receipt save without discarding its identity: %s",async field=>{
+ await within(async()=>{
+  const intent=prepareGoogleWhatsAppIntent(owner,"create_appointment",body,{clientMutationId:mutation}),execute=vi.fn(async()=>({id:event})),read=vi.fn();
+  deps.save.mockImplementation(async(_phone,action)=>{persisted=JSON.parse(JSON.stringify(action));if(deps.save.mock.calls.length===2)setCompanyContext(field==="mode"?{...context,mode:"personal"}:{...context,companyId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"});});
+  await expect(commitGoogleWhatsAppIntents(owner,phone,[intent],{execute,read})).rejects.toThrow("GOOGLE_WHATSAPP_WORKSPACE_CHANGED");
+  expect(execute).toHaveBeenCalledTimes(1);expect(persisted).toMatchObject({intents:[intent],receipts:[{clientMutationId:mutation,recordId:event}]});
+ });
+});
