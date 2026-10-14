@@ -64,7 +64,7 @@ it("rejects duplicate mutation identities and forged receipt targets before pers
  await within(async()=>{
   const intent=prepareGoogleWhatsAppIntent(owner,"cancel_appointment",{}, {appointmentId:event,expectedGoogleSyncVersion:null,clientMutationId:mutation}),execute=vi.fn(),read=vi.fn();
   for(const [intents,receipts] of [[[intent,intent],[]],[[intent],[{clientMutationId:mutation,recordId:otherEvent}]],[[intent],[{clientMutationId:"dddddddd-dddd-4ddd-8ddd-ddddddddddd2",recordId:event}]],[[intent],[{clientMutationId:mutation,recordId:event,privateScope:"forged"}]]] as const)
-   await expect(commitGoogleWhatsAppIntents(owner,phone,intents,{execute,read},receipts)).rejects.toThrow("GOOGLE_WHATSAPP_INPUT_INVALID");
+   await expect(commitGoogleWhatsAppIntents(owner,phone,intents,{execute,read},receipts as never)).rejects.toThrow("GOOGLE_WHATSAPP_INPUT_INVALID");
   expect(execute).not.toHaveBeenCalled();expect(read).not.toHaveBeenCalled();expect(deps.save).not.toHaveBeenCalled();
  });
 });
