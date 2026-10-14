@@ -64,6 +64,10 @@ reloads without adopting a new revision. Back clears eligibility while retaining
 an already attempted immutable identity. Back/logout/stale workspace prevent
 delayed eligibility results from reopening the choice. Conference conflicts cannot
 be offered as overwrite when the server reports false eligibility.
+Confirmation receives the exact frozen choice object shown to the human, rather
+than a refreshed appointment row. Its identity/revision remain authoritative for
+the original consent; a replaced/cancelled choice or delayed old button callback
+cannot authorize the controller's newer choice.
 DELETE accepts a current appointment snapshot or an acknowledged `{ok:true}` then
 reloads pending cancellation snapshots. The UI must preserve cancelled pending
 records in a separate recovery list; no empty Meet link is opened.

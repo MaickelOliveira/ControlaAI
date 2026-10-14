@@ -1,7 +1,7 @@
 import {googleAgendaAppointment,googleAgendaAppointments,type GoogleAgendaAppointment} from "./google-agenda-client-contract";
 import type {GoogleSettingsTarget} from "./google-settings-client";
 export type GoogleAgendaConflictChoice=Readonly<{appointmentId:string;expectedGoogleSyncVersion:string;cancellation:boolean;canOverwrite:boolean|null}>;
-export type GoogleAgendaConflictActions=Readonly<{choice:GoogleAgendaConflictChoice|null;check:(record:GoogleAgendaAppointment)=>Promise<boolean>;confirm:(record:GoogleAgendaAppointment)=>Promise<GoogleAgendaAppointment|null>;cancel:()=>void}>;
+export type GoogleAgendaConflictActions=Readonly<{choice:GoogleAgendaConflictChoice|null;check:(record:GoogleAgendaAppointment)=>Promise<boolean>;confirm:(choice:GoogleAgendaConflictChoice)=>Promise<GoogleAgendaAppointment|null>;cancel:()=>void}>;
 export type GoogleAgendaClientState=Readonly<{target:GoogleSettingsTarget|null;appointments:readonly GoogleAgendaAppointment[];loading:boolean;busy:boolean;googleConnected:boolean;errorCode:string|null;conflict:GoogleAgendaConflictChoice|null}>;
 type Dependencies={fetch:(url:string,init?:RequestInit)=>Promise<Response>;uuid:()=>string;changed:(state:GoogleAgendaClientState)=>void};
 export function emptyGoogleAgendaState():GoogleAgendaClientState{return Object.freeze({target:null,appointments:Object.freeze([]),loading:false,busy:false,googleConnected:false,errorCode:null,conflict:null});}
@@ -72,9 +72,9 @@ export function createGoogleAgendaController(deps:Dependencies){
   }catch(error){if(valid(token)&&state.conflict===choice){publish({conflict:null});failed(token,error);}return false;}
   finally{if(conflictReadGeneration===token)conflictReadGeneration=null;if(valid(token))publish({busy:false});}
  }
- async function confirmConflict(record:GoogleAgendaAppointment):Promise<GoogleAgendaAppointment|null>{
+ async function confirmConflict(selected:GoogleAgendaConflictChoice):Promise<GoogleAgendaAppointment|null>{
   const choice=state.conflict;
-  if(!choice?.canOverwrite||choice.appointmentId!==record.id||choice.expectedGoogleSyncVersion!==record.googleSyncVersion||!conflictRecord(record))return null;
+  if(!choice?.canOverwrite||choice!==selected)return null;
   const confirmed=await execute(`overwrite:${choice.appointmentId}`,`/api/agenda/${choice.appointmentId}/conflict`,"POST",conflictBody(choice.expectedGoogleSyncVersion));
   if(confirmed&&state.conflict===choice)publish({conflict:null});return confirmed;
  }
