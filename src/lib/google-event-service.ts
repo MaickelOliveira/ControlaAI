@@ -1,4 +1,5 @@
 import "server-only";
+import {confirmGoogleEventConflict,inspectGoogleEventConflict,type GoogleEventConflictConfirmation} from "./google-event-conflict";
 import {randomUUID} from "node:crypto";
 import {googleEventChangePayload,type GoogleEventChangePayload} from "./google-event-command-policy";
 import {loadGoogleEventCommand,prepareGoogleEventCommand} from "./google-event-command-store";
@@ -171,3 +172,7 @@ export async function retryWorkspaceGoogleEvent(scope:GoogleWorkspace,eventId:st
  if(!retry.replayed){if(retry.operationId===null)await synchronize(selected.scope,id);else await commandEffect(selected.scope,id,retry.operationId);}
  return await current(selected.scope,id);
 }
+
+export async function inspectWorkspaceGoogleEventConflict(scope:GoogleWorkspace,eventId:string,expected:string):Promise<Readonly<{canOverwrite:boolean}>>{return await inspectGoogleEventConflict(scope,eventId,expected);}
+/** Explicit human choice only; original receipt replay adds no Google round. */
+export async function confirmWorkspaceGoogleEventConflict(scope:GoogleWorkspace,eventId:string,value:GoogleEventConflictConfirmation):Promise<WorkspaceAppointment>{const selected=capture(scope,eventId),id=selected.eventId!,result=await confirmGoogleEventConflict(selected.scope,id,value);if(!result.replayed)await commandEffect(selected.scope,id,result.operationId);return await current(selected.scope,id);}
