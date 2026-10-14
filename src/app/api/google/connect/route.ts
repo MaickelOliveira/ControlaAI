@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { getAuthUrl } from "@/lib/google-oauth";
+import {cookies} from "next/headers";
+import {googleSettingsHttp,googleSettingsQuery,googleSettingsBody} from "@/lib/google-settings-http";
+import {connectGoogleSettings} from "@/lib/google-settings-actions";
 
-export async function GET(req: Request) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const requested = new URL(req.url).searchParams.get("locale");
-  const locale = requested === "es" ? "es" : requested === "pt-PT" ? "pt-PT" : "pt-BR";
-  const url = await getAuthUrl(session.sub, locale);
-  return NextResponse.redirect(url);
+export async function POST(request:Request){
+ return googleSettingsHttp(request,async scope=>{
+  googleSettingsQuery(request,[]);
+  const body=await googleSettingsBody(request,["workspaceKey","expectedBindingVersion","locale"]);
+  const session=(await cookies()).get("ca_session")?.value;
+  if(!session)throw Error("GOOGLE_SETTINGS_AUTH_REQUIRED");
+  return connectGoogleSettings(scope,session,body);
+ },true);
 }

@@ -1,11 +1,9 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { revokeTokens } from "@/lib/google-oauth";
+import {googleSettingsHttp,googleSettingsQuery,googleSettingsBody} from "@/lib/google-settings-http";
+import {unlinkGoogleSettings} from "@/lib/google-settings-service";
 
-export async function POST() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  await revokeTokens(session.sub);
-  return NextResponse.json({ ok: true });
+export async function POST(request:Request){
+ return googleSettingsHttp(request,async scope=>{
+  googleSettingsQuery(request,[]);
+  return unlinkGoogleSettings(scope,await googleSettingsBody(request,["workspaceKey","expectedBindingVersion"]));
+ },true);
 }

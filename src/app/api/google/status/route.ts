@@ -1,14 +1,6 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { isConnected, getConnectedEmail } from "@/lib/google-oauth";
+import {googleSettingsHttp,googleSettingsQuery} from "@/lib/google-settings-http";
+import {loadGoogleSettings} from "@/lib/google-settings-service";
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const connected = await isConnected(session.sub);
-  if (!connected) return NextResponse.json({ connected: false });
-
-  const email = await getConnectedEmail(session.sub);
-  return NextResponse.json({ connected: true, email });
+export async function GET(request:Request){
+ return googleSettingsHttp(request,async scope=>{googleSettingsQuery(request,[]);return loadGoogleSettings(scope);});
 }
