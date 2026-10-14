@@ -2,12 +2,12 @@ import {beforeEach,expect,it,vi} from "vitest";
 import {createGoogleSettingsController,type GoogleClientState,type GoogleSettingsTarget} from "./google-settings-client";
 const personal:GoogleSettingsTarget={mode:"personal",companyId:null,workspaceKey:"a".repeat(64),label:"Pessoal"};
 const business:GoogleSettingsTarget={mode:"business",companyId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",workspaceKey:"b".repeat(64),label:"Empresa fixture"};
-let controller:ReturnType<typeof createGoogleSettingsController>,fetcher:ReturnType<typeof vi.fn<(url:string,init?:RequestInit)=>Promise<Response>>>,navigate:ReturnType<typeof vi.fn>,states:GoogleClientState[];
+let controller:ReturnType<typeof createGoogleSettingsController>,fetcher:ReturnType<typeof vi.fn<(url:string,init?:RequestInit)=>Promise<Response>>>,navigate:ReturnType<typeof vi.fn<(url:string)=>void>>,states:GoogleClientState[];
 function status(target=personal,extra:Record<string,unknown>={}){return {workspace:{mode:target.mode,companyId:target.companyId,workspaceKey:target.workspaceKey},activated:true,connected:true,bindingVersion:"3",selectedCalendar:{id:"old",name:"Old"},legacy:{exists:true,assigned:false,assignedHere:false},...extra};}
 function list(target=personal,extra:Record<string,unknown>={}){return {workspace:{mode:target.mode,companyId:target.companyId,workspaceKey:target.workspaceKey},bindingVersion:"3",selectedCalendarId:"old",calendars:[{id:"old",name:"Old",primary:true},{id:"new",name:"New",primary:false}],...extra};}
 function deferred(){let resolve!:(response:Response)=>void,reject!:(error:Error)=>void;const promise=new Promise<Response>((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 beforeEach(()=>{
- states=[];navigate=vi.fn();fetcher=vi.fn<(url:string,init?:RequestInit)=>Promise<Response>>().mockImplementation(async url=>Response.json(url==="/api/google/status"?status():list()));
+ states=[];navigate=vi.fn<(url:string)=>void>();fetcher=vi.fn<(url:string,init?:RequestInit)=>Promise<Response>>().mockImplementation(async url=>Response.json(url==="/api/google/status"?status():list()));
  controller=createGoogleSettingsController({fetch:fetcher,navigate,changed:state=>states.push(state)});
 });
 it("fails closed with no server-confirmed target",async()=>{
