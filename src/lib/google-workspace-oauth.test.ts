@@ -36,11 +36,19 @@ beforeEach(()=>{
  mocks.rpc.mockReset().mockImplementation(async name=>({data:name==="zelo_google_grant_versions"?[]:name==="zelo_google_state_consume"?{user_id:owner,mode:"business",company_id:company,locale:"pt-PT",nonce_hash:createHash("sha256").update("google-oauth-nonce\0"+nonce).digest("hex"),expires_at:new Date(now+600_000).toISOString(),binding_version:"0"}:name==="zelo_google_binding_save"?binding:null,error:null}));
 });
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllEnvs();vi.useRealTimers();});
+it.each([undefined,null,"01","-1","9223372036854775808"])("refuses invalid UI revision before configuration lookup (%s)",async revision=>{
+ await expect(startGoogleWorkspaceAuthorization(scope,session,"pt-BR",revision as string)).rejects.toThrow("GOOGLE_AUTHORIZATION_INVALID");expect(mocks.authClient).not.toHaveBeenCalled();expect(mocks.rpc).not.toHaveBeenCalled();
+});
+it("reports a fixed stale initiation without returning a consent URL",async()=>{
+ mocks.rpc.mockResolvedValue({data:null,error:{message:"GOOGLE_BINDING_CONFLICT"}});
+ await expect(startGoogleWorkspaceAuthorization(scope,session,"pt-BR","0")).rejects.toThrow("GOOGLE_STATE_CONFLICT");expect(exchange).not.toHaveBeenCalled();
+});
 it("persists scoped hashed state and generates the existing scopes with a matching OIDC nonce",async()=>{
- const url=new URL(await startGoogleWorkspaceAuthorization(scope,session,"es"));
+ const url=new URL(await startGoogleWorkspaceAuthorization(scope,session,"es","0"));
  expect(url.origin).toBe("https://accounts.google.com");
  const args=mocks.rpc.mock.calls[0][1];
- expect(args).toMatchObject({p_user_id:owner,p_mode:"business",p_company_id:company,p_locale:"es"});
+ expect(args).toMatchObject({p_user_id:owner,p_mode:"business",p_company_id:company,p_locale:"es",p_binding_version:"0"});
+ expect(mocks.rpc.mock.calls[0][0]).toBe("zelo_google_state_issue_expected");
  expect(args.p_nonce_hash).toBe(createHash("sha256").update("google-oauth-nonce\0"+url.searchParams.get("nonce")).digest("hex"));
  expect(url.searchParams.get("scope")?.split(" ")).toEqual(["https://www.googleapis.com/auth/calendar.events","https://www.googleapis.com/auth/calendar.calendarlist.readonly","openid","email"]);
  expect(url.searchParams.get("access_type")).toBe("offline");expect(url.searchParams.get("prompt")).toBe("consent");
@@ -63,7 +71,7 @@ it("refuses code exchange when the pre-exchange grant snapshot cannot be read",a
 });
 it("captures the start target before awaiting the configured OAuth client",async()=>{
  const mutable={...scope};mocks.authClient.mockImplementation(async()=>{mutable.companyId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2";return client;});
- await startGoogleWorkspaceAuthorization(mutable,session,"pt-BR");
+ await startGoogleWorkspaceAuthorization(mutable,session,"pt-BR","0");
  expect(mocks.rpc.mock.calls[0][1].p_company_id).toBe(company);
 });
 it.each(["", "bad code", "x".repeat(16385)])("rejects malformed authorization codes without provider effects %#",async code=>{
@@ -101,7 +109,7 @@ it("hides provider diagnostics and never looks up the owner's legacy tokens",asy
 });
 it("refuses to start authorization after private state storage fails",async()=>{
  mocks.rpc.mockResolvedValue({data:null,error:{message:"fictitious storage diagnostic"}});
- await expect(startGoogleWorkspaceAuthorization(scope,session,"pt-BR")).rejects.toThrow("GOOGLE_AUTHORIZATION_INVALID");
+ await expect(startGoogleWorkspaceAuthorization(scope,session,"pt-BR","0")).rejects.toThrow("GOOGLE_AUTHORIZATION_INVALID");
  expect(exchange).not.toHaveBeenCalled();
 });
 it("rejects a grant refreshed during code exchange before the post-exchange identity lookup",async()=>{

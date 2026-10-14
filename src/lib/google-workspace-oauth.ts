@@ -1,7 +1,7 @@
 import "server-only";
 import {getAuthClient,GOOGLE_OAUTH_SCOPES} from "./google-oauth";
 import {googleWorkspaceKey,type GoogleWorkspace} from "./google-workspace-policy";
-import {issueGoogleOAuthState,consumeGoogleOAuthState,googleOAuthClientFingerprint,type GooglePendingState} from "./google-oauth-state";
+import {issueGoogleOAuthState,consumeGoogleOAuthState,googleOAuthClientFingerprint,googleOAuthBindingVersion,type GooglePendingState} from "./google-oauth-state";
 import {verifyGoogleIdentity} from "./google-verified-identity";
 import {loadGoogleBinding,captureGoogleGrantVersions,saveVerifiedGoogleBinding,type GoogleBinding,type GoogleBindingTokens} from "./google-binding-store";
 
@@ -22,17 +22,21 @@ function tokens(value:unknown):{idToken:string;credentials:GoogleBindingTokens} 
 
 /** Called only with an authenticated workspace/session. Never consult UI mode
  * again after capturing the target of this authorization. */
-export async function startGoogleWorkspaceAuthorization(scope:GoogleWorkspace,sessionId:string,locale:GooglePendingState["locale"]):Promise<string> {
+export async function startGoogleWorkspaceAuthorization(scope:GoogleWorkspace,sessionId:string,locale:GooglePendingState["locale"],expectedBindingVersion:string):Promise<string> {
   try {
     googleWorkspaceKey(scope);
     const selected=Object.freeze({userId:scope.userId.toLowerCase(),mode:scope.mode,companyId:scope.companyId?.toLowerCase()??null});
+    const revision=googleOAuthBindingVersion(expectedBindingVersion);
     if(typeof sessionId!=="string"||!sessionId||sessionId.length>16384||!["pt-BR","pt-PT","es"].includes(locale))throw Error();
     const client=await getAuthClient(),clientId=client._clientId;
     if(typeof clientId!=="string")throw Error();
     googleOAuthClientFingerprint(clientId);
-    const pending=await issueGoogleOAuthState(selected,sessionId,clientId,locale);
+    const pending=await issueGoogleOAuthState(selected,sessionId,clientId,locale,revision);
     return client.generateAuthUrl({access_type:"offline",prompt:"consent",scope:[...GOOGLE_OAUTH_SCOPES],state:pending.state,nonce:pending.nonce});
-  }catch{throw Error("GOOGLE_AUTHORIZATION_INVALID");}
+  }catch(error){
+    if(error instanceof Error&&error.message==="GOOGLE_STATE_CONFLICT")throw Error("GOOGLE_STATE_CONFLICT");
+    throw Error("GOOGLE_AUTHORIZATION_INVALID");
+  }
 }
 
 /** The HTTP boundary supplies the authenticated owner and session, never a

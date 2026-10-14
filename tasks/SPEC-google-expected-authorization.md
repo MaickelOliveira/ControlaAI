@@ -15,3 +15,10 @@ not select owner/company. Preserve states/credentials through rollback, close on
 the new issuer. Real disposable PostgreSQL checks cover ACLs, strict expectations,
 original snapshots and concurrent save/issue. No production migration or Google
 consent is performed during these tests.
+
+The scoped start broker requires a confirmed exact decimal binding revision before
+configuration lookup and always uses the expected issuer. Its caller supplies the
+authenticated session and target; neither body mode/company nor current callback
+page is authority. Only a fixed stale-initiation code survives to the HTTP boundary;
+all raw diagnostics remain hidden. Low-level compatibility state tests may still
+exercise the original issuer directly; no live scoped start can omit its revision.
