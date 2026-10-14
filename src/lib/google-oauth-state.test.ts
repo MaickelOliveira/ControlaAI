@@ -19,6 +19,17 @@ function row(patch:Record<string,unknown>={}){
 beforeEach(()=>{storage.rpc.mockReset().mockResolvedValue({data:null,error:null});});
 
 describe("persistent Google state boundary",()=>{
+  it.each(["0","9223372036854775806"])("issues consent against exact confirmed revision %s",async revision=>{
+    await issueGoogleOAuthState(workspace,session,client,"pt-BR",revision);
+    expect(storage.rpc).toHaveBeenCalledWith("zelo_google_state_issue_expected",expect.objectContaining({p_binding_version:revision,p_user_id:owner,p_mode:"business",p_company_id:company}));
+  });
+  it.each([null,1,"01","-1","9223372036854775808"])("rejects invalid confirmed revision %s before storage",async revision=>{
+    await expect(issueGoogleOAuthState(workspace,session,client,"pt-BR",revision as string)).rejects.toThrow("GOOGLE_STATE_INVALID");expect(storage.rpc).not.toHaveBeenCalled();
+  });
+  it("preserves only a fixed expected-issue conflict for a stale settings view",async()=>{
+    storage.rpc.mockResolvedValue({data:null,error:{message:"GOOGLE_BINDING_CONFLICT"}});
+    await expect(issueGoogleOAuthState(workspace,session,client,"pt-BR","0")).rejects.toThrow("GOOGLE_STATE_CONFLICT");
+  });
   it("persists only random state/nonce and session/client hashes with immutable workspace IDs",async()=>{
     const result=await issueGoogleOAuthState(workspace,session,client,"pt-PT");
     expect(result.state).toMatch(/^[A-Za-z0-9_-]{43}$/);

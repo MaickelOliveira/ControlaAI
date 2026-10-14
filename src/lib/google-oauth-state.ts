@@ -33,20 +33,28 @@ function workspace(value:GoogleWorkspace):GoogleWorkspace {
 async function rpc(name:string,args:Record<string,string|null>):Promise<unknown> {
   try {
     const {data,error}=await getSupabase().rpc(name,args);
-    if(error)throw Error("GOOGLE_STATE_STORAGE_UNAVAILABLE");
+    if(error){
+      if(name==="zelo_google_state_issue_expected"&&error.message==="GOOGLE_BINDING_CONFLICT")throw Error("GOOGLE_STATE_CONFLICT");
+      throw Error("GOOGLE_STATE_STORAGE_UNAVAILABLE");
+    }
     return data;
-  }catch{throw Error("GOOGLE_STATE_STORAGE_UNAVAILABLE");}
+  }catch(error){
+    if(error instanceof Error&&error.message==="GOOGLE_STATE_CONFLICT")throw Error("GOOGLE_STATE_CONFLICT");
+    throw Error("GOOGLE_STATE_STORAGE_UNAVAILABLE");
+  }
 }
 
 /** Call only after authenticated workspace resolution. The database rechecks
  * company ownership/activity; no current-mode fallback is accepted. */
-export async function issueGoogleOAuthState(scope:GoogleWorkspace,sessionId:string,clientId:string,selectedLocale:Locale):Promise<{state:string;nonce:string}> {
+export async function issueGoogleOAuthState(scope:GoogleWorkspace,sessionId:string,clientId:string,selectedLocale:Locale,expectedBindingVersion?:string):Promise<{state:string;nonce:string}> {
   const selected=workspace(scope),language=locale(selectedLocale),verified=identity(sessionId,clientId);
+  const revision=expectedBindingVersion===undefined?undefined:googleOAuthBindingVersion(expectedBindingVersion);
   const state=randomBytes(32).toString("base64url"),nonce=randomBytes(32).toString("base64url");
-  await rpc("zelo_google_state_issue",{
+  await rpc(revision===undefined?"zelo_google_state_issue":"zelo_google_state_issue_expected",{
     p_user_id:selected.userId,p_mode:selected.mode,p_company_id:selected.companyId,
     p_state_hash:hash("state",state),p_session_hash:verified.sessionHash,p_client_fingerprint:verified.clientFingerprint,
     p_nonce_hash:hash("nonce",nonce),p_locale:language,
+    ...(revision===undefined?{}:{p_binding_version:revision}),
   });
   return {state,nonce};
 }
