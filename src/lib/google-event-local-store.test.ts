@@ -8,7 +8,9 @@ vi.mock("./google-event-creation-store",()=>({loadGoogleEventCreation:deps.creat
 import {googleEventRetryIdentity} from "./google-event-policy";
 import {googleEventCreationPayload} from "./google-event-payload";
 import {googleOAuthClientFingerprint} from "./google-oauth-state";
-import {loadGoogleLocalEvent,prepareGoogleLocalEvent} from "./google-event-local-store";
+import {assertGoogleLocalEventActive,assertGoogleLocalEventLease,loadGoogleLocalEvent,prepareGoogleLocalEvent} from "./google-event-local-store";
+import {googleBindingFromStorage} from "./google-binding-store";
+import type {GoogleEventCreation} from "./google-event-creation-store";
 const owner="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",company="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",eventId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1";
 const bindingId="cccccccc-cccc-4ccc-8ccc-ccccccccccc1",grantId="dddddddd-dddd-4ddd-8ddd-ddddddddddd1",clientId="fixture.apps.googleusercontent.com";
 const scope:GoogleWorkspace={userId:owner,mode:"business",companyId:company};
@@ -17,6 +19,7 @@ const input={kind:"appointment",source:"web",payload,attendees:[]};
 function row(patch:Record<string,unknown>={}){return {event_id:eventId,appointment_id:eventId,meet_id:null,kind:"appointment",local_metadata:{source:"web",attendees:[]},...patch};}
 function binding(patch:Record<string,unknown>={}){return {id:bindingId,user_id:owner,mode:"business",company_id:company,grant_id:grantId,calendar_id:"fixture-calendar",calendar_name:"Fixture",version:"7",unlinked_at:null,...patch};}
 function savedCreation(patch:Record<string,unknown>={}){return {payload:googleEventCreationPayload(payload),intent:{workspace:scope,eventId,bindingId,grantId,calendarId:"fixture-calendar",bindingVersion:"7",...googleEventRetryIdentity(scope,eventId)},...patch};}
+function leasedCreation():GoogleEventCreation{return {payload:googleEventCreationPayload(payload),intent:savedCreation().intent,payloadFingerprint:"a".repeat(64),state:"running",attemptVersion:"9007199254740993",roundAttempts:1,authorizedBindingVersion:"7",lease:{id:"ffffffff-ffff-4fff-8fff-fffffffffff1",expiresAt:"2070-01-01T12:00:00Z",bindingVersion:"7",insertAllowed:true},wasAttempted:true,remoteKnown:false,etag:null,meetLink:null,failureCode:null};}
 beforeEach(()=>{
  deps.auth.mockReset().mockResolvedValue({_clientId:clientId});deps.creation.mockReset().mockResolvedValue(savedCreation());
  let saved=false;deps.rpc.mockReset().mockImplementation(async name=>{
@@ -122,4 +125,44 @@ it("strips configuration diagnostics and does not leak the client",async()=>{
 it("does not report a substituted creation target as success",async()=>{
  deps.creation.mockResolvedValue(savedCreation({intent:{...savedCreation().intent,calendarId:"different-calendar"}}));
  await expect(prepareGoogleLocalEvent(scope,eventId,input)).rejects.toThrow("GOOGLE_EVENT_STORAGE_INVALID");
+});
+it("checks active local rows before configuration or credential runtime",async()=>{
+ deps.rpc.mockResolvedValue({data:true,error:null});await assertGoogleLocalEventActive(scope,eventId);
+ expect(deps.rpc.mock.calls).toEqual([["zelo_google_event_local_active",{p_user_id:owner,p_mode:"business",p_company_id:company,p_event_id:eventId}]]);
+ expect(deps.auth).not.toHaveBeenCalled();expect(deps.creation).not.toHaveBeenCalled();
+});
+it("checks the captured local lease with exact bigint attempt and runtime revision",async()=>{
+ const creation=leasedCreation(),runtime=googleBindingFromStorage(binding(),scope);
+ deps.rpc.mockResolvedValue({data:true,error:null});await assertGoogleLocalEventLease(scope,creation,runtime,clientId);
+ expect(deps.rpc.mock.calls).toEqual([["zelo_google_event_local_preflight",{p_user_id:owner,p_mode:"business",p_company_id:company,p_event_id:eventId,p_client_fingerprint:googleOAuthClientFingerprint(clientId),p_binding_version:"7",p_attempt_version:"9007199254740993",p_lease_id:creation.lease?.id}]]);
+ expect(deps.auth).not.toHaveBeenCalled();
+});
+it.each([null,false,"true",{},1])("does not interpret an invalid active/lease authorization result as success %#",async data=>{
+ deps.rpc.mockResolvedValue({data,error:null});
+ await expect(assertGoogleLocalEventActive(scope,eventId)).rejects.toThrow("GOOGLE_EVENT_STORAGE_INVALID");
+ await expect(assertGoogleLocalEventLease(scope,leasedCreation(),googleBindingFromStorage(binding(),scope),clientId)).rejects.toThrow("GOOGLE_EVENT_STORAGE_INVALID");
+});
+it.each(["GOOGLE_EVENT_LOCAL_INACTIVE","GOOGLE_EVENT_LOCAL_CONFLICT","GOOGLE_EVENT_ATTEMPT_CONFLICT","GOOGLE_EVENT_CONNECTION_CHANGED"])("denies local work with its fixed failure and no credential fallback: %s",async message=>{
+ deps.rpc.mockResolvedValue({data:null,error:{message}});await expect(assertGoogleLocalEventActive(scope,eventId)).rejects.toThrow(message);
+ expect(deps.auth).not.toHaveBeenCalled();expect(deps.rpc).toHaveBeenCalledTimes(1);
+});
+it("captures scope/lease/runtime before the preflight storage await",async()=>{
+ const mutableScope={...scope},creation=leasedCreation(),runtime={...googleBindingFromStorage(binding(),scope)};
+ deps.rpc.mockImplementation(async()=>{mutableScope.companyId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2";runtime.version="8";return {data:true,error:null};});
+ await assertGoogleLocalEventLease(mutableScope,creation,runtime,clientId);
+ expect(deps.rpc.mock.calls[0][1]).toMatchObject({p_company_id:company,p_binding_version:"7",p_lease_id:creation.lease?.id});
+});
+it.each(["",null,"invalid client"])("refuses an invalid leased configured client before I/O %#",async value=>{
+ await expect(assertGoogleLocalEventLease(scope,leasedCreation(),googleBindingFromStorage(binding(),scope),value as string)).rejects.toThrow("GOOGLE_EVENT_INPUT_INVALID");expect(deps.rpc).not.toHaveBeenCalled();
+});
+it("refuses a lease from a different runtime binding or unlinked account before I/O",async()=>{
+ for(const runtime of [googleBindingFromStorage(binding({grant_id:"dddddddd-dddd-4ddd-8ddd-ddddddddddd2"}),scope),googleBindingFromStorage(binding({unlinked_at:"2070-01-01T00:00:00Z"}),scope)]){
+  await expect(assertGoogleLocalEventLease(scope,leasedCreation(),runtime,clientId)).rejects.toThrow("GOOGLE_EVENT_INPUT_INVALID");
+ }expect(deps.rpc).not.toHaveBeenCalled();
+});
+it("refuses malformed lease/attempt data before local preflight",async()=>{
+ const runtime=googleBindingFromStorage(binding(),scope),creation=leasedCreation();
+ for(const changed of [{...creation,lease:null},{...creation,attemptVersion:"00"},{...creation,lease:{...creation.lease!,id:"bad"}},{...creation,lease:{...creation.lease!,bindingVersion:"8"}}]){
+  await expect(assertGoogleLocalEventLease(scope,changed,runtime,clientId)).rejects.toThrow("GOOGLE_EVENT_INPUT_INVALID");
+ }expect(deps.rpc).not.toHaveBeenCalled();
 });

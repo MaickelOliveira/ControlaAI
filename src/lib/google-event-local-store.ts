@@ -1,17 +1,17 @@
 import "server-only";
 import {getSupabase} from "./supabase";
 import {getAuthClient} from "./google-oauth";
-import {loadGoogleBinding} from "./google-binding-store";
-import {loadGoogleEventCreation} from "./google-event-creation-store";
-import {googleEventRetryIdentity} from "./google-event-policy";
+import {googleBindingFromStorage,loadGoogleBinding,type GoogleBinding} from "./google-binding-store";
+import {loadGoogleEventCreation,type GoogleEventCreation} from "./google-event-creation-store";
+import {googleEventOperationTarget,googleEventRetryIdentity} from "./google-event-policy";
 import {googleEventCreationPayload,type GoogleEventCreationPayload} from "./google-event-payload";
-import {googleOAuthClientFingerprint} from "./google-oauth-state";
+import {googleOAuthBindingVersion,googleOAuthClientFingerprint} from "./google-oauth-state";
 import type {GoogleWorkspace} from "./google-workspace-policy";
 
 export type GoogleLocalAttendee=Readonly<{name:string;phone?:string;email?:string}>;
 export type GoogleLocalEvent=Readonly<{eventId:string;appointmentId:string;meetId:string|null;kind:"appointment"|"meet";source:"web"|"whatsapp";attendees:readonly GoogleLocalAttendee[]}>;
 type LocalInput=Readonly<{kind:GoogleLocalEvent["kind"];source:GoogleLocalEvent["source"];payload:GoogleEventCreationPayload;attendees:readonly GoogleLocalAttendee[]}>;
-const STORAGE_ERRORS=["GOOGLE_EVENT_INVALID","GOOGLE_EVENT_CONNECTION_CHANGED","GOOGLE_EVENT_ORIGIN_CONFLICT","GOOGLE_EVENT_LOCAL_CONFLICT"];
+const STORAGE_ERRORS=["GOOGLE_EVENT_INVALID","GOOGLE_EVENT_CONNECTION_CHANGED","GOOGLE_EVENT_ORIGIN_CONFLICT","GOOGLE_EVENT_LOCAL_CONFLICT","GOOGLE_EVENT_LOCAL_INACTIVE","GOOGLE_EVENT_ATTEMPT_CONFLICT"];
 const SAFE_ERRORS=[...STORAGE_ERRORS,"GOOGLE_EVENT_INPUT_INVALID","GOOGLE_EVENT_NOT_CONNECTED","GOOGLE_EVENT_CONFIGURATION_INVALID","GOOGLE_EVENT_STORAGE_UNAVAILABLE","GOOGLE_EVENT_STORAGE_INVALID"];
 function safe(error:unknown):Error{
  if(error instanceof Error&&error.message==="GOOGLE_BINDING_STORAGE_INVALID")return Error("GOOGLE_EVENT_STORAGE_INVALID");
@@ -72,6 +72,29 @@ function same(link:GoogleLocalEvent,selected:LocalInput):boolean{return link.kin
  * history only; a later worker must authorize active local records for effects. */
 export async function loadGoogleLocalEvent(scope:GoogleWorkspace,eventId:string):Promise<GoogleLocalEvent|null>{
  try{const selected=capture(scope,eventId);return await read(selected.scope,selected.eventId);}catch(error){throw safe(error);}
+}
+/** Before credential runtime: local history or a cancelled/missing record is
+ * not authority to initiate any provider work. The RPC returns only true. */
+export async function assertGoogleLocalEventActive(scope:GoogleWorkspace,eventId:string):Promise<void>{
+ try{const selected=capture(scope,eventId);if(await rpc("zelo_google_event_local_active",args(selected.scope,selected.eventId))!==true)throw Error("GOOGLE_EVENT_STORAGE_INVALID");}
+ catch(error){throw safe(error);}
+}
+/** Before each Calendar request. All context comes from private storage/runtime;
+ * capture it before the await, and let the database recheck exact active records,
+ * connection/client/attempt/lease and its own bounded remaining lifetime. */
+export async function assertGoogleLocalEventLease(scope:GoogleWorkspace,creation:GoogleEventCreation,binding:GoogleBinding,clientId:string):Promise<void>{
+ try{
+  let params:Record<string,unknown>;
+  try{
+   const selected=capture(scope,creation.intent.eventId),runtime=googleBindingFromStorage({id:binding.id,user_id:binding.workspace.userId,mode:binding.workspace.mode,company_id:binding.workspace.companyId,grant_id:binding.grantId,calendar_id:binding.calendarId,calendar_name:binding.calendarName,version:binding.version,unlinked_at:binding.unlinkedAt},selected.scope);
+   googleEventOperationTarget(selected.scope,selected.eventId,creation.intent,runtime);
+   const lease=creation.lease,version=googleOAuthBindingVersion(creation.attemptVersion);
+   if(creation.state!=="running"||!lease||version==="0"||lease.bindingVersion!==runtime.version||typeof lease.id!=="string"
+    ||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(lease.id)||!Number.isFinite(Date.parse(lease.expiresAt)))throw Error();
+   params={...args(selected.scope,selected.eventId),p_client_fingerprint:googleOAuthClientFingerprint(clientId),p_binding_version:runtime.version,p_attempt_version:version,p_lease_id:lease.id.toLowerCase()};
+  }catch{throw Error("GOOGLE_EVENT_INPUT_INVALID");}
+  if(await rpc("zelo_google_event_local_preflight",params)!==true)throw Error("GOOGLE_EVENT_STORAGE_INVALID");
+ }catch(error){throw safe(error);}
 }
 /** New authorized logical UUID only. No legacy create helper or provider call;
  * the invoker-only RPC atomically stores origin/payload, local records and link. */
