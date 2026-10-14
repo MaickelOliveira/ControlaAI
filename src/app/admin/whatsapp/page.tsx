@@ -10,6 +10,7 @@ type Cfg = {
   evolution: { server: string; adminKey: string; instanceName: string; hasApiKey: boolean };
   waba: { phoneNumberId: string; accessToken: string; verifyToken: string; appSecret: string };
   geminiApiKey: string; hasGemini: boolean;
+  aiIntentMode: "all" | "canary" | "rules-first" | null; aiProviderReady: boolean;
   appBaseUrl: string; wppBotNumber: string; connectionStatus: string;
   googleClientId: string; googleClientSecret: string; hasGoogleOAuth: boolean;
 };
@@ -19,6 +20,7 @@ const EMPTY_CFG: Cfg = {
   evolution: { server: "", adminKey: "", instanceName: "zelo", hasApiKey: false },
   waba: { phoneNumberId: "", accessToken: "", verifyToken: "", appSecret: "" },
   geminiApiKey: "", hasGemini: false,
+  aiIntentMode: null, aiProviderReady: false,
   appBaseUrl: "", wppBotNumber: "", connectionStatus: "UNKNOWN",
   googleClientId: "", googleClientSecret: "", hasGoogleOAuth: false,
 };
@@ -291,6 +293,7 @@ export default function AdminWhatsappPage() {
         {/* IA e URL da plataforma */}
         <div className="bg-surface border border-line rounded-2xl p-5 space-y-3">
           <h2 className="font-semibold text-ink mb-1">🧠 IA e URL da plataforma</h2>
+          {cfg.aiIntentMode && <p role="status" className="text-sm text-subtle">Interpretação no servidor: {cfg.aiIntentMode === "all" ? "IA primeiro para pedidos livres" : cfg.aiIntentMode === "canary" ? "IA primeiro só para números de teste" : "Regras primeiro"}. {cfg.aiProviderReady ? "IA configurada." : "IA sem chave Gemini configurada."} Respostas a perguntas pendentes e alguns comandos seguros seguem regras próprias.</p>}
           <div>
             <label className="block text-[11px] text-subtle mb-1">Chave Gemini AI</label>
             <input type="password" value={cfg.geminiApiKey} onChange={e => setCfg(c => ({ ...c, geminiApiKey: e.target.value }))}

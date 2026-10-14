@@ -38,3 +38,16 @@ it("keeps the saved verification secret when the masked form is saved unchanged"
     waba: expect.objectContaining({ verifyToken: config.waba.verifyToken }),
   }));
 });
+
+it("reports only the effective AI routing mode and provider readiness to the admin", async () => {
+  vi.stubEnv("AI_FIRST_INTENT_ENABLED", "canary");
+  vi.stubEnv("GEMINI_API_KEY", "fixture-private-gemini-key");
+  try {
+    const body = await (await GET()).json();
+    expect(body.aiIntentMode).toBe("canary");
+    expect(body.aiProviderReady).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("fixture-private-gemini-key");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

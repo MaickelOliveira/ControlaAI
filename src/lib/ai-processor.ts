@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
+import { shouldUseWhatsAppAiFirst } from "./whatsapp-ai-routing";
 import {virtualAgentPrompt} from "./virtual-agent-replies";
 import {validateBankQuery, type StructuredBankQuery} from "./bank-query-intent";
 import {descriptionExpenseCategory, normalizeExpenseCategories} from "./expense-category";
@@ -4050,12 +4051,10 @@ export function preserveOtherReminderRecipient(message: string, result: AIResult
 /** A IA interpreta primeiro para todos os usuários reais após o rollout.
  * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
-  const rolloutMode = process.env.AI_FIRST_INTENT_ENABLED;
-  const phone = ctx?.phone?.replace(/\D/g, "") ?? "";
-  const testPhones = (process.env.AI_FIRST_INTENT_TEST_PHONES ?? "")
-    .split(",").map(value => value.replace(/\D/g, "")).filter(Boolean);
-  const aiFirstForThisPhone = !!ctx?.user?.id && rolloutMode !== "false"
-    && (rolloutMode !== "canary" || (!!phone && testPhones.includes(phone)));
+  const aiFirstForThisPhone = shouldUseWhatsAppAiFirst(
+    ctx?.user?.id, ctx?.phone,
+    process.env.AI_FIRST_INTENT_ENABLED, process.env.AI_FIRST_INTENT_TEST_PHONES,
+  );
   if (!aiFirstForThisPhone) {
     const standalone = preserveOtherReminderRecipient(message, getExplicitIntentFallback(message, ctx));
     if (standalone) return standalone;
