@@ -3,7 +3,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   begin: vi.fn(), finish: vi.fn(), handle: vi.fn(), dedup: vi.fn(), signature: vi.fn(),
-  media: vi.fn(), transcribe: vi.fn(), config: vi.fn(), user: vi.fn(),
+  media: vi.fn(), transcribe: vi.fn(), config: vi.fn(), user: vi.fn(), sendText: vi.fn(), after: vi.fn(),
+}));
+vi.mock("next/server", async importOriginal => ({
+  ...await importOriginal<typeof import("next/server")>(), after: mocks.after,
 }));
 vi.mock("@/lib/whatsapp-activity", () => ({ beginWhatsAppActivity: mocks.begin }));
 vi.mock("@/lib/message-handler", () => ({ handleIncomingMessage: mocks.handle }));
@@ -12,6 +15,7 @@ vi.mock("@/lib/waba", () => ({ downloadMedia: mocks.media, verifySignature: mock
 vi.mock("@/lib/ai-processor", () => ({ transcribeAudio: mocks.transcribe }));
 vi.mock("@/lib/whatsapp-config", () => ({ getConfig: mocks.config }));
 vi.mock("@/lib/wpp-phone-links", () => ({ getUserIdByPhone: mocks.user }));
+vi.mock("@/lib/whatsapp", () => ({ sendText: mocks.sendText }));
 import { POST } from "./route";
 
 const from = "5511999990000";
@@ -33,6 +37,8 @@ beforeEach(() => {
   mocks.media.mockResolvedValue({ buffer: Buffer.from("fake-media"), mimeType: "audio/ogg" });
   mocks.transcribe.mockResolvedValue("áudio fictício");
   mocks.user.mockResolvedValue("fictional-user");
+  mocks.sendText.mockResolvedValue(true);
+  mocks.after.mockImplementation(callback => { void callback(); });
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
@@ -49,6 +55,7 @@ it("awaits inbound activity staging before ACK, dedup or handler and releases af
   expect(mocks.handle).not.toHaveBeenCalled();
   release({ finish: mocks.finish });
   expect((await response).status).toBe(200);
+  expect(mocks.after).toHaveBeenCalledOnce();
   await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
   expect(mocks.handle).toHaveBeenCalledWith(expect.objectContaining({ from, text: "mensagem fictícia", channel: "waba" }));
   expect(mocks.begin.mock.invocationCallOrder[0]).toBeLessThan(mocks.handle.mock.invocationCallOrder[0]);
@@ -60,6 +67,16 @@ it("returns generic 503 when begin fails without marking a message processed", a
   const response = await POST(request([textMessage()]));
   expect(response.status).toBe(503);
   expect(await response.text()).not.toContain("PRIVATE_DATABASE_DETAIL");
+  expect(mocks.dedup).not.toHaveBeenCalled();
+  expect(mocks.handle).not.toHaveBeenCalled();
+});
+
+it("returns 503 and releases staged activity if background work cannot be registered", async () => {
+  mocks.after.mockImplementationOnce(() => { throw Error("PRIVATE_SCHEDULER_FAILURE"); });
+  const response = await POST(request([textMessage()]));
+  expect(response.status).toBe(503);
+  expect(await response.text()).not.toContain("PRIVATE_SCHEDULER_FAILURE");
+  expect(mocks.finish).toHaveBeenCalledOnce();
   expect(mocks.dedup).not.toHaveBeenCalled();
   expect(mocks.handle).not.toHaveBeenCalled();
 });
@@ -97,10 +114,27 @@ it("protects the conversation before media download and transcription and preser
   expect(mocks.handle).toHaveBeenCalledWith(expect.objectContaining({ text: "áudio fictício", channel: "waba" }));
 });
 
-it("releases protection when media cannot be downloaded", async () => {
+it("asks for typed text when WABA cannot understand an audio message", async () => {
+  mocks.transcribe.mockResolvedValueOnce(null);
+  await POST(request([{ id: "unreadable-audio", from, type: "audio", audio: { id: "fake-audio-id" } }]));
+  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
+  expect(mocks.sendText).toHaveBeenCalledWith(from, expect.stringContaining("Pode digitar sua mensagem?"));
+  expect(mocks.handle).not.toHaveBeenCalled();
+});
+
+it("asks to resend when WABA cannot download an audio message", async () => {
   mocks.media.mockRejectedValueOnce(Error("fake media failure"));
   await POST(request([{ id: "audio", from, type: "audio", audio: { id: "fake-audio-id" } }]));
   await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
+  expect(mocks.sendText).toHaveBeenCalledWith(from, expect.stringContaining("enviar novamente"));
+  expect(mocks.handle).not.toHaveBeenCalled();
+});
+
+it("asks to resend when WABA cannot download a document", async () => {
+  mocks.media.mockResolvedValueOnce(null);
+  await POST(request([{ id: "document", from, type: "document", document: { id: "fake-document-id" } }]));
+  await settled(() => expect(mocks.finish).toHaveBeenCalledOnce());
+  expect(mocks.sendText).toHaveBeenCalledWith(from, expect.stringContaining("enviar novamente"));
   expect(mocks.handle).not.toHaveBeenCalled();
 });
 
