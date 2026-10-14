@@ -14,6 +14,7 @@ import { createOrRestartInstance } from "@/lib/evolution";
 import { sendTemplate } from "@/lib/waba";
 import { detectBotNumber } from "@/lib/bot-info";
 import { addMessage } from "@/lib/conversations";
+import { whatsAppAiMode } from "@/lib/whatsapp-ai-routing";
 
 const isMasked = (v: unknown) => typeof v === "string" && v.startsWith("•");
 
@@ -40,6 +41,8 @@ export async function GET() {
     },
     geminiApiKey: cfg.geminiApiKey ? "••••••••" : "",
     hasGemini: !!cfg.geminiApiKey,
+    aiIntentMode: whatsAppAiMode(process.env.AI_FIRST_INTENT_ENABLED),
+    aiProviderReady: !!(cfg.geminiApiKey || process.env.GEMINI_API_KEY),
     appBaseUrl: cfg.appBaseUrl ?? "",
     wppBotNumber: cfg.wppBotNumber ?? "",
     googleClientId: cfg.googleClientId ?? "",
