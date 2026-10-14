@@ -37,7 +37,7 @@ async function tick(state: State): Promise<void> {
       state.lastCleanup = Date.now();
     }
     const attention = await runWithTrustedCompanyJob(wabaInboxAttentionCount);
-    if (attention) console.error(`[waba-inbox] ${attention} mensagem(ns) precisa(m) de conferência`);
+    if (attention) console.error("[waba-inbox] Mensagens precisam de conferência");
   } catch { console.error("[waba-inbox] Recuperação adiada"); }
   finally {
     state.running = false;

@@ -78,7 +78,8 @@ export async function processWabaMessage(row: ClaimedWabaMessage): Promise<void>
   } catch {
     try { await finishWabaMessage(row.messageId, row.leaseToken, dispatchStarted ? "failed" : "retry"); }
     catch { /* The durable lease remains for recovery or review. */ }
-    console.error(dispatchStarted ? "[waba-inbox] Mensagem precisa de conferência" : "[waba-inbox] Preparação será tentada novamente");
+    if (dispatchStarted) console.error("[waba-inbox] Mensagem precisa de conferência");
+    else console.error("[waba-inbox] Preparação será tentada novamente");
   } finally {
     await activity?.finish().catch(() => {});
   }
