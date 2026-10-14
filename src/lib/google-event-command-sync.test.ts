@@ -52,6 +52,13 @@ it.each([false,true])("blocks changed ETag or412 without adopting a fresh snapsh
 it("rejects copied command marker whose controlled payload was edited afterward",async()=>{
  transport.mockImplementation(async options=>response({...owned(true),summary:"Changed externally"},options));expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).failureCode).toBe("ETAG_CONFLICT");expect(transport).toHaveBeenCalledTimes(1);
 });
+it("applies one human-confirmed fresh ETag after an old applied marker was externally changed",async()=>{
+ current={...current,expectedEtag:'"external-change"'};
+ transport.mockImplementation(async options=>response(options.method==="GET"?{...owned(true),etag:'"external-change"',summary:"Changed externally"}:owned(true),options));
+ expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("succeeded");
+ expect(transport.mock.calls.map(([v])=>v.method)).toEqual(["GET","PATCH"]);
+ expect(new Headers(transport.mock.calls[1][0].headers).get("If-Match")).toBe('"external-change"');
+});
 it("recovers ambiguous PATCH with GET only and one operation/invitation",async()=>{
  let applied=false;transport.mockImplementation(async options=>{if(options.method==="GET")return response(owned(applied),options);applied=true;throw Error("fictitious lost response");});
  expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("queued");expect((await synchronizeGoogleEventCommand(scope,eventId,operationId)).state).toBe("succeeded");expect(transport.mock.calls.filter(([v])=>v.method==="PATCH")).toHaveLength(1);

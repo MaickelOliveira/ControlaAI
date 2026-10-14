@@ -10,7 +10,8 @@ import {
 } from "./pending-actions";
 import { createRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
-import { createAppointment } from "./agenda";
+import type {GoogleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
+import {googleWorkspaceKey} from "./google-workspace-policy";
 import { createReminder, updateReminder, type Reminder } from "./reminders";
 import { appointmentReminderAt, formatReminderOffset } from "./appointment-reminders";
 import { todayStrBR, spToUTC } from "./date-br";
@@ -20,7 +21,7 @@ import { createCustomer, getCustomersByUser } from "./customers";
 import { createContact, getContactsByUser } from "./contacts";
 import { createVehicle, FUEL_TYPE_LABEL, type FuelType } from "./vehicles";
 import {
-  replyRecurringCreated, replyAgendaCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyContactCreated, replyGoalCreated, replyReminderSet,
+  replyRecurringCreated, replyGroceryPurchaseSaved, replyGroceryPurchaseFinished, replyEmployeeCreated, replyCustomerCreated, replyContactCreated, replyGoalCreated, replyReminderSet,
 } from "./bot-replies";
 import { getPhonesForUser } from "./wpp-phone-links";
 import { phoneVariants } from "./conversations";
@@ -69,6 +70,9 @@ export type SlotCtx = {
   userId: string;
   phone: string;
   mode: "personal" | "business";
+  /** Original authenticated intake only; a slot answer cannot replace it. */
+  googleMessage?: GoogleWhatsAppProviderEnvelope;
+  googleItemOrdinal?: number;
 };
 
 export type SlotParse = { ok: true; value: unknown } | { ok: false };
@@ -121,6 +125,58 @@ async function finalizeGrocerySnapshot(intent: SlotFillIntent, draft: Draft, ctx
   for (const ready of drafts) replies.push(await flow.finalize(ready, ctx));
   await clearPendingAction(ctx.phone);
   return batchDrafts ? joinBatchReplies(replies, ctx) : replies[0];
+}
+
+// Cache code only, never a consumer instance, request or participant scope.
+let googleAgendaModulesPromise:Promise<{intent:typeof import("./google-whatsapp-intent");message:typeof import("./google-whatsapp-message");service:typeof import("./google-whatsapp-service");consumer:typeof import("./google-whatsapp-consumer")}>|undefined;
+function googleAgendaModules(){
+  return googleAgendaModulesPromise??=Promise.all([import("./google-whatsapp-intent"),import("./google-whatsapp-message"),import("./google-whatsapp-service"),import("./google-whatsapp-consumer")]).then(([intent,message,service,consumer])=>({intent,message,service,consumer}));
+}
+function agendaReservation(draft:Draft,ctx:SlotCtx,replay:typeof import("./google-whatsapp-intent").replayGoogleWhatsAppIntent){
+  if(!draft._googleDraftIntent)throw Error("GOOGLE_WHATSAPP_SELECTION_EXPIRED");
+  const reserved=replay(ctx.userId,draft._googleDraftIntent);
+  if(reserved.operation!=="create_appointment")throw Error("GOOGLE_WHATSAPP_SELECTION_EXPIRED");
+  return reserved;
+}
+/** Freeze the completed batch once, before any creation. The service owns the
+ * durable receipt; a later slot answer never replaces the original identity. */
+async function finalizeAgendaSnapshot(drafts:Draft[],ctx:SlotCtx):Promise<string>{
+  const modules=await googleAgendaModules();
+  const {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent}=modules.intent;
+  const {loadGoogleWhatsAppConsumer}=modules.service;
+  const {googleWhatsAppConfirmation}=modules.consumer;
+  const intents=drafts.map(draft=>{
+    const reserved=agendaReservation(draft,ctx,replayGoogleWhatsAppIntent);
+    const startTime=draft.allDay?"00:00":(draft.startTime as string)||"00:00";
+    const intent=prepareGoogleWhatsAppIntent(ctx.userId,"create_appointment",{
+      title:draft.title,description:draft.description,location:draft.location,
+      startAt:spToUTC(`${draft.startDate}T${startTime}:00`),
+      endAt:draft.endDate?spToUTC(`${draft.endDate}T${(draft.endTime as string)||"00:00"}:00`):undefined,
+      allDay:draft.allDay??false,repeat:draft.repeat??"none",withMeet:false,
+    },{clientMutationId:reserved.clientMutationId});
+    if(googleWorkspaceKey(intent.workspace)!==googleWorkspaceKey(reserved.workspace))throw Error("GOOGLE_WHATSAPP_WORKSPACE_CHANGED");
+    return intent;
+  });
+  const results=await (await loadGoogleWhatsAppConsumer()).commit(ctx.userId,ctx.phone,intents);
+  const replies:string[]=[];
+  for(const [index,row] of results.entries()){
+    let reply=googleWhatsAppConfirmation(row.intent,row.result,ctx.user.locale);
+    const offset=drafts[index].reminderMinutesBefore;
+    // Normal handler creation uses automatic Agenda reminders. Retain the
+    // existing explicit local reminder branch without repeating it on receipts.
+    if(!row.replayed&&row.result&&typeof offset==="number"&&Number.isFinite(offset)&&offset>0){
+      const scheduledAt=appointmentReminderAt(row.result.startAt,offset);
+      if(new Date(scheduledAt).getTime()>Date.now()){
+        replayGoogleWhatsAppIntent(ctx.userId,row.intent);
+        await createReminder({userId:ctx.userId,message:`Compromisso: ${row.result.title}`,phone:ctx.phone,scheduledAt,repeat:"none",mode:row.intent.workspace.mode,recipientType:"self"});
+        replayGoogleWhatsAppIntent(ctx.userId,row.intent);
+        reply+=localized(ctx,`\n🔔 Vou avisar ${formatReminderOffset(offset)} antes.`,`\n🔔 Te avisaré ${formatReminderOffset(offset)} antes.`);
+      }else reply+=localized(ctx,"\n⚠️ O horário pedido para o lembrete já passou, então não consegui programar o aviso.","\n⚠️ La hora solicitada para el recordatorio ya pasó, por eso no pude programarlo.");
+    }
+    replies.push(reply);
+  }
+  // Caller acknowledges over WhatsApp before clearing the commit journal.
+  return drafts.length>1?joinBatchReplies(replies,ctx):replies[0];
 }
 
 const CANCEL_RE = /^(cancela(r)?|deixa( pra l[áa])?|esquece|para|sair|nada|desisto|n[ãa]o quero|olvida|salir|no quiero)\b/i;
@@ -257,15 +313,16 @@ export async function beginBatchSlotFill(
   items: AIResult[],
   ctx: SlotCtx,
   originalText: string,
-): Promise<{ reply: string }> {
+): Promise<{ reply: string; googleCommit?: boolean }> {
   if (items.length <= 1) return beginSlotFill(intent, items[0] ?? { intent, confidence: 1 }, ctx, originalText);
   const flow = FLOWS[intent];
   if (!flow) throw new Error(`[slot-filling] fluxo não implementado para intent "${intent}"`);
   const drafts = items.slice(0, 30).map(item => flow.seed(item, ctx));
-  for (const draft of drafts) await flow.prepare?.(draft, ctx);
+  for (const [googleItemOrdinal,draft] of drafts.entries()) await flow.prepare?.(draft, {...ctx,googleItemOrdinal});
   const missing = drafts.map(draft => flow.missing(draft, ctx));
   const first = missing.findIndex(queue => queue.length > 0);
   if (first < 0) {
+    if (intent === "agenda_create") return {reply:await finalizeAgendaSnapshot(drafts,ctx),googleCommit:true};
     if (isGroceryCommit(intent)) return { reply: await finalizeGrocerySnapshot(intent, drafts[0], ctx, originalText, drafts) };
     await clearPendingAction(ctx.phone);
     const replies = [];
@@ -283,7 +340,7 @@ async function runBatchSlotFillTurn(
   pending: PendingSlotFill,
   text: string,
   ctx: SlotCtx,
-): Promise<{ reply?: string; fallThrough: boolean }> {
+): Promise<{ reply?: string; fallThrough: boolean; googleCommit?: boolean }> {
   const flow = FLOWS[pending.intent];
   const drafts = pending.batchDrafts?.map(draft => ({ ...draft })) ?? [];
   const missing = pending.batchMissing?.map(queue => [...queue]) ?? [];
@@ -326,6 +383,7 @@ async function runBatchSlotFillTurn(
 
   const next = missing.findIndex((candidate, candidateIndex) => candidateIndex >= index && candidate.length > 0);
   if (next < 0) {
+    if (pending.intent === "agenda_create") return {reply:await finalizeAgendaSnapshot(drafts,ctx),fallThrough:false,googleCommit:true};
     if (isGroceryCommit(pending.intent)) return { reply: await finalizeGrocerySnapshot(pending.intent, drafts[0], ctx, pending.originalText, drafts), fallThrough: false };
     await clearPendingAction(ctx.phone);
     const replies = [];
@@ -348,7 +406,7 @@ export async function beginSlotFill(
   ai: AIResult,
   ctx: SlotCtx,
   originalText: string
-): Promise<{ reply: string }> {
+): Promise<{ reply: string; googleCommit?: boolean }> {
   const flow = FLOWS[intent];
   if (!flow) throw new Error(`[slot-filling] fluxo não implementado para intent "${intent}"`);
   const draft = flow.seed(ai, ctx);
@@ -356,6 +414,7 @@ export async function beginSlotFill(
   const queue = flow.missing(draft, ctx);
 
   if (queue.length === 0) {
+    if (intent === "agenda_create") return {reply:await finalizeAgendaSnapshot([draft],ctx),googleCommit:true};
     if (isGroceryCommit(intent)) return { reply: await finalizeGrocerySnapshot(intent, draft, ctx, originalText) };
     await clearPendingAction(ctx.phone);
     return { reply: await flow.finalize(draft, ctx) };
@@ -373,13 +432,17 @@ export async function runSlotFillTurn(
   pending: PendingSlotFill,
   text: string,
   ctx: SlotCtx
-): Promise<{ reply?: string; fallThrough: boolean }> {
+): Promise<{ reply?: string; fallThrough: boolean; googleCommit?: boolean }> {
   if (!pending.missing.length && isGroceryCommit(pending.intent)) {
     if (isCancelWord(text)) {
       await clearPendingAction(ctx.phone);
       return { reply: localized(ctx, "Interrompi esta tentativa. Confira o histórico: uma compra já concluída continua registrada.", "Detuve este intento. Consulta el historial: una compra completada permanece registrada."), fallThrough: false };
     }
     return { reply: await finalizeGrocerySnapshot(pending.intent, pending.draft, ctx, pending.originalText, pending.batchDrafts), fallThrough: false };
+  }
+  if (pending.intent === "agenda_create" && !isCancelWord(text)) {
+    const {intent}=await googleAgendaModules();
+    for(const draft of pending.batchDrafts??[pending.draft]) agendaReservation(draft,ctx,intent.replayGoogleWhatsAppIntent);
   }
   if (pending.batchDrafts?.length) return runBatchSlotFillTurn(pending, text, ctx);
   const flow = FLOWS[pending.intent];
@@ -410,9 +473,10 @@ export async function runSlotFillTurn(
         await setPendingAction(ctx.phone, reconstruct(pending, { draft, missing: queue, asked: pending.asked + 1 }));
         return { reply: slot.reask ? slot.reask(draft, ctx, pending.asked) : defaultReask(slot, draft, ctx), fallThrough: false };
       }
-      await clearPendingAction(ctx.phone);
+      if(pending.intent !== "agenda_create") await clearPendingAction(ctx.phone);
       const result = await finalizeWithDefaults(flow, draft, queue, ctx);
-      return { reply: result ?? flow.giveUp(draft, ctx), fallThrough: looksLikeNewCommand(trimmed) };
+      if(pending.intent === "agenda_create" && result===null) await clearPendingAction(ctx.phone);
+      return { reply: result ?? flow.giveUp(draft, ctx), fallThrough: looksLikeNewCommand(trimmed), googleCommit:pending.intent === "agenda_create" && result!==null };
     }
   }
 
@@ -420,6 +484,7 @@ export async function runSlotFillTurn(
   await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
 
   if (queue.length === 0) {
+    if (pending.intent === "agenda_create") return {reply:await finalizeAgendaSnapshot([draft],ctx),fallThrough:false,googleCommit:true};
     if (isGroceryCommit(pending.intent)) return { reply: await finalizeGrocerySnapshot(pending.intent, draft, ctx, pending.originalText), fallThrough: false };
     await clearPendingAction(ctx.phone);
     return { reply: await flow.finalize(draft, ctx), fallThrough: false };
@@ -1144,6 +1209,15 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       } satisfies Draft;
     },
 
+    async prepare(draft,ctx) {
+      const modules=await googleAgendaModules();
+      const {prepareGoogleWhatsAppIntent}=modules.intent;
+      const {googleWhatsAppMessageUUID}=modules.message;
+      // This is an unattempted reservation. Human slot answers complete the
+      // payload; only finalize freezes an executable intent.
+      draft._googleDraftIntent=prepareGoogleWhatsAppIntent(ctx.userId,"create_appointment",{title:draft.title,startAt:""},{clientMutationId:googleWhatsAppMessageUUID(ctx.userId,ctx.googleMessage,ctx.googleItemOrdinal??0)});
+    },
+
     missing(draft) {
       const q: string[] = [];
       if (!draft.title) q.push("title");
@@ -1196,47 +1270,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       },
     },
 
-    async finalize(draft, ctx) {
-      const startTime = draft.allDay ? "00:00" : (draft.startTime as string) || "00:00";
-      const startAt = spToUTC(`${draft.startDate}T${startTime}:00`);
-      const endAt = draft.endDate ? spToUTC(`${draft.endDate}T${(draft.endTime as string) || "00:00"}:00`) : undefined;
-      const apt = await createAppointment({
-        userId: ctx.userId,
-        title: draft.title as string,
-        description: draft.description as string | undefined,
-        location: draft.location as string | undefined,
-        startAt,
-        endAt,
-        allDay: (draft.allDay as boolean) ?? false,
-        repeat: (draft.repeat as "none" | "daily" | "weekly" | "monthly" | "yearly") ?? "none",
-        status: "scheduled",
-        source: "whatsapp",
-      });
-      let reply = replyAgendaCreated(apt, ctx.user.locale);
-      const reminderMinutesBefore = draft.reminderMinutesBefore as number | undefined;
-      if (reminderMinutesBefore && reminderMinutesBefore > 0) {
-        const scheduledAt = appointmentReminderAt(apt.startAt, reminderMinutesBefore);
-        if (new Date(scheduledAt).getTime() > Date.now()) {
-          await createReminder({
-            userId: ctx.userId,
-            message: `Compromisso: ${apt.title}`,
-            phone: ctx.phone,
-            scheduledAt,
-            repeat: "none",
-            mode: ctx.mode,
-            recipientType: "self",
-          });
-          reply += localized(ctx,
-            `\n🔔 Vou avisar ${formatReminderOffset(reminderMinutesBefore)} antes.`,
-            `\n🔔 Te avisaré ${formatReminderOffset(reminderMinutesBefore)} antes.`);
-        } else {
-          reply += localized(ctx,
-            "\n⚠️ O horário pedido para o lembrete já passou, então não consegui programar o aviso.",
-            "\n⚠️ La hora solicitada para el recordatorio ya pasó, por eso no pude programarlo.");
-        }
-      }
-      return reply;
-    },
+    finalize: (draft,ctx) => finalizeAgendaSnapshot([draft],ctx),
 
     giveUp: (_draft, ctx) => localized(ctx,
       "❌ Não consegui agendar — faltou o título ou a data. Tente de novo, ex: _\"agendar reunião amanhã às 14h\"_.",

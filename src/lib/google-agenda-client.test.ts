@@ -18,11 +18,11 @@ it("refuses edits to an attempted immutable intent instead of silently replacing
 it("sends exact control versions and stable request UUIDs and omits withMeet from edit",async()=>{
  await controller.setTarget(target);fetcher.mockResolvedValueOnce(reply({...record,title:"Changed",googleSyncVersion:"v1:1:1:0"}));
  await controller.patch(controller.newIntent(),controller.state().appointments[0],{title:"Changed",withMeet:false});
- const init=fetcher.mock.calls.find(([,init])=>init?.method==="PATCH")![1]!;expect(JSON.parse(init.body as string)).toMatchObject({googleSyncVersion:"v1:1:0:0",clientMutationId:expect.any(String),title:"Changed"});expect(JSON.parse(init.body as string)).not.toHaveProperty("withMeet");
+ const init=fetcher.mock.calls.find(([,init])=>init?.method==="PATCH")![1]!;expect(JSON.parse(init.body as string)).toMatchObject({expectedGoogleSyncVersion:"v1:1:0:0",clientMutationId:expect.any(String),title:"Changed"});expect(JSON.parse(init.body as string)).not.toHaveProperty("withMeet");expect(JSON.parse(init.body as string)).not.toHaveProperty("googleSyncVersion");
 });
-it("keeps completion local and sends no Google version or request identity",async()=>{
+it("keeps completion local while sending the required original expectation and stable identity",async()=>{
  await controller.setTarget(target);fetcher.mockResolvedValueOnce(reply({...record,status:"done"}));await controller.done(controller.state().appointments[0]);
- const init=fetcher.mock.calls.find(([,init])=>init?.method==="PATCH")![1]!;expect(JSON.parse(init.body as string)).toEqual({status:"done"});
+ const init=fetcher.mock.calls.find(([,init])=>init?.method==="PATCH")![1]!;expect(JSON.parse(init.body as string)).toEqual({status:"done",expectedGoogleSyncVersion:record.googleSyncVersion,clientMutationId:expect.any(String)});
 });
 it("reloads on conflict but retains the intent and never upgrades its expected version",async()=>{
  await controller.setTarget(target);const id=controller.newIntent();fetcher.mockResolvedValueOnce(reply({code:"GOOGLE_EVENT_ATTEMPT_CONFLICT"},{status:409}));
@@ -33,7 +33,7 @@ it("reloads on conflict but retains the intent and never upgrades its expected v
 it("retains cancelled pending work for explicit retry",async()=>{
  await controller.setTarget(target);fetcher.mockResolvedValueOnce(reply({...record,status:"cancelled",googleCancellationPending:true,googleSyncState:"queued"}));await controller.remove(controller.state().appointments[0]);
  expect(controller.state().appointments[0].googleCancellationPending).toBe(true);fetcher.mockResolvedValueOnce(reply({...record,status:"cancelled",googleCancellationPending:false,googleSyncState:"succeeded"}));await controller.retry(controller.state().appointments[0]);
- expect(fetcher.mock.calls.at(-1)?.[0]).toBe(`/api/agenda/${record.id}/google-retry`);expect(controller.state().appointments).toEqual([]);
+ expect(fetcher.mock.calls.at(-1)?.[0]).toBe(`/api/agenda/${record.id}/retry`);expect(controller.state().appointments).toEqual([]);
 });
 it("discards delayed mutation success and finally after changing owner/workspace",async()=>{
  await controller.setTarget(target);let finish!:(response:Response)=>void;fetcher.mockReturnValueOnce(new Promise(resolve=>{finish=resolve;}));const pending=controller.create(controller.newIntent(),body);await controller.setTarget(null);
@@ -52,4 +52,8 @@ it("keeps an attempted intent after a wrong-space rejection without adopting the
  fetcher.mockResolvedValueOnce(reply([record],{headers:{"X-Zelo-Workspace-Key":"b".repeat(64)}}));await controller.reload();const count=fetcher.mock.calls.length;await controller.create(id,body);expect(fetcher.mock.calls).toHaveLength(count);
  await controller.reload();fetcher.mockResolvedValueOnce(reply(record,{status:201}));await controller.create(id,body);
  const calls=fetcher.mock.calls.filter(([,init])=>init?.method==="POST");expect(calls).toHaveLength(2);expect(calls[0][1]!.body).toBe(calls[1][1]!.body);expect(new Headers(calls[1][1]!.headers).get("X-Zelo-Workspace-Key")).toBe(target.workspaceKey);
+});
+it("completion preserves its UUID and expected snapshot after an ambiguous response",async()=>{
+ await controller.setTarget(target);fetcher.mockRejectedValueOnce(Error("fixture lost response"));await controller.done(controller.state().appointments[0]);fetcher.mockResolvedValueOnce(reply({...record,status:"done"}));await controller.done(controller.state().appointments[0]);
+ const calls=fetcher.mock.calls.filter(([,init])=>init?.method==="PATCH");expect(calls).toHaveLength(2);expect(calls[0][1]!.body).toBe(calls[1][1]!.body);expect(JSON.parse(calls[0][1]!.body as string)).toMatchObject({expectedGoogleSyncVersion:record.googleSyncVersion,clientMutationId:expect.any(String)});
 });

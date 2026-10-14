@@ -1,7 +1,8 @@
 import {beforeEach,expect,it,vi} from "vitest";
 import type {GoogleWorkspace} from "./google-workspace-policy";
-const deps=vi.hoisted(()=>({appointments:vi.fn(),meets:vi.fn(),link:vi.fn(),prepare:vi.fn(),receipt:vi.fn(),saveReceipt:vi.fn(),binding:vi.fn(),activated:vi.fn(),sync:vi.fn(),command:vi.fn(),commandLoad:vi.fn(),commandSync:vi.fn(),controlled:vi.fn(),localPatch:vi.fn(),retryGet:vi.fn(),retry:vi.fn(),localMutation:vi.fn()}));
+const deps=vi.hoisted(()=>({appointments:vi.fn(),meets:vi.fn(),link:vi.fn(),prepare:vi.fn(),receipt:vi.fn(),saveReceipt:vi.fn(),binding:vi.fn(),activated:vi.fn(),sync:vi.fn(),command:vi.fn(),commandLoad:vi.fn(),commandSync:vi.fn(),controlled:vi.fn(),localPatch:vi.fn(),retryGet:vi.fn(),retry:vi.fn(),localMutation:vi.fn(),conflict:vi.fn()}));
 vi.mock("server-only",()=>({}));
+vi.mock("./google-event-conflict",()=>({confirmGoogleEventConflict:deps.conflict,inspectGoogleEventConflict:vi.fn()}));
 vi.mock("./google-event-readmodel",()=>({loadGoogleAppointmentRows:deps.appointments,loadGoogleMeetRows:deps.meets}));
 vi.mock("./google-event-local-store",()=>({loadGoogleLocalEvent:deps.link,prepareGoogleLocalEvent:deps.prepare}));
 vi.mock("./google-local-appointment-store",()=>({loadLocalAppointmentReceipt:deps.receipt,prepareLocalAppointmentReceipt:deps.saveReceipt}));
@@ -64,3 +65,5 @@ it("preserves a legitimate Meet title emoji when editing only its time",async()=
  await updateWorkspaceAppointment(scope,event,{startAt:"2070-01-01T12:00:00Z",endAt:"2070-01-01T13:00:00Z"},expectation);
  expect(deps.command.mock.calls[0][4]).toMatchObject({kind:"update",payload:{summary:"🎥 Revisão",startAt:"2070-01-01T12:00:00.000Z",endAt:"2070-01-01T13:00:00.000Z"},attendees});
 });
+
+it.each([false,true])("confirmed conflict runs original command only on first acknowledgment (%s)",async replayed=>{deps.conflict.mockResolvedValue({eventId:event,operationId:mutation,replayed});const {confirmWorkspaceGoogleEventConflict}=await import("./google-event-service");await confirmWorkspaceGoogleEventConflict(scope,event,{...expectation,confirmOverwrite:true});expect(deps.conflict).toHaveBeenCalledWith(scope,event,{...expectation,confirmOverwrite:true});expect(deps.commandSync).toHaveBeenCalledTimes(replayed?0:1);if(!replayed)expect(deps.commandSync).toHaveBeenCalledWith(scope,event,mutation);});
