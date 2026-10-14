@@ -49,5 +49,12 @@ Confirmation text distinguishes saved Zelo rows from Google work still pending o
 failed. Only a valid Meet URL with succeeded sync state and no conference pending
 can be offered as a newly confirmed invitation/link.
 
+The actual handler's agenda reads, edits, cancellations, completion and existing
+event Meet command use the consumer. Selection prompts retain the originally
+shown revision, including while asking for an edit patch. A changed current read
+never upgrades that revision. An ambiguous failure leaves its frozen commit;
+only an explicit retry repeats it. Explanations/unrecognized replies do not call
+Google. Cancelling a retry stops that attempt and does not undo saved records.
+
 Tests use fictitious participants, contexts, IDs and services only. No WhatsApp,
 Google, invitation or customer storage operation is used for verification.
