@@ -212,6 +212,17 @@ export async function getFinancesByUser(userId: string, mode?: FinanceMode, regi
   return load(userId, { mode, registeredBy });
 }
 
+/** Busca somente registros criados no intervalo; a data do lançamento pode
+ * ser diferente da data em que a pessoa o cadastrou. */
+export async function getFinancesCreatedBetween(userId: string, mode: FinanceMode, from: string, to: string): Promise<Finance[]> {
+  const { data, error } = await getSupabase().from("finances").select("*")
+    .eq("user_id", userId).eq("mode", mode)
+    .gte("created_at", from).lt("created_at", to)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`[finances] getFinancesCreatedBetween falhou: ${error.message}`);
+  return (data as Row[]).map(fromRow);
+}
+
 /** Contagem e data do lançamento mais recente de TODOS os usuários numa
  *  única query (só as colunas user_id/created_at, sem o resto da linha) —
  *  usado pelo painel admin. Fazer isso por usuário (1 requisição cada)

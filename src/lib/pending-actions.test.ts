@@ -189,6 +189,20 @@ describe("parseFinanceChoiceMulti", () => {
   it("returns [] for free text unrelated to a selection", () => {
     expect(parseFinanceChoiceMulti("mains nao falei vivo", items5)).toEqual([]);
   });
+
+  it("selects the unique expense or income when identical entries have different types", () => {
+    const entries = [
+      { ...items5[0], description: "TESTE AUDITORIA", type: "income" as const },
+      { ...items5[1], description: "TESTE AUDITORIA", type: "expense" as const },
+    ];
+    expect(parseFinanceChoiceMulti("a despesa", entries)).toEqual([1]);
+    expect(parseFinanceChoiceMulti("a receita", entries)).toEqual([0]);
+  });
+
+  it("does not guess from type when more than one candidate has that type", () => {
+    const entries = items5.slice(0, 3).map(item => ({ ...item, type: "expense" as const }));
+    expect(parseFinanceChoiceMulti("a despesa", entries)).toEqual([]);
+  });
 });
 
 describe("choiceIndexByLabels", () => {
