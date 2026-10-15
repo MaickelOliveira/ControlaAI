@@ -4,6 +4,7 @@ import {getUserById} from "@/lib/users";
 import {getPhonesForUser} from "@/lib/wpp-phone-links";
 import {identifyFinanceAuthors} from "@/lib/finance-attribution";
 import { addFinance, calculateFinanceBalance, getAllTimeBalance, getFinancesByUser, getFinancesInRange, getBalance } from "@/lib/finances";
+import {getAccountsByUser} from "@/lib/accounts";
 
 export async function GET(req: NextRequest) {
   try {
@@ -47,20 +48,31 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const { type, amount, category, description, date, mode } = body;
+  const { type, amount, category, description, date, mode, accountId } = body;
 
   if (!type || !amount || !category) return NextResponse.json({ error: "Campos obrigatórios" }, { status: 400 });
+  const selectedMode = mode || "personal";
+  if (selectedMode !== "personal" && selectedMode !== "business") return NextResponse.json({error:"Modo inválido"},{status:400});
+  if (accountId !== undefined) {
+    if (typeof accountId !== "string") return NextResponse.json({error:"Conta inválida"},{status:400});
+    try {
+      const account = (await getAccountsByUser(session.sub, selectedMode)).find(item => item.id === accountId);
+      if (!account) return NextResponse.json({error:"Conta não encontrada neste espaço."},{status:404});
+      if (account.type !== "bank") return NextResponse.json({error:"Escolha uma conta registrada, não um cartão."},{status:400});
+    } catch { return NextResponse.json({error:"Não foi possível conferir a conta."},{status:503}); }
+  }
 
   const finance = await addFinance({
     userId: session.sub,
     type, amount: parseFloat(amount), category,
     description: description || category,
     date: date || new Date().toISOString().slice(0, 10),
-    mode: mode || "personal",
+    mode: selectedMode,
     source: "web",
+    ...(accountId !== undefined ? {accountId} : {}),
   });
 
   return NextResponse.json(finance, { status: 201 });

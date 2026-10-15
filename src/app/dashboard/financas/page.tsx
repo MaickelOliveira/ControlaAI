@@ -10,6 +10,7 @@ import BankCategoryDialog from "@/components/BankCategoryDialog";
 import BankCreditPixDialog from "@/components/BankCreditPixDialog";
 import FinanceLedgerRows from "@/components/FinanceLedgerRows";
 import FinanceInstallmentProjections from "@/components/FinanceInstallmentProjections";
+import PlatformAccountMoveDialog from "@/components/PlatformAccountMoveDialog";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
 import FinanceBankSchedules from "@/components/FinanceBankSchedules";
@@ -60,6 +61,7 @@ const UNIT_LABEL: Record<string, string> = { monthly: "Mensal", weekly: "Semanal
 type FormState = {
   type: "expense" | "income";
   frequency: "once" | "recurring" | "installment";
+  accountId: string;
   amount: string;
   category: string;
   description: string;
@@ -71,7 +73,7 @@ type FormState = {
 };
 
 const EMPTY_FORM: FormState = {
-  type: "expense", frequency: "once", amount: "", category: "", description: "",
+  type: "expense", frequency: "once", accountId: "", amount: "", category: "", description: "",
   totalInstallments: "", repeatUnit: "monthly", dayOfMonth: "",
   startDate: new Date().toISOString().slice(0, 10), totalAmount: "",
 };
@@ -121,6 +123,7 @@ function FinancasContent() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const [editTarget, setEditTarget] = useState<Finance | null>(null);
   const [editForm, setEditForm] = useState({ amount: "", category: "", description: "", date: "" });
@@ -132,6 +135,7 @@ function FinancasContent() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showMovePlatform, setShowMovePlatform] = useState(false);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [cancellingRec, setCancellingRec] = useState<string | null>(null);
   const [confirmingPending, setConfirmingPending] = useState<string | null>(null);
@@ -265,32 +269,39 @@ function FinancasContent() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    if (form.frequency === "once") {
-      await fetch("/api/finances", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: form.type, amount: parseFloat(form.amount), category: form.category, description: form.description, mode }),
-      });
-    } else {
-      await fetch("/api/recurring", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: form.type, amount: form.amount,
-          totalAmount: form.totalAmount || undefined,
-          category: form.category || "Outros",
-          description: form.description, mode,
-          recurrenceType: form.frequency === "installment" ? "installment" : "recurring",
-          totalInstallments: form.frequency === "installment" ? form.totalInstallments : undefined,
-          repeatUnit: form.repeatUnit,
-          dayOfMonth: form.dayOfMonth || undefined,
-          startDate: form.startDate,
-        }),
-      });
+    setSaving(true); setFormError("");
+    try {
+      const response = form.frequency === "once"
+        ? await fetch("/api/finances", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: form.type, amount: parseFloat(form.amount), category: form.category, description: form.description, mode, accountId: form.accountId || undefined }),
+        })
+        : await fetch("/api/recurring", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: form.type, amount: form.amount,
+            totalAmount: form.totalAmount || undefined,
+            category: form.category || "Outros",
+            description: form.description, mode,
+            recurrenceType: form.frequency === "installment" ? "installment" : "recurring",
+            totalInstallments: form.frequency === "installment" ? form.totalInstallments : undefined,
+            repeatUnit: form.repeatUnit,
+            dayOfMonth: form.dayOfMonth || undefined,
+            startDate: form.startDate,
+          }),
+        });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw Error(data.error || "Não foi possível salvar o lançamento.");
+      }
+      setShowForm(false);
+      setForm(EMPTY_FORM);
+      loadAll(mode);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Não foi possível salvar o lançamento.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowForm(false);
-    setForm(EMPTY_FORM);
-    loadAll(mode);
   }
 
   function openEdit(f: Finance) {
@@ -452,12 +463,16 @@ function FinancasContent() {
           <PageTitle icon="finance">Finanças</PageTitle>
           <p className="text-subtle text-sm mt-0.5">{modeLabel}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button onClick={() => setShowMovePlatform(true)}
+            className="px-4 py-2.5 bg-surface border border-line text-muted rounded-xl text-sm font-semibold hover:bg-surface-muted transition">
+            Organizar lançamentos por conta
+          </button>
           <button onClick={openImport}
             className="px-4 py-2.5 bg-surface border border-line text-muted rounded-xl text-sm font-semibold hover:bg-surface-muted transition">
             📑 Importar fatura
           </button>
-          <button onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}
+          <button onClick={() => { const bankAccounts=(ledger?.accounts??[]).filter(account=>account.type==="bank"); setForm({...EMPTY_FORM,accountId:bankAccounts.length===1?bankAccounts[0].id:""}); setFormError(""); setShowForm(true); }}
             className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:bg-primary-hover transition shadow-sm">
             + Adicionar
           </button>
@@ -645,6 +660,8 @@ function FinancasContent() {
       {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onClose={()=>setBankCategoryTarget(null)} onSaved={matched=>{setBankCategoryTarget(null);setBanner(matched===undefined?"✅ Categoria salva. Os gráficos usam sua escolha.":`✅ Transferência confirmada. ${matched} movimentação(ões) com a mesma conta, descrição e valor foram atualizadas no histórico.`);loadAll(mode);}}/>}
       {bankCreditPixTarget&&<BankCreditPixDialog key={`${mode}:${bankCreditPixTarget.id}`} credit={bankCreditPixTarget} movements={ledger?.bank?.report.movements??[]} mode={mode} onClose={()=>setBankCreditPixId(null)} onSaved={()=>{setBankCreditPixId(null);setBanner("✅ Confirmação salva. O histórico e a dívida no cartão foram preservados.");loadAll(mode);}}/>}
 
+      {showMovePlatform && <PlatformAccountMoveDialog mode={mode} accounts={ledger?.accounts??[]} onClose={()=>setShowMovePlatform(false)} onMoved={(moved,accountName)=>{setShowMovePlatform(false);setBanner(`✅ ${moved} lançamento(s) feitos na plataforma foram vinculados à conta ${accountName}. Os valores e as datas não mudaram.`);loadAll(mode);}}/>}
+
       {/* ── Modal Adicionar (único + recorrente + parcelado) ── */}
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
@@ -673,6 +690,15 @@ function FinancasContent() {
                   </button>
                 ))}
               </div>
+
+              {form.frequency === "once" && (ledger?.accounts??[]).some(account=>account.type==="bank") && <label className="block text-xs font-semibold text-muted">
+                Conta do lançamento
+                <select value={form.accountId} onChange={event=>setForm(current=>({...current,accountId:event.target.value}))} required
+                  className="mt-1 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-sm text-ink">
+                  <option value="">Selecione a conta</option>
+                  {(ledger?.accounts??[]).filter(account=>account.type==="bank").map(account=><option key={account.id} value={account.id}>{account.name}</option>)}
+                </select>
+              </label>}
 
               {/* Campos comuns */}
               <input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required
@@ -726,6 +752,7 @@ function FinancasContent() {
                 </>
               )}
 
+              {formError && <p role="alert" className="text-sm text-red-ink">{formError}</p>}
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowForm(false)}
                   className="flex-1 border border-line rounded-xl py-2.5 text-sm text-muted hover:bg-surface-muted transition">Cancelar</button>
