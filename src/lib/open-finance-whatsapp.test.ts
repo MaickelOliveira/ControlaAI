@@ -39,6 +39,52 @@ it("does not label a movement with missing bank amount as a confirmed transfer",
   expect(answer).toContain("Valor não recebido");expect(answer).toContain("Não informado");
   expect(answer).not.toContain("R$ 0,00");expect(answer).not.toContain("Não altera o resultado");
 });
+it("keeps weekly account totals separate from card purchases",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"account-credit",mode:"personal",source:"bank",date:"2026-10-14",type:"income",amount:70,description:"Crédito",category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",direction:"credit",amount:"70",currency:"BRL"}},
+    {id:"account-debit",mode:"personal",source:"bank",date:"2026-10-14",type:"expense",amount:20,description:"Débito",category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"20",currency:"BRL"}},
+    {id:"card",mode:"personal",source:"bank",date:"2026-10-14",type:"expense",amount:90,description:"Compra",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco B",direction:"debit",amount:"90",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const incoming=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto entrou na conta nesta semana?","2026-10-15");
+  const outgoing=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana?","2026-10-15");
+  const split=await answerBankWhatsAppMessage(user as never,"personal","both","Separe movimentações de conta e de cartão nos últimos sete dias.","2026-10-15");
+  expect(incoming).toContain("R$ 70,00");expect(outgoing).toContain("R$ 20,00");expect(outgoing).not.toContain("R$ 90,00");
+  expect(split).toContain("Contas bancárias");expect(split).toContain("Cartões");expect(split).toContain("R$ 90,00");
+});
+it("filters card purchases, bill payments, own transfers and Pix direction",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"purchase",mode:"personal",source:"bank",date:"2026-10-13",type:"expense",amount:35,description:"Padaria",category:"Alimentação",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",amount:"35",currency:"BRL"}},
+    {id:"payment",mode:"personal",source:"bank",date:"2026-10-13",type:"expense",amount:500,description:"DEBITO AUT. FAT.CARTAO MASTER CARD FINAL 6129",category:"Transferências e pagamentos",categorySource:"excluded",included:false,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"500",currency:"BRL"}},
+    {id:"own-debit",mode:"personal",source:"bank",date:"2026-10-02",type:"expense",amount:100,description:"Transferência enviada pelo Pix|Samira",category:"Transferência entre contas próprias",categorySource:"excluded",included:false,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"100",currency:"BRL"}},
+    {id:"own-credit",mode:"personal",source:"bank",date:"2026-10-02",type:"income",amount:100,description:"PIX RECEBIDO Samira",category:"Transferência entre contas próprias",categorySource:"excluded",included:false,bank:{resource_type:"account",institution_name:"Banco B",direction:"credit",amount:"100",currency:"BRL"}},
+    {id:"third-party",mode:"personal",source:"bank",date:"2026-10-03",type:"expense",amount:22,description:"Pix para terceiro",category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"22",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const purchases=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre compras de cartão do mês sem pagamentos de fatura.","2026-10-15");
+  const payments=await answerBankWhatsAppMessage(user as never,"personal","both","Encontre pagamentos de fatura do mês e diga se ficaram fora dos gastos.","2026-10-15");
+  const own=await answerBankWhatsAppMessage(user as never,"personal","both","Encontre transferências entre minhas próprias contas no mês.","2026-10-15");
+  const sent=await answerBankWhatsAppMessage(user as never,"personal","both","Quais Pix enviados aparecem no extrato deste mês?","2026-10-15");
+  const received=await answerBankWhatsAppMessage(user as never,"personal","both","Quais Pix recebidos aparecem no extrato deste mês?","2026-10-15");
+  expect(purchases).toContain("Padaria");expect(purchases).not.toContain("DEBITO AUT");
+  expect(payments).toContain("DEBITO AUT");expect(payments).toContain("Fora dos totais");expect(payments).not.toContain("Padaria");
+  expect(own).toContain("Transferência enviada pelo Pix|Samira");expect(own).toContain("PIX RECEBIDO Samira");expect(own).not.toContain("terceiro");
+  expect(sent).toContain("Pix para terceiro");expect(sent).toContain("Transferência enviada pelo Pix|Samira");expect(sent).not.toContain("PIX RECEBIDO Samira");
+  expect(received).toContain("PIX RECEBIDO Samira");expect(received).not.toContain("Pix para terceiro");
+});
+it("reports only missing bank amounts and does not invent dates or zero",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"missing",mode:"personal",source:"bank",date:"2026-10-12",type:"expense",amount:0,description:"Sem valor",category:"Outros",included:false,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:null,currency:"BRL"}},
+    {id:"known",mode:"personal",source:"bank",date:"2026-10-12",type:"expense",amount:42,description:"Valor conhecido",category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"42",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:true,missing_dates:2,last_successful_sync_at:"2026-10-15"}}});
+  const amounts=await answerBankWhatsAppMessage(user as never,"personal","both","Quais lançamentos do extrato não têm valor informado?","2026-10-15");
+  const dates=await answerBankWhatsAppMessage(user as never,"personal","both","Quais lançamentos não têm data informada?","2026-10-15");
+  expect(amounts).toContain("Sem valor");expect(amounts).toContain("Não informado");expect(amounts).not.toContain("Valor conhecido");
+  expect(dates).toContain("2 movimento(s) sem data");expect(dates).not.toContain("Valor conhecido");
+});
+it("does not claim zero account movement without a connected bank",async()=>{
+  m.read.mockResolvedValue({entries:[],bank:null});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana?","2026-10-15");
+  expect(answer).toContain("Não tenho dados de um banco conectado");expect(answer).not.toContain("R$ 0,00");
+});
 it("includes received bills and explicit subscription estimates outside the realized expense total",async()=>{
   m.agenda.mockResolvedValue({items:[{id:"s",mode:"personal",kind:"recurring",description:"Streaming",resource_name:"Card",institution_name:"Bank",due_date:"2026-10-15",amount:"40",currency:"BRL",synced_at:"2026-10-11T10:00:00Z"}],incomplete:false});
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1},["2026-10-01","2026-10-31"]);
