@@ -3504,6 +3504,8 @@ function accountModeFromText(normalized: string): UserMode | undefined {
 export function getFinanceAccountDestinationHint(message: string): string | null {
   const text = message.trim();
   const normalized = normalizeCapabilityText(text);
+  if (/\bcategoria\b/.test(normalized)
+    && !/\b(?:para|pra|por|en)\s+(?:(?:a|la)\s+)?(?:conta|cuenta)\b/.test(normalized)) return null;
   const hasAccountWord = /\b(?:conta|cuenta)s?\b/.test(normalized);
   if (!hasAccountWord && /\b(?:funcionario|funcionaria|colaborador|colaboradora|empleado|empleada|trabajador|trabajadora)\b/.test(normalized)) return null;
   const hasLastFinanceReference = /\b(?:(?:esse|este|aquele|o|el)\s+)?(?:ultimo|lancamento|movimento|registro|gasto)\b|\b(?:que|q)\s+(?:eu\s+)?acabei\s+de\s+(?:lancar|registrar)\b|\b(?:que|q)\s+acabo\s+de\s+(?:registrar|anotar)\b/.test(normalized);
@@ -3760,6 +3762,27 @@ export function withExplicitFinanceAccount(message: string, result: AIResult): A
     ...(result.finance ? { finance: patchFinance(result.finance) } : {}),
     ...(result.finances ? { finances: result.finances.map(patchFinance) } : {}),
     account: { ...(result.account ?? {}), name, useContext: contextual && !name },
+  };
+}
+
+/** Pedido explícito de categoria prevalece sobre um palpite do modelo de
+ * que o nome depois de “para” seria uma conta bancária. */
+export function withExplicitFinanceCategoryEdit(message: string, result: AIResult): AIResult {
+  if (result.intent !== "finance_edit") return result;
+  const named = message.match(/\bcategoria\s+(?:do|da|de)\s+(?:lan[çc]amento|movimento|gasto|despesa|receita)\s+(.+?)\s+(?:para|pra|como)\s+([^.?!]+)/i);
+  const simple = message.match(/\bcategoria\s+(?:para|pra|como)\s+([^.?!]+)/i);
+  const category = (named?.[2] ?? simple?.[1])?.trim();
+  if (!category) return result;
+  const explicitAccount = /\b(?:conta|cuenta)\b/i.test(message);
+  const finance = { ...(result.finance ?? {}), category } as FinanceData;
+  if (!explicitAccount) delete finance.accountHint;
+  const target = named?.[1]?.trim();
+  const namedTarget = target && !/^(?:[oua]\s+)?(?:[uú]ltim[oa]|ess[ea]|est[ea])\b/i.test(target);
+  return {
+    ...result,
+    finance,
+    ...(!explicitAccount ? { account: undefined } : {}),
+    ...(namedTarget ? { keyword: target, lastFinanceReference: undefined } : {}),
   };
 }
 
