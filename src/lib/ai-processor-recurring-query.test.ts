@@ -14,6 +14,20 @@ it("repairs a generic expense reply without inheriting its default spending peri
  const result=await processMessage("o que tenho de parcelados da empresa",context);
  expect(result).toMatchObject({intent:"recurring_query",mode:"business"});expect(result.period).toBeUndefined();expect(result.keyword).toBeUndefined();
 });
+it("keeps a recurring-only monthly request out of the broad upcoming-finances answer",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+ try{
+  generateContent.mockResolvedValue({response:{text:()=>JSON.stringify({intent:"finance_upcoming",confidence:.98,financeType:"expense",period:{from:"2026-10-01",to:"2026-10-31"}})}});
+  const result=await processMessage("Quais cobranças recorrentes estão previstas neste mês?",context);
+  expect(result).toMatchObject({intent:"recurring_query",period:{from:"2026-10-01",to:"2026-10-31"}});
+  expect(result.keyword).toBeUndefined();
+ }finally{vi.useRealTimers()}
+});
+it("preserves a broad upcoming-bills request that also mentions recurring charges",async()=>{
+ generateContent.mockResolvedValue({response:{text:()=>JSON.stringify({intent:"finance_upcoming",confidence:.98,financeType:"expense"})}});
+ const result=await processMessage("Quais contas a pagar neste mês, inclusive cobranças recorrentes?",context);
+ expect(result.intent).toBe("finance_upcoming");
+});
 it("retains the explicitly requested future month when correcting the classifier",async()=>{
  vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
  try{
