@@ -36,16 +36,17 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const upcomingCardInstallments=/\bparcelas?\b/.test(text)&&/\bcartao\b/.test(text)&&/\bvencem\b/.test(text)&&dayCount>=1&&dayCount<=31;
   if(upcomingCardBills||upcomingCardInstallments){
     const monthEnd=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
-    const from=/\bneste mes\b/.test(text)?`${today.slice(0,7)}-01`:today;
+    const openThisMonth=upcomingCardBills&&/\babertas?\b/.test(text)&&/\bneste mes\b/.test(text);
+    const from=/\bneste mes\b/.test(text)&&!openThisMonth?`${today.slice(0,7)}-01`:today;
     const to=/\bneste mes\b/.test(text)?monthEnd:new Date(Date.parse(`${today}T12:00:00Z`)+dayCount*86400000).toISOString().slice(0,10);
     try{
       const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:false});
       const kind=upcomingCardBills?"bill":"installment";
       const items=agenda.items.filter(item=>item.kind===kind&&item.due_date&&item.due_date>=from&&item.due_date<=to);
       const name=upcomingCardBills?"faturas":"parcelas do cartão";
-      if(!items.length)return `Não recebi ${name} com vencimento informado de ${bankDate(from)} a ${bankDate(to)}. Isso não confirma que não haja cobranças; confira Contas e o banco.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+      if(!items.length)return `Não recebi ${name} com vencimento informado de ${bankDate(from)} a ${bankDate(to)}. Isso não confirma que não haja cobranças; confira Contas e o banco.${openThisMonth?" Não posso confirmar se faturas já vencidas continuam em aberto.":""}${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
       const answer=formatBankAgenda(items,agenda.incomplete);
-      return upcomingCardBills&&/\babertas?\b/.test(text)?`${answer}\nNão posso confirmar o total ainda em aberto: a situação de pagamento de cada fatura precisa ser conferida no banco.`:answer;
+      return upcomingCardBills&&/\babertas?\b/.test(text)?`${answer}\nNão posso confirmar o total ainda em aberto: a situação de pagamento de cada fatura precisa ser conferida no banco.${openThisMonth?" Faturas com vencimento anterior a hoje não foram listadas como abertas sem confirmação do banco.":""}`:answer;
     }catch{return "Não consegui consultar as faturas e parcelas dos bancos agora. Confira Contas ou tente novamente; nenhum valor foi estimado.";}
   }
   const question=message.replace(/\b(?:(?:da|na|de|em|do) (?:minha |meu |modo )?|modo )?(?:empresa|empresarial|empresariais|pessoal|pessoais|pf|pj)\b/gi,"").replace(/\s+/g," ").trim();

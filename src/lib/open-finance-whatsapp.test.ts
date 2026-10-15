@@ -84,6 +84,26 @@ it("respects a seven-day bill window instead of interpreting the sentence as a b
   expect(answer).toContain("Banco A");expect(answer).not.toContain("Banco B");
   expect(m.agenda).toHaveBeenCalledWith(user,"personal",{from:"2026-10-14",to:"2026-10-21",includeUndated:false});
 });
+it("does not present past bills as still open this month without payment status",async()=>{
+  m.agenda.mockResolvedValue({items:[
+    {id:"past",kind:"bill",description:"Fatura antiga",resource_name:"Gold",institution_name:"Banco A",due_date:"2026-10-02",amount:"100",currency:"BRL",synced_at:"2026-10-14"},
+    {id:"future",kind:"bill",description:"Fatura futura",resource_name:"Gold",institution_name:"Banco B",due_date:"2026-10-20",amount:"200",currency:"BRL",synced_at:"2026-10-14"},
+  ],incomplete:false});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto devo em faturas de cartão que ainda estão abertas neste mês? Separe por banco.","2026-10-15");
+  expect(answer).toContain("Banco B");
+  expect(answer).not.toContain("Banco A");
+  expect(answer).toContain("Não posso confirmar o total ainda em aberto");
+  expect(m.agenda).toHaveBeenCalledWith(user,"personal",{from:"2026-10-15",to:"2026-10-31",includeUndated:false});
+});
+it("does not claim a paid or unpaid amount from only past-due invoices",async()=>{
+  m.agenda.mockResolvedValue({items:[
+    {id:"past",kind:"bill",description:"Fatura antiga",resource_name:"Gold",institution_name:"Banco A",due_date:"2026-10-02",amount:"100",currency:"BRL",synced_at:"2026-10-14"},
+  ],incomplete:true});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto devo em faturas de cartão que ainda estão abertas neste mês?","2026-10-15");
+  expect(answer).not.toContain("Banco A");
+  expect(answer).toContain("Não posso confirmar se faturas já vencidas continuam em aberto");
+  expect(answer).toContain("consulta bancária está incompleta");
+});
 it("answers the largest single expense instead of the largest spending category",async()=>{
   m.read.mockResolvedValue({entries:[
     {id:"food-a",mode:"personal",included:true,source:"bank",date:"2026-10-05",type:"expense",category:"Alimentação",description:"Mercado A",amount:60,bank:{resource_type:"card"}},
