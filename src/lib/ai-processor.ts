@@ -825,7 +825,7 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
   if (/\b(?:esta|essa|nesta|nessa|desta|atual)\s+semana\b|\bsemana\s+(?:atual|actual)\b|\bna\s+semana\b/.test(normalized)) {
     return { from: weekFrom, to: weekTo };
   }
-  if (/\bate\s+(?:o\s+)?fim\s+deste\s+mes\b/.test(normalized)) {
+  if (/\bate\s+(?:o\s+)?fim\s+deste\s+mes\b/.test(normalized) && /\b(?:venc\w*|a\s+pagar|por\s+receber|proxim\w*)\b/.test(normalized)) {
     return { from: toYmd(anchor), to: monthBounds(0).to };
   }
   if (/\bproximo\s+mes\b|\bmes\s+(?:que\s+vem|seguinte|que\s+viene|siguiente)\b/.test(normalized)) return monthBounds(1);
