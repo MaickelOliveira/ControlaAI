@@ -15,3 +15,8 @@ it("does not interpret a payment order or an invoice registration as a request t
   expect(parseBillRequest("pague a fatura do cartão","2026-10-11")).toBeNull();
   expect(parseBillRequest("registre essa fatura","2026-10-11")).toBeNull();
 });
+it("leaves requests about card purchases and bill payments to the finance answer",()=>{
+  expect(parseBillRequest("Mostre compras de cartão do mês sem pagamentos de fatura.","2026-10-15")).toBeNull();
+  expect(parseBillRequest("Quero ver pagamentos de fatura do mês fora dos gastos.","2026-10-15")).toBeNull();
+  expect(parseBillRequest("Me envie a fatura do cartão Nubank de outubro.","2026-10-15")).not.toBeNull();
+});
