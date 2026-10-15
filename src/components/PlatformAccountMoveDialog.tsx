@@ -36,7 +36,7 @@ export default function PlatformAccountMoveDialog({mode,accounts,onClose,onMoved
  return <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
   <div role="dialog" aria-modal="true" aria-labelledby="move-platform-title" className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl">
    <h2 id="move-platform-title" className="text-lg font-bold text-ink">Organizar lançamentos da plataforma</h2>
-   <p className="mt-2 text-sm text-muted">Escolha uma conta criada na Zelo. Os lançamentos feitos diretamente na plataforma serão vinculados a ela, inclusive os de meses anteriores.</p>
+   <p className="mt-2 text-sm text-muted">Escolha uma conta criada na Zelo. Os lançamentos feitos pelo painel ou WhatsApp serão vinculados a ela, inclusive os de meses anteriores.</p>
    <label htmlFor="move-platform-account" className="mt-4 block text-sm font-semibold text-ink">Conta de destino</label>
    <select id="move-platform-account" value={accountId} disabled={saving} onChange={event=>{setAccountId(event.target.value);setCount(null);setError("");setLoading(!!event.target.value);}}
     className="mt-2 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink">
