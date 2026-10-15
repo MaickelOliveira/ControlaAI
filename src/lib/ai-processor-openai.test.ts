@@ -95,7 +95,7 @@ describe("AI provider routing", () => {
   });
 
   it.each([
-    ["Mostre tarifas bancárias cobradas neste mês.", "finance_query", { kind: "transactions", operation: "list", direction: "debit", source: "account", movementClass: "bank_fee" }],
+    ["Mostre tarifas bancárias cobradas neste mês.", "finance_query", { kind: "transactions", operation: "list", direction: "debit", movementClass: "bank_fee" }],
     ["Qual foi o maior débito bancário do mês?", "finance_analysis", { kind: "transactions", operation: "max", direction: "debit", source: "account" }],
     ["Qual foi o maior crédito bancário do mês?", "how_to", { kind: "transactions", operation: "max", direction: "credit", source: "account" }],
     ["Quais faturas vencem amanhã?", "finance_upcoming", { kind: "bill_due" }],
@@ -107,6 +107,7 @@ describe("AI provider routing", () => {
     googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: broadIntent, confidence: .95 }) } });
     const answer = await processMessage(message, context);
     expect(answer).toMatchObject({ intent: "bank_query", bankQuery: plan });
+    if (message.startsWith("Mostre tarifas")) expect(answer.bankQuery?.source).toBeUndefined();
     if (message.includes("amanhã")) expect(answer.period?.from).toBe(answer.period?.to);
     if (message.includes("três dias")) expect(answer.period).toBeDefined();
   });

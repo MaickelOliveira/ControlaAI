@@ -51,7 +51,7 @@ export function validateBankQuery(value: unknown): StructuredBankQuery | null {
   if (["spending", "income", "transactions", "result"].includes(result.kind) && result.last4) return null; // Movement DTO has no card ID.
   if (result.source && !["spending", "income", "transactions", "result"].includes(result.kind)) return null;
   if (result.kind === "bill_due" && (result.category || result.keyword || result.source || result.last4)) return null;
-  if (result.movementClass && (result.source && result.source !== "account" || result.direction && result.direction !== "debit")) return null;
+  if (result.movementClass && result.direction && result.direction !== "debit") return null;
   if (result.operation === "max" && !result.direction) return null;
   return result;
 }
@@ -70,7 +70,7 @@ export function explicitBankQueryPlan(message: string): StructuredBankQuery | nu
     if (direction) return { kind: "transactions", operation: "max", direction, source: "account" };
   }
   if (/\b(?:mostre|liste|quais|qual|consulte|ver)\b/.test(text) && /\b(?:tarifas? bancarias?|taxas? bancarias?)\b/.test(text))
-    return { kind: "transactions", operation: "list", direction: "debit", source: "account", movementClass: "bank_fee" };
+    return { kind: "transactions", operation: "list", direction: "debit", movementClass: "bank_fee" };
   if (/\b(?:quais|qual|mostre|liste)\b/.test(text) && /\bfaturas?\b/.test(text) && /\bvenc\w*/.test(text))
     return { kind: "bill_due" };
   return null;

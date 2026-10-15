@@ -105,9 +105,10 @@ it("lists identified bank fees individually without mixing IOF tax or a category
   m.read.mockResolvedValue({ entries: [
     { id: "fee", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-09", description: "Tarifa de manutenção", amount: 20, category: "Encargos bancários", bank: { amount: "20", currency: "BRL", direction: "debit", resource_type: "account", institution_name: "Nubank", source_category: "BANK_FEES" } },
     { id: "tax", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-10", description: "IOF", amount: 5, category: "Encargos bancários", bank: { amount: "5", currency: "BRL", direction: "debit", resource_type: "account", institution_name: "Nubank", source_category: "GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT" } },
+    { id: "annual", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-11", description: "Anuidade cartão", amount: 12, category: "Encargos bancários", bank: { amount: "12", currency: "BRL", direction: "debit", resource_type: "card", institution_name: "Nubank", source_category: "BANK_FEES" } },
   ], bank: { overview, report: { sync_pending: false, missing_dates: 0, last_successful_sync_at: "2026-10-11" } } });
-  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "transactions", operation: "list", direction: "debit", source: "account", movementClass: "bank_fee" }), "2026-10-11");
-  expect(response).toContain("Tarifa de manutenção"); expect(response).toContain(bankMoney("20", "BRL")); expect(response).not.toContain("IOF");
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "transactions", operation: "list", direction: "debit", movementClass: "bank_fee" }), "2026-10-11");
+  expect(response).toContain("Tarifa de manutenção"); expect(response).toContain(bankMoney("20", "BRL")); expect(response).toContain("Anuidade cartão"); expect(response).not.toContain("IOF");
 });
 
 it("lists only bills due on the requested date with payment uncertainty", async () => {
@@ -124,7 +125,8 @@ it("lists only bills due on the requested date with payment uncertainty", async 
 it("rejects unsafe or incoherent query-plan combinations", () => {
   expect(validateBankQuery({ kind: "transactions", operation: "erase" })).toBeNull();
   expect(validateBankQuery({ kind: "balances", operation: "max" })).toBeNull();
-  expect(validateBankQuery({ kind: "transactions", movementClass: "bank_fee", source: "card" })).toBeNull();
+  expect(validateBankQuery({ kind: "transactions", movementClass: "bank_fee", source: "card", direction: "debit" })).toMatchObject({ source: "card", movementClass: "bank_fee" });
+  expect(validateBankQuery({ kind: "transactions", movementClass: "bank_fee", direction: "credit" })).toBeNull();
 });
 
 it("does not broaden a named-bank request when the model failed to identify the bank", () => {
