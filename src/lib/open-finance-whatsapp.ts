@@ -13,7 +13,7 @@ import {collectUpcomingFinanceItems} from "./upcoming-finances";
 import {readBankAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
 import {bankDate,bankMoney} from "./open-finance-display";
-import {ledgerExpenseGroups} from "./finance-ledger";
+import {financeOrigin,ledgerExpenseGroups} from "./finance-ledger";
 import {todayStrBR} from "./date-br";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
 const safeSummary=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,120);
@@ -26,6 +26,22 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(/^quais foram minhas cinco movimentacoes mais recentes\s*[?!.]*$/.test(text.trim())){
+    const from=new Date(Date.parse(`${today}T00:00:00Z`)-364*86400000).toISOString().slice(0,10);
+    try{
+      const {entries,bank}=await readUnifiedFinances(user,requested,from,today);
+      const latest=entries.filter(entry=>entry.mode===requested&&entry.status!=="pending"&&entry.date>=from&&entry.date<=today)
+        .sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt??"").localeCompare(a.createdAt??"")||a.id.localeCompare(b.id)).slice(0,5);
+      const lines=latest.map((entry,index)=>{
+        const credit=entry.bank?entry.bank.direction==="credit":entry.type==="income";
+        const money=entry.bank?bankMoney(entry.bank.amount,entry.bank.currency):bankMoney(Math.abs(entry.amount),"BRL");
+        const excluded=entry.bank?.kind==="excluded"||entry.categorySource==="excluded"||normalize(entry.category)==="transferencia entre contas proprias";
+        const note=entry.included?"":money==="Não informado"?" · Valor não recebido; fora dos totais":excluded?" · Não altera o resultado":" · Fora dos totais";
+        return `${index+1}. ${bankDate(entry.date)} · ${safeSummary(entry.description)}\n${credit?"Entrada":"Saída"}: ${money} · ${safeSummary(financeOrigin(entry))}${note}`;
+      });
+      return `Cinco movimentações mais recentes recebidas · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.join("\n\n")||"Nenhuma movimentação recebida nos últimos 12 meses."}\nConsulta dos últimos 12 meses; o histórico bancário pode estar incompleto.${bank?.report.sync_pending?" Há uma importação pendente ou com falha.":""}`;
+    }catch{return "Não consegui consultar as movimentações agora. Tente novamente ou confira Finanças; nenhum valor foi estimado.";}
+  }
   if (/^(?:qual (?:e )?a diferenca|explique a diferenca) entre (?:o )?saldo disponivel(?: da conta)? e (?:o )?limite (?:do|de) cartao\s*[?!.]*$/.test(text.trim()))
     return "Saldo disponível é o valor que o banco informa como disponível na sua conta; confira as regras da conta para saber se inclui crédito adicional. Limite disponível do cartão é crédito para compras, que gera cobrança na fatura quando usado. Ele não é dinheiro na conta e não deve ser somado ao saldo disponível.";
   if(/\bopen\s*(finance|banking)\b/.test(text)||(/\b(conectar|conecto|sincronizar|vincular)\b/.test(text)&&/\b(banco|bancos|bancaria|bancarias)\b/.test(text))){
