@@ -26,3 +26,12 @@ it("matches accent-insensitive description, card or institution search",()=>{
  expect(financeBankSchedules([item],{...filters,search:"Gold"})).toHaveLength(1);
  expect(financeBankSchedules([item],{...filters,search:"outra loja"})).toEqual([]);
 });
+it("excludes false delivery subscriptions and installments finished before the selected month",()=>{
+ const rows:BankAgendaItem[]=[
+  {...item,id:"delivery",description:"Zé Delivery",due_date:"2026-10-20"},
+  {...item,id:"expired",kind:"installment",description:"Óticas Fam",due_date:null,observed_installments:3,total_installments:3,last_observed_month:"2026-08-01",last_observed_installment:3},
+  {...item,id:"current",kind:"installment",description:"Loja atual",due_date:null,observed_installments:2,total_installments:10,last_observed_month:"2026-10-01",last_observed_installment:2},
+ ];
+ expect(financeBankSchedules(rows,filters).map(row=>row.id)).toEqual(["current"]);
+ expect(financeBankSchedules(rows,{...filters,from:"2026-08-01",to:"2026-08-31"}).map(row=>row.id)).toContain("expired");
+});

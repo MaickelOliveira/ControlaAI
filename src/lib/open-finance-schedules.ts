@@ -1,6 +1,27 @@
 import { bankDate, bankMoney, bankAmountWithoutCurrency } from "./open-finance-display";
-export type BankAgendaItem={id:string;mode?:"personal"|"business";resource_id?:string;kind:"bill"|"recurring"|"installment";description:string;resource_name:string;institution_name:string;due_date:string|null;amount:string|null;currency:string|null;synced_at:string;payment_evidence?:boolean;payment_amount?:string|null;total_installments?:number|null;observed_installments?:number|null;regularity_score?:number|null};
+import {descriptionExpenseCategory} from "./expense-category";
+export type BankAgendaItem={id:string;mode?:"personal"|"business";resource_id?:string;kind:"bill"|"recurring"|"installment";description:string;resource_name:string;institution_name:string;due_date:string|null;amount:string|null;currency:string|null;synced_at:string;payment_evidence?:boolean;payment_amount?:string|null;total_installments?:number|null;observed_installments?:number|null;regularity_score?:number|null;last_observed_month?:string|null;last_observed_installment?:number|null};
 export type BankAgenda={items:BankAgendaItem[];incomplete:boolean};
+function monthIndex(date:string):number|null {
+  const match=/^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/.exec(date);
+  return match?Number(match[1])*12+Number(match[2])-1:null;
+}
+function activeSchedule(item:BankAgendaItem,from:string):boolean {
+  if(item.kind==="recurring"){
+    // Repeating orders and journeys are purchases, not a subscription contract.
+    if(["Delivery","Alimentação","Transporte","Saúde","Vestuário"].includes(descriptionExpenseCategory(item.description)??""))return false;
+    return !item.due_date||item.due_date>=from;
+  }
+  if(item.kind!=="installment")return true;
+  const observedMonth=item.last_observed_month?monthIndex(item.last_observed_month):null;
+  const selectedMonth=monthIndex(from),last=item.last_observed_installment,total=item.total_installments;
+  if(observedMonth===null||selectedMonth===null||!Number.isInteger(last)||!Number.isInteger(total)||!last||!total||last<1||last>total)return true;
+  return observedMonth+total-last>=selectedMonth;
+}
+/** Current account view excludes inferred subscriptions and completed old schedules. */
+export function visibleBankSchedules(items:readonly BankAgendaItem[],today:string):BankAgendaItem[]{
+  return items.filter(item=>item.kind!=="bill"&&activeSchedule(item,today));
+}
 export type BankInstallmentProgress={current:number;total:number;remaining:number;stage:"ongoing"|"last"};
 /** Polp's paidInstallments is the last observed ordinal, not payment evidence. */
 export function bankInstallmentProgress(item:BankAgendaItem):BankInstallmentProgress|null {
@@ -38,6 +59,7 @@ export function groupBankAgenda(items:BankAgendaItem[]):BankAgendaGroup[] {
 const safe=(text:string)=>text.replace(/[\r\n*`_~<>]/g," ").slice(0,180);
 export function collectBankAgenda(items:BankAgendaItem[],range:{from:string;to:string;includeUndated?:boolean;includeObservedInstallments?:boolean;forNotification?:boolean;now?:string}):BankAgendaItem[]{
   return items.filter(item=>{
+    if(!activeSchedule(item,range.from))return false;
     if(item.due_date?item.due_date<range.from||item.due_date>range.to:!range.includeUndated)return false;
     if(!range.includeObservedInstallments&&item.kind==="installment"&&(item.observed_installments??0)>=(item.total_installments??0))return false;
     if(range.forNotification){

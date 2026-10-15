@@ -5,14 +5,14 @@ import type { BankMovement } from "./open-finance-report";
 
 vi.mock("server-only", () => ({}));
 const boundary = vi.hoisted(() => ({
-  auth: vi.fn(), access: vi.fn(), records: vi.fn(), bank: vi.fn(), phones: vi.fn(), accounts: vi.fn(),
+  auth: vi.fn(), access: vi.fn(), records: vi.fn(), bank: vi.fn(), anchors: vi.fn(), phones: vi.fn(), accounts: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({getSessionWithUser: boundary.auth}));
 vi.mock("@/lib/open-finance-access", () => ({getOpenFinanceAccess: boundary.access}));
 vi.mock("@/lib/finances", async original => ({
   ...await original<typeof import("@/lib/finances")>(), getFinancesInRangeStrict: boundary.records,
 }));
-vi.mock("@/lib/finance-ledger-storage", () => ({readBankLedger: boundary.bank}));
+vi.mock("@/lib/finance-ledger-storage", () => ({readBankLedger: boundary.bank,readBankInstallmentAnchors: boundary.anchors}));
 vi.mock("@/lib/wpp-phone-links", () => ({getPhonesForUser: boundary.phones}));
 vi.mock("@/lib/accounts", () => ({getAccountsByUser: boundary.accounts}));
 
@@ -80,6 +80,7 @@ beforeEach(() => {
       next: null, missing_dates: 0, sync_pending: false, last_successful_sync_at: "2026-10-12T12:00:00.000Z",
     },
   }));
+  boundary.anchors.mockResolvedValue({items:[],incomplete:false});
   boundary.phones.mockResolvedValue([
     {userId: owner.id, phone: participantPhone, name: "Participante fictícia", relation: "Funcionária"},
     {userId: "fictional-other-owner", phone: foreignPhone, name: "Contato externo fictício"},
@@ -118,6 +119,7 @@ describe("one complete manual snapshot for the real ledger GET", () => {
     expect(payload.finances.find(entry => entry.id === "unknown-author")?.registeredByName).toBeUndefined();
     expect(payload.finances.filter(entry => entry.source === "bank").every(entry => !entry.registeredByName)).toBe(true);
     expect(payload.accounts).toEqual([{id: "fictional-manual-account", name: "Carteira fictícia", type: "bank"}]);
+    expect(payload.installmentAnchors).toEqual({items:[],incomplete:false});
     const serialized = JSON.stringify(payload);
     expect(serialized).not.toContain(participantPhone);
     expect(serialized).not.toContain(foreignPhone);
@@ -126,6 +128,7 @@ describe("one complete manual snapshot for the real ledger GET", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(boundary.access).toHaveBeenCalledExactlyOnceWith(owner, "business", {throwOnStorageError: true});
     expect(boundary.bank).toHaveBeenCalledExactlyOnceWith(scope, {from, to});
+    expect(boundary.anchors).toHaveBeenCalledExactlyOnceWith(scope);
     expect(boundary.phones).toHaveBeenCalledExactlyOnceWith(owner.id);
     expect(boundary.accounts).toHaveBeenCalledExactlyOnceWith(owner.id, "business");
     expect(boundary.records).toHaveBeenCalledExactlyOnceWith(owner.id, "business");
