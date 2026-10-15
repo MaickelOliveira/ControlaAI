@@ -54,7 +54,9 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     ? `Não encontrei ${safe(question.bankName ?? "esse cartão")}${question.last4 ? ` · final ${question.last4}` : ""} entre os bancos conectados em ${safe(modeLabel)}. Confira Contas e o modo/empresa selecionado.`
     : `Nenhum banco conectado em ${safe(modeLabel)}. A conexão fica na aba Contas.`;
   if(question.kind==="coverage"){
-    const missing=connectedGroups.flatMap(group=>group.resources.flatMap(resource=>{
+    const missing=connectedGroups.flatMap(group=>[
+      ...(!group.resources.some(resource=>resource.resource_type==="account")?[`• ${safe(group.name)} não enviou dados de conta; saldo disponível não pôde ser avaliado.`]:[]),
+      ...group.resources.flatMap(resource=>{
       const name=`${safe(group.name)} · ${safe(bankResourceName(resource.name))}${resource.identification_last4?` · final ${safe(resource.identification_last4)}`:""}`;
       if(resource.resource_type==="account")return bankMoney(resource.available_amount,resource.currency)==="Não informado"?[`• ${name}: saldo disponível não informado (posição: ${bankDate(resource.synced_at)}).`]:[];
       if(resource.resource_type!=="card")return [];
@@ -62,7 +64,8 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
       if(!limits.length)return [`• ${name}: limite disponível não informado (posição: ${bankDate(resource.synced_at)}).`];
       return limits.filter(limit=>bankMoney(limit.available_amount,limit.currency)==="Não informado")
         .map(limit=>`• ${name} · ${safe(limit.line_name??"Linha de crédito")}: limite disponível não informado (posição: ${bankDate(resource.synced_at)}).`);
-    }));
+      }),
+    ]);
     return `Saldos e limites que ainda não vieram completos · ${safe(modeLabel)}\n${missing.slice(0,15).join("\n")||"Todas as contas e linhas de cartão recebidas têm valor disponível informado."}${missing.length>15?`\nMais ${missing.length-15} item(ns) em Contas.`:""}\nIsso descreve apenas os dados recebidos; não confirma saldo zero, limite zero nem prazo de atualização do banco.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
   }
   if(question.kind==="balances"&&question.balanceFilter){

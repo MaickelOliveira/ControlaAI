@@ -80,6 +80,26 @@ it("reports only missing bank amounts and does not invent dates or zero",async()
   expect(amounts).toContain("Sem valor");expect(amounts).toContain("Não informado");expect(amounts).not.toContain("Valor conhecido");
   expect(dates).toContain("2 movimento(s) sem data");expect(dates).not.toContain("Valor conhecido");
 });
+it("separates explicit card refunds from income without mistaking a bill payment for a refund",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"refund",mode:"personal",source:"bank",date:"2026-10-13",type:"expense",amount:-40,description:"Estorno da compra na loja",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"credit",classification:"refund",amount:"40",currency:"BRL"}},
+    {id:"bill",mode:"personal",source:"bank",date:"2026-10-13",type:"expense",amount:-80,description:"DEB. AUTOM. DE FATURA EM C/C",category:"Transferências e pagamentos",included:false,bank:{resource_type:"card",institution_name:"Banco A",direction:"credit",classification:"bill_payment",amount:"80",currency:"BRL"}},
+    {id:"income",mode:"personal",source:"bank",date:"2026-10-13",type:"income",amount:100,description:"Salário",category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",direction:"credit",amount:"100",currency:"BRL"}},
+    {id:"other",mode:"business",source:"bank",date:"2026-10-13",type:"expense",amount:-500,description:"Estorno de outra empresa",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco B",direction:"credit",classification:"refund",amount:"500",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre estornos de cartão separados das receitas.","2026-10-15");
+  expect(answer).toContain("Estornos de cartão");expect(answer).toContain("Estorno da compra na loja");expect(answer).toContain("R$ 40,00");
+  expect(answer).toContain("Receitas realizadas sem estornos");expect(answer).toContain("R$ 100,00");
+  expect(answer).not.toContain("DEB. AUTOM");expect(answer).not.toContain("outra empresa");
+});
+it("does not turn an unknown card credit into a confirmed refund or claim the full month was zero",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"unknown",mode:"personal",source:"bank",date:"2026-10-13",type:"expense",amount:-25,description:"CRÉDITO CARTÃO",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"credit",classification:"unknown",amount:"25",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:true,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre estornos de cartão separados das receitas.","2026-10-15");
+  expect(answer).toContain("Nenhum estorno de cartão identificado");expect(answer).toContain("crédito de cartão sem identificação");
+  expect(answer).not.toContain("CRÉDITO CARTÃO");expect(answer).not.toContain("Entradas: R$ 0,00");
+});
 it("does not claim zero account movement without a connected bank",async()=>{
   m.read.mockResolvedValue({entries:[],bank:null});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana?","2026-10-15");

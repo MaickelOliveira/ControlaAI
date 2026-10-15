@@ -28,6 +28,21 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
   const wording=text.trim().replace(/[?!.]+$/g,"");
+  if(/^(?:mostre|liste|separe) estornos? de cartao separados? das receitas$/.test(wording)){
+    const from=`${today.slice(0,7)}-01`;
+    try{
+      const {entries,bank}=await readUnifiedFinances(user,requested,from,today);
+      if(!bank?.overview.connections.length)return "Não tenho dados de um banco conectado neste modo para identificar estornos. Confira Contas; não vou estimar valores.";
+      const scoped=entries.filter(e=>e.mode===requested&&e.status!=="pending"&&e.date>=from&&e.date<=today);
+      const cardCredits=scoped.filter(e=>e.source==="bank"&&e.bank?.resource_type==="card"&&e.bank.direction==="credit"&&!isBankBillPaymentDescription(e.description));
+      const refunds=cardCredits.filter(e=>/^(?:refund|reversal)$/.test(normalize(e.bank?.classification??""))||/\b(?:estorno|reembolso|restituicao|refund|reversal|devolucao|compra cancelada)\b/.test(normalize(e.description)));
+      const unclassified=cardCredits.length-refunds.length;
+      const income=scoped.filter(e=>e.included&&e.type==="income");
+      const incomeTotal=income.reduce((cents,e)=>cents+Math.round(e.amount*100),0)/100;
+      const refundLines=refunds.slice(0,20).map(e=>`• ${bankDate(e.date)} · ${safeSummary(e.description)} · ${bankMoney(e.bank?.amount,e.bank?.currency)} · ${safeSummary(financeOrigin(e))}${e.included?" · Reduz despesas":" · Fora da soma em reais"}`).join("\n");
+      return `Estornos de cartão identificados · ${bankDate(from)} a ${bankDate(today)} · ${requested==="personal"?"Pessoal":"Empresa"}\n${refundLines||"Nenhum estorno de cartão identificado nos dados recebidos deste mês; isso não confirma que não ocorreu."}${refunds.length>20?`\nMostrando 20 de ${refunds.length}; confira Finanças.`:""}\n\nReceitas realizadas sem estornos: ${bankMoney(incomeTotal,"BRL")} em ${income.length} lançamento(s). Estornos reduzem despesas e não entram nesse total.${unclassified?` Há ${unclassified} ${unclassified===1?"crédito":"créditos"} de cartão sem identificação de estorno; não os contei como devolução.`:""}${financeCoverageNotice(bank,entries)}`;
+    }catch{return "Não consegui separar estornos de receitas agora. Confira Finanças ou tente novamente; nenhum valor foi estimado.";}
+  }
   if(wording==="ha lancamentos com a mesma data e valor que precisam de conferencia"){
     const from=`${today.slice(0,7)}-01`;
     try{
