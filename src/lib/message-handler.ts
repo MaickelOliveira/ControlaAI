@@ -20,7 +20,8 @@ import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, withExplicitFinanceCategoryEdit, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { createdDayBoundsBR, isFinanceCreatedTodayQuery, replyFinancesCreatedToday } from "@/lib/finance-created-query";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
 import { createTask, createTasks, getPendingTasks, getTasksByUser, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
@@ -2898,6 +2899,36 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
     }
     console.log("[bot] Intenção processada");
+
+    if (["finance_query", "finance_detail"].includes(ai.intent) && isFinanceCreatedTodayQuery(messageText)) {
+      const queryMode = (ai.mode as FinanceMode | undefined) || mode;
+      if (!allowsFinanceMode(queryMode)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); return; }
+      try {
+        const resolved = ai.account ? await resolveAccountForAi(user.id, queryMode, ai, recentHistory) : null;
+        if (ai.account && !resolved?.account) {
+          const choices = resolved?.choices ?? [];
+          if (choices.length) {
+            await setPendingAction(from, {
+              type: "account_selection", userId: user.id, mode: queryMode,
+              action: "resume_ai", ai, originalText: messageText,
+              accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
+            });
+            await wppSend(from, accountSelectionMessage(choices, user.locale, queryMode));
+          } else await wppSend(from, user.locale === "es" ? "No encontré esa cuenta." : "Não encontrei essa conta.");
+          return;
+        }
+        const { from: createdFrom, to: createdTo } = createdDayBoundsBR(todayStrBR());
+        const created = await getFinancesCreatedBetween(user.id, queryMode, createdFrom, createdTo);
+        const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const keyword = ai.keyword?.trim();
+        const matched = created.filter(item => (!resolved?.account || item.accountId === resolved.account.id)
+          && (!keyword || normalize(item.description).includes(normalize(keyword))));
+        await wppSendLong(from, replyFinancesCreatedToday(matched, queryMode, keyword, user.locale), 3500, true);
+      } catch {
+        await wppSend(from, user.locale === "es" ? "No pude consultar los movimientos creados hoy. Inténtalo de nuevo." : "Não consegui consultar os lançamentos criados hoje. Tente novamente.");
+      }
+      return;
+    }
 
     // "Paguei o aluguel" costuma chegar como um novo lançamento financeiro,
     // mas pode ser a baixa de uma recorrência que vence hoje. Fazemos essa
