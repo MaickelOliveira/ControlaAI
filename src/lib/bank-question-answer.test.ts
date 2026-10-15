@@ -82,6 +82,16 @@ describe("saved bank positions", () => {
     expect(answer(data, "Mostre meus investimentos no Sicredi")).toContain(bankMoney("290", "BRL"));
     const bill = answer(data, "Qual o valor da fatura no Nubank?"); expect(bill).toContain(bankMoney("400", "BRL")); expect(bill).toContain("20/10/2026"); expect(bill).toContain("Pagamento: não informado"); expect(bill).not.toContain("Sicredi");
   });
+  it("answers the last update with received balances and dates, not a capabilities list", () => {
+    const data=overview();
+    data.resources.push({...resource("nu-account","nu","account","Conta Nubank"),available_amount:"123.45",synced_at:"2026-10-14"},
+      {...resource("si-account","si","account","Conta Sicredi"),available_amount:"-10",synced_at:"2026-10-15"});
+    const text=answer(data,"Qual era o saldo informado por cada banco na última atualização?");
+    expect(text).toContain("última posição recebida");
+    expect(text).toContain("Nubank");expect(text).toContain(bankMoney("123.45","BRL"));expect(text).toContain("14/10/2026");
+    expect(text).toContain("Sicredi");expect(text).toContain(bankMoney("-10","BRL"));expect(text).toContain("15/10/2026");
+    expect(text).not.toContain("Consigo consultar");
+  });
   it("shows only negative account balances and warns when the bank feed is incomplete", () => {
     const data=overview();
     data.resources.push({...resource("positive","nu","account","Conta positiva"),available_amount:"20"},

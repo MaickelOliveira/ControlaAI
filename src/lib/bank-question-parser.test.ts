@@ -40,6 +40,11 @@ it("recognizes focused questions about negative and missing account balances", (
   expect(parseBankQuestion("Quais contas conectadas não enviaram saldo?", "2026-10-15"))
     .toMatchObject({kind:"balances",balanceFilter:"missing"});
 });
+it("treats the last received bank update as a current snapshot, without opening historical periods", () => {
+  expect(parseBankQuestion("Qual era o saldo informado por cada banco na última atualização?", "2026-10-15"))
+    .toMatchObject({kind:"balances",latestSnapshot:true});
+  expect(parseBankQuestion("Qual era o saldo informado por cada banco mês passado?", "2026-10-15")).toBeNull();
+});
 
 it.each(["quanto falta pra min pagar do carro", "Quanto ainda devo no financiamento do carro?", "Quanto falta para quitar minha casa?"])("recognizes remaining financed debt rather than monthly bills: %s", message => {
   expect(parseBankQuestion(message, "2026-10-11")).toMatchObject({ kind: "financings", keyword: /carro/.test(message) ? "carro" : "casa" });
