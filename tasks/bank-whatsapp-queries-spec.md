@@ -46,3 +46,17 @@ O classificador agora tem `bank_query` com argumentos validados para os tipos ab
 Validação desta ampliação: 1.122 testes passaram; 15 testes opcionais de serviços reais não foram executados. Revisão independente aprovada após corrigir filtros incompatíveis de parcelas e a visualização de transferências/moedas/valores desconhecidos no extrato. Auditoria de dependências permanece igual à versão anterior, sem alterações no lockfile; manutenção registrada em `tasks/dependency-audit-followup.md`.
 
 Validação local: 1.079 testes passaram (15 testes opcionais de serviços reais seguem sem execução), tipos/lint/compilação concluídos. Revisão independente aprovada. Os exemplos de armazenamento/transporte são fictícios; nenhuma mensagem real foi enviada nos testes.
+
+## Ampliação após auditoria real de 15/10/2026
+
+O titular confirmou que deseja o caminho central: a IA interpreta a pergunta, entrega um plano de consulta estruturado e a Zelo executa e responde com os dados autorizados. A auditoria real mostrou que as perguntas por tarifas, maior débito/crédito e vencimento de faturas caem em respostas genéricas ou incoerentes.
+
+- O plano de consulta deve representar a operação pedida (listar, totalizar, escolher maior/menor ou filtrar vencimento), a fonte (conta/cartão), o sentido (entrada/saída), o período e filtros reconhecidos. Palavras da pergunta não devem virar nome fictício de banco.
+- A IA recebe somente a pergunta e contexto mínimo para escolher a operação. Não recebe extrato, saldo, credenciais, identificador de titular ou empresa e não calcula valores.
+- Antes da execução, a Zelo valida os campos do plano, reconfirma vínculo do telefone, modo e empresa, consulta apenas os dados permitidos e monta a resposta. Não executa mutações nesse caminho de leitura.
+- “Maior débito/crédito bancário” escolhe um único movimento de conta em reais no período; pagamentos e transferências podem aparecer como movimentos, mas devem ser identificados como fora dos totais de gasto/receita quando for o caso. Valores ausentes ou em outra moeda não entram no ranking, e a resposta avisa a limitação.
+- “Mostre tarifas bancárias” lista cada cobrança reconhecida com descrição, data e valor, separando tarifas de impostos como IOF quando os dados permitirem. Uma soma de categoria sozinha não atende ao pedido.
+- Faturas por prazo usam data de vencimento recebida do banco e indicam as datas exatas consultadas. “Amanhã” e “próximos três dias” não viram nome de banco; ausência de fatura recebida não prova quitação nem ausência de cobrança.
+- Se o plano vier incompleto, contraditório ou sem operação suportada, a Zelo pede o dado que falta ou informa a limitação específica, sem substituir por resumo mensal genérico ou frase mal formada.
+
+Implementar em fatias: (1) operações de movimentos de conta e tarifas; (2) vencimento de faturas; (3) ampliar a matriz de perguntas da auditoria. Cada fatia exige teste de interpretação, teste de execução com dados fictícios, verificação local, revisão e reteste real no WhatsApp após implantação.

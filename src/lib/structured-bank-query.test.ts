@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ access: vi.fn(), rpc: vi.fn(), read: vi.fn() }));
 vi.mock("./open-finance-access", () => ({ getOpenFinanceAccess: m.access }));
 vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
-import { validateBankQuery } from "./bank-query-intent";
+import { explicitBankQueryPlan, validateBankQuery } from "./bank-query-intent";
 import { answerStructuredBankQuery } from "./structured-bank-query";
 import { bankMoney } from "./open-finance-display";
 import type { AIResult } from "./ai-processor";
@@ -78,4 +78,58 @@ it("validates and executes a financing purpose filter instead of broadening it t
  m.rpc.mockResolvedValue({...overview,resources:[{id:"car",connection_id:"nu",resource_type:"financing",name:"Veículos e utilitários"},{id:"house",connection_id:"nu",resource_type:"financing",name:"Imóvel residencial"}],credit:[{resource_id:"car",currency:"BRL",outstanding_amount:"6789.12"},{resource_id:"house",currency:"BRL",outstanding_amount:"44444"}]});
  const response=await answerStructuredBankQuery(user,"personal","both",ai({kind:"financings",keyword:"carro"}),"2026-10-11");
  expect(response).toContain(bankMoney("6789.12","BRL"));expect(response).not.toContain("Imóvel residencial");
+});
+
+it("returns one largest account debit using the bank direction, even when excluded from spending totals", async () => {
+  m.read.mockResolvedValue({ entries: [
+    { id: "one", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-09", description: "Compra pequena", amount: 10, category: "Outros", bank: { amount: "10", currency: "BRL", direction: "debit", resource_type: "account", institution_name: "Nubank" } },
+    { id: "two", mode: "personal", source: "bank", included: false, type: "expense", status: "posted", date: "2026-10-10", description: "Pagamento de fatura", amount: 90, category: "Transferências e pagamentos", bank: { amount: "90", currency: "BRL", direction: "debit", resource_type: "account", institution_name: "Nubank" } },
+    { id: "three", mode: "personal", source: "bank", included: true, type: "income", status: "posted", date: "2026-10-08", description: "Entrada maior", amount: 150, category: "Outros", bank: { amount: "150", currency: "BRL", direction: "credit", resource_type: "account", institution_name: "Nubank" } },
+  ], bank: { overview, report: { sync_pending: false, missing_dates: 0, last_successful_sync_at: "2026-10-11" } } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "transactions", operation: "max", direction: "debit", source: "account" }), "2026-10-11");
+  expect(response).toContain("Pagamento de fatura"); expect(response).toContain(bankMoney("90", "BRL"));
+  expect(response).not.toContain("Compra pequena"); expect(response).not.toContain("Entrada maior");
+  expect(response).toContain("fora dos totais");
+});
+
+it("chooses the largest account credit without treating a card refund as bank income", async () => {
+  m.read.mockResolvedValue({ entries: [
+    { id: "account", mode: "personal", source: "bank", included: true, type: "income", status: "posted", date: "2026-10-09", description: "Depósito recebido", amount: 80, category: "Outros", bank: { amount: "80", currency: "BRL", direction: "credit", resource_type: "account", institution_name: "Nubank" } },
+    { id: "card", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-10", description: "Estorno do cartão", amount: -120, category: "Outros", bank: { amount: "120", currency: "BRL", direction: "credit", resource_type: "card", institution_name: "Nubank" } },
+  ], bank: { overview, report: { sync_pending: false, missing_dates: 0, last_successful_sync_at: "2026-10-11" } } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "transactions", operation: "max", direction: "credit", source: "account" }), "2026-10-11");
+  expect(response).toContain("Depósito recebido"); expect(response).toContain(bankMoney("80", "BRL")); expect(response).not.toContain("Estorno do cartão");
+});
+
+it("lists identified bank fees individually without mixing IOF tax or a category-only total", async () => {
+  m.read.mockResolvedValue({ entries: [
+    { id: "fee", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-09", description: "Tarifa de manutenção", amount: 20, category: "Encargos bancários", bank: { amount: "20", currency: "BRL", direction: "debit", resource_type: "account", institution_name: "Nubank", source_category: "BANK_FEES" } },
+    { id: "tax", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-10", description: "IOF", amount: 5, category: "Encargos bancários", bank: { amount: "5", currency: "BRL", direction: "debit", resource_type: "account", institution_name: "Nubank", source_category: "GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT" } },
+    { id: "annual", mode: "personal", source: "bank", included: true, type: "expense", status: "posted", date: "2026-10-11", description: "Anuidade cartão", amount: 12, category: "Encargos bancários", bank: { amount: "12", currency: "BRL", direction: "debit", resource_type: "card", institution_name: "Nubank", source_category: "BANK_FEES" } },
+  ], bank: { overview, report: { sync_pending: false, missing_dates: 0, last_successful_sync_at: "2026-10-11" } } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "transactions", operation: "list", direction: "debit", movementClass: "bank_fee" }), "2026-10-11");
+  expect(response).toContain("Tarifa de manutenção"); expect(response).toContain(bankMoney("20", "BRL")); expect(response).toContain("Anuidade cartão"); expect(response).not.toContain("IOF");
+});
+
+it("lists only bills due on the requested date with payment uncertainty", async () => {
+  m.rpc.mockResolvedValue({ items: [
+    { id: "tomorrow", kind: "bill", institution_name: "Nubank", resource_name: "Gold", description: "Fatura", due_date: "2026-10-12", amount: "75", currency: "BRL", synced_at: "2026-10-11" },
+    { id: "later", kind: "bill", institution_name: "Nubank", resource_name: "Gold", description: "Outra fatura", due_date: "2026-10-20", amount: "80", currency: "BRL", synced_at: "2026-10-11" },
+    { id: "installment", kind: "installment", institution_name: "Nubank", resource_name: "Gold", description: "Parcela", due_date: "2026-10-12", amount: "10", currency: "BRL", synced_at: "2026-10-11" },
+  ], incomplete: false });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "bill_due" }, { period: { from: "2026-10-12", to: "2026-10-12" } }), "2026-10-11");
+  expect(response).toContain(bankMoney("75", "BRL")); expect(response).toContain("12/10/2026"); expect(response).not.toContain(bankMoney("80", "BRL")); expect(response).not.toContain("Parcela");
+  expect(response).toContain("pagamento não confirmado");
+});
+
+it("rejects unsafe or incoherent query-plan combinations", () => {
+  expect(validateBankQuery({ kind: "transactions", operation: "erase" })).toBeNull();
+  expect(validateBankQuery({ kind: "balances", operation: "max" })).toBeNull();
+  expect(validateBankQuery({ kind: "transactions", movementClass: "bank_fee", source: "card", direction: "debit" })).toMatchObject({ source: "card", movementClass: "bank_fee" });
+  expect(validateBankQuery({ kind: "transactions", movementClass: "bank_fee", direction: "credit" })).toBeNull();
+});
+
+it("does not broaden a named-bank request when the model failed to identify the bank", () => {
+  expect(explicitBankQueryPlan("Qual foi o maior débito bancário no Banco Aurora?")).toBeNull();
+  expect(explicitBankQueryPlan("Qual foi o maior débito bancário do mês?")).toMatchObject({ kind: "transactions", operation: "max", direction: "debit" });
 });

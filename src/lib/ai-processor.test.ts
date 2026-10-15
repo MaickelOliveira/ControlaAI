@@ -780,6 +780,14 @@ describe("advisor summary classification", () => {
       .toEqual({ from: "2026-10-01", to: "2026-10-31" });
     expect(getExplicitRelativePeriod("o que recebi ontem?", sunday))
       .toEqual({ from: "2026-09-05", to: "2026-09-05" });
+    expect(getExplicitRelativePeriod("Quais faturas vencem nos próximos três dias?", sunday))
+      .toEqual({ from: "2026-09-06", to: "2026-09-09" });
+    expect(getExplicitRelativePeriod("Quais faturas vencem nos próximos quinze dias?", sunday))
+      .toEqual({ from: "2026-09-06", to: "2026-09-21" });
+    expect(getExplicitRelativePeriod("Quais faturas vencem até o fim deste mês?", sunday))
+      .toEqual({ from: "2026-09-06", to: "2026-09-30" });
+    expect(getExplicitRelativePeriod("Quanto gastei até o fim deste mês?", sunday))
+      .toEqual({ from: "2026-09-01", to: "2026-09-30" });
     expect(getExplicitRelativePeriod("gastos deste ano", sunday))
       .toEqual({ from: "2026-01-01", to: "2026-09-06" });
     expect(getExplicitDailySummaryResult("Resumo do dia de amanhã", sunday))

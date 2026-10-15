@@ -143,6 +143,8 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       return upcomingCardBills&&/\babertas?\b/.test(text)?`${answer}\nNão posso confirmar o total ainda em aberto: a situação de pagamento de cada fatura precisa ser conferida no banco.${openThisMonth?" Faturas com vencimento anterior a hoje não foram listadas como abertas sem confirmação do banco.":""}`:answer;
     }catch{return "Não consegui consultar as faturas e parcelas dos bancos agora. Confira Contas ou tente novamente; nenhum valor foi estimado.";}
   }
+  // Let the typed AI plan resolve other due-date wording; the legacy parser can mistake the time phrase for a bank name.
+  if (/\bfaturas?\b/.test(text) && /\bvenc(?:e|em|erao|eram)\b/.test(text)) return null;
   const question=message.replace(/\b(?:(?:da|na|de|em|do) (?:minha |meu |modo )?|modo )?(?:empresa|empresarial|empresariais|pessoal|pessoais|pf|pj)\b/gi,"").replace(/\s+/g," ").trim();
   const parsed=parseBankQuestion(question,today);
   if(parsed?.kind==="spending"&&!parsed.bankName)return null;
