@@ -1,8 +1,8 @@
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-const m=vi.hoisted(()=>({owner:vi.fn(),send:vi.fn(),process:vi.fn(),pending:vi.fn(),save:vi.fn(),clear:vi.fn(),connected:vi.fn(),settings:vi.fn(),legacy:vi.fn(),global:vi.fn(),globalMeet:vi.fn(),confirmed:true,scope:{userId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",companyId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",mode:"business" as "personal"|"business"},api:{listWorkspaceAppointments:vi.fn(),getWorkspaceAppointment:vi.fn(),getWorkspaceMeet:vi.fn(),createWorkspaceAppointment:vi.fn(),createWorkspaceMeet:vi.fn(),updateWorkspaceAppointment:vi.fn(),cancelWorkspaceAppointment:vi.fn(),addWorkspaceAppointmentMeet:vi.fn(),retryWorkspaceGoogleEvent:vi.fn()}}));
+const m=vi.hoisted(()=>({owner:vi.fn(),send:vi.fn(),process:vi.fn(),pending:vi.fn(),save:vi.fn(),clear:vi.fn(),connected:vi.fn(),status:vi.fn(),settings:vi.fn(),legacy:vi.fn(),global:vi.fn(),globalMeet:vi.fn(),confirmed:true,scope:{userId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",companyId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",mode:"business" as "personal"|"business"},api:{listWorkspaceAppointments:vi.fn(),getWorkspaceAppointment:vi.fn(),getWorkspaceMeet:vi.fn(),createWorkspaceAppointment:vi.fn(),createWorkspaceMeet:vi.fn(),updateWorkspaceAppointment:vi.fn(),cancelWorkspaceAppointment:vi.fn(),addWorkspaceAppointmentMeet:vi.fn(),retryWorkspaceGoogleEvent:vi.fn()}}));
 vi.mock("server-only",()=>({}));
 vi.mock("./google-event-service",()=>m.api);
-vi.mock("./google-whatsapp-service",()=>({loadGoogleWhatsAppConnected:m.connected,loadGoogleWhatsAppConsumer:async()=>{const {createGoogleWhatsAppConsumer}=await import("./google-whatsapp-consumer");return createGoogleWhatsAppConsumer(m.api);}}));
+vi.mock("./google-whatsapp-service",()=>({loadGoogleWhatsAppConnected:m.connected,loadGoogleWhatsAppConnectionStatus:m.status,loadGoogleWhatsAppConsumer:async()=>{const {createGoogleWhatsAppConsumer}=await import("./google-whatsapp-consumer");return createGoogleWhatsAppConsumer(m.api);}}));
 vi.mock("./google-settings-service",async original=>({...await original<typeof import("./google-settings-service")>(),loadGoogleSettings:m.settings}));
 vi.mock("./users",async original=>({...await original<typeof import("./users")>(),getUserById:m.owner}));
 vi.mock("./wpp-phone-links",()=>({getUserIdByPhone:async()=>m.scope.userId,getPhoneAccess:async()=>"both",getPhonesForUser:async()=>[{phone:"5511999999999",name:"Fixture",relation:"Titular"}]}));
@@ -31,6 +31,7 @@ beforeEach(()=>{
  m.process.mockResolvedValue({intent:"agenda_update",confidence:.99,keyword:"Fixture",mode:"personal",agendaData:{title:"Changed"}});
  m.api.listWorkspaceAppointments.mockResolvedValue([record]);m.api.getWorkspaceAppointment.mockResolvedValue(record);m.api.getWorkspaceMeet.mockResolvedValue(record);m.api.updateWorkspaceAppointment.mockResolvedValue({...record,title:"Changed"});m.api.cancelWorkspaceAppointment.mockResolvedValue({...record,status:"cancelled",googleCancellationPending:true});m.api.addWorkspaceAppointmentMeet.mockResolvedValue(record);m.api.retryWorkspaceGoogleEvent.mockResolvedValue(record);
  m.connected.mockResolvedValue(true);m.api.createWorkspaceAppointment.mockImplementation(async(_scope,id,data)=>({...record,...data,id,googleSyncVersion:null,googleSyncState:"local",googleMeetPending:false}));m.api.createWorkspaceMeet.mockImplementation(async(_scope,id,data)=>({...record,...data,id}));
+ m.status.mockImplementation(async(_user,mode)=>({mode,connected:mode==="personal"}));
  m.settings.mockResolvedValue({connected:true});
  m.legacy.mockResolvedValue([record]);m.global.mockResolvedValue(true);m.globalMeet.mockResolvedValue({meetLink:"https://meet.google.com/abc-defg-hij",calendarEventId:"foreign-legacy",googleCalendarId:"primary"});vi.spyOn(console,"error").mockImplementation(()=>{});vi.spyOn(console,"log").mockImplementation(()=>{});
 });
@@ -95,6 +96,23 @@ it("actual connection wiring consults private scoped settings without provider/g
  const real=await vi.importActual<typeof import("./google-whatsapp-service")>("./google-whatsapp-service");
  await runWithCompanyContext(async()=>{setCompanyContext(m.scope);expect(await real.loadGoogleWhatsAppConnected(owner)).toBe(true);expect(m.settings).toHaveBeenCalledWith(m.scope);m.settings.mockImplementationOnce(async()=>{setCompanyContext({...m.scope,mode:"personal"});return {connected:true};});await expect(real.loadGoogleWhatsAppConnected(owner)).rejects.toThrow("GOOGLE_WHATSAPP_WORKSPACE_CHANGED");});
  expect(m.global).not.toHaveBeenCalled();expect(m.globalMeet).not.toHaveBeenCalled();
+});
+it("answers Personal and Empresa Google status from the verified service without routing to the model",async()=>{
+ await receive("Explique se meu Google está conectado no modo Pessoal.","status-personal");
+ expect(m.status).toHaveBeenCalledWith(owner,"personal");expect(reply()).toContain("Pessoal*: conectado");
+ m.send.mockClear();await receive("Explique se há calendário conectado no modo Empresa.","status-business");
+ expect(m.status).toHaveBeenCalledWith(owner,"business");expect(reply()).toContain("Empresa*: não conectado");
+ expect(m.process).not.toHaveBeenCalled();expect(m.global).not.toHaveBeenCalled();
+});
+it("scoped Google status cannot be read after the selected workspace changes",async()=>{
+ const real=await vi.importActual<typeof import("./google-whatsapp-service")>("./google-whatsapp-service");
+ await runWithCompanyContext(async()=>{
+  setCompanyContext({...m.scope,mode:"personal"});
+  expect(await real.loadGoogleWhatsAppConnectionStatus(owner,"business")).toEqual({mode:"business",connected:true});
+  expect(m.settings).toHaveBeenCalledWith({...m.scope,mode:"business"});
+  m.settings.mockImplementationOnce(async()=>{setCompanyContext({...m.scope,companyId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"});return {connected:true};});
+  await expect(real.loadGoogleWhatsAppConnectionStatus(owner,"business")).rejects.toThrow("GOOGLE_WHATSAPP_WORKSPACE_CHANGED");
+ });
 });
 it("actual Agenda creation passes the authenticated source identity and acknowledges before clearing",async()=>{
  m.process.mockResolvedValue({intent:"agenda_create",confidence:.99,agendaData:{title:"Fixture create",startDate:"2026-10-20",startTime:"12:00"}});await receive("agende Fixture create amanhã às12","fixture-agenda-create");

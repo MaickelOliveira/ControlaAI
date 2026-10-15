@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn() }));
+const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), accounts: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn() }));
 vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner }));
 vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: vi.fn().mockResolvedValue("holder"), getPhoneAccess: vi.fn().mockResolvedValue("both"), getPhonesForUser: vi.fn().mockResolvedValue([{ phone: "5511999990000", name: "Ana Teste", relation: "Titular" }]) }));
 vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: vi.fn().mockResolvedValue(null) }));
@@ -10,7 +10,7 @@ vi.mock("./ai-processor", async original => ({ ...await original<typeof import("
 vi.mock("./open-finance-access", () => ({ getOpenFinanceAccess: m.access, canEnrollOpenFinance: () => true }));
 vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
 vi.mock("./recurring", async original => ({ ...await original<typeof import("./recurring")>(), getRecurringByUser: m.recurring, findDueRecurringMatches: m.due, confirmRecurring: m.confirm }));
-vi.mock("./accounts", async original => ({ ...await original<typeof import("./accounts")>(), getManualAccountsByUser: vi.fn().mockResolvedValue([]) }));
+vi.mock("./accounts", async original => ({ ...await original<typeof import("./accounts")>(), getManualAccountsByUser: m.accounts }));
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
 import { handleIncomingMessage } from "./message-handler";
 import { bankMoney } from "./open-finance-display";
@@ -22,7 +22,18 @@ beforeEach(() => {
   m.owner.mockResolvedValue(user); m.send.mockResolvedValue(true); m.process.mockRejectedValue(Error("Generic classifier must not handle a bank position"));
   m.recurring.mockResolvedValue([]); m.due.mockResolvedValue([{ id: "due-rent", description: "Aluguel", nextDueDate: "2026-10-01" }]);
   m.access.mockResolvedValue({ userId: "holder", mode: "personal", environment: "production" });
+  m.accounts.mockResolvedValue([]);
   m.rpc.mockResolvedValue({ connections: [{ id: "nu", institution_name: "Nubank", status: "active" }], resources: [{ id: "loan", connection_id: "nu", resource_type: "loan", name: "Crédito pessoal", synced_at: "2026-10-11" }, { id: "card", connection_id: "nu", resource_type: "card", name: "Platinum", synced_at: "2026-10-11" }], credit: [{ resource_id: "loan", currency: "BRL", outstanding_amount: "1200.10", contract_amount: "5000" }], limits: [{ resource_id: "card", line_name: "Crédito à vista", currency: "BRL", available_amount: "1245.92", total_amount: "2000", used_amount: "754.08" }], bills: [], sync: [] });
+});
+it("answers the reported account comparison with manual accounts and active banks in separate sections", async () => {
+  m.accounts.mockResolvedValue([{name:"Dinheiro",isDefault:true}]);
+  m.process.mockResolvedValue({intent:"account_list",confidence:1});
+  await handleIncomingMessage({from:"5511999990000",text:"Mostre minhas contas registradas manualmente separadas dos bancos"});
+  const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+  expect(response).toContain("*Contas cadastradas manualmente*\n1. Dinheiro ⭐");
+  expect(response).toContain("*Bancos conectados*\n1. Nubank");
+  expect(m.accounts).toHaveBeenCalledWith("holder","personal");
+  expect(m.rpc).toHaveBeenCalledWith(expect.objectContaining({mode:"personal"}),"zelo_of_overview",{p_environment:"production"});
 });
 it("interprets a new phrasing with AI then reads the correct bank product instead of generic expenses", async () => {
   m.process.mockResolvedValue({ intent: "bank_query", confidence: .96, bankQuery: { kind: "limits", bankName: "Nubank" } });
