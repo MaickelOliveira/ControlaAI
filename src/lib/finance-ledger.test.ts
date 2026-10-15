@@ -13,6 +13,16 @@ it("does not count duplicated bank pages, bill settlements, investments or unkno
  expect(entries).toHaveLength(5);expect(ledgerBalance(entries).expense).toBe(40.1);
  expect(entries.find(e=>e.id==="bank:unknown")?.bank?.amount).toBeNull();
 });
+it("does not count unmistakable card-bill settlement descriptions when the provider omitted their classification",()=>{
+ const entries=createFinanceLedger([], [
+  {...bank,id:"generic",description:"Pagamento de fatura",amount:"100.00"},
+  {...bank,id:"account",description:"DEBITO AUT. FAT.CARTAO MASTER CARD FINAL 6129",amount:"90.00"},
+  {...bank,id:"card",resource_type:"card",direction:"credit",kind:"credits",description:"DEB. AUTOM. DE FATURA EM C/C",amount:"90.00"},
+  {...bank,id:"utility",description:"Pagamento de fatura de energia",amount:"10.00"},
+ ],"personal");
+ expect(entries.filter(e=>!e.included)).toHaveLength(3);
+ expect(ledgerBalance(entries).expense).toBe(10);
+});
 it("deducts card refunds from expenses instead of inflating income and excludes pending records",()=>{
  const entries=createFinanceLedger([{...manual,status:"pending"}], [{...bank,resource_type:"card",direction:"credit",kind:"credits",amount:"10.05"}],"business");
  expect(ledgerBalance(entries)).toEqual({income:0,expense:-10.05,balance:10.05});

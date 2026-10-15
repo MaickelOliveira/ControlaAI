@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { polpExternalId, polpObject, polpUuid, type PolpObject } from "./polp-production";
+import { isBankBillPaymentDescription } from "./bank-bill-payment";
 export const INVESTMENT_FAMILIES = ["bank-fixed-incomes","credit-fixed-incomes","funds","treasure-titles","variable-incomes"] as const;
 export const RESOURCE_FAMILIES = ["accounts","credit-cards","loans","financings",...INVESTMENT_FAMILIES] as const;
 export type ResourceFamily = typeof RESOURCE_FAMILIES[number];
@@ -54,9 +55,9 @@ export function normalizeMovements(family: string, resourceId: string, rows: Pol
     const value=money(account?row.transaction_amount:card?row.brazilian_amount:row.transaction_net_value ?? row.transaction_value ?? row.transaction_gross_value);
     const original=card?money(row.amount):money(null), type=sourceText(card?row.transaction_type:row.type,100), category=sourceText(row.category_ref);
     const direction=account || card ? row.credit_debit_type==="DEBITO"?"debit":row.credit_debit_type==="CREDITO"?"credit":"unknown" : "unknown";
-    const classification=!account&&!card?"investment":type==="PAGAMENTO_FATURA"||category==="CREDIT_CARD_PAYMENT"?"bill_payment":category==="ACCOUNT_TRANSFER"?"transfer":card&&type==="COMPRA"?"purchase":"unknown";
-    const month=sourceText(row.bill_forecast_date,7);
     const merchantName=sourceText(row.transaction_name,1000)?.trim();
+    const classification=!account&&!card?"investment":type==="PAGAMENTO_FATURA"||category==="CREDIT_CARD_PAYMENT"||merchantName&&isBankBillPaymentDescription(merchantName)?"bill_payment":category==="ACCOUNT_TRANSFER"?"transfer":card&&type==="COMPRA"?"purchase":"unknown";
+    const month=sourceText(row.bill_forecast_date,7);
     return { resource_external_id:resourceId, resource_type:account?"account":card?"card":"investment", external_id:polpExternalId(row.id), description:merchantName||sourceText(row.transaction_type ?? type,1000)||"Movimentação", description_present:!!merchantName, transaction_date:sourceDate(family==="funds"?row.transaction_conversion_date:row.transaction_date_time ?? row.transaction_date), amount:value.amount?.replace(/^-/," ").trim() ?? null, currency:value.currency, original_amount:original.amount?.replace(/^-/," ").trim() ?? null, original_currency:original.currency, direction, classification, source_type:type, source_category:category,
       bill_month:card&&month&&/^\d{4}-\d{2}$/.test(month)?sourceDate(`${month}-01`):null, bill_external_id:card?sourceText(row.bill_id):null,
       installment_number:Number.isInteger(row.charge_identificator)?row.charge_identificator:null, installment_count:Number.isInteger(row.charge_number)?row.charge_number:null, source_updated_at:sourceText(row.updated_at,40) };
