@@ -131,6 +131,22 @@ it("answers the reported next vehicle installment question from the financing co
  expect(response).not.toContain("Parcelamentos recebidos dos bancos");
  expect(m.process).not.toHaveBeenCalled();
 });
+it("answers overdue, latest and minimum bill questions from scoped bank records instead of generic capabilities",async()=>{
+ m.rpc.mockResolvedValue({connections:[{id:"nu",institution_name:"Nubank",status:"active"}],resources:[{id:"card",connection_id:"nu",resource_type:"card",name:"Platinum",identification_last4:"1234"}],bills:[
+  {id:"latest",resource_id:"card",currency:"BRL",due_date:"2026-10-02",total_amount:"2215.51",minimum_payment_amount:"1054.96",status:"unknown"},
+  {id:"old",resource_id:"card",currency:"BRL",due_date:"2026-09-02",total_amount:"704.46",minimum_payment_amount:"105.67",status:"unknown"},
+ ],limits:[],credit:[],sync:[]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais faturas já venceram e o banco ainda não confirmou pagamento?"});
+ await handleIncomingMessage({from:"5511999990000",text:"Mostre a fatura atual de cada cartão por banco."});
+ await handleIncomingMessage({from:"5511999990000",text:"Qual é o pagamento mínimo informado para cada fatura?"});
+ const replies=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(replies).toContain("pagamento não confirmado nos dados recebidos");
+ expect(replies).toContain("último vencimento recebido 02/10/2026");
+ expect(replies).toContain("pagamento mínimo R$ 1.054,96");
+ expect(replies).not.toContain("704,46");
+ expect(replies).not.toContain("Posso consultar saldos bancários");
+ expect(m.process).not.toHaveBeenCalled();
+});
 it("answers the next loan installment question without using card installments",async()=>{
  await handleIncomingMessage({from:"5511999990000",text:"Qual é o valor da próxima parcela de cada empréstimo pessoal? Avise quais bancos não informaram esse valor."});
  const response=m.send.mock.calls.map(call=>call[1]).join("\n");

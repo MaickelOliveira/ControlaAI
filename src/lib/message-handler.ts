@@ -64,6 +64,7 @@ import {asksForManualAndBankAccounts,separatedAccountList} from "./separated-acc
 import {getOpenFinanceAccess} from "./open-finance-access";
 import {openFinanceRpc} from "./open-finance-http";
 import type {BankOverview} from "./open-finance-display";
+import {answerBillQuestion,parseBillQuestion} from "./bank-bill-answers";
 import {currentCompanyContext} from "./company-context";
 import {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
 import {googleWhatsAppMessageUUID,googleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
@@ -2869,6 +2870,22 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       .map(messageForAiContext);
     if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
     setVirtualAgentIntent("finance_query");
+    const billQuestion=parseBillQuestion(messageText);
+    if(billQuestion){
+      const requestedMode=/\b(?:empresa|empresarial|pj)\b/i.test(messageText)?"business":/\b(?:pessoal|pf)\b/i.test(messageText)?"personal":mode;
+      if(!allowsFinanceMode(requestedMode)){await wppSend(from,replyModeAccessDenied(mode,user.locale));return;}
+      try{
+        const selectedCompany=currentCompanyContext()?.companyId;
+        const scope=await getOpenFinanceAccess(user,requestedMode,{throwOnStorageError:true,companyId:selectedCompany});
+        if(!scope){await wppSend(from,"A consulta bancária não está disponível neste modo. Confira Contas no painel.");return;}
+        const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+        const freshAccess=await getPhoneAccess(user.id,from);
+        const freshUser=await getUserById(user.id);
+        if(!freshUser||!hasAccess(freshUser)||!freshAccess||(freshAccess!=="both"&&freshAccess!==requestedMode)||currentCompanyContext()?.companyId!==selectedCompany)return;
+        await wppSendLong(from,answerBillQuestion(overview,billQuestion,todayStrBR(),requestedMode),3500,true);
+      }catch{await wppSend(from,"Não consegui consultar as faturas recebidas agora. Tente novamente em Contas.");}
+      return;
+    }
     if(await sendRequestedBankBill(user,mode,from,messageText,todayStrBR()))return;
     const bankReply=await answerBankWhatsAppMessage(user,mode,phoneAccess,messageText,todayStrBR());
     if(bankReply){await wppSendLong(from,bankReply,3500,true);return;}
