@@ -16,6 +16,7 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   ["Mostre a quantidade total e a última parcela identificada de cada compra parcelada.","position"],
   ["Quais parcelas têm valor informado mas vencimento desconhecido?","undated-valued"],
   ["Separe anuidade de compras parceladas.","separate-annuity"],
+  ["Quanto vence em parcelas de cartão na próxima semana?","due-next-week"],
  ] as const)("entende %s",(message,kind)=>expect(parseBankInstallmentFocus(message)).toEqual({kind}));
  it("não intercepta edição, pagamento nem perguntas sem filtro claro",()=>{
   expect(parseBankInstallmentFocus("Pague a parcela da geladeira")).toBeNull();
@@ -45,5 +46,14 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   expect(split).toContain("Anuidades (1)");expect(split).toContain("Compras parceladas (3)");
   expect(split).toContain("ANUIDADE DIFERENCIADA");expect(split).toContain("Geladeira");
   expect(split).toContain("mesma descrição não prova duplicidade");
+ });
+ it("não informa total zero quando a próxima semana não tem parcelas datadas",()=>{
+  const answer=formatBankInstallmentFocus(agenda,{kind:"due-next-week"},"2026-10-15","Pessoal");
+  expect(answer).toContain("19/10/2026 a 25/10/2026");
+  expect(answer).toContain("Loja de móveis");
+  expect(answer).not.toContain("Geladeira");
+  const unknown=formatBankInstallmentFocus({...agenda,items:agenda.items.filter(item=>!item.due_date)},{kind:"due-next-week"},"2026-10-15","Pessoal");
+  expect(unknown).toContain("não há valor confirmado para somar");
+  expect(unknown).not.toContain("R$ 0,00");
  });
 });

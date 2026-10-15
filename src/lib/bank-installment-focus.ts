@@ -1,8 +1,10 @@
 import {bankDate,bankMoney,bankAmountWithoutCurrency} from "./open-finance-display";
 import {normalizeBankText} from "./bank-question-parser";
+import {bankAmountTotals} from "./bank-question-answer";
+import {weekBoundsBR} from "./date-br";
 import {bankInstallmentPosition,type BankAgenda,type BankAgendaItem} from "./open-finance-schedules";
 
-export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"};
+export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"|"due-next-week"};
 const safe=(text:string)=>text.replace(/[\r\n*`_~<>]/g," ").trim().slice(0,100);
 const isAnnuity=(item:BankAgendaItem)=>/\b(?:anuidade|anualidade|annual fee)\b/.test(normalizeBankText(item.description));
 const amount=(item:BankAgendaItem)=>item.currency?bankMoney(item.amount,item.currency):`${bankAmountWithoutCurrency(item.amount)} (moeda não informada)`;
@@ -13,6 +15,7 @@ const listed=(rows:BankAgendaItem[],format:(item:BankAgendaItem)=>string,limit=1
 export function parseBankInstallmentFocus(message:string):BankInstallmentFocus|null{
  const text=normalizeBankText(message).replace(/[?.!]+$/g,"");
  if(text.length>300||/\b(?:pague|pagar|cancele|exclua|altere|cadastre|registre)\b/.test(text))return null;
+ if(/\b(?:parcelas?|parcelamentos?)\b/.test(text)&&/\bcart(?:ao|oes)\b/.test(text)&&/\b(?:proxima semana|semana que vem)\b/.test(text)&&/\b(?:vence|vencem|vencimento|quanto)\b/.test(text))return {kind:"due-next-week"};
  if(/\b(?:separe|separar|separado|distinga|diferencie)\b/.test(text)&&/\banuidade\b/.test(text)&&/\bcompras? parcelad[ao]s?\b/.test(text))return {kind:"separate-annuity"};
  if(/\b(?:compras? parcelad[ao]s?|parcelamentos?)\b/.test(text)&&/\b(?:futura|futuras|futuro|futuros)\b/.test(text)&&/\b(?:data|vencimento)\b/.test(text))return {kind:"future-dated"};
  if(/\b(?:proxima|proximas) parcelas?\b/.test(text)&&/\b(?:cada|por) cartao\b/.test(text))return {kind:"next-by-card"};
@@ -53,6 +56,15 @@ export function formatBankInstallmentFocus(agenda:BankAgenda,focus:BankInstallme
    const fees=all.filter(isAnnuity);
    const short=(rows:BankAgendaItem[])=>listed(rows,item=>`• ${label(item)} · ${bankInstallmentPosition(item)} · ${amount(item)}`,8);
    return `Anuidades e compras parceladas recebidas dos bancos · ${safe(modeLabel)}\n\nAnuidades (${fees.length})\n${short(fees)}\n\nCompras parceladas (${purchases.length})\n${short(purchases)}${appendix}\nA mesma descrição não prova duplicidade; confira os lançamentos no banco. Valores de anuidades não foram somados às compras.`;
+  }
+  case "due-next-week":{
+   const nextWeek=new Date(`${today}T12:00:00`);
+   nextWeek.setDate(nextWeek.getDate()+7);
+   const [from,to]=weekBoundsBR(nextWeek);
+   const dated=all.filter(item=>item.due_date&&item.due_date>=from&&item.due_date<=to).sort((a,b)=>a.due_date!.localeCompare(b.due_date!));
+   const undated=all.filter(item=>!item.due_date).length;
+   const totals=bankAmountTotals(dated.map(item=>({amount:item.amount,currency:item.currency})),agenda.incomplete||undated>0);
+   return `Parcelas de cartão com vencimento recebido de ${bankDate(from)} a ${bankDate(to)} · ${safe(modeLabel)}\n${dated.length?listed(dated,item=>`• ${label(item)} · ${bankInstallmentPosition(item)} · ${amount(item)} · ${bankDate(item.due_date)}`):"Nenhuma parcela com data recebida para a próxima semana; não há valor confirmado para somar."}${dated.length?`\n${totals.join("\n")||"Os valores recebidos não têm moeda confiável para soma."}`:""}\n${undated} parcela(s) sem data ficaram fora da consulta; não é possível dizer se vencem nessa semana.${appendix}${caveat}`;
   }
  }
 }
