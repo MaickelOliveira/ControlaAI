@@ -10,7 +10,7 @@ export type BankQuestion = {
   settledOnly?: boolean;
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
-  limitView?: "used" | "available-known" | "shared";
+  limitView?: "used" | "available-known" | "shared" | "inconsistent" | "max-available" | "min-available";
 };
 
 export const normalizeBankText = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -89,6 +89,10 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     return {kind:"limits",...monthPeriod(today,false),limitView:"available-known"};
   if (/^(?:ha|existem?) linhas? de credito compartilhadas? que nao devem ser somadas$/.test(text))
     return {kind:"limits",...monthPeriod(today,false),limitView:"shared"};
+  if (/^algum limite recebido esta inconsistente com o total e o utilizado$/.test(text))
+    return {kind:"limits",...monthPeriod(today,false),limitView:"inconsistent"};
+  if (/^qual cartao tem o (maior|menor) limite disponivel$/.test(text))
+    return {kind:"limits",...monthPeriod(today,false),limitView:text.includes("maior")?"max-available":"min-available"};
   if (/^(?:existe|ha|tem) (?:alguma conta(?: pessoal)? com|algum) saldo negativo(?:\? mostre (?:somente|apenas) essas contas)?$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
   if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))

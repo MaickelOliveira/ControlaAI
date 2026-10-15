@@ -1,4 +1,4 @@
-import { cardLimitAmountsDisagree, displayCardLimits } from "./bank-card-limit";
+import { cardLimitAmountsDisagree, displayCardLimits, headlineCardLimit } from "./bank-card-limit";
 import { bankDate, bankMoney, bankResourceName, type BankOverview, type BankResource } from "./open-finance-display";
 import { normalizeBankText, type BankQuestion } from "./bank-question-parser";
 import { hasZeroBankDebt, matchesBankDebtPurpose } from "./bank-debt";
@@ -72,6 +72,31 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     const total=groups.reduce((sum,group)=>sum+group.count,0);
     const details=groups.slice(0,8).map(group=>`• ${safe(group.name)}: ${group.count} ${group.count===1?"linha consolidada":"linhas consolidadas"}`).join("\n");
     return `Linhas de crédito consolidadas · ${safe(modeLabel)}\n${total?`${total} ${total===1?"linha marcada":"linhas marcadas"} como CONSOLIDADO nos dados recebidos.\n${details}${groups.length>8?`\nMais ${groups.length-8} banco(s) em Contas.`:""}`:"Não identifiquei linhas marcadas como CONSOLIDADO nos dados recebidos."}\nOs dados recebidos não informam quais cartões compartilham exatamente a mesma linha. Por isso, a Zelo não soma os limites; linhas consolidadas não comprovam crédito adicional independente.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+  }
+  if(question.kind==="limits"&&question.limitView==="inconsistent"){
+    const lines=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="card")
+      .flatMap(resource=>displayCardLimits(data.limits.filter(limit=>limit.resource_id===resource.id))
+        .filter(cardLimitAmountsDisagree).map(limit=>`• ${safe(group.name)} · ${safe(bankResourceName(resource.name))}${resource.identification_last4?` · final ${safe(resource.identification_last4)}`:""} · ${safe(limit.line_name??"Linha de crédito")}\nTotal: ${bankMoney(limit.total_amount,limit.currency)} · Utilizado: ${bankMoney(limit.used_amount,limit.currency)} · Disponível: ${bankMoney(limit.available_amount,limit.currency)}`)));
+    return `Limites com valores que não fecham · ${safe(modeLabel)}\n${lines.length?`${lines.length} ${lines.length===1?"linha recebida precisa":"linhas recebidas precisam"} de conferência:\n${lines.slice(0,10).join("\n")}${lines.length>10?`\nMais ${lines.length-10} linha(s) em Contas.`:""}`:"Nenhuma linha recebida com total, utilizado e disponível informados apresentou divergência."}\nA Zelo preservou os números recebidos; confirme as divergências no banco. Linhas sem algum desses valores não puderam ser conferidas.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+  }
+  if(question.kind==="limits"&&(question.limitView==="max-available"||question.limitView==="min-available")){
+    const candidates=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="card")
+      .flatMap(resource=>{
+        const limit=headlineCardLimit(displayCardLimits(data.limits.filter(line=>line.resource_id===resource.id)));
+        const raw=String(limit?.available_amount??"");
+        if(!limit?.currency||bankMoney(limit.available_amount,limit.currency)==="Não informado"||!/^-?\d{1,16}(\.\d{1,8})?$/.test(raw))return [];
+        const [whole,fraction=""]=raw.replace(/^-/,"").split(".");
+        const units=(BigInt(whole)*BigInt(100000000)+BigInt(fraction.padEnd(8,"0")))*(raw.startsWith("-")?BigInt(-1):BigInt(1));
+        return [{bank:group.name,card:resource,limit,units}];
+      }));
+    const byCurrency=new Map<string,typeof candidates>();
+    for(const candidate of candidates){const currency=candidate.limit.currency!;byCurrency.set(currency,[...(byCurrency.get(currency)??[]),candidate]);}
+    const highest=question.limitView==="max-available";
+    const lines=[...byCurrency.values()].flatMap(items=>{
+      const selected=items.reduce((best,item)=>highest?(item.units>best.units?item:best):(item.units<best.units?item:best));
+      return items.filter(item=>item.units===selected.units).slice(0,5).map(item=>`• ${safe(item.bank)} · ${safe(bankResourceName(item.card.name))}${item.card.identification_last4?` · final ${safe(item.card.identification_last4)}`:""} · ${safe(item.limit.line_name??"Linha de crédito")}: ${bankMoney(item.limit.available_amount,item.limit.currency)}`);
+    });
+    return `${highest?"Maior":"Menor"} limite disponível recebido por cartão · ${safe(modeLabel)}\n${lines.join("\n")||"Nenhum cartão com limite disponível informado foi recebido."}\nA comparação usa uma linha representativa por cartão, sem somar linhas que podem compartilhar crédito.${byCurrency.size>1?" Moedas diferentes foram comparadas separadamente.":""} Valores não informados ficaram fora da comparação.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
   }
   const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
   const debt = question.kind === "loans" || question.kind === "financings";
