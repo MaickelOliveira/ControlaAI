@@ -102,15 +102,16 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
     .map(row=>`• ${safe(row.bank.institution_name)} · fatura com vencimento ${bankDate(row.bill.due_date)} · pagamento informado${positive(row.bill.payment_amount)!==null?` ${bankMoney(row.bill.payment_amount,row.bill.currency)}`:" (valor não informado)"}${partialPaymentConflict(row)?" · dados de pagamento inconsistentes":partiallyPaid(row)?" · parcial":""}`);
    return `Bancos com pagamento de fatura informado · ${label}\n${listed(result)||"Nenhum banco conectado informou pagamento de fatura nos registros recebidos."}\nAusência de confirmação não prova que não foram pagas. Um pagamento parcial informado não confirma a quitação total.`;
   }
-  case "partial-payment":
-   result=rows.filter(partiallyPaid).sort((a,b)=>(b.bill.due_date??"").localeCompare(a.bill.due_date??""))
-    .map(row=>{
-     const conflict=partialPaymentConflict(row);
-     return conflict
-      ?`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · ${partialStatus(row.bill.status)?"banco marcou como parcial, mas informou pagamento":"pagamento informado aparece"} ${conflict==="equal"?"igual ao total":"maior que o total"} (${bankMoney(row.bill.payment_amount,row.bill.currency)} de ${amount(row,"total_amount")}); dados contraditórios, não dá para confirmar saldo em aberto ou quitação`
-      :`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · pagamento parcial informado ${positive(row.bill.payment_amount)!==null?bankMoney(row.bill.payment_amount,row.bill.currency):"Não informado"} · total da fatura ${amount(row,"total_amount")}`;
-    });
-   return `Pagamentos parciais informados nas faturas · ${label}\n${listed(result)||"Nenhum pagamento parcial informado nas faturas recebidas."}\nEssa lista não confirma saldo a pagar nem quitação. Confira a fatura no banco, principalmente quando os dados recebidos forem contraditórios.`;
+  case "partial-payment":{
+   const candidates=rows.filter(partiallyPaid).sort((a,b)=>(b.bill.due_date??"").localeCompare(a.bill.due_date??""));
+   result=candidates.filter(row=>!partialPaymentConflict(row)).map(row=>`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · pagamento parcial informado ${positive(row.bill.payment_amount)!==null?bankMoney(row.bill.payment_amount,row.bill.currency):"Não informado"} · total da fatura ${amount(row,"total_amount")}`);
+   const conflicts=candidates.flatMap(row=>{
+    const conflict=partialPaymentConflict(row);
+    return conflict?[`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · ${partialStatus(row.bill.status)?"banco marcou como parcial, mas informou pagamento":"pagamento informado aparece"} ${conflict==="equal"?"igual ao total":"maior que o total"} (${bankMoney(row.bill.payment_amount,row.bill.currency)} de ${amount(row,"total_amount")}); dados contraditórios, não dá para confirmar saldo em aberto ou quitação`]:[];
+   });
+   const partials=result.length?`Pagamentos parciais informados nas faturas · ${label}\n${listed(result)}`:conflicts.length?`Nenhum pagamento parcial confiável informado nas faturas recebidas · ${label}.`:`Pagamentos parciais informados nas faturas · ${label}\nNenhum pagamento parcial informado nas faturas recebidas.`;
+   return `${partials}${conflicts.length?`\n\nRegistros contraditórios (fora da lista de parciais)\n${listed(conflicts)}`:""}\nEssa lista não confirma saldo a pagar nem quitação. Confira a fatura no banco, principalmente quando os dados recebidos forem contraditórios.`;
+  }
   case "missing":{
    const active=new Map(overview.connections.filter(c=>c.status==="active"&&!c.archived_at).map(c=>[c.id,c]));
    const withBills=new Set(rows.map(row=>row.card.id));
