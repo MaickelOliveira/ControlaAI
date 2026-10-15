@@ -45,6 +45,7 @@ import {
   preserveOtherReminderRecipient,
   withExplicitFinanceDestinationMode,
   withExplicitFinanceAccount,
+  withExplicitFinanceCategoryEdit,
   withExplicitFinanceType,
 } from "./ai-processor";
 
@@ -1133,6 +1134,25 @@ describe("manual account commands", () => {
       .toMatchObject({ finance: { accountHint: "Nubank" }, account: { name: "Nubank" } });
     expect(withExplicitFinanceAccount("Gasté 60 en farmacia en esa cuenta", base))
       .toMatchObject({ account: { useContext: true } });
+  });
+
+  it("does not turn an explicit category change into a new bank account", () => {
+    const message = "Altere a categoria do lançamento TESTE AUDITORIA para Serviços.";
+    expect(getFinanceAccountDestinationHint(message)).toBeNull();
+    expect(getExplicitLastFinanceAccountEditResult(message)).toBeNull();
+    const classified = {
+      intent: "finance_edit" as const, confidence: 1, keyword: "TESTE AUDITORIA",
+      lastFinanceReference: "last" as const,
+      finance: { type: "expense" as const, amount: 1, category: "Outros", description: "TESTE AUDITORIA", date: "2026-10-15", accountHint: "Serviços" },
+      account: { name: "Serviços" },
+    };
+    const result = withExplicitFinanceCategoryEdit(message, classified);
+    expect(result).toMatchObject({ intent: "finance_edit", keyword: "TESTE AUDITORIA", finance: { category: "Serviços" } });
+    expect(result.finance?.accountHint).toBeUndefined();
+    expect(result.account?.name).toBeUndefined();
+    expect(result.lastFinanceReference).toBeUndefined();
+    expect(withExplicitFinanceCategoryEdit("Mude a categoria da despesa TESTE AUDITORIA para Serviços", classified))
+      .toMatchObject({ keyword: "TESTE AUDITORIA", finance: { category: "Serviços" } });
   });
 
   it.each([

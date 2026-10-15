@@ -18,7 +18,7 @@ import {connectedRecurringAppendix} from "@/lib/connected-recurring-query";
 import {recurringQueryKind} from "@/lib/recurring-query-kind";
 import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, type AIResult, type FinanceData } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, withExplicitFinanceCategoryEdit, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
@@ -2860,9 +2860,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       return;
     }
     const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
-    const ai = actionContinuation
+    const ai = withExplicitFinanceCategoryEdit(messageText, actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
-      : classifiedAi;
+      : classifiedAi);
     setVirtualAgentIntent(ai.intent);
 
     // Read-only banking requests terminate before payment reconciliation and all mutations.
@@ -2885,7 +2885,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     if (["finance_register", "finance_edit", "finance_query", "balance_query", "finance_detail"].includes(ai.intent)) {
       const accountMode = (ai.mode || ai.finance?.mode || mode) as FinanceMode;
       const hasHint = ai.account?.name || ai.account?.useContext || ai.finance?.accountHint || ai.finances?.some(item => item.accountHint);
-      if (!hasHint) {
+      const categoryOnlyEdit = ai.intent === "finance_edit" && /\bcategoria\b/i.test(messageText);
+      if (!hasHint && !categoryOnlyEdit) {
         const accounts = await getManualAccountsByUser(user.id, accountMode);
         const normalizedMessage = messageText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
         const named = accounts.filter(account => normalizedMessage.includes(account.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase()));
