@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from "vitest";
 vi.mock("server-only",()=>({}));
 const rpc=vi.hoisted(()=>vi.fn());vi.mock("./open-finance-http",()=>({openFinanceRpc:rpc}));
-import {readBankLedger,readBankOverview} from "./finance-ledger-storage";
+import {readBankInstallmentAnchors,readBankLedger,readBankOverview} from "./finance-ledger-storage";
 const scope={userId:"user",mode:"business" as const,environment:"production" as const};
 beforeEach(()=>{rpc.mockReset();});
 it("includes account movements beyond the first report page",async()=>{
@@ -58,4 +58,13 @@ it("rejects missing company scope before joining a shared read",async()=>{
  vi.stubEnv("MULTI_COMPANY_ENABLED","true");
  try{await expect(readBankOverview(scope)).rejects.toThrow("OF_COMPANY_SCOPE_MISSING");expect(rpc).not.toHaveBeenCalled();}
  finally{vi.unstubAllEnvs();}
+});
+
+it("reads only the authorized installment anchors and rejects an incomplete payload shape",async()=>{
+ const item={id:"schedule",resource_id:"card",description:"Loja",resource_name:"Gold",institution_name:"Banco",amount:"12.00",currency:"BRL",bill_month:"2026-10-01",observed_installments:2,total_installments:4,synced_at:"2026-10-15T12:00:00Z"};
+ rpc.mockResolvedValue({items:[item],incomplete:false});
+ await expect(readBankInstallmentAnchors(scope)).resolves.toEqual({items:[item],incomplete:false});
+ expect(rpc).toHaveBeenCalledExactlyOnceWith(scope,"zelo_of_installment_anchors");
+ rpc.mockResolvedValue({items:[{...item,description:undefined}],incomplete:false});
+ await expect(readBankInstallmentAnchors(scope)).rejects.toThrow("OF_INSTALLMENT_ANCHORS_INVALID");
 });

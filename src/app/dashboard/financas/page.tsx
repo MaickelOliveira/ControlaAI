@@ -9,10 +9,13 @@ import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
 import BankCategoryDialog from "@/components/BankCategoryDialog";
 import BankCreditPixDialog from "@/components/BankCreditPixDialog";
 import FinanceLedgerRows from "@/components/FinanceLedgerRows";
+import FinanceInstallmentProjections from "@/components/FinanceInstallmentProjections";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
 import FinanceBankSchedules from "@/components/FinanceBankSchedules";
 import {financeBankSchedules} from "@/lib/finance-bank-schedules";
+import {projectBankInstallments} from "@/lib/bank-installment-projections";
+import {normalizeBankText} from "@/lib/bank-question-parser";
 import {financeAccountOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
 import {ledgerCategoryGroups,ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 
@@ -424,6 +427,12 @@ function FinancasContent() {
   // Recs sorted: overdue first, then by nextDueDate
   const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
   const bankSchedules=financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters);
+  const projectedInstallments=useMemo(()=>{
+    if(!ledger?.bank||filters.type==="income"||filters.categories.length||filters.account&&!filters.account.startsWith("bank:"))return [];
+    const search=normalizeBankText(filters.search);
+    return projectBankInstallments(ledger.installmentAnchors?.items??[],ledger.bank.report.movements,{from:filters.from,to:filters.to,today})
+      .filter(item=>(!filters.account||item.resource_id===filters.account.slice(5))&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
+  },[ledger,filters,today]);
 
   function recStatus(r: Recurring): { label: string; color: string } {
     if (r.nextDueDate < today) return { label: "Vencido", color: "bg-red-soft text-red-ink" };
@@ -481,6 +490,7 @@ function FinancasContent() {
 
       {ledger?.bank&&<FinanceBankSchedules items={bankSchedules} overview={ledger.bank.overview}/>}
       {ledger?.bank?.overview.agenda?.incomplete&&<p role="status" className="text-xs text-amber-ink">As recorrências bancárias podem estar incompletas: há dados em atualização ou indisponíveis.</p>}
+      {ledger?.installmentAnchors?.incomplete&&<p role="status" className="text-xs text-amber-ink">Há mais parcelas bancárias do que este extrato consegue mostrar de uma vez. Ajuste o período ou confira no banco.</p>}
       {!!filters.categories.length&&!!ledger?.bank?.overview.agenda?.items.some(item=>item.kind!=="bill")&&<p className="text-xs text-subtle">As previsões bancárias não informam categoria e ficam fora deste filtro.</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
@@ -516,7 +526,7 @@ function FinancasContent() {
             </div>
           )}
           {loading ? <p className="text-subtle text-sm">Carregando...</p> :
-            (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0) ? (
+            (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0 && projectedInstallments.length === 0) ? (
               <div className="text-center py-16 text-subtle">
                 <p className="text-4xl mb-3">💬</p>
                 <p className="font-medium text-muted">Nenhum registro ainda</p>
@@ -610,8 +620,10 @@ function FinancasContent() {
                   );
                 })}
 
+                <FinanceInstallmentProjections items={projectedInstallments}/>
+
                 {/* Separador se tiver pendentes e lançamentos confirmados */}
-                {(sortedRecs.length > 0 || pendingFinances.length > 0) && postedFinances.length > 0 && (
+                {(sortedRecs.length > 0 || pendingFinances.length > 0 || projectedInstallments.length > 0) && postedFinances.length > 0 && (
                   <div className="flex items-center gap-2 py-1">
                     <div className="flex-1 h-px bg-surface-muted" />
                     <span className="text-xs text-subtle">confirmados</span>

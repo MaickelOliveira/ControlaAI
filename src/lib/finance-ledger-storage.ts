@@ -3,6 +3,7 @@ import {openFinanceRpc} from "./open-finance-http";
 import type {OpenFinanceScope} from "./open-finance-access";
 import type {BankOverview} from "./open-finance-display";
 import type {BankFinancialData,BankMovement,BankReport} from "./open-finance-report";
+import type {BankInstallmentAnchor} from "./bank-installment-projections";
 const overviewReadsKey=Symbol.for("zelo.pendingBankOverviewReads");
 const registry=globalThis as typeof globalThis & {[overviewReadsKey]?:Map<string,Promise<BankOverview>>};
 const pendingOverviews=registry[overviewReadsKey]??(registry[overviewReadsKey]=new Map<string,Promise<BankOverview>>());
@@ -44,4 +45,13 @@ export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;
   }
   const [report,overview]=await Promise.all([pages(),readBankOverview(scope)]);
   return {report,overview};
+}
+
+export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise<{items:BankInstallmentAnchor[];incomplete:boolean}> {
+  const result=await openFinanceRpc(scope,"zelo_of_installment_anchors") as {items?:unknown;incomplete?:unknown};
+  if(!result||!Array.isArray(result.items)||result.items.length>2000||typeof result.incomplete!=="boolean"||result.items.some(item=>{
+    const row=item as Partial<BankInstallmentAnchor>;
+    return !row||typeof row.id!=="string"||typeof row.resource_id!=="string"||typeof row.description!=="string"||typeof row.resource_name!=="string"||typeof row.institution_name!=="string"||typeof row.amount!=="string"||typeof row.bill_month!=="string"||typeof row.synced_at!=="string"||typeof row.observed_installments!=="number"||typeof row.total_installments!=="number";
+  }))throw Error("OF_INSTALLMENT_ANCHORS_INVALID");
+  return result as {items:BankInstallmentAnchor[];incomplete:boolean};
 }

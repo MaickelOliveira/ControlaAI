@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 vi.mock("server-only",()=>({}));
 import { normalizeCardSchedules } from "./open-finance-schedule-normalize";
-import { collectBankAgenda, formatBankAgenda, formatUpcomingBankAgenda } from "./open-finance-schedules";
+import { collectBankAgenda, formatBankAgenda, formatUpcomingBankAgenda, visibleBankSchedules } from "./open-finance-schedules";
 
 it("treats a detected subscription as a BRL estimate, preserving its original currency and observed transactions",()=>{
   const [item]=normalizeCardSchedules("recurrings",[{description:"Streaming",averageAmount:-39.90,currency:"USD",periodMonths:1,expectedDay:9,firstOccurrenceAt:"2026-07-09",lastOccurrenceAt:"2026-09-09",nextExpectedAt:"2026-10-09",occurrences:["tx-1","tx-2","tx-3"],regularityScore:0.95}]);
@@ -62,4 +62,18 @@ it("only presents bank items with a confirmed future due date as upcoming",()=>{
  expect(reply).not.toContain("10/10/2026");
  expect(reply).toContain("1 parcelamento sem data");
  expect(reply).not.toContain("próximo vencimento: Não informado");
+});
+
+it("does not treat repeated Zé Delivery purchases as a subscription",()=>{
+ const purchase={id:"ze",kind:"recurring" as const,description:"Zé Delivery",resource_name:"platinum",institution_name:"Nubank",due_date:"2026-11-11",amount:"51.07",currency:"BRL",synced_at:"2026-10-15"};
+ const realSubscription={...purchase,id:"netflix",description:"Netflix"};
+ expect(visibleBankSchedules([purchase,realSubscription],"2026-10-15").map(item=>item.id)).toEqual(["netflix"]);
+ expect(collectBankAgenda([purchase,realSubscription],{from:"2026-10-01",to:"2026-11-30"}).map(item=>item.id)).toEqual(["netflix"]);
+});
+
+it("keeps a finished old installment in history but not in current schedules",()=>{
+ const old={id:"old",kind:"installment" as const,description:"Óticas Fam",resource_name:"platinum",institution_name:"Nubank",due_date:null,amount:"116.66",currency:null,synced_at:"2026-10-15",observed_installments:1,total_installments:3,last_observed_month:"2025-12-01",last_observed_installment:3};
+ expect(visibleBankSchedules([old],"2026-10-15")).toEqual([]);
+ expect(collectBankAgenda([old],{from:"2026-10-01",to:"2026-10-31",includeUndated:true})).toEqual([]);
+ expect(collectBankAgenda([old],{from:"2025-12-01",to:"2025-12-31",includeUndated:true})).toEqual([old]);
 });

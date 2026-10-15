@@ -5,6 +5,8 @@ import { canArchiveBankConnection, canDisconnectBank } from "@/lib/open-finance-
 import { hasZeroBankDebt } from "@/lib/bank-debt";
 import { displayCardLimits, headlineCardLimit } from "@/lib/bank-card-limit";
 import OpenFinanceIcon from "./OpenFinanceIcon";
+import {visibleBankSchedules} from "@/lib/open-finance-schedules";
+import {todayStrBR} from "@/lib/date-br";
 
 const labels = { account: "Conta bancária", card: "Cartão de crédito", investment: "Investimento", loan: "Empréstimo", financing: "Financiamento", reserve: "Reserva de saldo" };
 
@@ -12,7 +14,7 @@ function Product({ resource, data, mode }: { resource: BankResource; data: BankO
   const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id));
   const headline = headlineCardLimit(limits);
   const bills = data.bills.filter(b => b.resource_id === resource.id).sort((a, b) => (b.due_date ?? "").localeCompare(a.due_date ?? ""));
-  const schedules = data.agenda?.items.filter(i => i.resource_id === resource.id && i.kind !== "bill") ?? [];
+  const schedules = visibleBankSchedules(data.agenda?.items.filter(i => i.resource_id === resource.id) ?? [],todayStrBR());
   const credit = data.credit.find(c => c.resource_id === resource.id);
   const isDebt = resource.resource_type === "loan" || resource.resource_type === "financing";
   const value = resource.resource_type === "card" ? bankMoney(headline?.available_amount, headline?.currency)
@@ -44,7 +46,7 @@ function Product({ resource, data, mode }: { resource: BankResource; data: BankO
           {bills.slice(0, 12).map(b => <div key={b.id} className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 text-xs"><div><p>Vencimento {bankDate(b.due_date)} · <strong>{bankMoney(b.total_amount, b.currency)}</strong></p><p className="mt-1 text-muted">{b.payment_evidence ? `Pagamentos informados: ${bankMoney(b.payment_amount, b.currency)}. Confira no banco.` : "Pagamento não confirmado pelo banco."}</p></div><a href={`/api/open-finance/bills/${b.id}?mode=${mode}`} className="rounded-lg border border-line bg-surface px-3 py-2 font-medium hover:bg-surface-muted">Baixar demonstrativo ↓</a></div>)}
           {bills.length > 12 && <p className="mt-3 text-xs text-muted">Peça à Zelo pelo WhatsApp a fatura do mês desejado.</p>}
         </div>
-        {schedules.length > 0 && <details className="rounded-xl border border-line p-3"><summary className="cursor-pointer text-xs font-medium">Assinaturas e parcelas · {schedules.length}</summary><div className="mt-3 space-y-3">{schedules.map(s => <div key={s.id} className="text-xs"><p className="font-medium">{s.description}</p><p className="mt-1 text-muted">{s.kind === "recurring" ? `Cobrança prevista: ${bankDate(s.due_date)} · estimativa ${bankMoney(s.amount, s.currency)}` : `${s.observed_installments}/${s.total_installments} parcelas observadas; próximo vencimento não informado.`}</p></div>)}<p className="text-[11px] text-muted">Previsões do histórico, sujeitas a mudanças. Parcelas observadas não confirmam pagamento.</p></div></details>}
+        {schedules.length > 0 && <details className="rounded-xl border border-line p-3"><summary className="cursor-pointer text-xs font-medium">Recorrências e parcelas · {schedules.length}</summary><div className="mt-3 space-y-3">{schedules.map(s => <div key={s.id} className="text-xs"><p className="font-medium">{s.description}</p><p className="mt-1 text-muted">{s.kind === "recurring" ? `Cobrança prevista: ${bankDate(s.due_date)} · estimativa ${bankMoney(s.amount, s.currency)}` : `${s.observed_installments}/${s.total_installments} parcelas identificadas; próximo vencimento não informado.`}</p></div>)}<p className="text-[11px] text-muted">Previsões do histórico, sujeitas a mudanças. Parcelas identificadas não confirmam pagamento.</p></div></details>}
       </div>}
       {credit && <div className="grid gap-3 text-xs sm:grid-cols-3"><p className="text-muted">Valor contratado<strong className="mt-1 block text-ink">{bankMoney(credit.contract_amount, credit.currency)}</strong></p><p className="text-muted">Próxima parcela<strong className="mt-1 block text-ink">{bankMoney(credit.next_installment_amount, credit.currency)}</strong></p><p className="text-muted">Vencimento final<strong className="mt-1 block text-ink">{bankDate(credit.due_date)}</strong></p></div>}
       <p className="mt-3 flex items-center gap-1.5 text-[11px] text-subtle"><OpenFinanceIcon name="clock" className="h-3 w-3" />Recebido em {bankDate(resource.synced_at)}</p>

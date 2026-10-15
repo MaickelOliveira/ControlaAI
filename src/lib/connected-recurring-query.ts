@@ -3,7 +3,7 @@ import type { AIResult } from "./ai-processor";
 import { getOpenFinanceAccess, type OpenFinanceIdentity } from "./open-finance-access";
 import { readBankAgenda } from "./financial-agenda";
 import { formatBankSchedules } from "./bank-schedule-answer";
-import { formatBankAgenda } from "./open-finance-schedules";
+import { formatBankAgenda,visibleBankSchedules } from "./open-finance-schedules";
 import {recurringQueryKind} from "./recurring-query-kind";
 import { expandMerchantAliases, merchantDescriptionMatchesTerms } from "./finances";
 
@@ -18,7 +18,8 @@ export async function connectedRecurringAppendix(user: OpenFinanceIdentity, mode
     const terms = ai.keyword ? expandMerchantAliases(ai.keyword) : null;
     const requestedKind=recurringQueryKind(message);
     const wantsBills=/\b(?:faturas?|facturas?)\b/i.test(message);
-    const matches=agenda.items.filter(item=>item.kind!=="bill"&&(!requestedKind||item.kind===requestedKind)&&(!terms||merchantDescriptionMatchesTerms(`${item.description} ${item.institution_name} ${item.resource_name}`,terms)));
+    const schedules=ai.period?.to&&ai.period.to<today?agenda.items:visibleBankSchedules(agenda.items,today);
+    const matches=schedules.filter(item=>(!requestedKind||item.kind===requestedKind)&&(!terms||merchantDescriptionMatchesTerms(`${item.description} ${item.institution_name} ${item.resource_name}`,terms)));
     const bills=wantsBills?agenda.items.filter(item=>item.kind==="bill"&&(!terms||merchantDescriptionMatchesTerms(`${item.description} ${item.institution_name} ${item.resource_name}`,terms))):[];
     const undated=ai.period?[...matches,...bills].filter(item=>!item.due_date).length:0;
     const selected={...agenda,items:ai.period?matches.filter(item=>item.due_date&&(!ai.period?.from||item.due_date>=ai.period.from)&&(!ai.period?.to||item.due_date<=ai.period.to)):matches,incomplete:agenda.incomplete||undated>0};

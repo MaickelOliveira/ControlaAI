@@ -38,6 +38,7 @@ beforeEach(()=>{
   if(url.pathname==="/rest/v1/rpc/zelo_of_access")return Response.json({enabled:true,country_code:"BR",country_verified_at:"2026-10-01"});
   if(url.pathname==="/rest/v1/rpc/zelo_of_report")return Response.json({from:"2026-10-01",to:"2026-10-31",totals:[],movements:[],next:null,history_complete:false});
   if(url.pathname==="/rest/v1/rpc/zelo_of_overview")return Response.json({connections:[],resources:[],limits:[],bills:[],credit:[],sync:[]});
+  if(url.pathname==="/rest/v1/rpc/zelo_of_installment_anchors")return Response.json({items:[],incomplete:false});
   if(["/rest/v1/finances","/rest/v1/tasks","/rest/v1/accounts","/rest/v1/wpp_phone_links"].includes(url.pathname))return Response.json([],{headers:{"content-range":"*/0"}});
   throw Error("UNEXPECTED_TEST_READ");
  }));
@@ -53,6 +54,7 @@ it("loads the financial GET with real access/storage services and one company re
  expect(companyReads()).toHaveLength(1);
  const protectedReads=reads.filter(r=>["/rest/v1/finances","/rest/v1/accounts"].includes(r.path));
  expect(protectedReads.length).toBeGreaterThan(0);expect(protectedReads.every(r=>r.owner===`eq.${ownerA}`&&r.companyHeader===companyA&&r.predicate?.includes(companyA))).toBe(true);
+ expect(reads.find(r=>r.path==="/rest/v1/rpc/zelo_of_installment_anchors")?.companyHeader).toBe(companyA);
 });
 
 it("loads the bank GET with one authorized company snapshot",async()=>{
