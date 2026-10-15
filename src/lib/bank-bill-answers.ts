@@ -56,19 +56,20 @@ function cardLabel(row:BillRow):string{
 function amount(row:BillRow,value:"total_amount"|"minimum_payment_amount"):string{return bankMoney(row.bill[value],row.bill.currency);}
 function listed(lines:string[]):string{return `${lines.slice(0,20).join("\n")}${lines.length>20?`\nMais ${lines.length-20} item(ns); veja Contas.`:""}`;}
 function positive(value:string|number|null|undefined):number|null{const n=Number(value);return value!==null&&value!==undefined&&Number.isFinite(n)&&n>0?n:null;}
-function paymentReported(row:BillRow):boolean{return row.bill.payment_evidence===true||positive(row.bill.payment_amount)!==null||/^(?:paid|pago|paga|settled|liquidado|quitado|partial|partially_paid|parcial)$/i.test(row.bill.status);}
+function partialStatus(status:string):boolean{return /^(?:partial|partially_paid|partial_payment|parcial)$/i.test(status);}
+function paymentReported(row:BillRow):boolean{return row.bill.payment_evidence===true||positive(row.bill.payment_amount)!==null||/^(?:paid|pago|paga|settled|liquidado|quitado)$/i.test(row.bill.status)||partialStatus(row.bill.status);}
 function partiallyPaid(row:BillRow):boolean{
  if(/^(?:paid|pago|paga|settled|liquidado|quitado)$/i.test(row.bill.status))return false;
- if(/^(?:partial|partially_paid|parcial)$/i.test(row.bill.status))return true;
+ if(partialStatus(row.bill.status))return true;
  const paid=positive(row.bill.payment_amount),total=positive(row.bill.total_amount);
  return paid!==null&&total!==null&&paid<total;
 }
 function partialPaymentConflict(row:BillRow):"equal"|"greater"|null{
- if(!/^(?:partial|partially_paid|parcial)$/i.test(row.bill.status))return null;
  const paid=positive(row.bill.payment_amount),total=positive(row.bill.total_amount);
  if(paid===null||total===null)return null;
  const difference=Math.round(paid*100)-Math.round(total*100);
- return difference===0?"equal":difference>0?"greater":null;
+ if(difference===0&&(partialStatus(row.bill.status)||paid<total))return "equal";
+ return difference>0&&partialStatus(row.bill.status)?"greater":null;
 }
 
 /** Payment state is evidence, never inferred from a missing bank confirmation. */
@@ -106,10 +107,10 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
     .map(row=>{
      const conflict=partialPaymentConflict(row);
      return conflict
-      ?`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · banco marcou como parcial, mas informou pagamento ${conflict==="equal"?"igual ao total":"maior que o total"} (${bankMoney(row.bill.payment_amount,row.bill.currency)} de ${amount(row,"total_amount")}); dados contraditórios, não dá para confirmar saldo em aberto ou quitação`
+      ?`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · ${partialStatus(row.bill.status)?"banco marcou como parcial, mas informou pagamento":"pagamento informado aparece"} ${conflict==="equal"?"igual ao total":"maior que o total"} (${bankMoney(row.bill.payment_amount,row.bill.currency)} de ${amount(row,"total_amount")}); dados contraditórios, não dá para confirmar saldo em aberto ou quitação`
       :`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · pagamento parcial informado ${positive(row.bill.payment_amount)!==null?bankMoney(row.bill.payment_amount,row.bill.currency):"Não informado"} · total da fatura ${amount(row,"total_amount")}`;
     });
-   return `Pagamentos parciais informados nas faturas · ${label}\n${listed(result)||"Nenhum pagamento parcial informado nas faturas recebidas."}\nSem evidência de pagamento parcial não posso concluir que não houve pagamento; confira no banco.`;
+   return `Pagamentos parciais informados nas faturas · ${label}\n${listed(result)||"Nenhum pagamento parcial informado nas faturas recebidas."}\nEssa lista não confirma saldo a pagar nem quitação. Confira a fatura no banco, principalmente quando os dados recebidos forem contraditórios.`;
   case "missing":{
    const active=new Map(overview.connections.filter(c=>c.status==="active"&&!c.archived_at).map(c=>[c.id,c]));
    const withBills=new Set(rows.map(row=>row.card.id));
