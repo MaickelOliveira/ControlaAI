@@ -26,6 +26,12 @@ it("answers the last received balance for each bank instead of giving generic gu
   expect(response).not.toContain("Consigo consultar");
   expect(m.rpc).toHaveBeenCalled();
 });
+it("explains account balance versus card credit without treating the limit as cash", async () => {
+  const response=await answerBankWhatsAppMessage(user,"personal","both","Qual a diferença entre saldo disponível e limite do cartão?","2026-10-15");
+  expect(response).toContain("conta");expect(response).toContain("crédito");expect(response).toContain("fatura");
+  expect(response).toContain("não deve ser somado");expect(response).not.toContain("Posso consultar");
+  expect(m.rpc).not.toHaveBeenCalled();
+});
 it.each(["Por favor, qual era meu limite mês passado?", "Me mostra meus empréstimos mês passado", "Mostre meus saldos nos bancos mês passado"]) ("keeps historical positions out of the expense classifier even with courteous/colloquial wording: %s", async text => {
   expect(await answerBankWhatsAppMessage(user, "personal", "both", text, "2026-10-11")).toContain("dados atuais"); expect(m.rpc).not.toHaveBeenCalled();
 });
