@@ -10,6 +10,7 @@ export type BankQuestion = {
   settledOnly?: boolean;
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
+  limitView?: "used" | "available-known";
 };
 
 export const normalizeBankText = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -82,6 +83,10 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
   text = queryText(question);
   if (/^qual (?:era|foi) o saldo (?:informado )?por cada banco na ultima atualizacao$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),latestSnapshot:true};
+  if (/^quanto do limite de cada cartao ja foi usado$/.test(text))
+    return {kind:"limits",...monthPeriod(today,false),limitView:"used"};
+  if (/^mostre apenas os cartoes com limite disponivel informado$/.test(text))
+    return {kind:"limits",...monthPeriod(today,false),limitView:"available-known"};
   if (/^(?:existe|ha|tem) (?:alguma conta(?: pessoal)? com|algum) saldo negativo(?:\? mostre (?:somente|apenas) essas contas)?$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
   if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))

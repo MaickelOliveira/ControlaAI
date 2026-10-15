@@ -32,6 +32,14 @@ it("explains account balance versus card credit without treating the limit as ca
   expect(response).toContain("não deve ser somado");expect(response).not.toContain("Posso consultar");
   expect(m.rpc).not.toHaveBeenCalled();
 });
+it("routes the exact used-limit and available-only WhatsApp requests to saved bank limits", async () => {
+  m.rpc.mockResolvedValue({...data,resources:[...data.resources,{...data.resources[0],id:"card",resource_type:"card",name:"Cartão Gold"}],limits:[{id:"limit",resource_id:"card",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"60",available_amount:"40",is_flexible:false}]});
+  const used=await answerBankWhatsAppMessage(user,"personal","both","Quanto do limite de cada cartão já foi usado?","2026-10-15");
+  const available=await answerBankWhatsAppMessage(user,"personal","both","Mostre apenas os cartões com limite disponível informado.","2026-10-15");
+  expect(used).toContain(`Utilizado: ${bankMoney("60","BRL")}`);
+  expect(available).toContain(`Disponível: ${bankMoney("40","BRL")}`);
+  expect(m.rpc).toHaveBeenCalledTimes(2);
+});
 it.each(["Por favor, qual era meu limite mês passado?", "Me mostra meus empréstimos mês passado", "Mostre meus saldos nos bancos mês passado"]) ("keeps historical positions out of the expense classifier even with courteous/colloquial wording: %s", async text => {
   expect(await answerBankWhatsAppMessage(user, "personal", "both", text, "2026-10-11")).toContain("dados atuais"); expect(m.rpc).not.toHaveBeenCalled();
 });
