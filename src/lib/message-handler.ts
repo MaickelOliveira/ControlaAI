@@ -23,7 +23,8 @@ import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFile
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
-import { createTask, createTasks, getPendingTasks, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
+import { createTask, createTasks, getPendingTasks, getTasksByUser, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
+import { parseTaskQueryScope, replyScopedTaskList, selectTasksForQuery } from "@/lib/task-query";
 import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
@@ -3944,8 +3945,16 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "task_query": {
-        const tasks = await getPendingTasks(user.id, mode);
-        await wppSend(from, replyTaskList(tasks, mode, user.locale));
+        const scope = parseTaskQueryScope(messageText);
+        if (scope === "pending") {
+          const tasks = await getPendingTasks(user.id, mode);
+          await wppSend(from, replyTaskList(tasks, mode, user.locale));
+        } else if (scope === "completed_today") {
+          await wppSend(from, replyScopedTaskList([], scope, mode, user.locale));
+        } else {
+          const tasks = selectTasksForQuery(await getTasksByUser(user.id, mode), scope);
+          await wppSend(from, replyScopedTaskList(tasks, scope, mode, user.locale));
+        }
         break;
       }
 
