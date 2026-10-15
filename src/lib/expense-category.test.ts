@@ -4,9 +4,15 @@ import type { AIResult } from "./ai-processor";
 it.each([
   ["ZE*DELIVERY", "Delivery"], ["Zé Delivery", "Delivery"], ["Uber Eats", "Delivery"],
   ["Google*Ads", "Marketing"], ["FACEBK*123", "Marketing"], ["Facebook Serviços Online", "Marketing"],
-  ["Google Workspace", "Tecnologia"], ["GOOGLE*Serviços", "Serviços"], ["YouTube Premium", "Lazer"],
+  ["Google Workspace", "Tecnologia"], ["GOOGLE*Serviços", "Serviços"], ["YouTube Premium", "Assinaturas"],
   ["Drogasil", "Saúde"], ["DARF", "Impostos"], ["Energia elétrica", "Moradia"],
 ])("uses merchant or purpose evidence in %s", (description, expected) => expect(descriptionExpenseCategory(description)).toBe(expected));
+it.each(["NETFLIX.COM", "SPOTIFY PREMIUM", "Spotfy", "IFD*IFOOD CLUB", "iFood Clube", "Clube iFood", "Disney Plus", "Prime Video", "Assinatura Canva"])("groups identifiable subscription %s across past and future bank movements",description=>{
+  expect(descriptionExpenseCategory(description)).toBe("Assinaturas");
+});
+it.each(["iFood restaurante", "IFD*KARMUS ESFIHARIA", "Apple.Com/Bill", "Pix enviado para Netflix", "Mensalidade escolar"])("does not label an ambiguous or different payment %s as a subscription",description=>{
+  expect(descriptionExpenseCategory(description)).not.toBe("Assinaturas");
+});
 it.each(["Mercado Pago", "Mercado Livre", "Amazon", "Google Pay", "Facebook Marketplace", "Meta Pay", "Pix - Pessoa", ""])("does not guess the purchase category from an intermediary/ambiguous name: %s", text => expect(descriptionExpenseCategory(text)).toBeNull());
 const result = (description: string, category: string, type = "expense") => ({ intent: "finance_register", confidence: .95, finance: { description, category, type, amount: 50, date: "2026-10-11", mode: "business", accountHint: "Conta teste", registeredByName: "Ana teste" } }) as AIResult;
 it("corrects model categories while preserving all transaction fields", () => {
