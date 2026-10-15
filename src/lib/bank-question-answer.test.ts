@@ -25,7 +25,9 @@ describe("saved bank positions", () => {
   it("answers financing separately and keeps unknown installments unknown", () => {
     const text = answer(overview(), "Mostre meus financiamentos no Sicredi");
     expect(text).toContain("Veículo"); expect(text).toContain(bankMoney("8000.81", "BRL"));
-    expect(text).toContain("Próxima parcela: Não informado"); expect(text).not.toContain("Nubank");
+    expect(text).toContain("Valor da próxima parcela não informado pelo banco"); expect(text).not.toContain("Nubank");
+    const withInstallment = overview(); withInstallment.credit[2].next_installment_amount = "321.45";
+    expect(answer(withInstallment, "Mostre meus financiamentos no Sicredi")).toContain(`Valor da próxima parcela: ${bankMoney("321.45", "BRL")}`);
   });
   it("filters available card credit to Nubank and keeps shared credit lines separate", () => {
     const data = overview(); data.resources.push(resource("card", "nu", "card", "Platinum"), resource("other-card", "si", "card", "Gold"));
@@ -37,6 +39,13 @@ describe("saved bank positions", () => {
     const text = answer(data, "Quanto eu tenho de crédito disponível no cartão Nubank?");
     expect(text).toContain("Nubank"); expect(text).toContain(bankMoney("1245.92", "BRL")); expect(text).toContain("CREDITO A VISTA"); expect(text).toContain("SAQUE");
     expect(text).not.toContain("Sicredi"); expect(text).not.toContain("2.491"); expect(text).toContain("não são somados");
+  });
+  it("flags internally inconsistent card limits without changing the bank amounts", () => {
+    const data = overview(); data.resources.push(resource("card", "nu", "card", "Meu Cartão"));
+    data.limits = [{ id:"line", resource_id:"card", line_name:"CREDITO_A_VISTA", consolidation_type:"CONSOLIDADO", currency:"BRL", total_amount:"100", used_amount:"100", available_amount:"20", is_flexible:false }];
+    const text = answer(data, "Qual meu limite no cartão Nubank?");
+    expect(text).toContain(bankMoney("100","BRL")); expect(text).toContain(bankMoney("20","BRL"));
+    expect(text).toContain("valores desta linha não fecham entre si");
   });
   it("does not invent zero or add currencies when debt values are missing", () => {
     const data = overview(); data.credit[0].outstanding_amount = null; data.credit[1].currency = "USD";
@@ -72,6 +81,8 @@ it("filters vehicle financing by purpose across banks and hides exact zero debts
   data.credit.push({ resource_id: "house", currency: "BRL", outstanding_amount: "55000", contract_amount: null, next_installment_amount: null, due_date: null }, { resource_id: "zero", currency: "BRL", outstanding_amount: "0.00000000", contract_amount: "2000", next_installment_amount: "100", due_date: null }, { resource_id: "tiny", currency: "BRL", outstanding_amount: "0.00000001", contract_amount: null, next_installment_amount: null, due_date: null });
   const vehicle = formatBankQuestion(data, { kind: "financings", keyword: "carro", from: "2026-10-01", to: "2026-10-31" }, "Pessoal");
   expect(vehicle).toContain("VEICULOS E UTILITARIOS"); expect(vehicle).toContain(bankMoney("8000.81", "BRL")); expect(vehicle).not.toContain("Imóvel residencial"); expect(vehicle).not.toContain("55.000");
+  expect(vehicle).not.toContain("*Nubank*"); expect(vehicle).not.toContain("*Realize*");
+  expect(vehicle).toContain("Valor da próxima parcela não informado pelo banco");
   const loans = answer(data, "Mostre meus empréstimos");
   expect(loans).not.toContain("Quitado teste"); expect(loans).toContain("Sem posição teste"); expect(loans).toContain("Saldo pequeno teste");
 });

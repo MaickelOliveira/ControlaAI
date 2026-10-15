@@ -13,7 +13,10 @@ import {collectUpcomingFinanceItems} from "./upcoming-finances";
 import {readBankAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
 import {bankDate,bankMoney} from "./open-finance-display";
+import {ledgerExpenseGroups} from "./finance-ledger";
+import {todayStrBR} from "./date-br";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
+const safeSummary=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,120);
 
 export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"business",phoneAccess:string,message:string,today:string):Promise<string|null>{
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true")return null;
@@ -52,6 +55,28 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
     if(ai.account)return "Para consultar uma conta específica, use o filtro em Finanças. Posso informar aqui o total de todos os bancos conectados neste modo ou o gasto por categoria e estabelecimento.";
     const text=normalize(message);
     const source:FinanceQuery["source"]=/\b(cartao|cartoes)\b/.test(text)?"card":/\b(contas bancarias|bancos conectados)\b/.test(text)?"account":undefined;
+    const monthlyOverview=/\bresumo\b/.test(text)&&/\b(mes|mensal|periodo)\b/.test(text)&&!ai.category&&!ai.keyword&&!source;
+    if(monthlyOverview){
+      const realized=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.date>=from&&entry.date<=to);
+      const categories=ledgerExpenseGroups(realized,"category").filter(group=>group.value>0).sort((a,b)=>b.value-a.value).slice(0,5);
+      const largest=realized.filter(entry=>entry.type==="expense"&&entry.amount>0).sort((a,b)=>b.amount-a.amount).slice(0,3);
+      const futureFrom=todayStrBR()>from?todayStrBR():from;
+      let upcoming="Nenhum vencimento futuro com data informada neste período.";
+      if(futureFrom<=to){
+        const [pending,recurring,agenda]=await Promise.all([
+          getPendingFinances(user.id,requested),getRecurringByUser(user.id,requested,"active"),
+          readBankAgenda(user,requested,{from:futureFrom,to,includeUndated:false}),
+        ]);
+        const scheduled=collectUpcomingFinanceItems(pending,recurring,{from:futureFrom,to,mode:requested,includeUndated:false}).filter(item=>item.type==="expense"&&item.dueDate);
+        const bankDue=agenda.items.filter(item=>item.due_date&&item.due_date>=futureFrom&&item.due_date<=to);
+        const lines=[...scheduled.slice(0,5).map(item=>`${bankDate(item.dueDate)} · ${safeSummary(item.description)} · ${bankMoney(item.amount,"BRL")} (cadastrado na Zelo)`),
+          ...bankDue.slice(0,5).map(item=>`${bankDate(item.due_date)} · ${safeSummary(item.kind==="bill"?"Fatura":item.description)} · ${bankMoney(item.amount,item.currency)} (${safeSummary(item.institution_name)}; ${item.payment_evidence?"há pagamento informado, confira o saldo":"pagamento não confirmado"})`)];
+        if(lines.length)upcoming=lines.join("\n")+(scheduled.length>5||bankDue.length>5?"\nHá outros vencimentos em Finanças/Contas.":"");
+        if(agenda.incomplete)upcoming+="\nAlguns dados bancários ainda estão incompletos.";
+      }
+      const summary=summarizeFinanceQuery(entries,{from,to,type:"result"},requested);
+      return `${summary}\n\n*Principais categorias de despesas*\n${categories.map(group=>`• ${safeSummary(group.name)}: ${bankMoney(group.value,"BRL")}`).join("\n")||"Nenhuma despesa realizada no período."}\n\n*Maiores gastos realizados*\n${largest.map(item=>`• ${safeSummary(item.description)}: ${bankMoney(item.amount,"BRL")} (${bankDate(item.date)})`).join("\n")||"Nenhum gasto realizado no período."}\n\n*Próximos vencimentos com data informada*\n${upcoming}\n\nVencimentos previstos não entram no resultado já realizado. Valores do banco podem repetir obrigações cadastradas; confira se foram pagos.${financeCoverageNotice(bank,entries)}`;
+    }
     const query:FinanceQuery={from,to,type:ai.intent==="balance_query"?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail"};
     let answer=summarizeFinanceQuery(entries,query,requested)+financeCoverageNotice(bank,entries);
     if(ai.intent==="finance_detail"&&!query.source){

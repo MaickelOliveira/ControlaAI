@@ -2866,7 +2866,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // Read-only banking requests terminate before payment reconciliation and all mutations.
     const structuredBankReply = await answerStructuredBankQuery(user, mode, phoneAccess, ai, todayStrBR());
     if (structuredBankReply) { await wppSendLong(from, structuredBankReply, 3500, true); return; }
-    if (process.env.OPEN_FINANCE_WHATSAPP_ENABLED === "true" && isBankPositionQuestion(messageText)) {
+    if (process.env.OPEN_FINANCE_WHATSAPP_ENABLED === "true" && ai.intent !== "recurring_query" && isBankPositionQuestion(messageText)) {
       setVirtualAgentIntent("bank_query"); await wppSend(from, BANK_QUERY_GUIDANCE); return;
     }
     const isReadOnlyIntent = [
