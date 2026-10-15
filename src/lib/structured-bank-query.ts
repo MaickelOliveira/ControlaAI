@@ -13,7 +13,7 @@ import { formatBankSchedules } from "./bank-schedule-answer";
 import { expandMerchantAliases } from "./finances";
 import { bankDate, bankMoney } from "./open-finance-display";
 import { financeOrigin, ledgerAmount, type LedgerEntry } from "./finance-ledger";
-import type { BankAgenda } from "./open-finance-schedules";
+import { visibleBankSchedules, type BankAgenda } from "./open-finance-schedules";
 
 const safe = (value: string) => value.replace(/[\r\n*`_~<>]/g, " ").slice(0, 160);
 const normalize = (value: string) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -57,7 +57,8 @@ export async function answerStructuredBankQuery(user: OpenFinanceIdentity, mode:
       const cards = query.last4 ? data.resources.filter(r => r.resource_type === "card" && r.identification_last4 === query.last4).map(r => r.id) : null;
       if (cards && !cards.length) return "Não encontrei esse final de cartão nos dados recebidos. Confira Contas.";
       const agenda = data.agenda ?? { items: [], incomplete: true };
-      const selected = agenda.items.filter(item => (!banks || banks.includes(item.institution_name)) && (!cards || !!item.resource_id && cards.includes(item.resource_id)) && (!query.keyword || item.description.toLocaleLowerCase().includes(query.keyword.toLocaleLowerCase())));
+      const schedules = visibleBankSchedules(agenda.items, ai.period ? period.from : today);
+      const selected = schedules.filter(item => (!banks || banks.includes(item.institution_name)) && (!cards || !!item.resource_id && cards.includes(item.resource_id)) && (!query.keyword || item.description.toLocaleLowerCase().includes(query.keyword.toLocaleLowerCase())));
       const undated = ai.period ? selected.filter(item => !item.due_date).length : 0;
       const items = ai.period ? selected.filter(item => item.due_date && item.due_date >= period.from && item.due_date <= period.to) : selected;
       return formatBankSchedules({ ...agenda, incomplete: agenda.incomplete || undated > 0, items }, query.kind, label) + (undated ? `\n${undated} item(ns) sem vencimento informado ficaram fora do filtro de datas; não é possível determinar quando serão cobrados.` : "");

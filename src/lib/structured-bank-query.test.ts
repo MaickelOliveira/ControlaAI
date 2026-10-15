@@ -32,6 +32,28 @@ it("keeps unknown currency and payment dates unknown", async () => {
   const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }), "2026-10-11");
   expect(response).toContain("moeda não informada"); expect(response).not.toContain("R$"); expect(response).toContain("Vencimento não informado");
 });
+it("does not present delivery purchases as bank subscriptions", async () => {
+  m.rpc.mockResolvedValue({ ...overview, agenda: { incomplete: false, items: [
+    { id: "delivery", kind: "recurring", resource_id: "card", institution_name: "Nubank", resource_name: "Platinum", description: "Zé Delivery", amount: "51.07", currency: "BRL", due_date: "2026-11-11", synced_at: "2026-10-11" },
+    { id: "netflix", kind: "recurring", resource_id: "card", institution_name: "Nubank", resource_name: "Platinum", description: "Netflix", amount: "20.90", currency: "BRL", due_date: "2026-11-04", synced_at: "2026-10-11" },
+  ] } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "recurring" }), "2026-10-15");
+  expect(response).toContain("Netflix"); expect(response).not.toContain("Zé Delivery");
+});
+it("omits installment sequences that ended before the current month", async () => {
+  m.rpc.mockResolvedValue({ ...overview, agenda: { incomplete: false, items: [
+    { id: "old", kind: "installment", resource_id: "card", institution_name: "Nubank", resource_name: "Platinum", description: "Compra encerrada", amount: "116.66", currency: "BRL", due_date: null, synced_at: "2026-10-11", observed_installments: 3, total_installments: 3, last_observed_month: "2025-12", last_observed_installment: 3 },
+  ] } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }), "2026-10-15");
+  expect(response).not.toContain("Compra encerrada");
+});
+it("still shows a past installment when the client asks about its historical month", async () => {
+  m.rpc.mockResolvedValue({ ...overview, agenda: { incomplete: false, items: [
+    { id: "old", kind: "installment", resource_id: "card", institution_name: "Nubank", resource_name: "Platinum", description: "Compra encerrada", amount: "116.66", currency: "BRL", due_date: "2025-12-12", synced_at: "2026-10-11", observed_installments: 3, total_installments: 3, last_observed_month: "2025-12", last_observed_installment: 3 },
+  ] } });
+  const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "installments" }, { period: { from: "2025-12-01", to: "2025-12-31" } }), "2026-10-15");
+  expect(response).toContain("Compra encerrada");
+});
 it.each([{ period: { from: "2026-09-01", to: "2026-09-30" } }, { period: { from: "2026-10-08", to: "2026-10-08" } }, { period: "invalid" }, { period: { from: "2026-02-30", to: "2026-03-01" } }, { confidence: .3 }, { mode: "business" }])("does not query storage for unsupported historical positions, bad dates, uncertain intent or denied mode: %j", async extra => {
   const response = await answerStructuredBankQuery(user, "personal", "personal", ai({ kind: "limits" }, extra), "2026-10-11");
   expect(response).toBeTruthy(); expect(m.rpc).not.toHaveBeenCalled();
