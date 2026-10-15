@@ -20,7 +20,7 @@ const normalize = (value: string) => value.normalize("NFD").replace(/\p{Diacriti
 const isBankFee = (entry: LedgerEntry) => {
   const category = entry.bank?.source_category ?? "";
   const description = normalize(entry.description);
-  return !/\biof\b|\bimposto\b|\btributo\b/.test(description)
+  return !/\b(?:iof|imposto|tributo|juros?|interest|multa|fine)\b/.test(description)
     && (category === "BANK_FEES" || category.startsWith("BANK_FEES_") || /\b(?:tarifa|anuidade|cesta de servicos|pacote de servicos|taxa bancaria)\b/.test(description));
 };
 
