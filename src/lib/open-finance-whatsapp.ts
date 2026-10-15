@@ -13,7 +13,8 @@ import {collectUpcomingFinanceItems} from "./upcoming-finances";
 import {readBankAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
 import {bankDate,bankMoney} from "./open-finance-display";
-import {financeOrigin,ledgerExpenseGroups} from "./finance-ledger";
+import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
+import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
 const safeSummary=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,120);
@@ -26,6 +27,52 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  const wording=text.trim().replace(/[?!.]+$/g,"");
+  const weeklyAccounts=/^quanto (?:entrou na conta|saiu das contas) nesta semana$/.test(wording);
+  const splitSources=wording==="separe movimentacoes de conta e de cartao nos ultimos sete dias";
+  const cardPurchases=wording==="mostre compras de cartao do mes sem pagamentos de fatura";
+  const billPayments=wording==="encontre pagamentos de fatura do mes e diga se ficaram fora dos gastos";
+  const ownTransfers=wording==="encontre transferencias entre minhas proprias contas no mes";
+  const pixDirection=wording.match(/^quais pix (enviados|recebidos) aparecem no extrato deste mes$/)?.[1];
+  const missingAmount=wording==="quais lancamentos do extrato nao tem valor informado";
+  const missingDate=wording==="quais lancamentos nao tem data informada";
+  if(weeklyAccounts||splitSources||cardPurchases||billPayments||ownTransfers||pixDirection||missingAmount||missingDate){
+    const day=new Date(`${today}T00:00:00Z`);
+    const from=weeklyAccounts?new Date(day.getTime()-((day.getUTCDay()+6)%7)*86400000).toISOString().slice(0,10)
+      :splitSources?new Date(day.getTime()-6*86400000).toISOString().slice(0,10):`${today.slice(0,7)}-01`;
+    try{
+      const {entries,bank}=await readUnifiedFinances(user,requested,from,today);
+      if(!bank?.overview.connections.length)return "Não tenho dados de um banco conectado neste modo para responder. Confira Contas; não vou estimar valores.";
+      const scoped=entries.filter(e=>e.mode===requested&&e.source==="bank"&&e.status!=="pending"&&e.date>=from&&e.date<=today);
+      const account=scoped.filter(e=>e.bank?.resource_type==="account"),card=scoped.filter(e=>e.bank?.resource_type==="card");
+      const money=(value:number)=>bankMoney(value,"BRL");
+      const lines=(rows:LedgerEntry[])=>rows.sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id)).slice(0,20).map(e=>{
+        const value=bankMoney(e.bank?.amount,e.bank?.currency);
+        const direction=e.bank?.direction==="credit"?"Entrada":"Saída";
+        return `• ${bankDate(e.date)} · ${safeSummary(e.description)} · ${direction} ${value} · ${safeSummary(financeOrigin(e))}${e.included?"":" · Fora dos totais"}`;
+      }).join("\n")||"Nenhum movimento recebido neste período.";
+      const coverage=financeCoverageNotice(bank,entries);
+      if(missingDate)return `${bank.report.missing_dates?`O banco informou ${bank.report.missing_dates} movimento(s) sem data no período consultado.`:"O banco não informou movimentos sem data neste período."} Não consigo listar seus nomes pelo extrato por data. Confira Contas e o banco; isso não confirma que o histórico esteja completo.${coverage}`;
+      if(weeklyAccounts){
+        const incoming=wording.includes("entrou"),selected=account.filter(e=>e.included&&e.type===(incoming?"income":"expense"));
+        const total=selected.reduce((sum,e)=>sum+Math.round(e.amount*100),0)/100;
+        return `${incoming?"Entradas":"Saídas"} das contas bancárias · ${bankDate(from)} a ${bankDate(today)}\n${money(total)} em ${selected.length} movimento(s) recebido(s). Compras de cartão e transferências próprias confirmadas não entram nesta soma.${coverage}`;
+      }
+      if(splitSources){
+        const section=(label:string,rows:LedgerEntry[])=>{const balance=ledgerBalance(rows);return `${label} · ${rows.length} movimento(s) recebido(s)\nEntradas: ${money(balance.income)} · Saídas: ${money(balance.expense)}\n${lines(rows)}`;};
+        return `Movimentações recebidas · ${bankDate(from)} a ${bankDate(today)}\n\n${section("Contas bancárias",account)}\n\n${section("Cartões",card)}\nTotais excluem transferências e pagamentos confirmados; esses movimentos seguem listados como fora dos totais.${coverage}`;
+      }
+      let label:string,selected:LedgerEntry[];
+      if(cardPurchases){label="Compras de cartão";selected=card.filter(e=>e.bank?.direction==="debit"&&e.included&&!isBankBillPaymentDescription(e.description));}
+      else if(billPayments){label="Pagamentos de fatura identificados no extrato";selected=scoped.filter(e=>isBankBillPaymentDescription(e.description));}
+      else if(ownTransfers){label="Transferências entre contas próprias confirmadas";selected=account.filter(e=>normalize(e.category)==="transferencia entre contas proprias");}
+      else if(pixDirection){label=`Pix ${pixDirection}`;selected=account.filter(e=>/\bpix\b/.test(normalize(e.description))&&e.bank?.direction===(pixDirection==="enviados"?"debit":"credit"));}
+      else {label="Lançamentos com valor não informado";selected=scoped.filter(e=>bankMoney(e.bank?.amount,e.bank?.currency)==="Não informado");}
+      const sum=cardPurchases?`\nTotal conhecido: ${money(selected.reduce((cents,e)=>cents+Math.round(e.amount*100),0)/100)}.`:"";
+      const paymentNote=billPayments?"\nPagamentos marcados “Fora dos totais” não foram somados aos gastos. Entradas e saídas podem representar os dois lados da mesma fatura; não as some. Confira no banco se o pagamento foi concluído.":"";
+      return `${label} · ${bankDate(from)} a ${bankDate(today)}\n${selected.length} movimento(s) recebido(s).${sum}\n${lines(selected)}${selected.length>20?`\nMostrando 20 de ${selected.length}; veja o restante em Finanças.`:""}${paymentNote}${coverage}`;
+    }catch{return "Não consegui consultar esses movimentos agora. Confira Finanças ou tente novamente; nenhum valor foi estimado.";}
+  }
   if(/^quais foram minhas cinco movimentacoes mais recentes\s*[?!.]*$/.test(text.trim())){
     const from=new Date(Date.parse(`${today}T00:00:00Z`)-364*86400000).toISOString().slice(0,10);
     try{
