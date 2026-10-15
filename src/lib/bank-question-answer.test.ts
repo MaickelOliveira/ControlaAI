@@ -136,6 +136,7 @@ describe("saved bank positions", () => {
     const text=answer(data,"Explique quais saldos e limites ainda dependem de atualização bancária.");
     expect(text).toContain("Conta sem saldo");expect(text).toContain("Sicredi");
     expect(text).toContain("Cartão sem limite");expect(text).toContain("Realize");
+    expect(text).toContain("Realize não enviou dados de conta");
     expect(text).toContain("importação pendente ou com falha");
     expect(text).not.toContain("Conta atualizada");expect(text).not.toContain("Cartão antigo");
     expect(text).not.toContain("várias vezes ao dia");
