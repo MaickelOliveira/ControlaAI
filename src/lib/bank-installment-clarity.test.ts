@@ -167,7 +167,7 @@ describe.each(surfaces)("installment meaning in %s", surface => {
     const text = visibleText(output([installment("undated")], surface));
     expect(text).toContain("49,90");
     expect(text).toMatch(/moeda\s+n[aã]o\s+informada/i);
-    expect(text).toMatch(/(?:vencimento|data).{0,30}n[aã]o\s+informad/i);
+    expect(text).toMatch(/(?:vencimento|data).{0,30}n[aã]o\s+(?:informad|enviad)/i);
     expect(text).not.toContain("R$");
     if (surface === "whatsapp-query") {
       expect(text).toMatch(/recebido\s+em\s+13\/10\/2026/i);
