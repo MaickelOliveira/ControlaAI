@@ -2,6 +2,11 @@ import { normalizeMerchantText as normalize } from "./merchant-text";
 import type { AIResult, FinanceData } from "./ai-processor";
 const food = /\b(?:pizza|pizzaria|esfiha|esfiharia|sushi|temaki|comida\s+japonesa|marmita|marmitex|yakisoba|hamburguer|hamburger|lanche|refeicao|comida|bebida|acai|pastel|restaurante|padaria)\b/;
 const nonFoodDelivery = /\b(?:farmacia|drogaria|drogasil|remedios?|medicamentos?|roupas?|calcados?|tenis|moveis|material\s+de\s+construcao|pet\s*shop|racao|eletronicos?|livros?|cosmeticos?|computador|celular|documentos?|software|keeta\s+network)\b/;
+const namedSubscription = /\b(?:netflix|spotify|spotfy|youtube\s+(?:premium|music)|disney\s*plus|prime\s*video|hbo\s*max|(?:ifood|i\s*food|ifd)\s+(?:club|clube)|(?:club|clube)\s+(?:ifood|i\s*food|ifd))\b/;
+function subscriptionExpense(text: string): boolean {
+  if (/^pix\b/.test(text)) return false;
+  return namedSubscription.test(text) || /\bassinatura\b(?!\s+(?:(?:de|do|da)\s+)?(?:contrato|documento|termo|cartao)\b)/.test(text);
+}
 export function isNonFoodDeliveryDescription(description: string): boolean {
   return nonFoodDelivery.test(normalize(description));
 }
@@ -15,9 +20,11 @@ function foodDelivery(text: string): boolean {
   // even when the bank does not indicate whether the meal was delivered.
   return /\b(?:lanches?|lanchonetes?|pizzas?|pizzarias?|esfihas?|esfiharias?|sushis?|temakis?|yakisobas?|comida\s+japonesa|hamburguers?|hamburgers?|hamburguerias?|fast\s*food|ebi|bur(?:ger|guer)\s*king|bk|mc\s*donald(?:s|\s+s)?|subway|bob\s*s|habib\s*s?|kfc|pizza\s*hut|domino\s*s|giraffas|ragazzo|popeyes|madero|jeronimo\s+(?:burger|track|restaurante)|china\s*in\s*box|spoleto)\b/.test(text);
 }
-const priorityRules: Array<[RegExp, string]> = [
+const bankingPriorityRules: Array<[RegExp, string]> = [
   [/\b(?:iof|juros\s+(?:bancarios|do\s+(?:cartao|emprestimo|financiamento)|de\s+mora|mora|rotativo|sobre\s+(?:saldo|emprestimo|financiamento))|encargos\s+(?:bancarios|financeiros)|tarifa\s+(?:bancaria|do\s+banco)|anuidade\s+(?:do\s+cartao|diferenciada|cartao))\b|^juros$/, "Encargos bancários"],
   [/\b(?:emprestimos?|consignado|credito\s+(?:pessoal|facil\s+mobi))\b/, "Empréstimos"],
+];
+const priorityRules: Array<[RegExp, string]> = [
   [/\b(?:mensalidade\s+escolar|faculdade|universidade|curso|alura|udemy|coursera)\b/, "Educação"],
   [/\b(?:chat\s*gpt|open\s*ai|anthropic|google\s*gemini|perplexity)\b|^claude(?:\s+(?:ai|pro|sub))?$|\b(?:assinatura|subscription)\s+(?:do\s+)?claude\b/, "Inteligência Artificial"],
   [/\b(?:google\s*ads|google\s*adwords|facebook(?:\s+servicos\s+online|\s+ads)?|facebk|meta\s+ads|anuncios|publicidade|trafego\s+pago)\b/, "Marketing"],
@@ -25,7 +32,7 @@ const priorityRules: Array<[RegExp, string]> = [
 const rules: Array<[RegExp, string]> = [
   [/\b(?:supermercado|mercearia|restaurante|padaria|refeicao|lanchonete|muffato|assai|atacadao|carrefour|pao\s+de\s+acucar|mercado(?!\s+(?:pago|livre))|pizza|pizzaria|esfiha|esfiharia|sushi|temaki|comida\s+japonesa|marmita|marmitex|yakisoba|hamburguer|hamburger|acai|pastel|pastelaria)\b/, "Alimentação"],
   [/\b(?:google\s*(?:cloud|workspace|one|drive|gsuite)|aws|amazon\s+web\s+services|microsoft\s*(?:365|azure)|adobe|canva)\b/, "Tecnologia"],
-  [/\b(?:netflix|spotify|cinema|youtube\s*(?:premium|music)|disney\s*plus|prime\s*video|hbo\s*max)\b/, "Lazer"],
+  [/\bcinema\b/, "Lazer"],
   [/\bgoogle\b(?!\s*(?:pay|pays|pagamentos))/, "Serviços"],
   [/\b(?:uber|99app|99(?=\s+(?:corrida|viagem|taxi|app))|combustivel|gasolina|etanol|estacionamento|pedagio|posto\s+(?:de\s+)?combustivel)\b/, "Transporte"],
   [/\b(?:farmacia|drogaria|drogasil|droga\s*raia|drogaria\s*pacheco|hospital|dentista|clinica\s+medica|remedios?|medicamentos?)\b/, "Saúde"],
@@ -42,6 +49,9 @@ export function descriptionExpenseCategory(description: string): string | null {
   if (/\b(?:facebook\s*marketplace|meta\s*pay)\b/.test(text)) return null;
   // Banking charges, principal, education/AI and advertising keep their
   // specific purpose even when a delivery brand appears in the description.
+  const banking=bankingPriorityRules.find(([pattern]) => pattern.test(text))?.[1];
+  if(banking)return banking;
+  if(subscriptionExpense(text))return "Assinaturas";
   const priority = priorityRules.find(([pattern]) => pattern.test(text))?.[1];
   return priority ?? (foodDelivery(text) ? "Delivery" : rules.find(([pattern]) => pattern.test(text))?.[1] ?? null);
 }

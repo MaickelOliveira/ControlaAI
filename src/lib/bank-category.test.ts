@@ -15,6 +15,8 @@ it.each([
  ["Uber Eats", "TRANSPORTATION", "Delivery"],
  ["Drogasil", "GENERAL_MERCHANDISE", "Saúde"],
  ["DARF", "RENT_AND_UTILITIES", "Impostos"],
+ ["NETFLIX.COM", "ENTERTAINMENT", "Assinaturas"],
+ ["IFD*IFOOD CLUB", "FOOD_AND_DRINK_FAST_FOOD", "Assinaturas"],
 ])("corrects a bank suggestion using the identifiable merchant %s",(description,source_category,category)=>{
  const result=entry({description,source_category});expect(result.category).toBe(category);expect(result.categorySource).toBe("description");
  expect(result.amount).toBe(30);expect(result.included).toBe(true);
@@ -23,6 +25,16 @@ it("preserves a chosen category, transfers and income even when a merchant match
  expect(entry({description:"Zé Delivery",user_category:"Evento empresa",source_category:"FOOD_AND_DRINK"}).category).toBe("Evento empresa");
  expect(entry({description:"Facebook",kind:"excluded",classification:"bill_payment"}).included).toBe(false);
  expect(entry({description:"Google",direction:"credit",kind:"credits",source_category:"INCOME_SALARY"}).category).toBe("Salário");
+});
+it("groups older and newer subscription debits without altering the bank records or explicit choices",()=>{
+ const september={...movement,id:"sub-sep",date:"2026-09-08",resource_type:"card",kind:"card_purchases" as const,description:"NETFLIX.COM"};
+ const october={...september,id:"sub-oct",date:"2026-10-08"};
+ const chosen={...september,id:"user-choice",description:"SPOTIFY PREMIUM",user_category:"Lazer"};
+ const entries=createFinanceLedger([],[september,october,chosen],"personal");
+ expect(entries.find(entry=>entry.id==="bank:sub-sep")).toMatchObject({category:"Assinaturas",included:true});
+ expect(entries.find(entry=>entry.id==="bank:sub-oct")).toMatchObject({category:"Assinaturas",included:true});
+ expect(entries.find(entry=>entry.id==="bank:user-choice")).toMatchObject({category:"Lazer",categorySource:"user"});
+ expect(september.description).toBe("NETFLIX.COM");
 });
 it.each([
  ["FOOD_AND_DRINK_GROCERIES","Alimentação"],
