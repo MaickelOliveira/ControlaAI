@@ -4,7 +4,7 @@ const months=["janeiro","fevereiro","marco","abril","maio","junho","julho","agos
 export type BillRequest={month:string|null;bankWords:string[];last4:string|null;today:string;mode:"personal"|"business"|"both"|null};
 export function parseBillRequest(message:string,today:string):BillRequest|null {
   const text=normalize(message);
-  if(text.length>500||! /\bfatura\b/.test(text)||/\b(pague|paga|pagar|registre|registra|lance|lanca|exclua|apague|cancele)\b/.test(text))return null;
+  if(text.length>500||! /\bfatura\b/.test(text)||/\b(pague|paga|pagar|registre|registra|lance|lanca|exclua|apague|cancele)\b/.test(text)||/\bpagamentos?\s+(?:de|da)\s+fatura\b/.test(text))return null;
   if(!/\b(envia|envie|enviar|mande|manda|mandar|quero|preciso|mostre|mostrar|ver|pdf|baixe|baixar)\b/.test(text)&&!/^fatura (?:do|de|da|dos) /.test(text))return null;
   let month:string|null=null;
   const explicit=text.match(/\b(0?[1-9]|1[0-2])[/-](20\d{2})\b/);
