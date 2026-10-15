@@ -94,6 +94,27 @@ describe("AI provider routing", () => {
     expect(answer.bankQuery).not.toHaveProperty("userId"); expect(answer.bankQuery).not.toHaveProperty("total");
   });
 
+  it.each([
+    ["Mostre tarifas bancárias cobradas neste mês.", "finance_query", { kind: "transactions", operation: "list", direction: "debit", source: "account", movementClass: "bank_fee" }],
+    ["Qual foi o maior débito bancário do mês?", "finance_analysis", { kind: "transactions", operation: "max", direction: "debit", source: "account" }],
+    ["Qual foi o maior crédito bancário do mês?", "how_to", { kind: "transactions", operation: "max", direction: "credit", source: "account" }],
+    ["Quais faturas vencem amanhã?", "finance_upcoming", { kind: "bill_due" }],
+    ["Quais faturas vencem nos próximos três dias?", "finance_upcoming", { kind: "bill_due" }],
+  ] as const)("repairs a broad AI classification into a read-only bank plan: %s", async (message, broadIntent, plan) => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: broadIntent, confidence: .95 }) } });
+    const answer = await processMessage(message, context);
+    expect(answer).toMatchObject({ intent: "bank_query", bankQuery: plan });
+    if (message.includes("amanhã")) expect(answer.period?.from).toBe(answer.period?.to);
+    if (message.includes("três dias")) expect(answer.period).toBeDefined();
+  });
+  it("keeps the bank explicitly named by the customer while refining a largest-debit plan", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: "bank_query", confidence: .95, bankQuery: { kind: "transactions", bankName: "Nubank", operation: "max", direction: "debit", source: "account" } }) } });
+    expect(await processMessage("Qual foi o maior débito bancário no Nubank?", context))
+      .toMatchObject({ intent: "bank_query", bankQuery: { kind: "transactions", operation: "max", direction: "debit", source: "account", bankName: "Nubank" } });
+  });
+
   it("keeps an explicitly requested merchant when the model drops it and returns a broad expense category", async () => {
     process.env.OPENAI_TEST_USER_IDS = "another-user";
     googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: "finance_query", confidence: .95, category: "Alimentação" }) } });
