@@ -126,7 +126,10 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     const receivedTo = dates.length ? bankDate(dates.at(-1)) : "";
     return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${!question.settledOnly&&groups.length>1&&resources.length>1&&bankAmounts.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${receivedFrom}${receivedFrom !== receivedTo ? ` a ${receivedTo}` : ""}.` : ""}`;
   });
-  let result = `${question.settledOnly?"Empréstimos com saldo informado como zero":labels[question.kind]+" recebidos"} · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
+  const title = question.latestSnapshot && question.kind === "balances"
+    ? "Saldos bancários da última posição recebida"
+    : question.settledOnly ? "Empréstimos com saldo informado como zero" : `${labels[question.kind]} recebidos`;
+  let result = `${title} · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
   if ((question.kind === "balances" || debt && shownDebtCount !== 1) && !question.settledOnly) result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
   if(question.settledOnly)result += "\nSaldo zero recebido não confirma quitação contratual; confirme com o banco. Contratos já encerrados podem não aparecer nos dados recebidos.";
   if (question.kind === "limits") result += "\n\nLinhas e limites compartilhados não são somados. Crédito disponível não é saldo em conta.";

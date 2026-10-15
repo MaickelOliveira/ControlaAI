@@ -26,6 +26,8 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if (/^(?:qual (?:e )?a diferenca|explique a diferenca) entre (?:o )?saldo disponivel(?: da conta)? e (?:o )?limite (?:do|de) cartao\s*[?!.]*$/.test(text.trim()))
+    return "Saldo disponível é o valor que o banco informa como disponível na sua conta; confira as regras da conta para saber se inclui crédito adicional. Limite disponível do cartão é crédito para compras, que gera cobrança na fatura quando usado. Ele não é dinheiro na conta e não deve ser somado ao saldo disponível.";
   if(/\bopen\s*(finance|banking)\b/.test(text)||(/\b(conectar|conecto|sincronizar|vincular)\b/.test(text)&&/\b(banco|bancos|bancaria|bancarias)\b/.test(text))){
     if(!canEnrollOpenFinance(user,requested)&&!await getOpenFinanceAccess(user,requested))return null;
     return "O Open Finance está disponível para contas bancárias do Brasil. Na Zelo, abra Contas → Conectar banco no modo Pessoal (PF) ou Empresa (PJ). Você autoriza diretamente no banco; a Zelo não pede sua senha. Depois, as consultas usam os dados recebidos e salvos na Zelo.";
