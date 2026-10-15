@@ -63,6 +63,28 @@ describe("saved bank positions", () => {
     expect(text).toContain(bankMoney("100","BRL")); expect(text).toContain(bankMoney("20","BRL"));
     expect(text).toContain("valores desta linha não fecham entre si");
   });
+  it("shows used limits directly, preserving distinct shared lines and unknown values", () => {
+    const data=overview();
+    data.resources.push(resource("nu-card","nu","card","Nubank Gold"),resource("si-card","si","card","Sicredi Gold"));
+    data.limits=[{id:"used",resource_id:"nu-card",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"35",available_amount:"65",is_flexible:false}];
+    const text=answer(data,"Quanto do limite de cada cartão já foi usado?");
+    expect(text).toContain("Nubank Gold");expect(text).toContain(`Utilizado: ${bankMoney("35","BRL")}`);
+    expect(text).toContain("Sicredi Gold");expect(text).toContain("Utilizado: Não informado");
+    expect(text).not.toContain("Total informado:");expect(text).not.toContain("Disponível:");
+  });
+  it("lists only card lines whose available limit was actually reported, including zero", () => {
+    const data=overview();
+    data.resources.push(resource("nu-card","nu","card","Nubank Gold"),resource("si-card","si","card","Sicredi Gold"),resource("real-card","real","card","Realize Gold"));
+    data.limits=[
+      {id:"known",resource_id:"nu-card",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"100",available_amount:"0",is_flexible:false},
+      {id:"unknown",resource_id:"nu-card",line_name:"SAQUE",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"0",available_amount:null,is_flexible:false},
+      {id:"si-unknown",resource_id:"si-card",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"0",available_amount:null,is_flexible:false},
+    ];
+    const text=answer(data,"Mostre apenas os cartões com limite disponível informado.");
+    expect(text).toContain("Nubank Gold");expect(text).toContain(`Disponível: ${bankMoney("0","BRL")}`);
+    expect(text).not.toContain("Sicredi Gold");expect(text).not.toContain("Realize Gold");expect(text).not.toContain("SAQUE");
+    expect(text).not.toContain("O banco ainda não informou crédito");
+  });
   it("does not invent zero or add currencies when debt values are missing", () => {
     const data = overview(); data.credit[0].outstanding_amount = null; data.credit[1].currency = "USD";
     const text = answer(data, "Mostre meus empréstimos");

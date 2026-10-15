@@ -68,14 +68,20 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
   const debt = question.kind === "loans" || question.kind === "financings";
   const wantedDebtType = question.kind === "loans" ? "loan" : "financing";
-  const groups = question.settledOnly
+  const limitGroups = question.limitView ? connectedGroups.map(group => ({...group, resources: group.resources.filter(resource => resource.resource_type === "card" && (
+    question.limitView === "used" || displayCardLimits(data.limits.filter(limit => limit.resource_id === resource.id))
+      .some(limit => bankMoney(limit.available_amount,limit.currency) !== "Não informado")
+  ))})).filter(group => group.resources.length) : [];
+  const groups = question.limitView ? limitGroups : question.settledOnly
     ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === "loan" && hasZeroBankDebt(resource,data)))
     : question.kind === "investments"
     ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === "investment"))
     : debt && question.keyword
     ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === wantedDebtType && matchesBankDebtPurpose(resource, question.keyword)))
     : connectedGroups;
-  if (!groups.length) return question.settledOnly
+  if (!groups.length) return question.limitView
+    ? `Nenhum cartão ${question.limitView === "available-known" ? "com limite disponível informado" : "com dados de limite"} foi recebido em ${safe(modeLabel)}. Isso não confirma ausência de cartões; confira Contas e o banco.`
+    : question.settledOnly
     ? `Não identifiquei empréstimos com saldo devedor informado como zero nos dados recebidos em ${safe(modeLabel)}. Isso não confirma que não haja contratos quitados; confira o banco.`
     : question.kind === "investments"
     ? `Nenhum investimento informado pelos bancos conectados em ${safe(modeLabel)}. Isso não confirma ausência de investimentos; confira cada banco.${data.truncated ? " Consulta parcial: há dados além do limite recebido." : ""}${data.sync.some(s => s.status !== "complete") ? " Há uma importação pendente ou com falha." : ""}`
@@ -103,9 +109,16 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
           : `Valor da próxima parcela: ${bankMoney(detail.next_installment_amount, detail.currency)}`;
         lines.push(question.settledOnly ? `${name}\nSaldo devedor informado: ${bankMoney(amount.amount,amount.currency)}` : `${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · ${installment}\nVencimento final: ${bankDate(detail?.due_date)}`);
       } else if (question.kind === "limits") {
-        const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id));
-        if (!limits.length) lines.push(`${name} · Limite não informado pelo banco.`);
-        for (const limit of limits) lines.push(`${name} · ${safe(limit.line_name ?? "Linha de crédito")}${limit.consolidation_type ? ` · ${safe(limit.consolidation_type)}` : ""}\nDisponível: ${bankMoney(limit.available_amount, limit.currency)}\nTotal: ${bankMoney(limit.total_amount, limit.currency)} · Utilizado: ${bankMoney(limit.used_amount, limit.currency)}${cardLimitAmountsDisagree(limit) ? "\n⚠️ Os valores desta linha não fecham entre si; confirme o limite no banco." : ""}`);
+        const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id))
+          .filter(limit => question.limitView !== "available-known" || bankMoney(limit.available_amount,limit.currency) !== "Não informado");
+        if (!limits.length) lines.push(question.limitView === "used" ? `${name} · Utilizado: Não informado pelo banco.` : `${name} · Limite não informado pelo banco.`);
+        for (const limit of limits) {
+          const heading = `${name} · ${safe(limit.line_name ?? "Linha de crédito")}${limit.consolidation_type ? ` · ${safe(limit.consolidation_type)}` : ""}`;
+          const amounts = question.limitView === "used"
+            ? `Utilizado: ${bankMoney(limit.used_amount,limit.currency)}`
+            : `Disponível: ${bankMoney(limit.available_amount, limit.currency)}\nTotal: ${bankMoney(limit.total_amount, limit.currency)} · Utilizado: ${bankMoney(limit.used_amount, limit.currency)}`;
+          lines.push(`${heading}\n${amounts}${cardLimitAmountsDisagree(limit) ? "\n⚠️ Os valores desta linha não fecham entre si; confirme o limite no banco." : ""}`);
+        }
       } else if (question.kind === "balances") {
         bankAmounts.push({ amount: resource.available_amount, currency: resource.currency });
         lines.push(`${name} · Saldo disponível: ${bankMoney(resource.available_amount, resource.currency)}`);
