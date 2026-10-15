@@ -825,6 +825,9 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
   if (/\b(?:esta|essa|nesta|nessa|desta|atual)\s+semana\b|\bsemana\s+(?:atual|actual)\b|\bna\s+semana\b/.test(normalized)) {
     return { from: weekFrom, to: weekTo };
   }
+  if (/\bate\s+(?:o\s+)?fim\s+deste\s+mes\b/.test(normalized)) {
+    return { from: toYmd(anchor), to: monthBounds(0).to };
+  }
   if (/\bproximo\s+mes\b|\bmes\s+(?:que\s+vem|seguinte|que\s+viene|siguiente)\b/.test(normalized)) return monthBounds(1);
   if (/\bultimo\s+mes\b|\bmes\s+(?:passado|anterior|pasado)\b/.test(normalized)) return monthBounds(-1);
   if (/\b(?:este|esse|neste|nesse|deste|atual)\s+mes\b|\bmes\s+atual\b/.test(normalized)) return monthBounds(0);
@@ -846,9 +849,10 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
     const days = Number(rollingDays[1]);
     return { from: toYmd(shiftDate(anchor, -(days - 1))), to: toYmd(anchor) };
   }
-  const nextDays = normalized.match(/\bproximos?\s+(\d{1,2}|tres)\s+dias\b/);
+  const nextDays = normalized.match(/\bproximos?\s+(\d{1,2}|tres|sete|quinze|trinta)\s+dias\b/);
   if (nextDays) {
-    const days = nextDays[1] === "tres" ? 3 : Number(nextDays[1]);
+    const wordDays: Record<string, number> = { tres: 3, sete: 7, quinze: 15, trinta: 30 };
+    const days = wordDays[nextDays[1]] ?? Number(nextDays[1]);
     if (days >= 1 && days <= 31) return { from: toYmd(anchor), to: toYmd(shiftDate(anchor, days)) };
   }
   if (/\bamanha\b|\bmanana\b/.test(normalized)) {

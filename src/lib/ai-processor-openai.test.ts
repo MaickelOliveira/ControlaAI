@@ -100,6 +100,8 @@ describe("AI provider routing", () => {
     ["Qual foi o maior crédito bancário do mês?", "how_to", { kind: "transactions", operation: "max", direction: "credit", source: "account" }],
     ["Quais faturas vencem amanhã?", "finance_upcoming", { kind: "bill_due" }],
     ["Quais faturas vencem nos próximos três dias?", "finance_upcoming", { kind: "bill_due" }],
+    ["Quais faturas vencem nos próximos quinze dias?", "finance_upcoming", { kind: "bill_due" }],
+    ["Quais faturas vencem até o fim deste mês?", "finance_upcoming", { kind: "bill_due" }],
   ] as const)("repairs a broad AI classification into a read-only bank plan: %s", async (message, broadIntent, plan) => {
     process.env.OPENAI_TEST_USER_IDS = "another-user";
     googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: broadIntent, confidence: .95 }) } });
