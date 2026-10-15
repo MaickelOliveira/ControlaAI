@@ -39,6 +39,13 @@ it("retains a validated bank-specific recurring query",async()=>{
  generateContent.mockResolvedValue({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.98,bankQuery:{kind:"recurring",bankName:"Banco fictício"}})}});
  expect(await processMessage("quais contas recorrentes tenho no Banco fictício",context)).toMatchObject({intent:"bank_query",bankQuery:{kind:"recurring",bankName:"Banco fictício"}});
 });
+it.each([
+  {intent:"bank_query",confidence:.98},
+  {intent:"bank_query",confidence:.98,bankQuery:{kind:"recurring"}},
+])("routes bank subscriptions not manually registered to a comparable recurring lookup: %j",async modeled=>{
+ generateContent.mockResolvedValue({response:{text:()=>JSON.stringify(modeled)}});
+ expect(await processMessage("Quais assinaturas foram detectadas pelo banco e não cadastradas por mim?",context)).toMatchObject({intent:"recurring_query"});
+});
 it.each(["registra 50 reais em compra parcelada","cancela minhas assinaturas","quanto gastei com assinaturas"])("does not turn a mutation or past spending into a schedule lookup: %s",message=>{
  expect(getExplicitRecurringQueryResult(message)).toBeNull();
 });

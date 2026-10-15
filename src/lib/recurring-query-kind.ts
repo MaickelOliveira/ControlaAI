@@ -5,3 +5,12 @@ export function recurringQueryKind(message:string):"recurring"|"installment"|nul
  const recurring=/\b(?:recorrentes?|recurrentes?|assinaturas?|suscripciones?|suscripcion|mensualidades?)\b/.test(text);
  return installment&&!recurring?"installment":recurring&&!installment?"recurring":null;
 }
+
+/** Consulta de comparação, não pedido para criar ou apagar uma assinatura. */
+export function isUnregisteredBankRecurringRequest(message:string):boolean{
+ const text=normalizeBankText(message);
+ return /^(?:quais?|mostre|me mostre|liste|lista)\b/.test(text)
+  && /\b(?:banco|bancarias?|open finance)\b/.test(text)
+  && recurringQueryKind(message)==="recurring"
+  && /\b(?:nao|sem)\s+(?:foram?\s+)?(?:cadastrad[oa]s?|registrad[oa]s?|anotad[oa]s?)\b/.test(text);
+}

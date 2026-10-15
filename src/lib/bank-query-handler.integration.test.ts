@@ -87,6 +87,20 @@ it("includes bank installments when the manual recurring list is empty, retainin
   expect(response).toContain("Compra teste"); expect(response).toContain("Última parcela identificada: 12 de 12"); expect(response).toContain("moeda não informada"); expect(response).not.toContain("Nenhum lançamento recorrente ou parcelado ativo");
   expect(m.send.mock.calls.every(call => call[2]?.privateFinancial)).toBe(true);
 });
+it("answers bank subscriptions missing a manual registration without listing capabilities or registered subscriptions",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+ m.recurring.mockResolvedValue([{description:"Netflix",type:"expense",recurrenceType:"recurring"}]);
+ const due=new Date(Date.parse(`${todayStrBR()}T12:00:00Z`)+30*86400000).toISOString().slice(0,10);
+ m.rpc.mockResolvedValue({incomplete:false,items:[
+  {id:"netflix",kind:"recurring",description:"Netflix",institution_name:"Nubank",resource_name:"Platinum",amount:"20.90",currency:"BRL",due_date:due,synced_at:todayStrBR()},
+  {id:"google",kind:"recurring",description:"Google One",institution_name:"Nubank",resource_name:"Platinum",amount:"96.99",currency:"BRL",due_date:due,synced_at:todayStrBR()},
+  {id:"delivery",kind:"recurring",description:"Zé Delivery",institution_name:"Nubank",resource_name:"Platinum",amount:"51.07",currency:"BRL",due_date:due,synced_at:todayStrBR()},
+ ]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais assinaturas foram detectadas pelo banco e não cadastradas por mim?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Google One");expect(response).not.toContain("Netflix");expect(response).not.toContain("Zé Delivery");
+ expect(response).not.toContain("Posso consultar saldos bancários");expect(response).toContain("cadastro manual semelhante");
+});
 it("separates annuities from purchases using bank records without falling into generic help",async()=>{
  m.rpc.mockResolvedValue({incomplete:false,items:[
   {id:"fee",kind:"installment",resource_id:"card",description:"ANUIDADE DIFERENCIADA",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:12,observed_installments:1},
