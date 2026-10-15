@@ -113,6 +113,14 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   expect(confirmed).not.toContain(" · parcial");
   const excessive={...inconsistent,bills:[{...inconsistent.bills[0],payment_amount:"2300"}]} as BankOverview;
   expect(answerBillQuestion(excessive,{kind:"partial-payment"},"2026-10-15","personal")).toContain("maior que o total");
+  const rounded={...inconsistent,bills:[{...inconsistent.bills[0],status:"unknown",payment_amount:"2215.50999999"}]} as BankOverview;
+  const roundedAnswer=answerBillQuestion(rounded,{kind:"partial-payment"},"2026-10-15","personal");
+  expect(roundedAnswer).toContain("pagamento informado aparece igual ao total");
+  expect(roundedAnswer).not.toContain("pagamento parcial informado R$");
+  const alternateStatus={...inconsistent,bills:[{...inconsistent.bills[0],status:"partial_payment"}]} as BankOverview;
+  expect(answerBillQuestion(alternateStatus,{kind:"partial-payment"},"2026-10-15","personal")).toContain("dados contraditórios");
+  const fullyPaid={...inconsistent,bills:[{...inconsistent.bills[0],status:"paid"}]} as BankOverview;
+  expect(answerBillQuestion(fullyPaid,{kind:"confirmed-payment"},"2026-10-15","personal")).not.toContain("dados de pagamento inconsistentes");
  });
  it("identifica cartões ativos sem fatura recebida",()=>{
   const reply=answerBillQuestion(overview,{kind:"missing"},"2026-10-15","personal");
