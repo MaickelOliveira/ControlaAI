@@ -34,6 +34,15 @@ it("recognizes the next installment of a vehicle financing without treating it a
   expect(parseBankQuestion("Qual é o valor da próxima parcela do financiamento do meu carro no Sicredi? Se não constar nos dados bancários, diga isso claramente.", "2026-10-11"))
     .toMatchObject({kind:"financings",keyword:"carro",bankName:"sicredi"});
 });
+it("recognizes the next installment across all personal loans", () => {
+  expect(parseBankQuestion("Qual é o valor da próxima parcela de cada empréstimo? Avise quais bancos não informaram esse valor.", "2026-10-11"))
+    .toMatchObject({kind:"loans"});
+});
+it("recognizes settled loans without accepting the rest of a sentence as a bank name", () => {
+  expect(parseBankQuestion("Quais empréstimos já estão quitados? Separe por banco e não conte como dívida.", "2026-10-11"))
+    .toMatchObject({kind:"loans",settledOnly:true});
+  expect(parseBankQuestion("Quais empréstimos atrasados? Separe por banco.", "2026-10-11")).toBeNull();
+});
 it.each(["Pague o financiamento do carro", "Quanto falta pagar do carro e registre 50", "Quanto falta pagar do carro mês passado?"])("does not execute payoff questions as mutations or discard historical filters: %s", message => expect(parseBankQuestion(message, "2026-10-11")).toBeNull());
 
 it.each(["quanto falta pagar do carro da empresa", "quanto falta pagar do carro pessoal", "quanto falta pagar do carro hoje", "quanto falta pagar do carro esta semana"])("does not treat an explicit workspace or date as a bank filter: %s",message=>expect(parseBankQuestion(message,"2026-10-11")).toBeNull());

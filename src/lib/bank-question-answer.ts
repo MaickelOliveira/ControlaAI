@@ -56,17 +56,21 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
   const debt = question.kind === "loans" || question.kind === "financings";
   const wantedDebtType = question.kind === "loans" ? "loan" : "financing";
-  const groups = debt && question.keyword
+  const groups = question.settledOnly
+    ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === "loan" && hasZeroBankDebt(resource,data)))
+    : debt && question.keyword
     ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === wantedDebtType && matchesBankDebtPurpose(resource, question.keyword)))
     : connectedGroups;
-  if (!groups.length) return `Não encontrei contrato correspondente a ${safe(question.keyword ?? "essa busca")} nos dados recebidos em ${safe(modeLabel)}. Isso não confirma ausência de dívida; confira também o banco. ${data.truncated ? "Consulta parcial: há dados além do limite recebido. " : ""}${data.sync.some(s => s.status !== "complete") ? "Há uma importação pendente ou com falha." : ""}`.trim();
+  if (!groups.length) return question.settledOnly
+    ? `Não identifiquei empréstimos com saldo devedor informado como zero nos dados recebidos em ${safe(modeLabel)}. Isso não confirma que não haja contratos quitados; confira o banco.`
+    : `Não encontrei contrato correspondente a ${safe(question.keyword ?? "essa busca")} nos dados recebidos em ${safe(modeLabel)}. Isso não confirma ausência de dívida; confira também o banco. ${data.truncated ? "Consulta parcial: há dados além do limite recebido. " : ""}${data.sync.some(s => s.status !== "complete") ? "Há uma importação pendente ou com falha." : ""}`.trim();
   const received: Amount[] = [];
   let incomplete = !!data.truncated;
   let omitted = false;
   const blocks = groups.map(group => {
     const wanted = { loans: "loan", financings: "financing", limits: "card", balances: "account", investments: "investment", bills: "card", spending: "account" }[question.kind];
     const candidates = group.resources.filter(r => r.resource_type === wanted && (!debt || matchesBankDebtPurpose(r, question.keyword)));
-    const resources = candidates.filter(r => !debt || !hasZeroBankDebt(r, data));
+    const resources = candidates.filter(r => question.settledOnly ? hasZeroBankDebt(r,data) : !debt || !hasZeroBankDebt(r, data));
     const hiddenZero = candidates.length - resources.length;
     const lines: string[] = [];
     const bankAmounts: Amount[] = candidates.filter(r => debt && hasZeroBankDebt(r, data)).map(r => ({ amount: "0", currency: data.credit.find(c => c.resource_id === r.id)?.currency }));
@@ -79,7 +83,7 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
         const installment = detail?.next_installment_amount == null
           ? "Valor da próxima parcela não informado pelo banco"
           : `Valor da próxima parcela: ${bankMoney(detail.next_installment_amount, detail.currency)}`;
-        lines.push(`${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · ${installment}\nVencimento final: ${bankDate(detail?.due_date)}`);
+        lines.push(question.settledOnly ? `${name}\nSaldo devedor informado: ${bankMoney(amount.amount,amount.currency)}` : `${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · ${installment}\nVencimento final: ${bankDate(detail?.due_date)}`);
       } else if (question.kind === "limits") {
         const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id));
         if (!limits.length) lines.push(`${name} · Limite não informado pelo banco.`);
@@ -102,10 +106,11 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     const empty = hiddenZero ? "Não há saldo devedor pendente nos contratos recebidos." : question.keyword ? `Nenhum contrato correspondente a ${safe(question.keyword)} nos dados recebidos.` : `O banco ainda não informou ${labels[question.kind].toLowerCase()}.`;
     const receivedFrom = dates.length ? bankDate(dates[0]) : "";
     const receivedTo = dates.length ? bankDate(dates.at(-1)) : "";
-    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${bankAmounts.length && resources.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${receivedFrom}${receivedFrom !== receivedTo ? ` a ${receivedTo}` : ""}.` : ""}`;
+    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${!question.settledOnly&&bankAmounts.length&&resources.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${receivedFrom}${receivedFrom !== receivedTo ? ` a ${receivedTo}` : ""}.` : ""}`;
   });
-  let result = `${labels[question.kind]} recebidos · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
-  if (debt || question.kind === "balances") result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
+  let result = `${question.settledOnly?"Empréstimos com saldo informado como zero":labels[question.kind]+" recebidos"} · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
+  if ((debt || question.kind === "balances") && !question.settledOnly) result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
+  if(question.settledOnly)result += "\nSaldo zero recebido não confirma quitação contratual; confirme com o banco. Contratos já encerrados podem não aparecer nos dados recebidos.";
   if (question.kind === "limits") result += "\n\nLinhas e limites compartilhados não são somados. Crédito disponível não é saldo em conta.";
   result += "\nValores não informados permanecem desconhecidos. Posição conforme os dados recebidos de cada banco; ausência de dados não confirma valor zero.";
   if (data.truncated) result += " Consulta parcial: há dados além do limite recebido; consulte Contas.";

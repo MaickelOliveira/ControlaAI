@@ -7,6 +7,7 @@ export type BankQuestion = {
   last4?: string;
   explicitBank?: boolean;
   keyword?: string;
+  settledOnly?: boolean;
 };
 
 export const normalizeBankText = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -30,7 +31,7 @@ function bankFilter(suffix: string): Pick<BankQuestion, "bankName" | "last4"> | 
   let target = match[1].replace(/\bfinal \d{4}\b/, "").trim();
   if (/^(?:(?:todos|todas|os|as|meus|minhas|bancos|banco|contas|conta|cartoes|cartao|bancarias|bancarios|conectados|conectadas|cada|um|dos|das|de|credito)\s*)+$/.test(target)) target = "";
   else target = target.replace(/^(?:(?:o|a|meu|minha) )?(?:cartao(?: de credito)?|conta(?: bancaria)?) (?:do |da )?/, "").replace(/^(?:(?:o|a|meu|minha) )?banco /, "");
-  if (target.length > 80 || /^\d+$/.test(target) || /[\n<>*`~]/.test(target) || /^(?:e|ou|sem|com|acima|abaixo)\b/.test(target)) return null;
+  if (target.length > 80 || /^\d+$/.test(target) || /[\n<>*`~?!;:]/.test(target) || /\b(?:quitados?|atrasados?|vencidos?)\b/.test(target) || /^(?:e|ou|sem|com|acima|abaixo)\b/.test(target)) return null;
   return { ...(target ? { bankName: target } : {}), ...(last4 ? { last4 } : {}) };
 }
 
@@ -59,13 +60,25 @@ function nextFinancingInstallment(text: string): Pick<BankQuestion, "kind" | "ke
   return filter ? { kind: "financings", keyword: match[1], ...filter } : null;
 }
 
+function nextLoanInstallment(text: string): Pick<BankQuestion, "kind"> | null {
+  if (mutation.test(text)) return null;
+  const clause=text.split(/[?.!]/,1)[0].trim();
+  return /^(?:qual (?:e )?(?:o )?valor da (?:proxima )?parcela|quanto (?:e|sera|custa) a (?:proxima )?parcela) (?:de cada|dos meus|de meus) emprestimos?$/.test(clause)?{kind:"loans"}:null;
+}
+
+function settledLoans(text: string): Pick<BankQuestion, "kind" | "settledOnly"> | null {
+  if (mutation.test(text)) return null;
+  const clause=text.split(/[?.!]/,1)[0].trim();
+  return /^(?:quais (?:sao )?(?:os )?(?:meus )?|(?:me )?mostre (?:os )?(?:meus )?)emprestimos (?:ja )?(?:estao )?quitados$/.test(clause)?{kind:"loans",settledOnly:true}:null;
+}
+
 /** Only read-only questions enter this path. Unrecognized filters are never discarded. */
 export function parseBankQuestion(question: string, today: string): BankQuestion | null {
   let text = normalizeBankText(question);
   if (text.length > 500) return null;
   text = queryText(question);
   if (/\b(empresa|empresarial|pessoal|familia|ontem|hoje|semana|ano|com|ifood|categoria)\b/.test(text)) return null;
-  const payoff = remainingFinancing(text) ?? nextFinancingInstallment(text);
+  const payoff = remainingFinancing(text) ?? nextFinancingInstallment(text) ?? nextLoanInstallment(text) ?? settledLoans(text);
   if (payoff && !/\b(mes|ontem|ano|anterior|passad\w*|(?:19|20)\d{2})\b/.test(text.replace(/\bfinal \d{4}\b/g, ""))) return { ...payoff, ...monthPeriod(today, false) };
   if (mutation.test(text)) return null;
   if (/^(?:quanto (?:eu )?gastei|quanto gastamos)/.test(text)) {
@@ -92,7 +105,7 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
 /** Protect unsupported bank-position questions from being answered as ordinary expenses. */
 export function isBankPositionQuestion(question: string): boolean {
   const text = queryText(question);
-  if (remainingFinancing(text) || nextFinancingInstallment(text)) return true;
+  if (remainingFinancing(text) || nextFinancingInstallment(text) || nextLoanInstallment(text) || settledLoans(text)) return true;
   return /^(?:qual|quais|quanto|quantos|como|mostre|me mostre|meus|minhas)\b/.test(text)
     && (/\b(?:emprestimos?|financiamentos?|investimentos?|limites?|credito|faturas?)\b/.test(text) || (/\bsaldos?\b/.test(text) && /\b(?:bancos?|bancarias?)\b/.test(text)))
     && !mutation.test(text) && !/\b(?:gastei|gastamos|gastos)\b/.test(text);
