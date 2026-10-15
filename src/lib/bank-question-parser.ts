@@ -8,6 +8,7 @@ export type BankQuestion = {
   explicitBank?: boolean;
   keyword?: string;
   settledOnly?: boolean;
+  balanceFilter?: "negative" | "missing";
 };
 
 export const normalizeBankText = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -29,6 +30,7 @@ function bankFilter(suffix: string): Pick<BankQuestion, "bankName" | "last4"> | 
   if (!match) return null;
   const last4 = match[1].match(/\bfinal (\d{4})\b/)?.[1];
   let target = match[1].replace(/\bfinal \d{4}\b/, "").trim();
+  if (/^(?:cada|todas?|contas?)\b/.test(target)) target=target.replace(/\b(?:agora|atualmente)$/, "").trim();
   if (/^(?:(?:todos|todas|os|as|meus|minhas|bancos|banco|contas|conta|cartoes|cartao|bancarias|bancarios|conectados|conectadas|cada|um|dos|das|de|credito)\s*)+$/.test(target)) target = "";
   else target = target.replace(/^(?:(?:o|a|meu|minha) )?(?:cartao(?: de credito)?|conta(?: bancaria)?) (?:do |da )?/, "").replace(/^(?:(?:o|a|meu|minha) )?banco /, "");
   if (target.length > 80 || /^\d+$/.test(target) || /[\n<>*`~?!;:]/.test(target) || /\b(?:quitados?|atrasados?|vencidos?)\b/.test(target) || /^(?:e|ou|sem|com|acima|abaixo)\b/.test(target)) return null;
@@ -77,6 +79,10 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
   let text = normalizeBankText(question);
   if (text.length > 500) return null;
   text = queryText(question);
+  if (/^(?:existe|ha|tem) (?:alguma conta com|algum) saldo negativo$/.test(text))
+    return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
+  if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))
+    return {kind:"balances",...monthPeriod(today,false),balanceFilter:"missing"};
   if (/\b(empresa|empresarial|pessoal|familia|ontem|hoje|semana|ano|com|ifood|categoria)\b/.test(text)) return null;
   const payoff = remainingFinancing(text) ?? nextFinancingInstallment(text) ?? nextLoanInstallment(text) ?? settledLoans(text);
   if (payoff && !/\b(mes|ontem|ano|anterior|passad\w*|(?:19|20)\d{2})\b/.test(text.replace(/\bfinal \d{4}\b/g, ""))) return { ...payoff, ...monthPeriod(today, false) };
