@@ -58,6 +58,13 @@ import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import type { Appointment } from "@/lib/agenda";
 import {googleWhatsAppConfirmation,googleWhatsAppReadyMeetLink,type GoogleWhatsAppRecord} from "./google-whatsapp-consumer";
 import {loadGoogleWhatsAppConsumer,loadGoogleWhatsAppConnected} from "./google-whatsapp-service";
+import {loadGoogleWhatsAppConnectionStatus} from "./google-whatsapp-service";
+import {googleConnectionQuestion} from "./google-connection-question";
+import {asksForManualAndBankAccounts,separatedAccountList} from "./separated-account-list";
+import {getOpenFinanceAccess} from "./open-finance-access";
+import {openFinanceRpc} from "./open-finance-http";
+import type {BankOverview} from "./open-finance-display";
+import {currentCompanyContext} from "./company-context";
 import {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
 import {googleWhatsAppMessageUUID,googleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
 import {googleAgendaSyncVersion} from "./google-agenda-client-contract";
@@ -2826,6 +2833,32 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       return;
     }
 
+    const googleStatusQuestion = googleConnectionQuestion(messageText);
+    if (googleStatusQuestion) {
+      if (googleStatusQuestion.ambiguous) {
+        await wppSend(from, localized(user.locale,
+          "Você quer verificar a conexão Google do modo *Pessoal* ou *Empresa*? Pergunte por um modo de cada vez.",
+          "¿Quieres verificar la conexión Google de *Personal* o *Empresa*? Pregunta por un modo a la vez."));
+        return;
+      }
+      const requested = googleStatusQuestion.mode ?? mode;
+      if (!allowsFinanceMode(requested)) {
+        await wppSend(from, replyModeAccessDenied(mode, user.locale));
+        return;
+      }
+      try {
+        const status = await loadGoogleWhatsAppConnectionStatus(user.id, requested);
+        await wppSend(from, localized(user.locale,
+          `Google Calendar / Meet no modo *${status.mode === "business" ? "Empresa" : "Pessoal"}*: ${status.connected ? "conectado ✅" : "não conectado"}.`,
+          `Google Calendar / Meet en *${status.mode === "business" ? "Empresa" : "Personal"}*: ${status.connected ? "conectado ✅" : "sin conectar"}.`));
+      } catch {
+        await wppSend(from, localized(user.locale,
+          "Não consegui verificar a conexão Google agora. Confira Configurações → Google Calendar / Meet no painel e tente novamente.",
+          "No pude verificar la conexión Google ahora. Revisa Configuración → Google Calendar / Meet en el panel e inténtalo de nuevo."));
+      }
+      return;
+    }
+
     // ── Processa com IA ──
     // A mensagem atual já foi gravada em addMessage() acima (linha ~179),
     // então o histórico já vem com ela como último item — removemos antes
@@ -3080,6 +3113,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const accountMode = (ai.mode || mode) as FinanceMode;
         if (phoneAccess !== "both" && accountMode !== mode) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
         const accounts = await getManualAccountsByUser(user.id, accountMode);
+        if (asksForManualAndBankAccounts(messageText)) {
+          let overview: Pick<BankOverview,"connections"> | null = null;
+          let bankReadFailed = false;
+          try {
+            const scope = await getOpenFinanceAccess(user, accountMode, {throwOnStorageError:true,companyId:currentCompanyContext()?.companyId});
+            if (scope) {
+              const result = await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+              if (!result || !Array.isArray(result.connections)) throw Error("BANK_OVERVIEW_UNAVAILABLE");
+              overview = result;
+            }
+          } catch { bankReadFailed = true; }
+          await wppSend(from,separatedAccountList(accounts,overview,accountMode,bankReadFailed,user.locale));
+          break;
+        }
         const title = user.locale === "es" ? "🏦 *Tus cuentas*" : "🏦 *Suas contas*";
         await wppSend(from, `${title}\n_(${accountMode === "business" ? (user.locale === "es" ? "Empresa" : "Empresa") : (user.locale === "es" ? "Personal" : "Pessoal")})_\n\n${accounts.map((account, index) => `${listNumberLabel(index)} ${account.name}${account.isDefault ? " ⭐" : ""}`).join("\n")}`);
         break;
