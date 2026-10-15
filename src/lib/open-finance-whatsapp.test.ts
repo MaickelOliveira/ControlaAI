@@ -15,6 +15,30 @@ it("uses the requested previous month and the own connected ledger",async()=>{
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"]);
   expect(answer).toContain("R$ 35,00");expect(answer).toContain("01/09/2026");expect(m.read).toHaveBeenCalledWith(user,"personal","2026-09-01","2026-09-30");
 });
+it("answers five recent movements with both directions and no sixth item",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"sixth",mode:"personal",source:"web",date:"2026-10-09",type:"expense",description:"Sexto",amount:6,category:"Outros",included:true},
+    {id:"credit",mode:"personal",source:"bank",date:"2026-10-15",type:"income",description:"Receita recente",amount:50,category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",amount:"50",currency:"BRL",direction:"credit"}},
+    {id:"transfer",mode:"personal",source:"bank",date:"2026-10-14",type:"expense",description:"Transferência própria",amount:40,category:"Transferência entre contas próprias",included:false,bank:{resource_type:"account",institution_name:"Banco B",amount:"40",currency:"BRL",direction:"debit"}},
+    {id:"debit",mode:"personal",source:"bank",date:"2026-10-13",type:"expense",description:"Compra recente",amount:30,category:"Alimentação",included:true,bank:{resource_type:"card",institution_name:"Banco C",amount:"30",currency:"BRL",direction:"debit"}},
+    {id:"manual",mode:"personal",source:"web",date:"2026-10-12",type:"income",description:"Registro manual",amount:20,category:"Outros",included:true},
+    {id:"fifth",mode:"personal",source:"web",date:"2026-10-11",type:"expense",description:"Quinto",amount:10,category:"Outros",included:true},
+    {id:"pending",mode:"personal",source:"web",date:"2026-10-15",type:"expense",description:"Pendente",amount:9,category:"Outros",status:"pending",included:false},
+    {id:"foreign",mode:"business",source:"web",date:"2026-10-15",type:"expense",description:"Outra empresa",amount:9,category:"Outros",included:true},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:true,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais foram minhas cinco movimentações mais recentes?","2026-10-15");
+  expect(answer).toContain("Receita recente");expect(answer).toContain("Transferência própria");expect(answer).toContain("Compra recente");
+  expect(answer).toContain("Registro manual");expect(answer).toContain("Quinto");
+  expect(answer).not.toContain("Sexto");expect(answer).not.toContain("Pendente");expect(answer).not.toContain("Outra empresa");
+  expect(answer).toContain("Não altera o resultado");expect(answer).toContain("importação");
+  expect(m.read).toHaveBeenCalledWith(user,"personal",expect.any(String),"2026-10-15");
+});
+it("does not label a movement with missing bank amount as a confirmed transfer",async()=>{
+  m.read.mockResolvedValue({entries:[{id:"unknown",mode:"personal",source:"bank",date:"2026-10-15",type:"expense",description:"Valor não recebido",amount:0,category:"Outros",included:false,bank:{resource_type:"account",institution_name:"Banco A",amount:null,currency:"BRL",direction:"debit"}}],bank:null});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais foram minhas cinco movimentações mais recentes?","2026-10-15");
+  expect(answer).toContain("Valor não recebido");expect(answer).toContain("Não informado");
+  expect(answer).not.toContain("R$ 0,00");expect(answer).not.toContain("Não altera o resultado");
+});
 it("includes received bills and explicit subscription estimates outside the realized expense total",async()=>{
   m.agenda.mockResolvedValue({items:[{id:"s",mode:"personal",kind:"recurring",description:"Streaming",resource_name:"Card",institution_name:"Bank",due_date:"2026-10-15",amount:"40",currency:"BRL",synced_at:"2026-10-11T10:00:00Z"}],incomplete:false});
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1},["2026-10-01","2026-10-31"]);
