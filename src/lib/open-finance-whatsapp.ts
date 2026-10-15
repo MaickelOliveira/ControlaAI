@@ -28,6 +28,20 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
   const wording=text.trim().replace(/[?!.]+$/g,"");
+  if(wording==="ha lancamentos com a mesma data e valor que precisam de conferencia"){
+    const from=`${today.slice(0,7)}-01`;
+    try{
+      const {entries,bank}=await readUnifiedFinances(user,requested,from,today);
+      const groups=new Map<string,LedgerEntry[]>();
+      for(const entry of entries.filter(e=>e.mode===requested&&e.included&&e.status!=="pending"&&e.amount>0&&e.date>=from&&e.date<=today)){
+        const key=`${entry.date}|${entry.type}|${Math.round(entry.amount*100)}`;
+        groups.set(key,[...groups.get(key)??[],entry]);
+      }
+      const candidates=[...groups.values()].filter(group=>group.length>1).sort((a,b)=>b[0].date.localeCompare(a[0].date));
+      const lines=candidates.slice(0,10).map((group,index)=>`${index+1}. ${bankDate(group[0].date)} · ${bankMoney(group[0].amount,"BRL")} · ${group[0].type==="income"?"entradas":"saídas"}\n${group.map(e=>`• ${safeSummary(e.description)} · ${safeSummary(financeOrigin(e))}`).join("\n")}`).join("\n\n");
+      return `Coincidências de data, valor e sentido para conferir · ${bankDate(from)} a ${bankDate(today)}\n${lines||"Nenhuma coincidência encontrada nos movimentos realizados recebidos."}${candidates.length>10?`\nMostrando 10 de ${candidates.length} grupos; confira Finanças.`:""}\nA coincidência não prova duplicação; não removi nem alterei nenhum lançamento.${financeCoverageNotice(bank,entries)}`;
+    }catch{return "Não consegui conferir possíveis repetições agora. Confira Finanças ou tente novamente; nenhum lançamento foi alterado.";}
+  }
   const weeklyAccounts=/^quanto (?:entrou na conta|saiu das contas) nesta semana$/.test(wording);
   const splitSources=wording==="separe movimentacoes de conta e de cartao nos ultimos sete dias";
   const cardPurchases=wording==="mostre compras de cartao do mes sem pagamentos de fatura";

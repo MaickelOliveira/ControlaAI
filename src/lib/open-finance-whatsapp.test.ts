@@ -85,6 +85,18 @@ it("does not claim zero account movement without a connected bank",async()=>{
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana?","2026-10-15");
   expect(answer).toContain("Não tenho dados de um banco conectado");expect(answer).not.toContain("R$ 0,00");
 });
+it("lists same-day, same-value review candidates without calling them duplicates",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"a",mode:"personal",source:"bank",date:"2026-10-11",type:"expense",amount:45,description:"Loja A",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",amount:"45",currency:"BRL"}},
+    {id:"b",mode:"personal",source:"bank",date:"2026-10-11",type:"expense",amount:45,description:"Loja B",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco B",direction:"debit",amount:"45",currency:"BRL"}},
+    {id:"transfer",mode:"personal",source:"bank",date:"2026-10-11",type:"expense",amount:45,description:"Transferência própria",category:"Transferência entre contas próprias",included:false,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"45",currency:"BRL"}},
+    {id:"other",mode:"business",source:"bank",date:"2026-10-11",type:"expense",amount:45,description:"Outra empresa",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",amount:"45",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Há lançamentos com a mesma data e valor que precisam de conferência?","2026-10-15");
+  expect(answer).toContain("Loja A");expect(answer).toContain("Loja B");
+  expect(answer).not.toContain("Transferência própria");expect(answer).not.toContain("Outra empresa");
+  expect(answer).toContain("não prova duplicação");
+});
 it("includes received bills and explicit subscription estimates outside the realized expense total",async()=>{
   m.agenda.mockResolvedValue({items:[{id:"s",mode:"personal",kind:"recurring",description:"Streaming",resource_name:"Card",institution_name:"Bank",due_date:"2026-10-15",amount:"40",currency:"BRL",synced_at:"2026-10-11T10:00:00Z"}],incomplete:false});
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1},["2026-10-01","2026-10-31"]);
