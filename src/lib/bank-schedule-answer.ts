@@ -33,5 +33,5 @@ export function formatBankSchedules(agenda: BankAgenda, kind: "installments" | "
     if (rows.length > 10) result += `\nMais ${rows.length - 10} item(ns); consulte Contas. Os subtotais incluem todos os itens recebidos.`;
   }
   if (agenda.incomplete) result += "\nConsulta bancária incompleta: há dados em atualização ou indisponíveis.";
-  return result + "\nAs parcelas identificadas não confirmam pagamento. A quantidade restante é uma previsão pelo último número recebido; datas futuras não são calculadas. Faturas, parcelas e obrigações manuais não são somadas entre si nem aos gastos realizados.";
+  return result + (kind==="installments"?"\nAs parcelas identificadas não confirmam pagamento. A quantidade restante é uma previsão pelo último número recebido; datas futuras não são calculadas.":"") + "\nFaturas, parcelas e obrigações manuais não são somadas entre si nem aos gastos realizados.";
 }

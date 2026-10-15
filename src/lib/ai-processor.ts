@@ -3,6 +3,7 @@ import { getConfig } from "./whatsapp-config";
 import { shouldUseWhatsAppAiFirst } from "./whatsapp-ai-routing";
 import {virtualAgentPrompt} from "./virtual-agent-replies";
 import {explicitBankQueryPlan, validateBankQuery, type StructuredBankQuery} from "./bank-query-intent";
+import {isUnregisteredBankRecurringRequest} from "./recurring-query-kind";
 import {descriptionExpenseCategory, normalizeExpenseCategories} from "./expense-category";
 import {categoryDetailQuestion} from "./category-detail-question";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
@@ -4121,6 +4122,10 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
         : `Você quer apagar um lançamento chamado "${label}" ou corrigir o total mostrado? Se for um lançamento, diga a descrição, o valor ou a data para eu encontrar o registro certo.`;
     return { intent: "how_to", confidence: 1, response };
   }
+
+  // Para comparar com cadastros manuais, a consulta precisa das duas fontes.
+  // Um plano bancário sem essa comparação daria uma lista incompleta.
+  if (explicit?.intent === "recurring_query" && isUnregisteredBankRecurringRequest(message)) return explicit;
 
   // Respostas do modelo com intenção ou confiança ausentes não executam ações.
   if (modeled?.intent === "unknown" && modeled.response?.trim() && !explicit) return modeled;
