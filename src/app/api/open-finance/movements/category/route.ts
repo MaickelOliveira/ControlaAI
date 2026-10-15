@@ -12,15 +12,27 @@ export async function PATCH(request:Request){
   const scope=await getOpenFinanceAccess(auth.user,new URL(request.url).searchParams.get("mode"));
   if(!scope)return NextResponse.json({error:"Não disponível"},{status:404,headers:OF_HEADERS});
   try{requireOpenFinanceOrigin(request);}catch{return NextResponse.json({error:"Origem não autorizada"},{status:403,headers:OF_HEADERS});}
-  let movementId:string,category:string|null;
+  let movementId:string,category:string|null,applyToMatchingHistory:boolean,stopFutureMatching:boolean;
   try{
     const body=JSON.parse((await readBankBody(request,4096)).toString("utf8"));
     movementId=body.movementId;category=body.category;
+    applyToMatchingHistory=body.applyToMatchingHistory??false;
+    stopFutureMatching=body.stopFutureMatching??false;
     const user=await workspaceCategoryUser(auth.user);
     const categories=[...CATEGORIES_EXPENSE,...CATEGORIES_INCOME,OWN_ACCOUNT_TRANSFER_CATEGORY,...user.customCategoriesExpense??[],...user.customCategoriesIncome??[]];
-    if(typeof movementId!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(movementId)||category!==null&&(typeof category!=="string"||category.length>100||!categories.includes(category)))throw Error("INVALID_CATEGORY");
+    if(typeof movementId!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(movementId)||category!==null&&(typeof category!=="string"||category.length>100||!categories.includes(category))||typeof applyToMatchingHistory!=="boolean"||typeof stopFutureMatching!=="boolean"||applyToMatchingHistory&&category!==OWN_ACCOUNT_TRANSFER_CATEGORY||stopFutureMatching&&category!==null||applyToMatchingHistory&&stopFutureMatching)throw Error("INVALID_CATEGORY");
   }catch{return NextResponse.json({error:"Escolha uma categoria válida."},{status:400,headers:OF_HEADERS});}
   try{
+    if(applyToMatchingHistory){
+      const matched=await openFinanceRpc(scope,"zelo_of_confirm_own_transfer_pattern",{p_movement:movementId});
+      if(!Number.isInteger(matched)||typeof matched!=="number"||matched<0)return NextResponse.json({error:"Movimentação não encontrada neste modo."},{status:404,headers:OF_HEADERS});
+      return NextResponse.json({ok:true,matched},{headers:OF_HEADERS});
+    }
+    if(stopFutureMatching){
+      const cleared=await openFinanceRpc(scope,"zelo_of_clear_own_transfer_pattern",{p_movement:movementId});
+      if(cleared!==true)return NextResponse.json({error:"Movimentação não encontrada neste modo."},{status:404,headers:OF_HEADERS});
+      return NextResponse.json({ok:true},{headers:OF_HEADERS});
+    }
     const saved=await openFinanceRpc(scope,"zelo_of_set_movement_category",{p_movement:movementId,p_category:category});
     if(saved!==true)return NextResponse.json({error:"Movimentação não encontrada neste modo."},{status:404,headers:OF_HEADERS});
     return NextResponse.json({ok:true},{headers:OF_HEADERS});
