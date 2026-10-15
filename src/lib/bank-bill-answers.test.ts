@@ -122,6 +122,20 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   const fullyPaid={...inconsistent,bills:[{...inconsistent.bills[0],status:"paid"}]} as BankOverview;
   expect(answerBillQuestion(fullyPaid,{kind:"confirmed-payment"},"2026-10-15","personal")).not.toContain("dados de pagamento inconsistentes");
  });
+ it("separa pagamentos realmente parciais de faturas com valores contraditórios",()=>{
+  const mixed={...overview,bills:[
+   {id:"partial",resource_id:"card-sa",currency:"BRL",due_date:"2026-10-13",total_amount:"1000",payment_amount:"250",payment_evidence:true,status:"partial"},
+   {id:"conflict",resource_id:"card-nu",currency:"BRL",due_date:"2026-10-02",total_amount:"2215.51",payment_amount:"2215.51",payment_evidence:true,status:"partial"},
+  ]} as BankOverview;
+  const reply=answerBillQuestion(mixed,{kind:"partial-payment"},"2026-10-15","personal");
+  const [partialSection,conflictSection]=reply.split("Registros contraditórios (fora da lista de parciais)");
+  expect(partialSection).toContain("Santander");
+  expect(partialSection).not.toContain("Nubank");
+  expect(conflictSection).toContain("Nubank");
+  const conflictingOnly=answerBillQuestion({...mixed,bills:[mixed.bills[1]]},{kind:"partial-payment"},"2026-10-15","personal");
+  expect(conflictingOnly).toContain("Nenhum pagamento parcial confiável");
+  expect(conflictingOnly).toContain("Registros contraditórios (fora da lista de parciais)");
+ });
  it("identifica cartões ativos sem fatura recebida",()=>{
   const reply=answerBillQuestion(overview,{kind:"missing"},"2026-10-15","personal");
   expect(reply).toContain("Realize · Cartão Renner");expect(reply).not.toContain("Nubank");expect(reply).not.toContain("Inter");
