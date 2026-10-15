@@ -27,6 +27,11 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  // A largest movement is a transaction query, even when "crédito" also resembles a credit-line position.
+  // Leave it to the validated AI query plan instead of returning generic position guidance.
+  if(/\b(?:maior|mais alto|mais alta)\b/.test(text)
+    && /\b(?:credito|debito)\b/.test(text)
+    && /\b(?:bancari[oa]|conta bancaria|extrato bancario)\b/.test(text))return null;
   const wording=text.trim().replace(/[?!.]+$/g,"");
   if(/^(?:mostre|liste|separe) estornos? de cartao separados? das receitas$/.test(wording)){
     const from=`${today.slice(0,7)}-01`;

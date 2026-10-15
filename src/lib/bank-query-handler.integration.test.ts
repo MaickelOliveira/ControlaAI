@@ -49,6 +49,17 @@ it("lets the structured query answer bill dates that the legacy phrase parser ca
   expect(response).toContain(bankMoney("75", "BRL"));
   expect(response).not.toContain("Não encontrei vencem");
 });
+it("routes the largest bank credit to the AI plan instead of answering with generic position guidance", async () => {
+  m.process.mockResolvedValue({ intent: "bank_query", confidence: .96, bankQuery: { kind: "transactions", operation: "max", direction: "credit", source: "account" }, period: { from: "2026-10-01", to: "2026-10-31" } });
+  m.read.mockResolvedValue({ entries: [
+    { id: "credit", mode: "personal", source: "bank", included: true, type: "income", status: "posted", date: "2026-10-10", description: "Crédito recebido", amount: 80, category: "Outros", bank: { amount: "80", currency: "BRL", direction: "credit", resource_type: "account", institution_name: "Nubank" } },
+  ], bank: { overview: { connections: [{ institution_name: "Nubank" }] }, report: { sync_pending: false, missing_dates: 0, last_successful_sync_at: "2026-10-11" } } });
+  await handleIncomingMessage({ from: "5511999990000", text: "Qual foi o maior crédito bancário do mês?" });
+  const response = m.send.mock.calls.map(call => call[1]).join("\n");
+  expect(m.process).toHaveBeenCalledOnce();
+  expect(response).toContain("Crédito recebido");
+  expect(response).not.toContain("Posso consultar saldos bancários");
+});
 it("keeps ordinary spending questions read-only as well", async () => {
   m.process.mockResolvedValue({ intent: "finance_query", confidence: .96, keyword: "aluguel" });
   m.read.mockResolvedValue({ entries: [], bank: { overview: { connections: [{ institution_name: "Nubank" }] }, report: { sync_pending: false, missing_dates: 0, last_successful_sync_at: "2026-10-11" } } });
