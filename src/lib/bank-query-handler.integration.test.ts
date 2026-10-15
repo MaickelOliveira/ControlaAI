@@ -166,6 +166,37 @@ it("explains paid bills without claiming the bank confirmed a payment",async()=>
  expect(response).not.toContain("será marcada");expect(m.process).not.toHaveBeenCalled();
  expect(m.rpc).not.toHaveBeenCalled();
 });
+it("explains a closed bill without claiming that closing means paid",async()=>{
+ await handleIncomingMessage({from:"5511999990000",text:"Qual é a diferença entre fatura fechada e compra em aberto?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("ciclo encerrado");expect(response).toContain("não significa que já foi paga");
+ expect(m.process).not.toHaveBeenCalled();expect(m.rpc).not.toHaveBeenCalled();
+});
+it("answers confirmed and partial bill payments from bank evidence only",async()=>{
+ m.rpc.mockResolvedValue({connections:[{id:"nu",institution_name:"Nubank",status:"active"}],resources:[{id:"card",connection_id:"nu",resource_type:"card",name:"Platinum"}],bills:[
+  {id:"paid",resource_id:"card",currency:"BRL",due_date:"2026-09-02",total_amount:"100",payment_amount:"100",payment_evidence:true,status:"paid"},
+  {id:"partial",resource_id:"card",currency:"BRL",due_date:"2026-10-02",total_amount:"200",payment_amount:"50",payment_evidence:true,status:"partial"},
+ ],limits:[],credit:[],sync:[]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais bancos confirmaram pagamento de fatura?"});
+ await handleIncomingMessage({from:"5511999990000",text:"Liste pagamentos parciais informados nas faturas."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Bancos com pagamento de fatura informado");expect(response).toContain("pagamento parcial informado");
+ expect(response).toContain("50,00");expect(m.process).not.toHaveBeenCalled();
+});
+it("interprets Empresa as the requested mode when Pessoal is explicitly excluded",async()=>{
+ await handleIncomingMessage({from:"5511999990000",text:"Mostre as faturas do modo Empresa sem misturar com o Pessoal."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Última fatura recebida de cada cartão · Empresa");
+ expect(response).not.toContain("Escolha um modo por consulta");
+ expect(m.access).toHaveBeenCalledWith(expect.objectContaining({id:"holder"}),"business",expect.any(Object));
+ expect(m.process).not.toHaveBeenCalled();
+});
+it("lists only active cards without any received bill",async()=>{
+ await handleIncomingMessage({from:"5511999990000",text:"Quais cartões não enviaram dados de fatura?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Cartões sem fatura recebida");expect(response).toContain("Nubank · Platinum");
+ expect(m.process).not.toHaveBeenCalled();
+});
 it("answers the next loan installment question without using card installments",async()=>{
  await handleIncomingMessage({from:"5511999990000",text:"Qual é o valor da próxima parcela de cada empréstimo pessoal? Avise quais bancos não informaram esse valor."});
  const response=m.send.mock.calls.map(call=>call[1]).join("\n");

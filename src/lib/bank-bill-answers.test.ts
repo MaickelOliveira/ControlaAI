@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer} from "./bank-bill-answers";
+import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer,closedBillAnswer} from "./bank-bill-answers";
 import type {BankOverview} from "./open-finance-display";
 import type {LedgerEntry} from "./finance-ledger";
 
@@ -30,6 +30,10 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   ["Separe o valor da fatura das compras já realizadas no cartão.", "separate"],
   ["Compare fatura e compras dos cartões.", "separate"],
   ["Fatura versus compras no cartão: mostre separado.", "separate"],
+  ["Quais bancos confirmaram pagamento de fatura?", "confirmed-payment"],
+  ["Liste pagamentos parciais informados nas faturas.", "partial-payment"],
+  ["Mostre as faturas do modo Empresa sem misturar com o Pessoal.", "latest"],
+  ["Quais cartões não enviaram dados de fatura?", "missing"],
  ] as const)("entende %s",(message,kind)=>expect(parseBillQuestion(message)?.kind).toBe(kind));
  it("não trata pedido de pagamento como consulta",()=>expect(parseBillQuestion("Pague a fatura do Nubank")).toBeNull());
  it("explica histórico de fatura quitada sem prometer baixa automática",()=>{
@@ -37,6 +41,11 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   expect(reply).toContain("Sim");expect(reply).toContain("histórico");expect(reply.toLowerCase()).toContain("se o banco informar");
   expect(reply).not.toContain("será marcada");
   expect(paidBillHistoryAnswer("Pague a fatura agora")).toBeNull();
+ });
+ it("distingue fatura fechada de compra que ainda pode mudar de ciclo",()=>{
+  const reply=closedBillAnswer("Qual é a diferença entre fatura fechada e compra em aberto?")!;
+  expect(reply).toContain("ciclo encerrado");expect(reply).toContain("ainda não entrou");
+  expect(reply).toContain("não significa que já foi paga");
  });
  it("mostra só a última fatura por cartão sem concluir que permanece em aberto",()=>{
   const reply=answerBillQuestion(overview,{kind:"latest"},"2026-10-15","personal");
@@ -75,5 +84,26 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   expect(reply).toContain("Realize · Cartão Renner");expect(reply).toContain("Fatura não informada pelo banco");
   expect(reply).toContain("nenhuma compra em BRL contabilizável recebida");
   expect(reply.toLowerCase()).toContain("não some");
+ });
+ it("mostra só bancos com pagamento informado e não chama ausência de confirmação de falta de pagamento",()=>{
+  const paid={...overview,bills:[...overview.bills,{id:"paid",resource_id:"card-nu",currency:"BRL",due_date:"2026-08-02",total_amount:"704.46",minimum_payment_amount:"105",status:"paid",payment_amount:"704.46",payment_evidence:true}]} as BankOverview;
+  const reply=answerBillQuestion(paid,{kind:"confirmed-payment"},"2026-10-15","personal");
+  expect(reply).toContain("Nubank");expect(reply).not.toContain("Santander");expect(reply).not.toContain("Inter");
+  const missing=answerBillQuestion(overview,{kind:"confirmed-payment"},"2026-10-15","personal");
+  expect(missing).toContain("Nenhum banco conectado informou pagamento de fatura");
+  expect(missing).toContain("não prova que não foram pagas");
+ });
+ it("lista somente pagamentos parciais com evidência recebida",()=>{
+  const partial={...overview,bills:[...overview.bills,{id:"partial",resource_id:"card-sa",currency:"BRL",due_date:"2026-09-13",total_amount:"1000",minimum_payment_amount:"100",status:"partial",payment_amount:"250",payment_evidence:true}]} as BankOverview;
+  const reply=answerBillQuestion(partial,{kind:"partial-payment"},"2026-10-15","personal");
+  expect(reply).toContain("Santander");expect(reply).toContain("250,00");expect(reply).not.toContain("Nubank");
+  expect(answerBillQuestion(overview,{kind:"partial-payment"},"2026-10-15","personal")).toContain("Nenhum pagamento parcial informado");
+  const noAmount={...overview,bills:[{id:"status-only",resource_id:"card-sa",currency:"BRL",due_date:"2026-10-13",total_amount:"1000",status:"partial",payment_amount:"0"}]} as BankOverview;
+  const noAmountReply=answerBillQuestion(noAmount,{kind:"partial-payment"},"2026-10-15","personal");
+  expect(noAmountReply).toContain("Não informado");expect(noAmountReply).not.toContain("R$ 0,00");
+ });
+ it("identifica cartões ativos sem fatura recebida",()=>{
+  const reply=answerBillQuestion(overview,{kind:"missing"},"2026-10-15","personal");
+  expect(reply).toContain("Realize · Cartão Renner");expect(reply).not.toContain("Nubank");expect(reply).not.toContain("Inter");
  });
 });
