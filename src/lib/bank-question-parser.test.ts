@@ -25,6 +25,18 @@ it.each(["Registre um empréstimo de 500", "Pague meu empréstimo", "Cancele a c
 it("retains the exact institution phrase and card suffix", () => {
   expect(parseBankQuestion("Qual o limite disponível no cartão do Nubank final 1234?", "2026-10-11")).toMatchObject({ bankName: "nubank", last4: "1234" });
   expect(parseBankQuestion("Qual saldo no Banco do Brasil?", "2026-10-11")).toMatchObject({ bankName: "do brasil" });
+  expect(parseBankQuestion("Qual saldo no Banco Agora?", "2026-10-11")).toMatchObject({ bankName: "agora" });
+});
+it("treats 'each account now' as a balance request, not a bank name", () => {
+  expect(parseBankQuestion("Qual o saldo disponível em cada conta agora?", "2026-10-15"))
+    .toMatchObject({kind:"balances"});
+  expect(parseBankQuestion("Qual o saldo disponível em cada conta agora?", "2026-10-15")?.bankName).toBeUndefined();
+});
+it("recognizes focused questions about negative and missing account balances", () => {
+  expect(parseBankQuestion("Existe alguma conta com saldo negativo?", "2026-10-15"))
+    .toMatchObject({kind:"balances",balanceFilter:"negative"});
+  expect(parseBankQuestion("Quais contas conectadas não enviaram saldo?", "2026-10-15"))
+    .toMatchObject({kind:"balances",balanceFilter:"missing"});
 });
 
 it.each(["quanto falta pra min pagar do carro", "Quanto ainda devo no financiamento do carro?", "Quanto falta para quitar minha casa?"])("recognizes remaining financed debt rather than monthly bills: %s", message => {

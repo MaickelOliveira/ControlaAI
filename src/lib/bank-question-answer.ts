@@ -53,6 +53,16 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   if (!connectedGroups.length) return question.bankName || question.last4
     ? `Não encontrei ${safe(question.bankName ?? "esse cartão")}${question.last4 ? ` · final ${question.last4}` : ""} entre os bancos conectados em ${safe(modeLabel)}. Confira Contas e o modo/empresa selecionado.`
     : `Nenhum banco conectado em ${safe(modeLabel)}. A conexão fica na aba Contas.`;
+  if(question.kind==="balances"&&question.balanceFilter){
+    const missing=question.balanceFilter==="missing";
+    const accounts=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="account"&&(
+      missing?bankMoney(resource.available_amount,resource.currency)==="Não informado":
+        bankMoney(resource.available_amount,resource.currency)!=="Não informado"&&Number(resource.available_amount)<0
+    )).map(resource=>`• ${safe(group.name)} · ${safe(bankResourceName(resource.name))}${missing?"":`: ${bankMoney(resource.available_amount,resource.currency)}`}`));
+    const heading=missing?"Contas sem saldo disponível informado":"Contas com saldo negativo informado";
+    const empty=missing?"Nenhuma conta sem saldo informado foi identificada nos dados recebidos.":"Nenhuma conta com saldo negativo foi identificada nos dados recebidos.";
+    return `${heading} · ${safe(modeLabel)}\n${accounts.slice(0,20).join("\n")||empty}${accounts.length>20?`\nMais ${accounts.length-20} conta(s) em Contas.`:""}\nPosição conforme os dados recebidos; ausência de dados não confirma saldo zero.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+  }
   const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
   const debt = question.kind === "loans" || question.kind === "financings";
   const wantedDebtType = question.kind === "loans" ? "loan" : "financing";

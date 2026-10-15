@@ -82,6 +82,33 @@ describe("saved bank positions", () => {
     expect(answer(data, "Mostre meus investimentos no Sicredi")).toContain(bankMoney("290", "BRL"));
     const bill = answer(data, "Qual o valor da fatura no Nubank?"); expect(bill).toContain(bankMoney("400", "BRL")); expect(bill).toContain("20/10/2026"); expect(bill).toContain("Pagamento: não informado"); expect(bill).not.toContain("Sicredi");
   });
+  it("shows only negative account balances and warns when the bank feed is incomplete", () => {
+    const data=overview();
+    data.resources.push({...resource("positive","nu","account","Conta positiva"),available_amount:"20"},
+      {...resource("negative","si","account","Conta negativa"),available_amount:"-15.25"},
+      resource("missing","real","account","Conta sem saldo"));
+    data.sync=[{status:"error",last_successful_sync_at:null,covered_from:null,covered_to:null}];
+    const text=answer(data,"Existe alguma conta com saldo negativo?");
+    expect(text).toContain("Conta negativa");expect(text).toContain(bankMoney("-15.25","BRL"));
+    expect(text).not.toContain("Conta positiva");expect(text).not.toContain("Conta sem saldo");
+    expect(text).toContain("importação pendente ou com falha");
+  });
+  it("lists only connected accounts whose available balance was not received", () => {
+    const data=overview();
+    data.resources.push({...resource("known","nu","account","Conta informada"),available_amount:"0"},
+      resource("missing","si","account","Conta sem saldo"),
+      resource("card","real","card","Cartão sem saldo"));
+    const text=answer(data,"Quais contas conectadas não enviaram saldo?");
+    expect(text).toContain("Conta sem saldo");expect(text).toContain("Sicredi");
+    expect(text).not.toContain("Conta informada");expect(text).not.toContain("Cartão sem saldo");
+  });
+  it("limits a focused balance reply when many accounts match",()=>{
+    const data=overview();
+    data.resources.push(...Array.from({length:21},(_,index)=>({...resource(`missing-${index}`,"si","account",`Conta ${index}`),available_amount:null})));
+    const text=answer(data,"Quais contas conectadas não enviaram saldo?");
+    expect(text).toContain("Conta 19");expect(text).not.toContain("Conta 20");
+    expect(text).toContain("Mais 1 conta(s) em Contas");
+  });
   it("keeps exact bank names distinct and filters the last four digits of a card", () => {
     const data = overview(); data.connections.push(connection("bb", "Banco do Brasil"), connection("bne", "Banco do Nordeste do Brasil S.A."));
     data.resources.push({ ...resource("bb-cash", "bb", "account", "Conta"), available_amount: "10" }, { ...resource("bne-cash", "bne", "account", "Conta"), available_amount: "90" }, { ...resource("c1", "nu", "card", "Um"), identification_last4: "1234" }, { ...resource("c2", "nu", "card", "Dois"), identification_last4: "5678" });
