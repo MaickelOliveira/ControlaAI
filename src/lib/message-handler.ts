@@ -26,6 +26,7 @@ import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, i
 import { createTask, createTasks, getPendingTasks, getTasksByUser, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
 import { parseTaskQueryScope, replyScopedTaskList, selectTasksForQuery } from "@/lib/task-query";
 import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
+import { filterRemindersForNextWeek, reminderListScope } from "@/lib/reminder-query";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
 import {
@@ -4013,7 +4014,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "reminder_list": {
         const reminders = await getRemindersByUser(user.id, mode);
-        await wppSend(from, replyReminderList(reminders, user.locale));
+        const scope = reminderListScope(messageText);
+        await wppSend(from, replyReminderList(scope === "next_week" ? filterRemindersForNextWeek(reminders) : reminders, user.locale, scope));
         break;
       }
 

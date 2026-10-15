@@ -158,21 +158,26 @@ export function replyReminderSet(message: string, scheduledAt: string, repeat: s
   return `${intro}\n\n💬 ${message}\n📅 ${dateStr} ${isEs(locale) ? "a las" : "às"} ${timeStr}\n🔁 ${dict[repeat] ?? dict.none}`;
 }
 
-export function replyReminderList(reminders: Reminder[], locale?: string): string {
-  if (!reminders.length) return isEs(locale) ? "🔔 Ningún recordatorio activo en este momento." : "🔔 Nenhum lembrete ativo no momento.";
+export function replyReminderList(reminders: Reminder[], locale?: string, scope: "all" | "next_week" = "all"): string {
+  if (!reminders.length) return scope === "next_week"
+    ? (isEs(locale) ? "🔔 Ningún recordatorio para la próxima semana." : "🔔 Nenhum lembrete para a próxima semana.")
+    : (isEs(locale) ? "🔔 Ningún recordatorio activo en este momento." : "🔔 Nenhum lembrete ativo no momento.");
   const repeatLabel: Record<string, Record<string, string>> = {
     "pt-BR": { none: "uma vez", daily: "todo dia", weekly: "toda semana", monthly: "todo mês" },
     "pt-PT": { none: "uma vez", daily: "todos os dias", weekly: "todas as semanas", monthly: "todos os meses" },
     es: { none: "una vez", daily: "todos los días", weekly: "todas las semanas", monthly: "todos los meses" },
   };
   const dict = repeatLabel[locale ?? "pt-BR"] ?? repeatLabel["pt-BR"];
-  const titulo = isEs(locale) ? "Tus recordatorios activos" : "Seus lembretes ativos";
+  const titulo = scope === "next_week"
+    ? (isEs(locale) ? "Tus recordatorios de la próxima semana" : "Seus lembretes da próxima semana")
+    : (isEs(locale) ? "Tus recordatorios activos" : "Seus lembretes ativos");
   let msg = `🔔 *${titulo} (${reminders.length}):*\n\n`;
   reminders.slice(0, 10).forEach((r, i) => {
     const dateStr = formatDateBR(r.scheduledAt);
     const timeStr = new Date(r.scheduledAt).toLocaleTimeString(dateLocale(locale), { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
     const para = r.recipientType !== "self" && r.recipientName ? ` _(${isEs(locale) ? "para" : "pra"} ${r.recipientName})_` : "";
-    msg += `${i + 1}. 💬 ${r.message}${para} — ${dateStr} ${isEs(locale) ? "a las" : "às"} ${timeStr} _(${dict[r.repeat] ?? dict.none})_\n`;
+    const item = scope === "next_week" ? "•" : `${i + 1}.`;
+    msg += `${item} 💬 ${r.message}${para} — ${dateStr} ${isEs(locale) ? "a las" : "às"} ${timeStr} _(${dict[r.repeat] ?? dict.none})_\n`;
   });
   return msg.trim();
 }

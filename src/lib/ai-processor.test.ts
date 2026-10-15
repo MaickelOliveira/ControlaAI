@@ -674,6 +674,17 @@ describe("task lists and scheduled reminders", () => {
     expect(result?.reminder?.scheduledAt).toMatch(/^\d{4}-\d{2}-\d{2}T18:00:00$/);
   });
 
+  it("does not save the command or the trailing h as a reminder's subject", () => {
+    const result = getExplicitScheduledReminderResult(
+      "Crie um lembrete TESTE AUDITORIA - conferir fatura amanhã às 10h.",
+    );
+    expect(result).toMatchObject({
+      intent: "reminder_set",
+      reminder: { message: "TESTE AUDITORIA - conferir fatura", repeat: "none" },
+    });
+    expect(result?.reminder?.scheduledAt).toMatch(/^\d{4}-\d{2}-\d{2}T10:00:00$/);
+  });
+
   it("creates a Spanish task list item by item", () => {
     expect(getExplicitTaskListCreateResult("Crea una lista de tareas: estudiar, ordenar el escritorio y llamar a Ana")?.tasks?.map(task => task.title))
       .toEqual(["estudiar", "ordenar el escritorio", "llamar a Ana"]);
