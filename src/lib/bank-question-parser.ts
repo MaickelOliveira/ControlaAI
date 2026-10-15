@@ -79,7 +79,7 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
   let text = normalizeBankText(question);
   if (text.length > 500) return null;
   text = queryText(question);
-  if (/^(?:existe|ha|tem) (?:alguma conta com|algum) saldo negativo$/.test(text))
+  if (/^(?:existe|ha|tem) (?:alguma conta(?: pessoal)? com|algum) saldo negativo(?:\? mostre (?:somente|apenas) essas contas)?$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
   if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"missing"};

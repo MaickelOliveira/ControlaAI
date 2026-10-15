@@ -60,8 +60,10 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
         bankMoney(resource.available_amount,resource.currency)!=="Não informado"&&Number(resource.available_amount)<0
     )).map(resource=>`• ${safe(group.name)} · ${safe(bankResourceName(resource.name))}${missing?"":`: ${bankMoney(resource.available_amount,resource.currency)}`}`));
     const heading=missing?"Contas sem saldo disponível informado":"Contas com saldo negativo informado";
-    const empty=missing?"Nenhuma conta sem saldo informado foi identificada nos dados recebidos.":"Nenhuma conta com saldo negativo foi identificada nos dados recebidos.";
-    return `${heading} · ${safe(modeLabel)}\n${accounts.slice(0,20).join("\n")||empty}${accounts.length>20?`\nMais ${accounts.length-20} conta(s) em Contas.`:""}\nPosição conforme os dados recebidos; ausência de dados não confirma saldo zero.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+    const empty=missing?"Nenhuma conta recebida sem saldo informado foi identificada.":"Nenhuma conta com saldo negativo foi identificada nos dados recebidos.";
+    const banksWithoutAccounts=missing?connectedGroups.filter(group=>!group.resources.some(resource=>resource.resource_type==="account")).map(group=>safe(group.name)):[];
+    const bankNotice=banksWithoutAccounts.length?`\nBancos que não enviaram dados de conta: ${banksWithoutAccounts.slice(0,20).join(", ")}.${banksWithoutAccounts.length>20?` Mais ${banksWithoutAccounts.length-20} banco(s) em Contas.`:""}`:"";
+    return `${heading} · ${safe(modeLabel)}\n${accounts.slice(0,20).join("\n")||empty}${accounts.length>20?`\nMais ${accounts.length-20} conta(s) em Contas.`:""}${bankNotice}\nPosição conforme os dados recebidos; ausência de dados não confirma saldo zero.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
   }
   const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
   const debt = question.kind === "loans" || question.kind === "financings";

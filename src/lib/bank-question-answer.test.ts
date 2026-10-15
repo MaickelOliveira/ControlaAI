@@ -101,6 +101,8 @@ describe("saved bank positions", () => {
     const text=answer(data,"Quais contas conectadas não enviaram saldo?");
     expect(text).toContain("Conta sem saldo");expect(text).toContain("Sicredi");
     expect(text).not.toContain("Conta informada");expect(text).not.toContain("Cartão sem saldo");
+    expect(text).toContain("Realize");
+    expect(text).toContain("não enviaram dados de conta");
   });
   it("limits a focused balance reply when many accounts match",()=>{
     const data=overview();

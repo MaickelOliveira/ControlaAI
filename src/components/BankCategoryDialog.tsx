@@ -1,8 +1,10 @@
 "use client";
 import {useState} from "react";
 import type {LedgerEntry} from "@/lib/finance-ledger";
+import {OWN_ACCOUNT_TRANSFER_CATEGORY} from "@/lib/bank-category";
 export default function BankCategoryDialog({entry,mode,categories,onClose,onSaved}:{entry:LedgerEntry;mode:string;categories:string[];onClose:()=>void;onSaved:()=>void}){
-  const [category,setCategory]=useState(categories.includes(entry.category)?entry.category:"");
+  const options=entry.bank?.resource_type==="account"?[...new Set([...categories,OWN_ACCOUNT_TRANSFER_CATEGORY])]:categories;
+  const [category,setCategory]=useState(options.includes(entry.category)?entry.category:"");
   const [saving,setSaving]=useState(false),[error,setError]=useState("");
   async function save(value:string|null){
     setSaving(true);setError("");
@@ -18,7 +20,8 @@ export default function BankCategoryDialog({entry,mode,categories,onClose,onSave
       <p className="mt-3 break-words text-sm text-muted">{entry.description}</p>
       <p className="mt-2 text-xs text-muted">Sua escolha organiza o extrato e os gráficos da Zelo. Valor, data e descrição recebidos do banco permanecem iguais.</p>
       <label htmlFor="bank-category-select" className="mt-5 block text-sm font-medium text-ink">Categoria</label>
-      <select id="bank-category-select" required value={category} disabled={saving} onChange={e=>setCategory(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-surface p-3 text-sm"><option value="" disabled>Escolha uma categoria</option>{categories.map(name=><option key={name}>{name}</option>)}</select>
+      <select id="bank-category-select" required value={category} disabled={saving} onChange={e=>setCategory(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-surface p-3 text-sm"><option value="" disabled>Escolha uma categoria</option>{options.map(name=><option key={name}>{name}</option>)}</select>
+      {category===OWN_ACCOUNT_TRANSFER_CATEGORY&&<p className="mt-2 text-xs text-muted">Essa movimentação continua no extrato, mas não entra nas receitas ou despesas.</p>}
       {entry.categorySource==="description"&&<p className="mt-2 text-xs text-amber-ink">Categoria sugerida pela descrição. Confira se corresponde ao pagamento.</p>}
       {error&&<p role="alert" className="mt-3 text-sm text-red-ink">{error}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" disabled={saving} onClick={onClose} className="rounded-xl px-4 py-2 text-sm text-muted">Cancelar</button><button disabled={saving||!category} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving?"Salvando…":"Salvar categoria"}</button></div>

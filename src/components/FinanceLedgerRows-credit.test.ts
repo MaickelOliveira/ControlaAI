@@ -11,3 +11,11 @@ it("makes the financial expense explicit while retaining the original card charg
  expect(text).toContain("Cobrança no cartão:");expect(text).toMatch(/R\$\s?850,16/);
  expect(movement.amount).toBe("850.16");
 });
+it("labels a confirmed own-account transfer as outside the result while keeping the bank row visible",()=>{
+ const movement:BankMovement={id:"own-transfer",resource_name:"Conta",institution_name:"Banco teste",resource_type:"account",date:"2026-10-15",description:"Pix enviado",amount:"100.00",currency:"BRL",direction:"debit",classification:"unknown",kind:"account_debits",user_category:"Transferência entre contas próprias",bill_month:null,installment_number:null,installment_count:null};
+ const text=renderToStaticMarkup(createElement(FinanceLedgerRows,{entries:createFinanceLedger([],[movement],"personal"),selectMode:false,selectedIds:new Set<string>(),onToggle:()=>{},onEdit:()=>{},onDelete:()=>{},onCategory:()=>{},displayDescription:value=>value,displayDate:entry=>entry.date}));
+ expect(text).toContain("Transferência entre contas próprias");
+ expect(text).toContain("Não altera o resultado");
+ expect(text).toContain("Alterar categoria");
+ expect(text).not.toContain("Valor/direção não informados");
+});

@@ -35,6 +35,8 @@ it("treats 'each account now' as a balance request, not a bank name", () => {
 it("recognizes focused questions about negative and missing account balances", () => {
   expect(parseBankQuestion("Existe alguma conta com saldo negativo?", "2026-10-15"))
     .toMatchObject({kind:"balances",balanceFilter:"negative"});
+  expect(parseBankQuestion("Existe alguma conta pessoal com saldo negativo? Mostre somente essas contas.", "2026-10-15"))
+    .toMatchObject({kind:"balances",balanceFilter:"negative"});
   expect(parseBankQuestion("Quais contas conectadas não enviaram saldo?", "2026-10-15"))
     .toMatchObject({kind:"balances",balanceFilter:"missing"});
 });
