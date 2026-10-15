@@ -972,6 +972,13 @@ describe("Spanish deterministic queries", () => {
     expect(getExplicitRecurringQueryResult("¿Cuánto dejo de pagar en cuotas hasta marzo?", anchor))
       .toMatchObject({ intent: "recurring_query", installmentForecast: true, period: { to: "2027-03-31" } });
   });
+  it("treats parcelamentos that terminate in a month as a forecast question",()=>{
+    const anchor=new Date(2026,9,15,12,0,0);
+    expect(getExplicitRecurringQueryResult("Quais parcelamentos terminam neste mês?",anchor))
+      .toMatchObject({intent:"recurring_query",installmentForecast:true,period:{to:"2026-10-31"}});
+    expect(getExplicitRecurringQueryResult("Quais parcelamentos terminam nos próximos três meses?",anchor))
+      .toMatchObject({intent:"recurring_query",installmentForecast:true});
+  });
   it("treats installments until December as today through December, not December alone", () => {
     const anchor = new Date(2026, 9, 14, 12, 0, 0);
     expect(getExplicitRecurringQueryResult("Quanto ainda tenho parcelado até dezembro? Separe compras, faturas e cobranças recorrentes.", anchor))
