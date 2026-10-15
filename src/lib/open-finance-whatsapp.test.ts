@@ -75,6 +75,15 @@ it("answers future card bills and installments from dated bank items without cla
   const open=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto devo em faturas de cartão que ainda estão abertas neste mês? Separe por banco.","2026-10-14");
   expect(open).toContain("Faturas recebidas");expect(open).toContain("Não posso confirmar o total ainda em aberto");
 });
+it("respects a seven-day bill window instead of interpreting the sentence as a bank name",async()=>{
+  m.agenda.mockResolvedValue({items:[
+    {id:"near",kind:"bill",description:"Fatura próxima",resource_name:"Gold",institution_name:"Banco A",due_date:"2026-10-19",amount:"100",currency:"BRL",synced_at:"2026-10-14"},
+    {id:"far",kind:"bill",description:"Fatura distante",resource_name:"Gold",institution_name:"Banco B",due_date:"2026-10-28",amount:"200",currency:"BRL",synced_at:"2026-10-14"},
+  ],incomplete:false});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais faturas dos meus cartões vencem nos próximos 7 dias? Diga o valor, o banco e a data.","2026-10-14");
+  expect(answer).toContain("Banco A");expect(answer).not.toContain("Banco B");
+  expect(m.agenda).toHaveBeenCalledWith(user,"personal",{from:"2026-10-14",to:"2026-10-21",includeUndated:false});
+});
 it("answers the largest single expense instead of the largest spending category",async()=>{
   m.read.mockResolvedValue({entries:[
     {id:"food-a",mode:"personal",included:true,source:"bank",date:"2026-10-05",type:"expense",category:"Alimentação",description:"Mercado A",amount:60,bank:{resource_type:"card"}},
@@ -94,4 +103,12 @@ it("groups income by category instead of listing transactions when asked for a b
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1,financeType:"income"},["2026-09-01","2026-09-30"],"Quanto recebi no mês passado no modo pessoal? Separe as receitas por categoria.");
   expect(answer).toContain("Receitas por categoria");expect(answer).toContain(bankMoney("150","BRL"));expect(answer).toContain("Rendimentos");
   expect(answer).not.toContain("Movimentações encontradas");
+});
+it("honors a request to separate category spending by bank",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"a",mode:"personal",included:true,source:"bank",date:"2026-10-05",type:"expense",category:"Transporte",description:"Viagem",amount:20,bank:{resource_type:"card",institution_name:"Banco A"}},
+    {id:"b",mode:"personal",included:true,source:"bank",date:"2026-10-06",type:"expense",category:"Transporte",description:"Viagem",amount:30,bank:{resource_type:"card",institution_name:"Banco B"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-14"}}});
+  const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,category:"Transporte"},["2026-10-01","2026-10-31"],"Quanto gastei em transporte neste mês? Separe por banco.");
+  expect(answer).toContain("Por banco");expect(answer).toContain("Banco A");expect(answer).toContain("Banco B");
 });

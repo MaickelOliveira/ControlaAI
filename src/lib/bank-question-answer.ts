@@ -58,11 +58,15 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   const wantedDebtType = question.kind === "loans" ? "loan" : "financing";
   const groups = question.settledOnly
     ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === "loan" && hasZeroBankDebt(resource,data)))
+    : question.kind === "investments"
+    ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === "investment"))
     : debt && question.keyword
     ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === wantedDebtType && matchesBankDebtPurpose(resource, question.keyword)))
     : connectedGroups;
   if (!groups.length) return question.settledOnly
     ? `Não identifiquei empréstimos com saldo devedor informado como zero nos dados recebidos em ${safe(modeLabel)}. Isso não confirma que não haja contratos quitados; confira o banco.`
+    : question.kind === "investments"
+    ? `Nenhum investimento informado pelos bancos conectados em ${safe(modeLabel)}. Isso não confirma ausência de investimentos; confira cada banco.${data.truncated ? " Consulta parcial: há dados além do limite recebido." : ""}${data.sync.some(s => s.status !== "complete") ? " Há uma importação pendente ou com falha." : ""}`
     : `Não encontrei contrato correspondente a ${safe(question.keyword ?? "essa busca")} nos dados recebidos em ${safe(modeLabel)}. Isso não confirma ausência de dívida; confira também o banco. ${data.truncated ? "Consulta parcial: há dados além do limite recebido. " : ""}${data.sync.some(s => s.status !== "complete") ? "Há uma importação pendente ou com falha." : ""}`.trim();
   const received: Amount[] = [];
   let incomplete = !!data.truncated;

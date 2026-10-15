@@ -29,6 +29,14 @@ describe("saved bank positions", () => {
     expect(text).toContain("Crédito pessoal"); expect(text).not.toContain("Crédito fácil");
     expect(text).not.toContain("Total informado"); expect(text).toContain("não confirma quitação contratual");
   });
+  it("consolidates missing investment data instead of repeating an empty answer for every bank",()=>{
+    const empty=answer(overview(),"Mostre meus investimentos");
+    expect(empty).toContain("Nenhum investimento informado");
+    expect(empty).not.toContain("Nubank");expect(empty).not.toContain("Sicredi");
+    const data=overview();data.resources.push(resource("investment","si","investment","CDB teste"));
+    const shown=answer(data,"Mostre meus investimentos");
+    expect(shown).toContain("CDB teste");expect(shown).toContain("Sicredi");expect(shown).not.toContain("Nubank");
+  });
   it("answers financing separately and keeps unknown installments unknown", () => {
     const text = answer(overview(), "Mostre meus financiamentos no Sicredi");
     expect(text).toContain("Veículo"); expect(text).toContain(bankMoney("8000.81", "BRL"));
