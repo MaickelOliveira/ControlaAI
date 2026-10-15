@@ -14,6 +14,7 @@ vi.mock("./accounts", async original => ({ ...await original<typeof import("./ac
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
 import { handleIncomingMessage } from "./message-handler";
 import { bankMoney } from "./open-finance-display";
+import { todayStrBR } from "./date-br";
 import {getExplicitRecurringQueryResult} from "./ai-processor";
 const user = { id: "holder", name: "Ana Teste", email: "holder@example.test", plan: "business", status: "active", activeMode: "personal", locale: "pt-BR" };
 beforeEach(() => {
@@ -33,6 +34,20 @@ it("never confirms a due manual payment while answering an AI-interpreted bank q
   m.process.mockResolvedValue({ intent: "bank_query", confidence: .96, bankQuery: { kind: "spending", keyword: "aluguel" } });
   await handleIncomingMessage({ from: "5511999990000", text: "Quanto paguei o aluguel no banco?" });
   expect(m.due).not.toHaveBeenCalled(); expect(m.confirm).not.toHaveBeenCalled();
+});
+it("lets the structured query answer bill dates that the legacy phrase parser cannot resolve", async () => {
+  const today = todayStrBR();
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  m.process.mockResolvedValue({ intent: "bank_query", confidence: .96, bankQuery: { kind: "bill_due" }, period: { from: tomorrow, to: tomorrow } });
+  m.rpc.mockImplementation(async (_scope, name) => name === "zelo_of_agenda"
+    ? { items: [{ id: "bill", kind: "bill", institution_name: "Nubank", resource_name: "Gold", description: "Fatura", due_date: tomorrow, amount: "75", currency: "BRL", synced_at: today }], incomplete: false }
+    : {});
+  await handleIncomingMessage({ from: "5511999990000", text: "Quais faturas vencem amanhã?" });
+  const response = m.send.mock.calls.map(call => call[1]).join("\n");
+  expect(m.process).toHaveBeenCalledOnce();
+  expect(response).toContain("Faturas com vencimento informado");
+  expect(response).toContain(bankMoney("75", "BRL"));
+  expect(response).not.toContain("Não encontrei vencem");
 });
 it("keeps ordinary spending questions read-only as well", async () => {
   m.process.mockResolvedValue({ intent: "finance_query", confidence: .96, keyword: "aluguel" });
