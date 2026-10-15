@@ -19,6 +19,7 @@ it("accepts only valid movement ids and the user's available categories",async()
  expect((await PATCH(request({movementId:"bad",category:"Alimentação"}))).status).toBe(400);
  expect((await PATCH(request({movementId:id,category:"Unknown"}))).status).toBe(400);
  expect((await PATCH(request({movementId:id,category:"Categoria especial"}))).status).toBe(200);
+ expect((await PATCH(request({movementId:id,category:"Transferência entre contas próprias"}))).status).toBe(200);
 });
 it("writes only category metadata with session-scoped user and mode",async()=>{
  expect((await PATCH(request({movementId:id,category:"Alimentação",userId:"other",amount:999}))).status).toBe(200);

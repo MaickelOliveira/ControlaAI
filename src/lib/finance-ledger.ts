@@ -21,8 +21,9 @@ export function createFinanceLedger(records:readonly RecordedFinance[],movements
     const amount=ledgerAmount(adjustment?adjustment.charges_amount:bank.amount);
     const refund=bank.resource_type==="card"&&bank.direction==="credit";
     const billPayment=isBankBillPaymentDescription(bank.description);
-    const included=amount!==null&&amount>=0&&bank.currency==="BRL"&&bank.kind!=="excluded"&&!billPayment&&(bank.direction==="debit"||bank.direction==="credit");
-    const category:BankCategory=billPayment?{name:"Transferências e pagamentos",source:"excluded"}:adjustment?{name:"Encargos bancários",source:"user"}:bankCategory(bank);
+    const selectedCategory=bankCategory(bank);
+    const category:BankCategory=selectedCategory.source==="excluded"?selectedCategory:billPayment?{name:"Transferências e pagamentos",source:"excluded"}:adjustment?{name:"Encargos bancários",source:"user"}:selectedCategory;
+    const included=amount!==null&&amount>=0&&bank.currency==="BRL"&&bank.kind!=="excluded"&&category.source!=="excluded"&&(bank.direction==="debit"||bank.direction==="credit");
     entries.push({id:`bank:${bank.id}`,type:refund||bank.direction!=="credit"?"expense":"income",amount:(amount??0)*(refund?-1:1),category:category.name,categorySource:category.source,description:bank.description,date:bank.date,mode,source:"bank",status:"posted",included,possibleDuplicate:false,bank});
   }
   // A same amount/date is a clue, not identity. Never remove records based on it.

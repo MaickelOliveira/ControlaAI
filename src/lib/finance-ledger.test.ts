@@ -23,6 +23,16 @@ it("does not count unmistakable card-bill settlement descriptions when the provi
  expect(entries.filter(e=>!e.included)).toHaveLength(3);
  expect(ledgerBalance(entries).expense).toBe(10);
 });
+it("excludes only the bank movement explicitly marked as a transfer between own accounts",()=>{
+ const description="Transferência enviada pelo Pix|SAMIRA";
+ const entries=createFinanceLedger([], [
+  {...bank,id:"confirmed-own",description,amount:"100.00",user_category:"Transferência entre contas próprias"},
+  {...bank,id:"unverified",description,amount:"15.00"},
+ ],"personal");
+ expect(entries.find(e=>e.id==="bank:confirmed-own")).toMatchObject({included:false,category:"Transferência entre contas próprias",categorySource:"excluded"});
+ expect(entries.find(e=>e.id==="bank:unverified")?.included).toBe(true);
+ expect(ledgerBalance(entries)).toMatchObject({expense:15,balance:-15});
+});
 it("deducts card refunds from expenses instead of inflating income and excludes pending records",()=>{
  const entries=createFinanceLedger([{...manual,status:"pending"}], [{...bank,resource_type:"card",direction:"credit",kind:"credits",amount:"10.05"}],"business");
  expect(ledgerBalance(entries)).toEqual({income:0,expense:-10.05,balance:10.05});

@@ -5,6 +5,7 @@ import {getOpenFinanceAccess,requireOpenFinanceOrigin} from "@/lib/open-finance-
 import {openFinanceRpc,OF_HEADERS} from "@/lib/open-finance-http";
 import {readBankBody} from "@/lib/open-finance-body";
 import {CATEGORIES_EXPENSE,CATEGORIES_INCOME} from "@/lib/finances";
+import {OWN_ACCOUNT_TRANSFER_CATEGORY} from "@/lib/bank-category";
 export async function PATCH(request:Request){
   const auth=await getSessionWithUser();
   if(!auth||auth.session.role!=="client")return NextResponse.json({error:"Não autorizado"},{status:401,headers:OF_HEADERS});
@@ -16,7 +17,7 @@ export async function PATCH(request:Request){
     const body=JSON.parse((await readBankBody(request,4096)).toString("utf8"));
     movementId=body.movementId;category=body.category;
     const user=await workspaceCategoryUser(auth.user);
-    const categories=[...CATEGORIES_EXPENSE,...CATEGORIES_INCOME,...user.customCategoriesExpense??[],...user.customCategoriesIncome??[]];
+    const categories=[...CATEGORIES_EXPENSE,...CATEGORIES_INCOME,OWN_ACCOUNT_TRANSFER_CATEGORY,...user.customCategoriesExpense??[],...user.customCategoriesIncome??[]];
     if(typeof movementId!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(movementId)||category!==null&&(typeof category!=="string"||category.length>100||!categories.includes(category)))throw Error("INVALID_CATEGORY");
   }catch{return NextResponse.json({error:"Escolha uma categoria válida."},{status:400,headers:OF_HEADERS});}
   try{
