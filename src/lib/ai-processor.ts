@@ -3876,8 +3876,9 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
   }
   if(deliverySpending&&["how_to","unknown","finance_query","finance_analysis"].includes(result.intent))result={...result,...deliverySpending,keyword:deliveryQueryKeyword(result.keyword),response:undefined};
   const recurringQuery=getExplicitRecurringQueryResult(message);
-  if(recurringQuery&&["how_to","unknown","finance_query","finance_detail","recurring_query"].includes(result.intent)){
-    const keyword=recurringQuery.keyword??result.keyword;
+  const focusedUpcomingRecurring=result.intent==="finance_upcoming"&&/^(?:quais?|cuales?|mostre|me mostra|me mostre|muestra|muestrame|liste|lista)\s+(?:(?:as|os|minhas|meus|mis|las|los)\s+)?(?:(?:cobrancas?|contas?|pagamentos?|despesas?|cuentas?|cobros?)\s+(?:recorrentes?|recurrentes?)|assinaturas?|suscripciones?|parcelas?|parcelamentos?|cuotas?)\b/.test(normalizeCapabilityText(message));
+  if(recurringQuery&&(["how_to","unknown","finance_query","finance_detail","recurring_query"].includes(result.intent)||focusedUpcomingRecurring)){
+    const keyword=recurringQuery.keyword??(focusedUpcomingRecurring?undefined:result.keyword);
     result={...recurringQuery,mode:recurringQuery.mode??result.mode,period:recurringQuery.period??(result.intent==="recurring_query"?result.period:undefined),keyword:keyword&&/^(?:contas?|parcelad[oa]s?|parcelas?|recorrentes?|assinaturas?)$/i.test(keyword.trim())?undefined:keyword};
   }
   if (merchant && result.intent === "grocery_spend_query") result = { ...result, intent: "finance_query", keyword: merchant, period: result.grocery?.period ?? result.period, category: undefined, financeType: "expense" };
