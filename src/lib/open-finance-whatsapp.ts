@@ -30,12 +30,14 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
     if(!canEnrollOpenFinance(user,requested)&&!await getOpenFinanceAccess(user,requested))return null;
     return "O Open Finance está disponível para contas bancárias do Brasil. Na Zelo, abra Contas → Conectar banco no modo Pessoal (PF) ou Empresa (PJ). Você autoriza diretamente no banco; a Zelo não pede sua senha. Depois, as consultas usam os dados recebidos e salvos na Zelo.";
   }
-  const upcomingCardBills=/\bfaturas?\b/.test(text)&&/\b(?:vencem|vencimento|abertas?)\b/.test(text)&&/\b(?:proximos? 30 dias|neste mes)\b/.test(text);
-  const upcomingCardInstallments=/\bparcelas?\b/.test(text)&&/\bcartao\b/.test(text)&&/\bvencem\b/.test(text)&&/\bproximos? 30 dias\b/.test(text);
+  const dayCount=Number(text.match(/\bproximos? (\d{1,2}) dias\b/)?.[1]??0);
+  const upcomingPeriod=/\bneste mes\b/.test(text)||dayCount>=1&&dayCount<=31;
+  const upcomingCardBills=/\bfaturas?\b/.test(text)&&/\b(?:vencem|vencimento|abertas?)\b/.test(text)&&upcomingPeriod;
+  const upcomingCardInstallments=/\bparcelas?\b/.test(text)&&/\bcartao\b/.test(text)&&/\bvencem\b/.test(text)&&dayCount>=1&&dayCount<=31;
   if(upcomingCardBills||upcomingCardInstallments){
     const monthEnd=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
     const from=/\bneste mes\b/.test(text)?`${today.slice(0,7)}-01`:today;
-    const to=/\bneste mes\b/.test(text)?monthEnd:new Date(Date.parse(`${today}T12:00:00Z`)+30*86400000).toISOString().slice(0,10);
+    const to=/\bneste mes\b/.test(text)?monthEnd:new Date(Date.parse(`${today}T12:00:00Z`)+dayCount*86400000).toISOString().slice(0,10);
     try{
       const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:false});
       const kind=upcomingCardBills?"bill":"installment";
@@ -101,7 +103,7 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
       const summary=summarizeFinanceQuery(entries,{from,to,type:"result"},requested);
       return `${summary}\n\n*Principais categorias de despesas*\n${categories.map(group=>`• ${safeSummary(group.name)}: ${bankMoney(group.value,"BRL")}`).join("\n")||"Nenhuma despesa realizada no período."}\n\n*Maiores gastos realizados*\n${largest.map(item=>`• ${safeSummary(item.description)}: ${bankMoney(item.amount,"BRL")} (${bankDate(item.date)})`).join("\n")||"Nenhum gasto realizado no período."}\n\n*Próximos vencimentos com data informada*\n${upcoming}\n\nVencimentos previstos não entram no resultado já realizado. Valores do banco podem repetir obrigações cadastradas; confira se foram pagos.${financeCoverageNotice(bank,entries)}`;
     }
-    const query:FinanceQuery={from,to,type:ai.intent==="balance_query"?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail"};
+    const query:FinanceQuery={from,to,type:ai.intent==="balance_query"?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail",byBank:/\bpor banco\b|\bsepare\b[^.!?]*\bbancos?\b/.test(text)};
     let answer=summarizeFinanceQuery(entries,query,requested)+financeCoverageNotice(bank,entries);
     if(ai.intent==="finance_detail"&&!query.source){
       const [pending,recurring]=await Promise.all([getPendingFinances(user.id,requested),getRecurringByUser(user.id,requested,"active")]);

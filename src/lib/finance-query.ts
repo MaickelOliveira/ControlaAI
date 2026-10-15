@@ -2,7 +2,7 @@ import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "
 import {bankDate,bankMoney} from "./open-finance-display";
 import type {BankFinancialData} from "./open-finance-report";
 import {merchantDescriptionMatchesTerms} from "./merchant-text";
-export type FinanceQuery={from:string;to:string;type:"expense"|"income"|"result";source?:"card"|"account";category?:string;keywords?:string[];analysis?:boolean;detail?:boolean};
+export type FinanceQuery={from:string;to:string;type:"expense"|"income"|"result";source?:"card"|"account";category?:string;keywords?:string[];analysis?:boolean;detail?:boolean;byBank?:boolean};
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
 const safe=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,180);
 const money=(value:number)=>bankMoney(value,"BRL");
@@ -27,7 +27,14 @@ export function summarizeFinanceQuery(entries:readonly LedgerEntry[],query:Finan
     if(groups.length)answer=`🏆 *Maior categoria de ${query.type==="income"?"receitas":"gastos"}: ${safe(groups[0].name)}*\n*${money(groups[0].value)}*\n\n${answer}`;
     answer+=`\n\n*${query.type==="income"?"Receitas":"Gastos"} por categoria*\n${groups.slice(0,20).map(g=>`• ${safe(g.name)}: ${money(g.value)}`).join("\n")||`Nenhuma ${query.type==="income"?"receita":"despesa"} realizada no período.`}`;
   }
-  if(query.type!=="result"&&byOrigin.size)answer+=`\n\n*Por origem*\n${[...byOrigin].map(([name,cents])=>`• ${name}: ${money(cents/100)}`).join("\n")}`;
+  if(query.type!=="result"&&query.byBank){
+    const byBank=new Map<string,number>();
+    for(const entry of selected){
+      const name=entry.source==="bank"?entry.bank?.institution_name?.trim()||"Banco não informado":"Registros manuais";
+      byBank.set(name,(byBank.get(name)??0)+Math.round(entry.amount*100));
+    }
+    answer+=`\n\n*Por banco*\n${[...byBank].sort((a,b)=>b[1]-a[1]).map(([name,cents])=>`• ${safe(name)}: ${money(cents/100)}`).join("\n")||"Nenhum valor realizado recebido no período."}`;
+  }else if(query.type!=="result"&&byOrigin.size)answer+=`\n\n*Por origem*\n${[...byOrigin].map(([name,cents])=>`• ${name}: ${money(cents/100)}`).join("\n")}`;
   if(query.detail||query.keywords?.length){
     const lines=scoped.slice(0,40).map((e,index)=>`*${index+1}. ${safe(e.description)}*\n💰 ${e.bank&&!e.included?bankMoney(e.bank.amount,e.bank.currency):money(e.amount)}\n📅 ${bankDate(e.date)} · ${safe(financeOrigin(e))}\n🏷️ ${safe(e.category)}${e.source!=="bank"&&e.registeredByName?`\n👤 Registrado por ${safe(e.registeredByName)}`:""}${!e.included?"\n⚠️ Fora do total (transferência/pagamento, moeda diferente ou valor não informado)":""}`);
     answer+=`\n\n*Movimentações encontradas (${scoped.length})*\n\n${lines.join("\n\n")||"Nenhum movimento recebido no período."}`;

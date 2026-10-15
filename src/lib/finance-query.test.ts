@@ -18,6 +18,14 @@ it("applies source and category filters without claiming that bank debits are al
   expect(summarizeFinanceQuery(entries,{from:"2026-09-01",to:"2026-09-30",type:"expense",source:"card"},"personal")).toContain("R$ 35,00");
   expect(summarizeFinanceQuery(entries,{from:"2026-09-01",to:"2026-09-30",type:"expense",category:"Alimentação"},"personal")).toContain("R$ 20,00");
 });
+it("separates a category total by bank when the user requests banks",()=>{
+  const scoped=createFinanceLedger([{id:"manual",type:"expense",amount:5,category:"Transporte",description:"Ônibus",date:"2026-09-10",mode:"personal",source:"web"}], [
+    {...bank("one","20"),institution_name:"Banco A"},
+    {...bank("two","30"),institution_name:"Banco B"},
+  ],"personal");
+  const reply=summarizeFinanceQuery(scoped,{from:"2026-09-01",to:"2026-09-30",type:"expense",byBank:true},"personal");
+  expect(reply).toContain("Por banco");expect(reply).toContain("Banco A: R$ 20,00");expect(reply).toContain("Banco B: R$ 30,00");expect(reply).toContain("Registros manuais: R$ 5,00");
+});
 it("groups income as receipts instead of expenses",()=>{
   const income=createFinanceLedger([{id:"income",amount:500,type:"income",date:"2026-09-12",description:"Salary",category:"Salário",source:"web",mode:"personal"}],[],"personal");
   const answer=summarizeFinanceQuery(income,{from:"2026-09-01",to:"2026-09-30",type:"income",analysis:true},"personal");
