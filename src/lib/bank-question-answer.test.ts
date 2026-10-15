@@ -33,6 +33,7 @@ describe("saved bank positions", () => {
     const text = answer(overview(), "Mostre meus financiamentos no Sicredi");
     expect(text).toContain("Veículo"); expect(text).toContain(bankMoney("8000.81", "BRL"));
     expect(text).toContain("Valor da próxima parcela não informado pelo banco"); expect(text).not.toContain("Nubank");
+    expect(text).not.toContain("Total informado:");
     const withInstallment = overview(); withInstallment.credit[2].next_installment_amount = "321.45";
     expect(answer(withInstallment, "Mostre meus financiamentos no Sicredi")).toContain(`Valor da próxima parcela: ${bankMoney("321.45", "BRL")}`);
   });

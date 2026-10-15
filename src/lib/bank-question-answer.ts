@@ -67,10 +67,12 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   const received: Amount[] = [];
   let incomplete = !!data.truncated;
   let omitted = false;
+  let shownDebtCount = 0;
   const blocks = groups.map(group => {
     const wanted = { loans: "loan", financings: "financing", limits: "card", balances: "account", investments: "investment", bills: "card", spending: "account" }[question.kind];
     const candidates = group.resources.filter(r => r.resource_type === wanted && (!debt || matchesBankDebtPurpose(r, question.keyword)));
     const resources = candidates.filter(r => question.settledOnly ? hasZeroBankDebt(r,data) : !debt || !hasZeroBankDebt(r, data));
+    if (debt) shownDebtCount += resources.length;
     const hiddenZero = candidates.length - resources.length;
     const lines: string[] = [];
     const bankAmounts: Amount[] = candidates.filter(r => debt && hasZeroBankDebt(r, data)).map(r => ({ amount: "0", currency: data.credit.find(c => c.resource_id === r.id)?.currency }));
@@ -106,10 +108,10 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     const empty = hiddenZero ? "Não há saldo devedor pendente nos contratos recebidos." : question.keyword ? `Nenhum contrato correspondente a ${safe(question.keyword)} nos dados recebidos.` : `O banco ainda não informou ${labels[question.kind].toLowerCase()}.`;
     const receivedFrom = dates.length ? bankDate(dates[0]) : "";
     const receivedTo = dates.length ? bankDate(dates.at(-1)) : "";
-    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${!question.settledOnly&&bankAmounts.length&&resources.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${receivedFrom}${receivedFrom !== receivedTo ? ` a ${receivedTo}` : ""}.` : ""}`;
+    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${!question.settledOnly&&groups.length>1&&resources.length>1&&bankAmounts.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${receivedFrom}${receivedFrom !== receivedTo ? ` a ${receivedTo}` : ""}.` : ""}`;
   });
   let result = `${question.settledOnly?"Empréstimos com saldo informado como zero":labels[question.kind]+" recebidos"} · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
-  if ((debt || question.kind === "balances") && !question.settledOnly) result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
+  if ((question.kind === "balances" || debt && shownDebtCount !== 1) && !question.settledOnly) result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
   if(question.settledOnly)result += "\nSaldo zero recebido não confirma quitação contratual; confirme com o banco. Contratos já encerrados podem não aparecer nos dados recebidos.";
   if (question.kind === "limits") result += "\n\nLinhas e limites compartilhados não são somados. Crédito disponível não é saldo em conta.";
   result += "\nValores não informados permanecem desconhecidos. Posição conforme os dados recebidos de cada banco; ausência de dados não confirma valor zero.";
