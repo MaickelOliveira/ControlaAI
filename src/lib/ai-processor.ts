@@ -1431,7 +1431,14 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
 export function getExplicitRecurringQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
   const mode:UserMode|undefined=/\b(?:empresa|empresarial|negocio)\b/.test(normalized)?"business":/\b(?:pessoal|personal)\b/.test(normalized)?"personal":undefined;
-  const scoped=(result:AIResult)=>withExplicitRelativePeriod(message,{...result,period:result.period??explicitPurchaseCalendarPeriod(message,anchor,true)??undefined,...(mode?{mode}:{})},anchor);
+  const throughMonth=normalized.match(new RegExp(`\\b(?:ate|hasta)\\s+(${Object.keys(PURCHASE_MONTHS).join("|")})(?:\\s+(?:de\\s+)?(20\\d{2}))?\\b`));
+  const throughPeriod=throughMonth?(()=>{
+    const month=PURCHASE_MONTHS[throughMonth[1]];
+    const year=throughMonth[2]?Number(throughMonth[2]):month>=anchor.getMonth()+1?anchor.getFullYear():anchor.getFullYear()+1;
+    const pad=(value:number)=>String(value).padStart(2,"0");
+    return {from:`${anchor.getFullYear()}-${pad(anchor.getMonth()+1)}-${pad(anchor.getDate())}`,to:`${year}-${pad(month)}-${pad(new Date(year,month,0).getDate())}`};
+  })():null;
+  const scoped=(result:AIResult)=>withExplicitRelativePeriod(message,{...result,period:result.period??throughPeriod??explicitPurchaseCalendarPeriod(message,anchor,true)??undefined,...(mode?{mode}:{})},anchor);
   const reliefQuestion = /\b(?:quanto|o\s+que|quais?|cuanto|que)\b[\s\S]*\b(?:me\s+livro|vou\s+me\s+livrar|deixo\s+de\s+pagar|libero|terminam|acabam|finalizam|me\s+libero|dejo\s+de\s+pagar|terminan|acaban)\b[\s\S]*\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b/.test(normalized)
     || /\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b[\s\S]*\b(?:terminam|acabam|finalizam|terminan|acaban)\b/.test(normalized);
   if (reliefQuestion) {

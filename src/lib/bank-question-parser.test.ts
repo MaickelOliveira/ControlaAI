@@ -30,6 +30,10 @@ it("retains the exact institution phrase and card suffix", () => {
 it.each(["quanto falta pra min pagar do carro", "Quanto ainda devo no financiamento do carro?", "Quanto falta para quitar minha casa?"])("recognizes remaining financed debt rather than monthly bills: %s", message => {
   expect(parseBankQuestion(message, "2026-10-11")).toMatchObject({ kind: "financings", keyword: /carro/.test(message) ? "carro" : "casa" });
 });
+it("recognizes the next installment of a vehicle financing without treating it as a card installment", () => {
+  expect(parseBankQuestion("Qual é o valor da próxima parcela do financiamento do meu carro no Sicredi? Se não constar nos dados bancários, diga isso claramente.", "2026-10-11"))
+    .toMatchObject({kind:"financings",keyword:"carro",bankName:"sicredi"});
+});
 it.each(["Pague o financiamento do carro", "Quanto falta pagar do carro e registre 50", "Quanto falta pagar do carro mês passado?"])("does not execute payoff questions as mutations or discard historical filters: %s", message => expect(parseBankQuestion(message, "2026-10-11")).toBeNull());
 
 it.each(["quanto falta pagar do carro da empresa", "quanto falta pagar do carro pessoal", "quanto falta pagar do carro hoje", "quanto falta pagar do carro esta semana"])("does not treat an explicit workspace or date as a bank filter: %s",message=>expect(parseBankQuestion(message,"2026-10-11")).toBeNull());

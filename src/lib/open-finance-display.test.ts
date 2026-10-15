@@ -22,6 +22,7 @@ describe("bank data display", () => {
   });
   it("preserves provider calendar dates instead of shifting a day by timezone", () => {
     expect(bankDate("2026-10-01")).toBe("01/10/2026");
+    expect(bankDate("2026-10-15T01:00:00Z")).toBe("14/10/2026");
     expect(bankDate(null)).toBe("Não informado");
   });
 });

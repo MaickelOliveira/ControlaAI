@@ -2,6 +2,22 @@ import { bankMoney, type BankLimit } from "./open-finance-display";
 
 export type DisplayCardLimit = BankLimit & { displayCount: number };
 
+function cents(value: BankLimit["total_amount"]): bigint | null {
+  const raw = String(value ?? "");
+  if (!/^-?\d{1,16}(\.\d{1,8})?$/.test(raw)) return null;
+  const [whole, fraction = ""] = raw.replace(/^-/, "").split(".");
+  const rounded = BigInt(whole) * BigInt(100) + BigInt((fraction + "00").slice(0, 2)) + (Number(fraction[2] ?? 0) >= 5 ? BigInt(1) : BigInt(0));
+  return raw.startsWith("-") ? -rounded : rounded;
+}
+
+/** Warn on inconsistent source numbers; never rewrite a bank-reported limit. */
+export function cardLimitAmountsDisagree(limit: BankLimit): boolean {
+  const total = cents(limit.total_amount), used = cents(limit.used_amount), available = cents(limit.available_amount);
+  if (total === null || used === null || available === null) return false;
+  const difference = total - used - available;
+  return difference > BigInt(1) || difference < BigInt(-1);
+}
+
 // Compare decimal values exactly; display rounding must not hide different limits.
 function decimalKey(value: BankLimit["total_amount"]): string | null | undefined {
   if (value === null) return null;

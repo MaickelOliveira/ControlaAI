@@ -25,6 +25,10 @@ export function bankMoney(value: string | number | null | undefined, currency: s
 }
 export function bankDate(value: string | null | undefined): string {
   if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return "Não informado";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    const instant = new Date(value);
+    if (!Number.isNaN(instant.getTime())) return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }).format(instant);
+  }
   const [year, month, day] = value.slice(0, 10).split("-");
   return `${day}/${month}/${year}`;
 }

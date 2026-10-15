@@ -43,3 +43,21 @@ it("keeps upcoming items inside the requested category and omits them for bank-o
   const cards=await answerConnectedFinanceQuery(user,"personal","both",ai,["2026-09-01","2026-09-30"],"detalhe meus gastos no cartão");
   expect(cards).not.toContain("Valores ainda");expect(cards).not.toContain("Food");
 });
+it("gives a complete monthly overview without presenting undated old installments as upcoming",async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-14T15:00:00Z"));
+  try {
+    m.read.mockResolvedValue({entries:[
+      {id:"income",mode:"personal",included:true,source:"bank",date:"2026-10-05",type:"income",category:"Outros",description:"Recebimento",amount:1000,bank:{resource_type:"account"}},
+      {id:"expense",mode:"personal",included:true,source:"bank",date:"2026-10-06",type:"expense",category:"Alimentação",description:"Mercado",amount:200,bank:{resource_type:"card"}},
+    ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-14"}}});
+    m.pending.mockResolvedValue([{id:"future",mode:"personal",status:"pending",type:"expense",amount:80,date:"2026-10-20",description:"Internet",category:"Serviços"}]);
+    m.agenda.mockResolvedValue({items:[
+      {id:"old",mode:"personal",kind:"installment",description:"Óticas Fam",resource_name:"Card",institution_name:"Bank",due_date:null,amount:"40",currency:null,synced_at:"2026-10-11"},
+      {id:"bill",mode:"personal",kind:"bill",description:"Fatura",resource_name:"Card",institution_name:"Bank",due_date:"2026-10-25",amount:"100",currency:"BRL",synced_at:"2026-10-11"},
+    ],incomplete:false});
+    const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1},["2026-10-01","2026-10-31"],"Me dê um resumo detalhado do meu mês: receitas, despesas, saldo, categorias, maiores gastos e próximos vencimentos.");
+    expect(answer).toContain("Entradas");expect(answer).toContain("Saídas");expect(answer).toContain("Resultado do período");
+    expect(answer).toContain("Alimentação");expect(answer).toContain("Mercado");expect(answer).toContain("Internet");expect(answer).toContain("25/10/2026");
+    expect(answer).not.toContain("Óticas Fam");expect(answer).not.toContain("Movimentações encontradas");
+  } finally { vi.useRealTimers(); }
+});

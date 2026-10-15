@@ -1,4 +1,4 @@
-import { displayCardLimits } from "./bank-card-limit";
+import { cardLimitAmountsDisagree, displayCardLimits } from "./bank-card-limit";
 import { bankDate, bankMoney, bankResourceName, type BankOverview, type BankResource } from "./open-finance-display";
 import { normalizeBankText, type BankQuestion } from "./bank-question-parser";
 import { hasZeroBankDebt, matchesBankDebtPurpose } from "./bank-debt";
@@ -49,12 +49,17 @@ function banksFor(data: BankOverview, question: BankQuestion) {
 
 /** Format only the authenticated overview; no provider calls, model output or cross-mode joins. */
 export function formatBankQuestion(data: BankOverview, question: BankQuestion, modeLabel: string): string {
-  const groups = banksFor(data, question);
-  if (!groups.length) return question.bankName || question.last4
+  const connectedGroups = banksFor(data, question);
+  if (!connectedGroups.length) return question.bankName || question.last4
     ? `Não encontrei ${safe(question.bankName ?? "esse cartão")}${question.last4 ? ` · final ${question.last4}` : ""} entre os bancos conectados em ${safe(modeLabel)}. Confira Contas e o modo/empresa selecionado.`
     : `Nenhum banco conectado em ${safe(modeLabel)}. A conexão fica na aba Contas.`;
   const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
   const debt = question.kind === "loans" || question.kind === "financings";
+  const wantedDebtType = question.kind === "loans" ? "loan" : "financing";
+  const groups = debt && question.keyword
+    ? connectedGroups.filter(group => group.resources.some(resource => resource.resource_type === wantedDebtType && matchesBankDebtPurpose(resource, question.keyword)))
+    : connectedGroups;
+  if (!groups.length) return `Não encontrei contrato correspondente a ${safe(question.keyword ?? "essa busca")} nos dados recebidos em ${safe(modeLabel)}. Isso não confirma ausência de dívida; confira também o banco. ${data.truncated ? "Consulta parcial: há dados além do limite recebido. " : ""}${data.sync.some(s => s.status !== "complete") ? "Há uma importação pendente ou com falha." : ""}`.trim();
   const received: Amount[] = [];
   let incomplete = !!data.truncated;
   let omitted = false;
@@ -71,11 +76,14 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
         const detail = data.credit.find(c => c.resource_id === resource.id);
         const amount = { amount: detail?.outstanding_amount, currency: detail?.currency };
         bankAmounts.push(amount);
-        lines.push(`${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · Próxima parcela: ${bankMoney(detail?.next_installment_amount, detail?.currency)}\nVencimento final: ${bankDate(detail?.due_date)}`);
+        const installment = detail?.next_installment_amount == null
+          ? "Valor da próxima parcela não informado pelo banco"
+          : `Valor da próxima parcela: ${bankMoney(detail.next_installment_amount, detail.currency)}`;
+        lines.push(`${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · ${installment}\nVencimento final: ${bankDate(detail?.due_date)}`);
       } else if (question.kind === "limits") {
         const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id));
         if (!limits.length) lines.push(`${name} · Limite não informado pelo banco.`);
-        for (const limit of limits) lines.push(`${name} · ${safe(limit.line_name ?? "Linha de crédito")}${limit.consolidation_type ? ` · ${safe(limit.consolidation_type)}` : ""}\nDisponível: ${bankMoney(limit.available_amount, limit.currency)}\nTotal: ${bankMoney(limit.total_amount, limit.currency)} · Utilizado: ${bankMoney(limit.used_amount, limit.currency)}`);
+        for (const limit of limits) lines.push(`${name} · ${safe(limit.line_name ?? "Linha de crédito")}${limit.consolidation_type ? ` · ${safe(limit.consolidation_type)}` : ""}\nDisponível: ${bankMoney(limit.available_amount, limit.currency)}\nTotal: ${bankMoney(limit.total_amount, limit.currency)} · Utilizado: ${bankMoney(limit.used_amount, limit.currency)}${cardLimitAmountsDisagree(limit) ? "\n⚠️ Os valores desta linha não fecham entre si; confirme o limite no banco." : ""}`);
       } else if (question.kind === "balances") {
         bankAmounts.push({ amount: resource.available_amount, currency: resource.currency });
         lines.push(`${name} · Saldo disponível: ${bankMoney(resource.available_amount, resource.currency)}`);
@@ -90,9 +98,11 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     if (!candidates.length) incomplete = true;
     received.push(...bankAmounts);
     omitted ||= lines.length > 10;
-    const dates = [...new Set(resources.map(r => r.synced_at?.slice(0, 10)).filter(Boolean))].sort();
+    const dates = [...new Set(resources.map(r => r.synced_at).filter(Boolean))].sort();
     const empty = hiddenZero ? "Não há saldo devedor pendente nos contratos recebidos." : question.keyword ? `Nenhum contrato correspondente a ${safe(question.keyword)} nos dados recebidos.` : `O banco ainda não informou ${labels[question.kind].toLowerCase()}.`;
-    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${bankAmounts.length && resources.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${bankDate(dates[0])}${dates.length > 1 ? ` a ${bankDate(dates.at(-1))}` : ""}.` : ""}`;
+    const receivedFrom = dates.length ? bankDate(dates[0]) : "";
+    const receivedTo = dates.length ? bankDate(dates.at(-1)) : "";
+    return `*${safe(group.name)}*${debt && resources.length ? ` · ${resources.length} operação(ões) recebida(s)` : ""}\n\n${lines.slice(0, 10).join("\n\n") || empty}${bankAmounts.length && resources.length ? `\n\n${bankAmountTotals(bankAmounts, !!data.truncated).join("\n")}` : ""}${lines.length > 10 ? `\nMais ${lines.length - 10} registro(s); veja os detalhes em Contas.` : ""}${dates.length ? `\nRecebido em ${receivedFrom}${receivedFrom !== receivedTo ? ` a ${receivedTo}` : ""}.` : ""}`;
   });
   let result = `${labels[question.kind]} recebidos · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
   if (debt || question.kind === "balances") result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;

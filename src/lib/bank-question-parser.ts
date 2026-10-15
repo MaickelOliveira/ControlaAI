@@ -50,13 +50,22 @@ function remainingFinancing(text: string): Pick<BankQuestion, "kind" | "keyword"
   return filter ? { kind: "financings", keyword: match[1], ...filter } : null;
 }
 
+function nextFinancingInstallment(text: string): Pick<BankQuestion, "kind" | "keyword" | "bankName" | "last4"> | null {
+  if (mutation.test(text)) return null;
+  const clause = text.split(/[?.!]/, 1)[0].trim();
+  const match = clause.match(/^(?:qual (?:e )?(?:o )?valor da (?:proxima )?parcela|quanto (?:e|sera|custa) a (?:proxima )?parcela|de quanto e a (?:proxima )?parcela) (?:do |da )?(?:meu |minha )?financiamento (?:do |da )?(?:meu |minha )?(carro|veiculo|automovel|moto|motocicleta|casa|imovel|habitacao)(.*)$/);
+  if (!match) return null;
+  const filter = bankFilter(match[2]);
+  return filter ? { kind: "financings", keyword: match[1], ...filter } : null;
+}
+
 /** Only read-only questions enter this path. Unrecognized filters are never discarded. */
 export function parseBankQuestion(question: string, today: string): BankQuestion | null {
   let text = normalizeBankText(question);
   if (text.length > 500) return null;
   text = queryText(question);
   if (/\b(empresa|empresarial|pessoal|familia|ontem|hoje|semana|ano|com|ifood|categoria)\b/.test(text)) return null;
-  const payoff = remainingFinancing(text);
+  const payoff = remainingFinancing(text) ?? nextFinancingInstallment(text);
   if (payoff && !/\b(mes|ontem|ano|anterior|passad\w*|(?:19|20)\d{2})\b/.test(text.replace(/\bfinal \d{4}\b/g, ""))) return { ...payoff, ...monthPeriod(today, false) };
   if (mutation.test(text)) return null;
   if (/^(?:quanto (?:eu )?gastei|quanto gastamos)/.test(text)) {
@@ -83,7 +92,7 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
 /** Protect unsupported bank-position questions from being answered as ordinary expenses. */
 export function isBankPositionQuestion(question: string): boolean {
   const text = queryText(question);
-  if (remainingFinancing(text)) return true;
+  if (remainingFinancing(text) || nextFinancingInstallment(text)) return true;
   return /^(?:qual|quais|quanto|quantos|como|mostre|me mostre|meus|minhas)\b/.test(text)
     && (/\b(?:emprestimos?|financiamentos?|investimentos?|limites?|credito|faturas?)\b/.test(text) || (/\bsaldos?\b/.test(text) && /\b(?:bancos?|bancarias?)\b/.test(text)))
     && !mutation.test(text) && !/\b(?:gastei|gastamos|gastos)\b/.test(text);

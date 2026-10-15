@@ -58,6 +58,15 @@ it("answers the exact reported parcelados phrase with manual and bank installmen
  const response=m.send.mock.calls.map(call=>call[1]).join("\n");
  expect(response).toContain("Parcela manual fictícia");expect(response).toContain("Parcela bancária fictícia");expect(response).not.toContain("Assinatura manual fictícia");expect(response).not.toContain("Assinatura bancária fictícia");expect(m.confirm).not.toHaveBeenCalled();
 });
+it("answers a combined parcel, invoice and recurring question instead of listing capabilities",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+ m.rpc.mockResolvedValue({incomplete:false,items:[{id:"fixture-bank",kind:"installment",resource_id:"card",description:"Parcela bancária fictícia",institution_name:"Banco fictício",resource_name:"Gold",amount:"49.90",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:12,observed_installments:2},{id:"bill",kind:"bill",resource_id:"card",description:"Fatura fictícia",institution_name:"Banco fictício",resource_name:"Gold",amount:"70",currency:"BRL",due_date:"2026-11-10",synced_at:"2026-10-11"},{id:"recurring",kind:"recurring",resource_id:"card",description:"Recorrência fictícia",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:"2026-11-11",synced_at:"2026-10-11"}]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quanto ainda tenho parcelado até dezembro? Separe compras, faturas e cobranças recorrentes."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("sem vencimento informado ficaram fora do filtro de datas");
+ expect(response).toContain("Faturas recebidas"); expect(response).toContain("Recorrência fictícia");
+ expect(response).not.toContain("Posso consultar saldos bancários");
+});
 it("does not count undated installments in a dated subscription-only query",async()=>{
  m.process.mockResolvedValue({intent:"recurring_query",confidence:.95,period:{from:"2026-11-01",to:"2026-11-30"}});
  m.rpc.mockResolvedValue({incomplete:false,items:[{id:"undated",kind:"installment",description:"Parcela não solicitada",institution_name:"Banco fictício",resource_name:"Gold",amount:"40",currency:"BRL",due_date:null,synced_at:"2026-10-11"},{id:"subscription",kind:"recurring",description:"Assinatura solicitada",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:"2026-11-10",synced_at:"2026-10-11"}]});
@@ -76,4 +85,12 @@ it("answers the remaining car financing through saved debt rather than the month
  await handleIncomingMessage({from:"5511999990000",text:"quanto falta pra min pagar do carro"});
  const response=m.send.mock.calls.map(call=>call[1]).join("\n");
  expect(response).toContain(bankMoney("7654.32","BRL")); expect(response).toContain("Saldo devedor"); expect(response).not.toContain("Habitação"); expect(response).not.toContain("Previsão para"); expect(m.process).not.toHaveBeenCalled(); expect(m.confirm).not.toHaveBeenCalled();
+});
+it("answers the reported next vehicle installment question from the financing contract",async()=>{
+ m.rpc.mockResolvedValue({connections:[{id:"si",institution_name:"Sicredi",status:"active"}],resources:[{id:"car",connection_id:"si",resource_type:"financing",name:"VEICULOS E UTILITARIOS LEVES - REVENDAS",synced_at:"2026-10-11"}],credit:[{resource_id:"car",currency:"BRL",outstanding_amount:"7654.32",contract_amount:"18000",next_installment_amount:"450"}],limits:[],bills:[],sync:[]});
+ await handleIncomingMessage({from:"5511999990000",text:"Qual é o valor da próxima parcela do financiamento do meu carro no Sicredi? Se não constar nos dados bancários, diga isso claramente."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain(`Valor da próxima parcela: ${bankMoney("450","BRL")}`);
+ expect(response).not.toContain("Parcelamentos recebidos dos bancos");
+ expect(m.process).not.toHaveBeenCalled();
 });
