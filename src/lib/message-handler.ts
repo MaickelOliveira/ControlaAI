@@ -53,7 +53,7 @@ import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring,
 import { collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import {readBankAgenda,readFinancialAgenda} from "@/lib/financial-agenda";
-import {formatBankAgenda} from "@/lib/open-finance-schedules";
+import {formatBankAgenda,formatUpcomingBankAgenda} from "@/lib/open-finance-schedules";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import type { Appointment } from "@/lib/agenda";
 import {googleWhatsAppConfirmation,googleWhatsAppReadyMeetLink,type GoogleWhatsAppRecord} from "./google-whatsapp-consumer";
@@ -3965,7 +3965,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           periodLabelFor(ai.period, now, user.locale),
           today,
           user.locale,
-        )+(ai.financeType==="income"?"":formatBankAgenda(financialAgenda.bank.items,financialAgenda.bank.incomplete))+financialAgenda.coverage,3500,true);
+        )+(ai.financeType==="income"?"":formatUpcomingBankAgenda(financialAgenda.bank.items,today,financialAgenda.bank.incomplete))+financialAgenda.coverage,3500,true);
         break;
       }
 

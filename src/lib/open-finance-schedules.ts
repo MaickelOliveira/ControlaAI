@@ -64,11 +64,25 @@ export function formatBankAgenda(items:BankAgendaItem[],incomplete=false):string
       const progress=bankInstallmentProgress(item);
       const future=progress?progress.remaining?`${progress.remaining} parcela${progress.remaining===1?"":"s"} prevista${progress.remaining===1?"":"s"} após essa parcela`:"Sem novas parcelas previstas nesta sequência":"Quantidade restante não informada";
       const position=`${bankInstallmentPosition(item)}\n${future}`;
-      return `${heading}💰 ${value} por parcela\n${position}\n📅 próximo vencimento: ${bankDate(item.due_date)}\nPagamento não confirmado`;
+      const due=item.due_date?`📅 próximo vencimento: ${bankDate(item.due_date)}`:"📅 Data da próxima parcela não enviada pelo banco; confira a fatura do cartão";
+      return `${heading}💰 ${value} por parcela\n${position}\n${due}\nPagamento não confirmado`;
     }
     return `${heading}💰 Estimativa ${value}\n📅 cobrança prevista em ${bankDate(item.due_date)}`;
     });
     return `*${group.title}*\n\n${lines.join("\n\n")}`;
   });
   return `\n\n🏦 *Faturas e previsões dos bancos*\n\n${groups.filter(Boolean).join("\n\n")}${items.some(item=>item.kind==="installment")?"\n\n_O banco informa a parcela mais recente identificada; isso não confirma quantas foram pagas._":""}${items.length>20?"\n\nVeja os demais itens em Contas.":""}${incomplete?"\n\nConsulta bancária incompleta: há dados em atualização ou indisponíveis.":""}\n\n_Faturas e previsões não foram somadas às compras realizadas ou às obrigações cadastradas. Confira pagamentos e datas no banco._`;
+}
+
+/** An observed installment without a due date is not an upcoming payment. */
+export function formatUpcomingBankAgenda(items:BankAgendaItem[],today:string,incomplete=false):string {
+  const dated=items.filter(item=>item.due_date!==null&&item.due_date>=today);
+  const undatedInstallments=items.filter(item=>item.due_date===null&&item.kind==="installment").length;
+  const otherUndated=items.filter(item=>item.due_date===null&&item.kind!=="installment").length;
+  const notes=[
+    undatedInstallments?`${undatedInstallments} parcelamento${undatedInstallments===1?"":"s"} sem data da próxima cobrança ${undatedInstallments===1?"foi deixado":"foram deixados"} fora desta previsão. Confira a fatura do cartão no banco.`:"",
+    otherUndated?`${otherUndated} outro${otherUndated===1?" item":"s itens"} do banco sem data de vencimento ${otherUndated===1?"foi deixado":"foram deixados"} fora desta previsão.`:"",
+  ].filter(Boolean);
+  const result=formatBankAgenda(dated,incomplete);
+  return `${result}${notes.length?`\n\n_${notes.join(" ")}_`:""}`;
 }

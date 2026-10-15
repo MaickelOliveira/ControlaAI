@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 vi.mock("server-only",()=>({}));
 import { normalizeCardSchedules } from "./open-finance-schedule-normalize";
-import { collectBankAgenda, formatBankAgenda } from "./open-finance-schedules";
+import { collectBankAgenda, formatBankAgenda, formatUpcomingBankAgenda } from "./open-finance-schedules";
 
 it("treats a detected subscription as a BRL estimate, preserving its original currency and observed transactions",()=>{
   const [item]=normalizeCardSchedules("recurrings",[{description:"Streaming",averageAmount:-39.90,currency:"USD",periodMonths:1,expectedDay:9,firstOccurrenceAt:"2026-07-09",lastOccurrenceAt:"2026-09-09",nextExpectedAt:"2026-10-09",occurrences:["tx-1","tx-2","tx-3"],regularityScore:0.95}]);
@@ -45,4 +45,21 @@ it("does not notify stale estimates, but keeps incomplete bank data distinguisha
 it("formats bank forecasts in separate readable blocks and trims meaningless decimal zeros without assuming a currency",()=>{
  const reply=formatBankAgenda([{id:"p",kind:"installment",description:"Compra teste",resource_name:"Gold",institution_name:"Banco teste",due_date:null,amount:"74.79000000",currency:null,synced_at:"2026-10-11",observed_installments:2,total_installments:10}]);
  expect(reply).toContain("\n\n*1. Compra teste*\n");expect(reply).toContain("74,79 (moeda não informada)");expect(reply).not.toContain("74.79000000");expect(reply).not.toContain("R$");
+ expect(reply).toContain("Data da próxima parcela não enviada pelo banco");
+ expect(reply).not.toContain("próximo vencimento: Não informado");
+});
+
+it("only presents bank items with a confirmed future due date as upcoming",()=>{
+ const items=[
+  {id:"old",kind:"installment" as const,description:"Oticas Fam",resource_name:"platinum",institution_name:"Nubank",due_date:null,amount:"116.66",currency:null,synced_at:"2026-10-11",observed_installments:1,total_installments:3},
+  {id:"bill",kind:"bill" as const,description:"Fatura atual",resource_name:"Gold",institution_name:"Banco",due_date:"2026-10-20",amount:"250.00",currency:"BRL",synced_at:"2026-10-15"},
+  {id:"past",kind:"bill" as const,description:"Fatura anterior",resource_name:"Gold",institution_name:"Banco",due_date:"2026-10-10",amount:"50.00",currency:"BRL",synced_at:"2026-10-15"},
+ ];
+ const reply=formatUpcomingBankAgenda(items,"2026-10-15");
+ expect(reply).toContain("fatura com vencimento 20/10/2026");
+ expect(reply).toContain("20/10/2026");
+ expect(reply).not.toContain("Oticas Fam");
+ expect(reply).not.toContain("10/10/2026");
+ expect(reply).toContain("1 parcelamento sem data");
+ expect(reply).not.toContain("próximo vencimento: Não informado");
 });
