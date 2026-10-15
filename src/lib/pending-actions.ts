@@ -156,7 +156,7 @@ export type PendingFinanceSelect = {
   phone: string;
   userId: string;
   action: "edit" | "delete";
-  candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string }>;
+  candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string; type?: "expense" | "income" }>;
   patch?: Record<string, unknown>; // usado só em "edit"
   // true = "candidates" já é a seleção final (1 ou vários), só falta a
   // pessoa dizer o que mudar — sem isso, "candidates" é a LISTA pra
@@ -679,7 +679,7 @@ export function parseFinanceChoice(
  *  múltipla existir. */
 export function parseFinanceChoiceMulti(
   text: string,
-  candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string }>
+  candidates: Array<{ id: string; description: string; amount: number; date: string; category: string; mode: string; type?: "expense" | "income" }>
 ): number[] {
   // A pessoa pode reforçar a data depois dos números ("2 e 3 do dia
   // 07/09/2026"). A data é contexto, não parte do segundo índice.
@@ -705,6 +705,16 @@ export function parseFinanceChoiceMulti(
     if (/^\d+$/.test(token)) {
       const n = parseInt(token, 10);
       if (n >= 1 && n <= candidates.length) indices.add(n - 1);
+    }
+  }
+  if (!indices.size) {
+    const normalized = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const wantsExpense = /\b(?:despesa|gasto|saida)\b/.test(normalized);
+    const wantsIncome = /\b(?:receita|entrada|recebimento)\b/.test(normalized);
+    if (wantsExpense !== wantsIncome) {
+      const type = wantsExpense ? "expense" : "income";
+      const matches = candidates.flatMap((candidate, index) => candidate.type === type ? [index] : []);
+      if (matches.length === 1) return matches;
     }
   }
   return [...indices].sort((a, b) => a - b);
