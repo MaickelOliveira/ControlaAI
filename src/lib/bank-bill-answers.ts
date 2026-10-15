@@ -1,12 +1,21 @@
 import {bankDate,bankMoney,type BankBill,type BankConnection,type BankOverview,type BankResource} from "./open-finance-display";
 import {normalizeBankText} from "./bank-question-parser";
+import {isBankBillPaymentDescription} from "./bank-bill-payment";
+import type {LedgerEntry} from "./finance-ledger";
 
-export type BillQuestion = {kind:"overdue"|"latest"|"total"|"minimum"|"next"|"undated";bankName?:string};
+export type BillQuestion = {kind:"overdue"|"latest"|"total"|"minimum"|"next"|"undated"|"separate";bankName?:string};
+
+export function paidBillHistoryAnswer(message:string):string|null{
+ const text=normalizeBankText(message);
+ if(!/\bfaturas?\b/.test(text)||!/\b(?:quitad[ao]s?|pagas?)\b/.test(text)||!/\b(?:extrato|historico|aparecer|continuar)\b/.test(text)||/\b(?:pague|pagar|cancele|exclua)\b/.test(text))return null;
+ return "Sim. Uma fatura quitada pode continuar no histórico e no extrato. Se o banco informar o pagamento, a Zelo pode mostrar essa confirmação; se não informar, o estado do pagamento permanece desconhecido. A presença no histórico não prova que você ainda deve esse valor. Confira no banco antes de pagar novamente.";
+}
 
 /** Only clear, read-only bill questions bypass the general classifier. */
 export function parseBillQuestion(message:string):BillQuestion|null{
  const text=normalizeBankText(message).replace(/[?.!]+$/g,"");
  if(text.length>300||/\b(?:pague|pagar|cancele|exclua|altere|cadastre)\b/.test(text))return null;
+ if(/\b(?:separe|separado|diferenc[ie]|distinga|compare|versus|vs)\b/.test(text)&&/\bfaturas?\b/.test(text)&&/\bcompras?\b/.test(text)&&/\bcart(?:ao|oes)\b/.test(text))return {kind:"separate"};
  if(/\bfaturas?\b/.test(text)&&/\b(?:ja venceram|vencidas?|atrasadas?)\b/.test(text)&&/\b(?:pagamento|paga|pagas|confirmad[oa]s?)\b/.test(text))return {kind:"overdue"};
  if(/\bfaturas?\b/.test(text)&&/\b(?:atual|mais recente|ultima)\b/.test(text)&&/\b(?:cada|por banco|todos os cartoes)\b/.test(text))return {kind:"latest"};
  const total=text.match(/^(?:qual (?:e )?o |quanto (?:e|foi) o )?(?:total|valor) (?:informado )?da fatura (?:do|da) (.+)$/);
@@ -38,7 +47,7 @@ function amount(row:BillRow,value:"total_amount"|"minimum_payment_amount"):strin
 function listed(lines:string[]):string{return `${lines.slice(0,20).join("\n")}${lines.length>20?`\nMais ${lines.length-20} item(ns); veja Contas.`:""}`;}
 
 /** Payment state is evidence, never inferred from a missing bank confirmation. */
-export function answerBillQuestion(overview:BankOverview,question:BillQuestion,today:string,mode:"personal"|"business"):string{
+export function answerBillQuestion(overview:BankOverview,question:BillQuestion,today:string,mode:"personal"|"business",entries?:readonly LedgerEntry[]):string{
  if(!Array.isArray(overview.connections)||!Array.isArray(overview.resources)||!Array.isArray(overview.bills))throw Error("BANK_BILLS_UNAVAILABLE");
  let rows=billRows(overview);
  if(question.bankName){const wanted=normalizeBankText(question.bankName);rows=rows.filter(row=>normalizeBankText(row.bank.institution_name).includes(wanted));}
@@ -46,6 +55,20 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
  const label=mode==="business"?"Empresa":"Pessoal";
  let result:string[]=[];
  switch(question.kind){
+  case "separate":{
+   if(!entries)throw Error("BANK_CARD_PURCHASES_UNAVAILABLE");
+   const monthStart=`${today.slice(0,7)}-01`;
+   const active=new Map(overview.connections.filter(c=>c.status==="active"&&!c.archived_at).map(c=>[c.id,c]));
+   const latestByCard=new Map(latest.map(row=>[row.card.id,row]));
+   result=overview.resources.filter(card=>card.resource_type==="card"&&active.has(card.connection_id)).map(card=>{
+    const bank=active.get(card.connection_id)!;
+    const row=latestByCard.get(card.id);
+    const purchases=entries.filter(entry=>entry.source==="bank"&&entry.bank?.resource_id===card.id&&entry.bank.resource_type==="card"&&entry.bank.direction==="debit"&&entry.included&&entry.status!=="pending"&&entry.date>=monthStart&&entry.date<=today&&!isBankBillPaymentDescription(entry.description));
+    const cents=purchases.reduce((sum,entry)=>sum+Math.round(entry.amount*100),0);
+    return `• ${safe(bank.institution_name)} · ${safe(card.name)}${card.identification_last4?` final ${card.identification_last4}`:""}\n  ${row?`Última fatura recebida: ${amount(row,"total_amount")} · vencimento ${bankDate(row.bill.due_date)}`:"Fatura não informada pelo banco"}\n  Compras recebidas no extrato deste mês: ${purchases.length?`${bankMoney(cents/100,"BRL")} em ${purchases.length} compra(s)`:"nenhuma compra em BRL contabilizável recebida"}`;
+   });
+   return `Fatura e compras de cartão · ${label}\n${listed(result)||"Nenhum cartão conectado com dados recebidos."}\nSão informações diferentes: o extrato do mês pode incluir compras de outro ciclo. Compras sem valor ou moeda confiável ficam fora da soma. Não some esses valores para calcular dívida; confira a fatura e os pagamentos no banco.`;
+  }
   case "overdue":
    result=latest.filter(row=>row.bill.due_date&&row.bill.due_date<today&&!/^(?:paid|pago|paga|settled|liquidado|quitado)$/i.test(row.bill.status))
     .sort((a,b)=>(b.bill.due_date??"").localeCompare(a.bill.due_date??""))

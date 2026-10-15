@@ -147,6 +147,25 @@ it("answers overdue, latest and minimum bill questions from scoped bank records 
  expect(replies).not.toContain("Posso consultar saldos bancários");
  expect(m.process).not.toHaveBeenCalled();
 });
+it("separates the latest bill from card purchases without counting a bill payment as a purchase",async()=>{
+ const overview={connections:[{id:"nu",institution_name:"Nubank",status:"active"}],resources:[{id:"card",connection_id:"nu",resource_type:"card",name:"Platinum"}],bills:[{id:"latest",resource_id:"card",currency:"BRL",due_date:"2026-10-02",total_amount:"2215.51",status:"unknown"}],limits:[],credit:[],sync:[]};
+ m.read.mockResolvedValue({bank:{overview},entries:[
+  {id:"purchase",source:"bank",mode:"personal",status:"posted",included:true,type:"expense",amount:35,date:todayStrBR(),description:"Mercado",bank:{resource_id:"card",resource_type:"card",direction:"debit",currency:"BRL",amount:"35"}},
+  {id:"payment",source:"bank",mode:"personal",status:"posted",included:true,type:"expense",amount:500,date:todayStrBR(),description:"Pagamento de fatura",bank:{resource_id:"card",resource_type:"card",direction:"debit",currency:"BRL",amount:"500"}},
+ ]});
+ await handleIncomingMessage({from:"5511999990000",text:"Separe o valor da fatura das compras já realizadas no cartão."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("2.215,51");expect(response).toContain("35,00");expect(response).not.toContain("500,00");
+ expect(response).toContain("Não some esses valores");expect(m.process).not.toHaveBeenCalled();
+ expect(m.read).toHaveBeenCalledOnce();
+});
+it("explains paid bills without claiming the bank confirmed a payment",async()=>{
+ await handleIncomingMessage({from:"5511999990000",text:"Uma fatura quitada pode continuar aparecendo no extrato?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("histórico");expect(response).toContain("permanece desconhecido");
+ expect(response).not.toContain("será marcada");expect(m.process).not.toHaveBeenCalled();
+ expect(m.rpc).not.toHaveBeenCalled();
+});
 it("answers the next loan installment question without using card installments",async()=>{
  await handleIncomingMessage({from:"5511999990000",text:"Qual é o valor da próxima parcela de cada empréstimo pessoal? Avise quais bancos não informaram esse valor."});
  const response=m.send.mock.calls.map(call=>call[1]).join("\n");

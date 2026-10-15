@@ -1,6 +1,7 @@
 import {describe,expect,it} from "vitest";
-import {answerBillQuestion,parseBillQuestion} from "./bank-bill-answers";
+import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer} from "./bank-bill-answers";
 import type {BankOverview} from "./open-finance-display";
+import type {LedgerEntry} from "./finance-ledger";
 
 const overview={
  connections:[{id:"nu",institution_name:"Nubank",status:"active"},{id:"sa",institution_name:"Santander",status:"active"},{id:"re",institution_name:"Realize",status:"active"},{id:"old",institution_name:"Inter",status:"revoked"}],
@@ -26,8 +27,17 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   ["Qual o mínimo das faturas?", "minimum"],
   ["Qual é a próxima fatura a vencer?", "next"],
   ["Quais faturas não têm vencimento?", "undated"],
+  ["Separe o valor da fatura das compras já realizadas no cartão.", "separate"],
+  ["Compare fatura e compras dos cartões.", "separate"],
+  ["Fatura versus compras no cartão: mostre separado.", "separate"],
  ] as const)("entende %s",(message,kind)=>expect(parseBillQuestion(message)?.kind).toBe(kind));
  it("não trata pedido de pagamento como consulta",()=>expect(parseBillQuestion("Pague a fatura do Nubank")).toBeNull());
+ it("explica histórico de fatura quitada sem prometer baixa automática",()=>{
+  const reply=paidBillHistoryAnswer("Uma fatura quitada pode continuar aparecendo no extrato?")!;
+  expect(reply).toContain("Sim");expect(reply).toContain("histórico");expect(reply.toLowerCase()).toContain("se o banco informar");
+  expect(reply).not.toContain("será marcada");
+  expect(paidBillHistoryAnswer("Pague a fatura agora")).toBeNull();
+ });
  it("mostra só a última fatura por cartão sem concluir que permanece em aberto",()=>{
   const reply=answerBillQuestion(overview,{kind:"latest"},"2026-10-15","personal");
   expect(reply).toContain("Nubank");expect(reply).toContain("R$ 2.215,51");expect(reply).not.toContain("704,46");expect(reply).not.toContain("Inter");expect(reply).toContain("pode já ter sido paga");
@@ -53,5 +63,17 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
  it("responde claramente quando nenhuma fatura recebida está sem data",()=>{
   const reply=answerBillQuestion(overview,{kind:"undated"},"2026-10-15","personal");
   expect(reply).toContain("Nenhuma fatura recebida apareceu sem data");
+ });
+ it("separa última fatura de compras do mês sem somar a obrigação duas vezes",()=>{
+  const entries=[
+   {id:"bank:purchase",source:"bank",mode:"personal",status:"posted",included:true,type:"expense",amount:35,date:"2026-10-14",description:"Mercado",bank:{resource_id:"card-nu",resource_type:"card",direction:"debit",currency:"BRL",amount:"35",description:"Mercado"}},
+   {id:"bank:payment",source:"bank",mode:"personal",status:"posted",included:false,type:"expense",amount:500,date:"2026-10-14",description:"Pagamento de fatura",bank:{resource_id:"card-nu",resource_type:"card",direction:"debit",currency:"BRL",amount:"500",description:"Pagamento de fatura"}},
+  ] as unknown as LedgerEntry[];
+  const reply=answerBillQuestion(overview,{kind:"separate"},"2026-10-15","personal",entries);
+  expect(reply).toContain("Nubank");expect(reply).toContain("2.215,51");expect(reply).toContain("35,00");
+  expect(reply).not.toContain("704,46");expect(reply).not.toContain("500,00");
+  expect(reply).toContain("Realize · Cartão Renner");expect(reply).toContain("Fatura não informada pelo banco");
+  expect(reply).toContain("nenhuma compra em BRL contabilizável recebida");
+  expect(reply.toLowerCase()).toContain("não some");
  });
 });
