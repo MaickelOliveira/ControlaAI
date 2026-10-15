@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
     }, {
       source: "/api/:path*",
       headers: [{ key: "Cache-Control", value: "private, no-store" }],
+    }, {
+      source: "/api/auth/google/callback",
+      headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
     }];
   },
 };
