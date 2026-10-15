@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ access: vi.fn(), rpc: vi.fn(), read: vi.fn() }));
 vi.mock("./open-finance-access", () => ({ getOpenFinanceAccess: m.access }));
 vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
-import { validateBankQuery } from "./bank-query-intent";
+import { explicitBankQueryPlan, validateBankQuery } from "./bank-query-intent";
 import { answerStructuredBankQuery } from "./structured-bank-query";
 import { bankMoney } from "./open-finance-display";
 import type { AIResult } from "./ai-processor";
@@ -125,4 +125,9 @@ it("rejects unsafe or incoherent query-plan combinations", () => {
   expect(validateBankQuery({ kind: "transactions", operation: "erase" })).toBeNull();
   expect(validateBankQuery({ kind: "balances", operation: "max" })).toBeNull();
   expect(validateBankQuery({ kind: "transactions", movementClass: "bank_fee", source: "card" })).toBeNull();
+});
+
+it("does not broaden a named-bank request when the model failed to identify the bank", () => {
+  expect(explicitBankQueryPlan("Qual foi o maior débito bancário no Banco Aurora?")).toBeNull();
+  expect(explicitBankQueryPlan("Qual foi o maior débito bancário do mês?")).toMatchObject({ kind: "transactions", operation: "max", direction: "debit" });
 });

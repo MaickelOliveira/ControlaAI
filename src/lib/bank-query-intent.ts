@@ -62,6 +62,9 @@ export const BANK_QUERY_GUIDANCE = "Posso consultar saldos bancários, crédito 
 export function explicitBankQueryPlan(message: string): StructuredBankQuery | null {
   const text = message.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   if (/\b(?:registr|cadastr|cri[ae]|exclu|apag|alter|edit|corrig|paguei)\w*/.test(text)) return null;
+  // A fallback without the named bank would silently broaden a filtered request.
+  const qualifier = text.match(/\b(?:no|na|do|da)\s+(?:banco\s+)?([a-z][a-z0-9-]*)\b/)?.[1];
+  if (qualifier && !new Set(["mes", "ano", "dia", "periodo", "semana", "conta", "cartao", "extrato", "modo", "pessoal", "empresa"]).has(qualifier)) return null;
   if (/\b(?:maior|mais alto|mais alta)\b/.test(text) && /\b(?:bancari[oa]|conta bancaria|extrato bancario)\b/.test(text)) {
     const direction = /\bdebito\b/.test(text) ? "debit" : /\bcredito\b/.test(text) ? "credit" : null;
     if (direction) return { kind: "transactions", operation: "max", direction, source: "account" };
