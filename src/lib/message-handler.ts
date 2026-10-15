@@ -64,7 +64,7 @@ import {asksForManualAndBankAccounts,separatedAccountList} from "./separated-acc
 import {getOpenFinanceAccess} from "./open-finance-access";
 import {openFinanceRpc} from "./open-finance-http";
 import type {BankOverview} from "./open-finance-display";
-import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer} from "./bank-bill-answers";
+import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer,closedBillAnswer} from "./bank-bill-answers";
 import {readUnifiedFinances} from "./unified-finances";
 import {currentCompanyContext} from "./company-context";
 import {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
@@ -2873,6 +2873,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     setVirtualAgentIntent("finance_query");
     const billHistoryAnswer=paidBillHistoryAnswer(messageText);
     if(billHistoryAnswer){await wppSend(from,billHistoryAnswer);return;}
+    const billDifferenceAnswer=closedBillAnswer(messageText);
+    if(billDifferenceAnswer){await wppSend(from,billDifferenceAnswer);return;}
     const billQuestion=parseBillQuestion(messageText);
     if(billQuestion){
       const requestedMode=/\b(?:empresa|empresarial|pj)\b/i.test(messageText)?"business":/\b(?:pessoal|pf)\b/i.test(messageText)?"personal":mode;

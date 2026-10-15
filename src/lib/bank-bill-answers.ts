@@ -3,7 +3,7 @@ import {normalizeBankText} from "./bank-question-parser";
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import type {LedgerEntry} from "./finance-ledger";
 
-export type BillQuestion = {kind:"overdue"|"latest"|"total"|"minimum"|"next"|"undated"|"separate";bankName?:string};
+export type BillQuestion = {kind:"overdue"|"latest"|"total"|"minimum"|"next"|"undated"|"separate"|"confirmed-payment"|"partial-payment"|"missing";bankName?:string};
 
 export function paidBillHistoryAnswer(message:string):string|null{
  const text=normalizeBankText(message);
@@ -11,10 +11,20 @@ export function paidBillHistoryAnswer(message:string):string|null{
  return "Sim. Uma fatura quitada pode continuar no histórico e no extrato. Se o banco informar o pagamento, a Zelo pode mostrar essa confirmação; se não informar, o estado do pagamento permanece desconhecido. A presença no histórico não prova que você ainda deve esse valor. Confira no banco antes de pagar novamente.";
 }
 
+export function closedBillAnswer(message:string):string|null{
+ const text=normalizeBankText(message);
+ if(!/\bfatura fechada\b/.test(text)||!/\bcompra em aberto\b/.test(text)||!/\b(?:diferenca|compare|explique)\b/.test(text))return null;
+ return "Fatura fechada reúne as compras de um ciclo encerrado e informa o valor cobrado naquele fechamento; isso não significa que já foi paga. Compra em aberto ainda não entrou numa fatura fechada e pode aparecer no ciclo atual ou no próximo, conforme a data e as regras do cartão. Não some uma compra à fatura sem conferir se ela já está incluída nela.";
+}
+
 /** Only clear, read-only bill questions bypass the general classifier. */
 export function parseBillQuestion(message:string):BillQuestion|null{
  const text=normalizeBankText(message).replace(/[?.!]+$/g,"");
  if(text.length>300||/\b(?:pague|pagar|cancele|exclua|altere|cadastre)\b/.test(text))return null;
+ if(/\bfaturas?\b/.test(text)&&/\bbancos?\b/.test(text)&&/\b(?:confirmaram?|informaram?)\b/.test(text)&&/\bpagamentos?\b/.test(text))return {kind:"confirmed-payment"};
+ if(/\bfaturas?\b/.test(text)&&/\bpagamentos? parciais?\b/.test(text))return {kind:"partial-payment"};
+ if(/\bfaturas?\b/.test(text)&&/\bempresa\b/.test(text)&&/\bsem misturar com (?:o )?pessoal\b/.test(text))return {kind:"latest"};
+ if(/\bfaturas?\b/.test(text)&&/\bcartoes\b/.test(text)&&/\b(?:nao enviaram|sem dados|sem fatura)\b/.test(text))return {kind:"missing"};
  if(/\b(?:separe|separado|diferenc[ie]|distinga|compare|versus|vs)\b/.test(text)&&/\bfaturas?\b/.test(text)&&/\bcompras?\b/.test(text)&&/\bcart(?:ao|oes)\b/.test(text))return {kind:"separate"};
  if(/\bfaturas?\b/.test(text)&&/\b(?:ja venceram|vencidas?|atrasadas?)\b/.test(text)&&/\b(?:pagamento|paga|pagas|confirmad[oa]s?)\b/.test(text))return {kind:"overdue"};
  if(/\bfaturas?\b/.test(text)&&/\b(?:atual|mais recente|ultima)\b/.test(text)&&/\b(?:cada|por banco|todos os cartoes)\b/.test(text))return {kind:"latest"};
@@ -45,6 +55,14 @@ function cardLabel(row:BillRow):string{
 }
 function amount(row:BillRow,value:"total_amount"|"minimum_payment_amount"):string{return bankMoney(row.bill[value],row.bill.currency);}
 function listed(lines:string[]):string{return `${lines.slice(0,20).join("\n")}${lines.length>20?`\nMais ${lines.length-20} item(ns); veja Contas.`:""}`;}
+function positive(value:string|number|null|undefined):number|null{const n=Number(value);return value!==null&&value!==undefined&&Number.isFinite(n)&&n>0?n:null;}
+function paymentReported(row:BillRow):boolean{return row.bill.payment_evidence===true||positive(row.bill.payment_amount)!==null||/^(?:paid|pago|paga|settled|liquidado|quitado|partial|partially_paid|parcial)$/i.test(row.bill.status);}
+function partiallyPaid(row:BillRow):boolean{
+ if(/^(?:paid|pago|paga|settled|liquidado|quitado)$/i.test(row.bill.status))return false;
+ if(/^(?:partial|partially_paid|parcial)$/i.test(row.bill.status))return true;
+ const paid=positive(row.bill.payment_amount),total=positive(row.bill.total_amount);
+ return paid!==null&&total!==null&&paid<total;
+}
 
 /** Payment state is evidence, never inferred from a missing bank confirmation. */
 export function answerBillQuestion(overview:BankOverview,question:BillQuestion,today:string,mode:"personal"|"business",entries?:readonly LedgerEntry[]):string{
@@ -68,6 +86,24 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
     return `• ${safe(bank.institution_name)} · ${safe(card.name)}${card.identification_last4?` final ${card.identification_last4}`:""}\n  ${row?`Última fatura recebida: ${amount(row,"total_amount")} · vencimento ${bankDate(row.bill.due_date)}`:"Fatura não informada pelo banco"}\n  Compras recebidas no extrato deste mês: ${purchases.length?`${bankMoney(cents/100,"BRL")} em ${purchases.length} compra(s)`:"nenhuma compra em BRL contabilizável recebida"}`;
    });
    return `Fatura e compras de cartão · ${label}\n${listed(result)||"Nenhum cartão conectado com dados recebidos."}\nSão informações diferentes: o extrato do mês pode incluir compras de outro ciclo. Compras sem valor ou moeda confiável ficam fora da soma. Não some esses valores para calcular dívida; confira a fatura e os pagamentos no banco.`;
+  }
+  case "confirmed-payment":{
+   const confirmed=rows.filter(paymentReported).sort((a,b)=>(b.bill.due_date??"").localeCompare(a.bill.due_date??""));
+   const seen=new Set<string>();
+   result=confirmed.filter(row=>{if(seen.has(row.bank.id))return false;seen.add(row.bank.id);return true;})
+    .map(row=>`• ${safe(row.bank.institution_name)} · fatura com vencimento ${bankDate(row.bill.due_date)} · pagamento informado${positive(row.bill.payment_amount)!==null?` ${bankMoney(row.bill.payment_amount,row.bill.currency)}`:" (valor não informado)"}${partiallyPaid(row)?" · parcial":""}`);
+   return `Bancos com pagamento de fatura informado · ${label}\n${listed(result)||"Nenhum banco conectado informou pagamento de fatura nos registros recebidos."}\nAusência de confirmação não prova que não foram pagas. Um pagamento parcial informado não confirma a quitação total.`;
+  }
+  case "partial-payment":
+   result=rows.filter(partiallyPaid).sort((a,b)=>(b.bill.due_date??"").localeCompare(a.bill.due_date??""))
+    .map(row=>`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · pagamento parcial informado ${positive(row.bill.payment_amount)!==null?bankMoney(row.bill.payment_amount,row.bill.currency):"Não informado"} · total da fatura ${amount(row,"total_amount")}`);
+   return `Pagamentos parciais informados nas faturas · ${label}\n${listed(result)||"Nenhum pagamento parcial informado nas faturas recebidas."}\nSem evidência de pagamento parcial não posso concluir que não houve pagamento; confira no banco.`;
+  case "missing":{
+   const active=new Map(overview.connections.filter(c=>c.status==="active"&&!c.archived_at).map(c=>[c.id,c]));
+   const withBills=new Set(rows.map(row=>row.card.id));
+   result=overview.resources.filter(card=>card.resource_type==="card"&&active.has(card.connection_id)&&!withBills.has(card.id))
+    .map(card=>`• ${safe(active.get(card.connection_id)!.institution_name)} · ${safe(card.name)}${card.identification_last4?` final ${card.identification_last4}`:""}`);
+   return `Cartões sem fatura recebida · ${label}\n${listed(result)||"Todos os cartões ativos consultados têm ao menos uma fatura recebida; isso não confirma que os dados estejam atualizados."}\nConfira Contas para ver a última sincronização de cada banco.`;
   }
   case "overdue":
    result=latest.filter(row=>row.bill.due_date&&row.bill.due_date<today&&!/^(?:paid|pago|paga|settled|liquidado|quitado)$/i.test(row.bill.status))
