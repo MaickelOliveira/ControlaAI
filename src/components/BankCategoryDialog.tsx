@@ -2,16 +2,17 @@
 import {useState} from "react";
 import type {LedgerEntry} from "@/lib/finance-ledger";
 import {OWN_ACCOUNT_TRANSFER_CATEGORY} from "@/lib/bank-category";
-export default function BankCategoryDialog({entry,mode,categories,onClose,onSaved}:{entry:LedgerEntry;mode:string;categories:string[];onClose:()=>void;onSaved:()=>void}){
+export default function BankCategoryDialog({entry,mode,categories,onClose,onSaved}:{entry:LedgerEntry;mode:string;categories:string[];onClose:()=>void;onSaved:(matched?:number)=>void}){
   const options=entry.bank?.resource_type==="account"?[...new Set([...categories,OWN_ACCOUNT_TRANSFER_CATEGORY])]:categories;
   const [category,setCategory]=useState(options.includes(entry.category)?entry.category:"");
+  const [applyToMatchingHistory,setApplyToMatchingHistory]=useState(false);
   const [saving,setSaving]=useState(false),[error,setError]=useState("");
   async function save(value:string|null){
     setSaving(true);setError("");
     try{
-      const response=await fetch(`/api/open-finance/movements/category?mode=${mode}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({movementId:entry.bank?.id,category:value})});
+      const response=await fetch(`/api/open-finance/movements/category?mode=${mode}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({movementId:entry.bank?.id,category:value,applyToMatchingHistory:value===OWN_ACCOUNT_TRANSFER_CATEGORY&&applyToMatchingHistory,stopFutureMatching:value===null&&entry.bank?.user_category===OWN_ACCOUNT_TRANSFER_CATEGORY})});
       if(!response.ok){const body=await response.json();throw Error(body.error||"Não foi possível salvar a categoria.");}
-      onSaved();
+      const result=await response.json();onSaved(result.matched);
     }catch(reason){setError(reason instanceof Error?reason.message:"Não foi possível salvar a categoria.");}finally{setSaving(false);}
   }
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
@@ -22,10 +23,11 @@ export default function BankCategoryDialog({entry,mode,categories,onClose,onSave
       <label htmlFor="bank-category-select" className="mt-5 block text-sm font-medium text-ink">Categoria</label>
       <select id="bank-category-select" required value={category} disabled={saving} onChange={e=>setCategory(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-surface p-3 text-sm"><option value="" disabled>Escolha uma categoria</option>{options.map(name=><option key={name}>{name}</option>)}</select>
       {category===OWN_ACCOUNT_TRANSFER_CATEGORY&&<p className="mt-2 text-xs text-muted">Essa movimentação continua no extrato, mas não entra nas receitas ou despesas.</p>}
+      {category===OWN_ACCOUNT_TRANSFER_CATEGORY&&<label className="mt-3 flex items-start gap-2 text-xs text-ink"><input type="checkbox" checked={applyToMatchingHistory} disabled={saving} onChange={event=>setApplyToMatchingHistory(event.target.checked)} className="mt-0.5"/><span>Também aplicar às movimentações da mesma conta, com descrição e valor iguais, em todos os meses e nas próximas importações. Confira se todas representam transferências entre suas contas.</span></label>}
       {entry.categorySource==="description"&&<p className="mt-2 text-xs text-amber-ink">Categoria sugerida pela descrição. Confira se corresponde ao pagamento.</p>}
       {error&&<p role="alert" className="mt-3 text-sm text-red-ink">{error}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" disabled={saving} onClick={onClose} className="rounded-xl px-4 py-2 text-sm text-muted">Cancelar</button><button disabled={saving||!category} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving?"Salvando…":"Salvar categoria"}</button></div>
-      {entry.bank?.user_category&&<button type="button" disabled={saving} onClick={()=>void save(null)} className="mt-3 text-xs text-muted underline">Voltar à categoria automática</button>}
+      {entry.bank?.user_category&&<button type="button" disabled={saving} onClick={()=>void save(null)} className="mt-3 text-xs text-muted underline">{entry.bank.user_category===OWN_ACCOUNT_TRANSFER_CATEGORY?"Voltar à categoria automática e parar a regra futura":"Voltar à categoria automática"}</button>}
     </form>
   </div>;
 }

@@ -25,6 +25,21 @@ it("writes only category metadata with session-scoped user and mode",async()=>{
  expect((await PATCH(request({movementId:id,category:"Alimentação",userId:"other",amount:999}))).status).toBe(200);
  expect(rpc).toHaveBeenCalledWith({userId:"owner",mode:"business",environment:"production"},"zelo_of_set_movement_category",{p_movement:id,p_category:"Alimentação"});
 });
+it("applies a confirmed own-account pattern to all matching history only by explicit opt-in",async()=>{
+ rpc.mockResolvedValueOnce(3);
+ const response=await PATCH(request({movementId:id,category:"Transferência entre contas próprias",applyToMatchingHistory:true}));
+ expect(response.status).toBe(200);
+ expect(await response.json()).toEqual({ok:true,matched:3});
+ expect(rpc).toHaveBeenCalledWith({userId:"owner",mode:"business",environment:"production"},"zelo_of_confirm_own_transfer_pattern",{p_movement:id});
+ expect((await PATCH(request({movementId:id,category:"Alimentação",applyToMatchingHistory:true}))).status).toBe(400);
+ expect((await PATCH(request({movementId:id,category:"Transferência entre contas próprias",applyToMatchingHistory:"true"}))).status).toBe(400);
+});
+it("lets the holder stop a previously confirmed future rule when restoring automatic categorization",async()=>{
+ const response=await PATCH(request({movementId:id,category:null,stopFutureMatching:true}));
+ expect(response.status).toBe(200);
+ expect(rpc).toHaveBeenCalledWith({userId:"owner",mode:"business",environment:"production"},"zelo_of_clear_own_transfer_pattern",{p_movement:id});
+ expect((await PATCH(request({movementId:id,category:"Outros",stopFutureMatching:true}))).status).toBe(400);
+});
 it("can restore automatic categorization and handles a missing movement",async()=>{
  expect((await PATCH(request({movementId:id,category:null}))).status).toBe(200);
  rpc.mockResolvedValueOnce(false);expect((await PATCH(request({movementId:id,category:"Alimentação"}))).status).toBe(404);
