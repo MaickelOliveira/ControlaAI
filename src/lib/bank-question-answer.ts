@@ -65,6 +65,14 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     const bankNotice=banksWithoutAccounts.length?`\nBancos que não enviaram dados de conta: ${banksWithoutAccounts.slice(0,20).join(", ")}.${banksWithoutAccounts.length>20?` Mais ${banksWithoutAccounts.length-20} banco(s) em Contas.`:""}`:"";
     return `${heading} · ${safe(modeLabel)}\n${accounts.slice(0,20).join("\n")||empty}${accounts.length>20?`\nMais ${accounts.length-20} conta(s) em Contas.`:""}${bankNotice}\nPosição conforme os dados recebidos; ausência de dados não confirma saldo zero.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
   }
+  if(question.kind==="limits"&&question.limitView==="shared"){
+    const groups=connectedGroups.map(group=>({name:group.name,count:group.resources.filter(resource=>resource.resource_type==="card")
+      .flatMap(resource=>displayCardLimits(data.limits.filter(limit=>limit.resource_id===resource.id)))
+      .filter(limit=>normalizeBankText(limit.consolidation_type??"")==="consolidado").length})).filter(group=>group.count>0);
+    const total=groups.reduce((sum,group)=>sum+group.count,0);
+    const details=groups.slice(0,8).map(group=>`• ${safe(group.name)}: ${group.count} ${group.count===1?"linha consolidada":"linhas consolidadas"}`).join("\n");
+    return `Linhas de crédito consolidadas · ${safe(modeLabel)}\n${total?`${total} ${total===1?"linha marcada":"linhas marcadas"} como CONSOLIDADO nos dados recebidos.\n${details}${groups.length>8?`\nMais ${groups.length-8} banco(s) em Contas.`:""}`:"Não identifiquei linhas marcadas como CONSOLIDADO nos dados recebidos."}\nOs dados recebidos não informam quais cartões compartilham exatamente a mesma linha. Por isso, a Zelo não soma os limites; linhas consolidadas não comprovam crédito adicional independente.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+  }
   const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
   const debt = question.kind === "loans" || question.kind === "financings";
   const wantedDebtType = question.kind === "loans" ? "loan" : "financing";
