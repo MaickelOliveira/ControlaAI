@@ -94,3 +94,17 @@ it("answers the reported next vehicle installment question from the financing co
  expect(response).not.toContain("Parcelamentos recebidos dos bancos");
  expect(m.process).not.toHaveBeenCalled();
 });
+it("answers the next loan installment question without using card installments",async()=>{
+ await handleIncomingMessage({from:"5511999990000",text:"Qual é o valor da próxima parcela de cada empréstimo pessoal? Avise quais bancos não informaram esse valor."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Valor da próxima parcela não informado pelo banco");
+ expect(response).not.toContain("Parcelamentos recebidos dos bancos");
+ expect(m.process).not.toHaveBeenCalled();
+});
+it("shows only a zero-balance loan as possibly settled, without inventing a bank name",async()=>{
+ m.rpc.mockResolvedValue({connections:[{id:"nu",institution_name:"Nubank",status:"active"}],resources:[{id:"loan",connection_id:"nu",resource_type:"loan",name:"Contrato teste",synced_at:"2026-10-11"}],credit:[{resource_id:"loan",currency:"BRL",outstanding_amount:"0.00000000",contract_amount:"100"}],limits:[],bills:[],sync:[]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais empréstimos pessoais já estão quitados? Separe por banco e não conte como dívida."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Contrato teste");expect(response).toContain("não confirma quitação contratual");
+ expect(response).not.toContain("ja estao quitados? separe");expect(m.process).not.toHaveBeenCalled();
+});

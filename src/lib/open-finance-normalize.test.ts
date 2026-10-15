@@ -28,6 +28,14 @@ describe("real provider normalization", () => {
     const [movement] = normalizeMovements("credit-cards", "card", [{ id: "tx", credit_card_id: "card", transaction_date_time: "2026-09-30T23:45:00-03:00", bill_forecast_date: "2026-11", credit_debit_type: "CREDITO", transaction_type: "PAGAMENTO_FATURA", brazilian_amount: amount("123.45"), amount: amount("20", "USD"), charge_identificator: 2, charge_number: 5 }]);
     expect(movement).toMatchObject({ transaction_date: "2026-09-30", bill_month: "2026-11-01", classification: "bill_payment", original_amount: "20", original_currency: "USD", installment_number: 2, installment_count: 5 });
   });
+  it("classifies clear card-bill settlement descriptions even without a provider category",()=>{
+    const rows=normalizeMovements("accounts","account",[
+      {id:"bill",account_id:"account",transaction_name:"DEBITO AUT. FAT.CARTAO MASTER CARD FINAL 6129",transaction_amount:amount("90"),credit_debit_type:"DEBITO"},
+      {id:"utility",account_id:"account",transaction_name:"Pagamento de fatura de energia",transaction_amount:amount("10"),credit_debit_type:"DEBITO"},
+    ]);
+    expect(rows[0]).toMatchObject({classification:"bill_payment"});
+    expect(rows[1]).toMatchObject({classification:"unknown"});
+  });
   it("distinguishes a supplied merchant name from a sparse generic fallback",()=>{
     const source={id:"fixture",credit_card_id:"card",transaction_type:"COMPRA"};
     expect(normalizeMovements("credit-cards","card",[{...source,transaction_name:"Mercado fictício"}])[0]).toMatchObject({description:"Mercado fictício",description_present:true});

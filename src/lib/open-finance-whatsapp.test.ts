@@ -7,7 +7,8 @@ vi.mock("./unified-finances",()=>({readUnifiedFinances:m.read}));
 vi.mock("./open-finance-question",()=>({answerBankQuestion:m.bank,parseBankQuestion:()=>null}));
 vi.mock("./finances",()=>({expandMerchantAliases:(s:string)=>[s],getPendingFinances:m.pending}));
 vi.mock("./recurring",()=>({getRecurringByUser:m.recurring}));
-import {answerConnectedFinanceQuery} from "./open-finance-whatsapp";
+import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "./open-finance-whatsapp";
+import {bankMoney} from "./open-finance-display";
 const user={id:"own-user",email:"user@example.test",plan:"business",activeMode:"personal",status:"active"} as const;
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});});
 it("uses the requested previous month and the own connected ledger",async()=>{
@@ -60,4 +61,37 @@ it("gives a complete monthly overview without presenting undated old installment
     expect(answer).toContain("Alimentação");expect(answer).toContain("Mercado");expect(answer).toContain("Internet");expect(answer).toContain("25/10/2026");
     expect(answer).not.toContain("Óticas Fam");expect(answer).not.toContain("Movimentações encontradas");
   } finally { vi.useRealTimers(); }
+});
+it("answers future card bills and installments from dated bank items without claiming payment",async()=>{
+  m.agenda.mockResolvedValue({items:[
+    {id:"bill",kind:"bill",description:"Fatura teste",resource_name:"Gold",institution_name:"Banco teste",due_date:"2026-10-20",amount:"100",currency:"BRL",synced_at:"2026-10-14"},
+    {id:"installment",kind:"installment",description:"Compra teste",resource_name:"Gold",institution_name:"Banco teste",due_date:"2026-10-22",amount:"30",currency:"BRL",synced_at:"2026-10-14"},
+    {id:"old",kind:"installment",description:"Óticas Fam",resource_name:"Gold",institution_name:"Banco teste",due_date:null,amount:"40",currency:"BRL",synced_at:"2026-10-14"},
+  ],incomplete:false});
+  const bills=await answerBankWhatsAppMessage(user as never,"personal","both","Quais faturas dos meus cartões pessoais vencem nos próximos 30 dias? Separe por banco e diga se o pagamento já foi confirmado.","2026-10-14");
+  expect(bills).toContain("Faturas recebidas");expect(bills).not.toContain("Compra teste");expect(bills).toContain("pagamento não confirmado");
+  const installments=await answerBankWhatsAppMessage(user as never,"personal","both","Quais parcelas do cartão vencem nos próximos 30 dias? Diga o valor e o cartão de cada uma.","2026-10-14");
+  expect(installments).toContain("Compra teste");expect(installments).not.toContain("Óticas Fam");expect(installments).not.toContain("Faturas recebidas");
+  const open=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto devo em faturas de cartão que ainda estão abertas neste mês? Separe por banco.","2026-10-14");
+  expect(open).toContain("Faturas recebidas");expect(open).toContain("Não posso confirmar o total ainda em aberto");
+});
+it("answers the largest single expense instead of the largest spending category",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"food-a",mode:"personal",included:true,source:"bank",date:"2026-10-05",type:"expense",category:"Alimentação",description:"Mercado A",amount:60,bank:{resource_type:"card"}},
+    {id:"food-b",mode:"personal",included:true,source:"bank",date:"2026-10-06",type:"expense",category:"Alimentação",description:"Mercado B",amount:60,bank:{resource_type:"card"}},
+    {id:"single",mode:"personal",included:true,source:"bank",date:"2026-10-07",type:"expense",category:"Saúde",description:"Consulta médica",amount:100,bank:{resource_type:"account"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-14"}}});
+  const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_analysis",confidence:1},["2026-10-01","2026-10-31"],"Qual foi meu maior gasto neste mês no modo pessoal? Diga a data e a categoria.");
+  expect(answer).toContain("Consulta médica");expect(answer).toContain("07/10/2026");expect(answer).toContain("Saúde");
+  expect(answer).not.toContain("Maior categoria");
+});
+it("groups income by category instead of listing transactions when asked for a breakdown",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"i1",mode:"personal",included:true,source:"bank",date:"2026-09-05",type:"income",category:"Salário",description:"Recebimento A",amount:100,bank:{resource_type:"account"}},
+    {id:"i2",mode:"personal",included:true,source:"bank",date:"2026-09-06",type:"income",category:"Salário",description:"Recebimento B",amount:50,bank:{resource_type:"account"}},
+    {id:"i3",mode:"personal",included:true,source:"bank",date:"2026-09-07",type:"income",category:"Rendimentos",description:"Juros",amount:20,bank:{resource_type:"account"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-14"}}});
+  const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1,financeType:"income"},["2026-09-01","2026-09-30"],"Quanto recebi no mês passado no modo pessoal? Separe as receitas por categoria.");
+  expect(answer).toContain("Receitas por categoria");expect(answer).toContain(bankMoney("150","BRL"));expect(answer).toContain("Rendimentos");
+  expect(answer).not.toContain("Movimentações encontradas");
 });

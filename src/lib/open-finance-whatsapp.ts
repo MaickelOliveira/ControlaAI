@@ -30,6 +30,22 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
     if(!canEnrollOpenFinance(user,requested)&&!await getOpenFinanceAccess(user,requested))return null;
     return "O Open Finance está disponível para contas bancárias do Brasil. Na Zelo, abra Contas → Conectar banco no modo Pessoal (PF) ou Empresa (PJ). Você autoriza diretamente no banco; a Zelo não pede sua senha. Depois, as consultas usam os dados recebidos e salvos na Zelo.";
   }
+  const upcomingCardBills=/\bfaturas?\b/.test(text)&&/\b(?:vencem|vencimento|abertas?)\b/.test(text)&&/\b(?:proximos? 30 dias|neste mes)\b/.test(text);
+  const upcomingCardInstallments=/\bparcelas?\b/.test(text)&&/\bcartao\b/.test(text)&&/\bvencem\b/.test(text)&&/\bproximos? 30 dias\b/.test(text);
+  if(upcomingCardBills||upcomingCardInstallments){
+    const monthEnd=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
+    const from=/\bneste mes\b/.test(text)?`${today.slice(0,7)}-01`:today;
+    const to=/\bneste mes\b/.test(text)?monthEnd:new Date(Date.parse(`${today}T12:00:00Z`)+30*86400000).toISOString().slice(0,10);
+    try{
+      const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:false});
+      const kind=upcomingCardBills?"bill":"installment";
+      const items=agenda.items.filter(item=>item.kind===kind&&item.due_date&&item.due_date>=from&&item.due_date<=to);
+      const name=upcomingCardBills?"faturas":"parcelas do cartão";
+      if(!items.length)return `Não recebi ${name} com vencimento informado de ${bankDate(from)} a ${bankDate(to)}. Isso não confirma que não haja cobranças; confira Contas e o banco.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+      const answer=formatBankAgenda(items,agenda.incomplete);
+      return upcomingCardBills&&/\babertas?\b/.test(text)?`${answer}\nNão posso confirmar o total ainda em aberto: a situação de pagamento de cada fatura precisa ser conferida no banco.`:answer;
+    }catch{return "Não consegui consultar as faturas e parcelas dos bancos agora. Confira Contas ou tente novamente; nenhum valor foi estimado.";}
+  }
   const question=message.replace(/\b(?:(?:da|na|de|em|do) (?:minha |meu |modo )?|modo )?(?:empresa|empresarial|empresariais|pessoal|pessoais|pf|pj)\b/gi,"").replace(/\s+/g," ").trim();
   const parsed=parseBankQuestion(question,today);
   if(parsed?.kind==="spending"&&!parsed.bankName)return null;
@@ -55,6 +71,14 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
     if(ai.account)return "Para consultar uma conta específica, use o filtro em Finanças. Posso informar aqui o total de todos os bancos conectados neste modo ou o gasto por categoria e estabelecimento.";
     const text=normalize(message);
     const source:FinanceQuery["source"]=/\b(cartao|cartoes)\b/.test(text)?"card":/\b(contas bancarias|bancos conectados)\b/.test(text)?"account":undefined;
+    if(/\b(?:maior gasto|compra mais cara)\b/.test(text)){
+      const largest=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.type==="expense"&&entry.amount>0&&entry.date>=from&&entry.date<=to&&(!source||entry.bank?.resource_type===source))
+        .sort((a,b)=>b.amount-a.amount)[0];
+      return `${largest?`Maior gasto realizado · ${requested==="personal"?"Pessoal":"Empresa"}\n${safeSummary(largest.description)} · ${bankMoney(largest.amount,"BRL")}\nData: ${bankDate(largest.date)} · Categoria: ${safeSummary(largest.category)}`:`Não encontrei gasto realizado de ${bankDate(from)} a ${bankDate(to)} nesse modo.`}${financeCoverageNotice(bank,entries)}`;
+    }
+    if(/\b(?:recebi|receitas?|entradas?)\b/.test(text)&&/\bpor categoria\b|\bsepare\b[^.!?]*\bcategoria\b/.test(text)&&!/\b(?:despesas?|gastos?)\b/.test(text)){
+      return summarizeFinanceQuery(entries,{from,to,type:"income",source,analysis:true,detail:false},requested)+financeCoverageNotice(bank,entries);
+    }
     const monthlyOverview=/\bresumo\b/.test(text)&&/\b(mes|mensal|periodo)\b/.test(text)&&!ai.category&&!ai.keyword&&!source;
     if(monthlyOverview){
       const realized=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.date>=from&&entry.date<=to);

@@ -22,10 +22,18 @@ describe("saved bank positions", () => {
     expect(text).toContain("não informou"); expect(text).not.toContain("Banco removido"); expect(text).not.toContain("Não autorizado");
     expect(text).not.toContain("8.000"); expect(text).not.toContain("Você gastou");
   });
+  it("shows only known zero-balance loans when asked which are settled", () => {
+    const data=overview();
+    data.credit[0].outstanding_amount="0.00000000";
+    const text=formatBankQuestion(data,{kind:"loans",from:"2026-10-01",to:"2026-10-31",settledOnly:true},"Pessoal");
+    expect(text).toContain("Crédito pessoal"); expect(text).not.toContain("Crédito fácil");
+    expect(text).not.toContain("Total informado"); expect(text).toContain("não confirma quitação contratual");
+  });
   it("answers financing separately and keeps unknown installments unknown", () => {
     const text = answer(overview(), "Mostre meus financiamentos no Sicredi");
     expect(text).toContain("Veículo"); expect(text).toContain(bankMoney("8000.81", "BRL"));
     expect(text).toContain("Valor da próxima parcela não informado pelo banco"); expect(text).not.toContain("Nubank");
+    expect(text).not.toContain("Total informado:");
     const withInstallment = overview(); withInstallment.credit[2].next_installment_amount = "321.45";
     expect(answer(withInstallment, "Mostre meus financiamentos no Sicredi")).toContain(`Valor da próxima parcela: ${bankMoney("321.45", "BRL")}`);
   });

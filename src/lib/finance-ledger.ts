@@ -2,6 +2,7 @@ import type {BankMovement} from "./open-finance-report";
 import type {BankFinancialData} from "./open-finance-report";
 import {bankCategory,type BankCategory} from "./bank-category";
 import {creditPaymentAdjustment} from "./credit-funded-payment";
+import {isBankBillPaymentDescription} from "./bank-bill-payment";
 export type FinanceLedgerData={finances:LedgerEntry[];balance:{income:number;expense:number;balance:number};totalBalance:{income:number;expense:number;balance:number};bank:BankFinancialData|null;accounts?:Array<{id:string;name:string;type:"bank"|"credit_card"}>};
 export type RecordedFinance = {id:string;type:string;amount:number;category:string;description:string;date:string;mode:string;source?:"whatsapp"|"web";status?:string;createdAt?:string;registeredByName?:string;accountId?:string};
 export type LedgerEntry = Omit<RecordedFinance,"source"> & {source:"whatsapp"|"web"|"bank";included:boolean;possibleDuplicate:boolean;bank?:BankMovement;categorySource?:BankCategory["source"]};
@@ -19,8 +20,9 @@ export function createFinanceLedger(records:readonly RecordedFinance[],movements
     const adjustment=creditPaymentAdjustment(bank);
     const amount=ledgerAmount(adjustment?adjustment.charges_amount:bank.amount);
     const refund=bank.resource_type==="card"&&bank.direction==="credit";
-    const included=amount!==null&&amount>=0&&bank.currency==="BRL"&&bank.kind!=="excluded"&&(bank.direction==="debit"||bank.direction==="credit");
-    const category:BankCategory=adjustment?{name:"Encargos bancários",source:"user"}:bankCategory(bank);
+    const billPayment=isBankBillPaymentDescription(bank.description);
+    const included=amount!==null&&amount>=0&&bank.currency==="BRL"&&bank.kind!=="excluded"&&!billPayment&&(bank.direction==="debit"||bank.direction==="credit");
+    const category:BankCategory=billPayment?{name:"Transferências e pagamentos",source:"excluded"}:adjustment?{name:"Encargos bancários",source:"user"}:bankCategory(bank);
     entries.push({id:`bank:${bank.id}`,type:refund||bank.direction!=="credit"?"expense":"income",amount:(amount??0)*(refund?-1:1),category:category.name,categorySource:category.source,description:bank.description,date:bank.date,mode,source:"bank",status:"posted",included,possibleDuplicate:false,bank});
   }
   // A same amount/date is a clue, not identity. Never remove records based on it.

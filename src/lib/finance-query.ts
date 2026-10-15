@@ -38,8 +38,8 @@ export function summarizeFinanceQuery(entries:readonly LedgerEntry[],query:Finan
 }
 export function financeCoverageNotice(bank:BankFinancialData|null,entries:readonly LedgerEntry[]):string {
   if(!bank)return "";
-  const notes=["O histórico recebido pode estar incompleto.","Transferências, pagamentos de fatura e investimentos ficam fora dos gastos."];
-  if(entries.some(e=>e.bank&&!e.included&&e.bank.kind!=="excluded"))notes.push("Valores desconhecidos ou em outras moedas ficam fora da soma em reais.");
+  const notes=["O histórico recebido pode estar incompleto.","Pagamentos de fatura identificados e investimentos ficam fora dos gastos. Transferências só ficam fora quando reconhecidas como tal."];
+  if(entries.some(e=>e.bank&&!e.included&&e.bank.kind!=="excluded"&&e.categorySource!=="excluded"))notes.push("Valores desconhecidos ou em outras moedas ficam fora da soma em reais.");
   if(bank.report.sync_pending)notes.push("Há uma atualização bancária pendente ou com falha.");
   if(bank.report.missing_dates)notes.push("Movimentos sem data não entram no período.");
   return `\n\nℹ️ *Sobre os dados*\nAtualização bancária: ${bankDate(bank.report.last_successful_sync_at)}\n${notes.map(note=>`• ${note}`).join("\n")}`;
