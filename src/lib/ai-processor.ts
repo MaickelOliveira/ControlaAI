@@ -1587,6 +1587,7 @@ export function getExplicitScheduledReminderResult(message: string): AIResult | 
   let content = text
     .replace(/^\p{L}[\p{L}\s'-]{0,40},\s*/u, "")
     .replace(/^\s*(?:(?:me\s+)?(?:lembra|lembre)(?:-me)?|recu[eé]rdame|recordarme)\s*/i, "")
+    .replace(/^\s*(?:crie|criar|cria|adicione|adicionar|agende|anote|programe)\s+(?:(?:um|uma)\s+)?(?:lembrete|recordat[oó]rio)\s*(?:de|para)?\s*/i, "")
     .replace(/^\s*(?:tarefa|tarea|lembrete|recordatorio)\b\s*(?:de|para)?\s*(?:hoje|hoy|amanh[ãa]|ma[ñn]ana)?\s*[.,;:]?\s*/i, "")
     .replace(/^\s*(?:hoje|hoy|amanh[ãa]|ma[ñn]ana)\s*[.,;:]?\s*/i, "")
     .replace(/^\s*\d{1,2}(?::\d{2})?\s*(?:horas?\s+)?(?:da|de\s+la)\s+(?:tarde|manh[ãa]|mañana|noite|noche)\s*[.,;:]?\s*/i, "")
@@ -1595,12 +1596,12 @@ export function getExplicitScheduledReminderResult(message: string): AIResult | 
     // No formato natural "me lembre de X amanhã às 9, uma hora antes",
     // data e antecedência vêm depois do assunto. Elas definem o disparo e
     // não podem virar parte do texto enviado no lembrete.
-    .replace(/(?:hoje|hoy|amanh[ãa]|ma[ñn]ana)(?=\s|[,.;:]|$)\s*(?:(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2})?|\d{1,2}h(?:\d{2})?)?/gi, " ")
-    .replace(/(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2})?|\b\d{1,2}h(?:\d{2})?\b/gi, " ")
+    .replace(/(?:hoje|hoy|amanh[ãa]|ma[ñn]ana)(?=\s|[,.;:]|$)\s*(?:(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2}|h(?:\d{2})?)?|\d{1,2}h(?:\d{2})?)?/gi, " ")
+    .replace(/(?:[àa]s|a\s+las)\s+\d{1,2}(?::\d{2}|h(?:\d{2})?)?|\b\d{1,2}h(?:\d{2})?\b/gi, " ")
     .replace(/(?:,?\s*(?:e|y)?\s*(?:me\s+)?(?:lembra|lembre|avisa|avise|recu[eé]rdame|recordarme|av[ií]same)?\s*)?(?:\d{1,3}|um|uma|uno|una|quinze|quince|trinta|treinta)\s*(?:h|hr|hrs|hora|horas|min|minuto|minutos)\s+antes\b/gi, " ")
     .replace(/^\s*(?:de|para|que)\s+/i, "")
     .replace(/\s+/g, " ")
-    .trim().replace(/[.!?]+$/, "");
+    .trim().replace(/[.!?]+$/, "").trim();
   if (!content) content = text.replace(/^[^,.;:]+[,.;:]\s*/, "").trim();
   if (!content || content === text) return null;
 
