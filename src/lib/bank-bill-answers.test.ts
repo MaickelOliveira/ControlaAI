@@ -102,6 +102,18 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   const noAmountReply=answerBillQuestion(noAmount,{kind:"partial-payment"},"2026-10-15","personal");
   expect(noAmountReply).toContain("Não informado");expect(noAmountReply).not.toContain("R$ 0,00");
  });
+ it("aponta status parcial contraditório quando o banco informa pagamento igual ao total",()=>{
+  const inconsistent={...overview,bills:[{id:"conflict",resource_id:"card-nu",currency:"BRL",due_date:"2026-10-02",total_amount:"2215.51",status:"partial",payment_amount:"2215.51",payment_evidence:true}]} as BankOverview;
+  const partial=answerBillQuestion(inconsistent,{kind:"partial-payment"},"2026-10-15","personal");
+  expect(partial).toContain("dados contraditórios");
+  expect(partial).toContain("igual ao total");
+  expect(partial).not.toContain("pagamento parcial informado R$");
+  const confirmed=answerBillQuestion(inconsistent,{kind:"confirmed-payment"},"2026-10-15","personal");
+  expect(confirmed).toContain("dados de pagamento inconsistentes");
+  expect(confirmed).not.toContain(" · parcial");
+  const excessive={...inconsistent,bills:[{...inconsistent.bills[0],payment_amount:"2300"}]} as BankOverview;
+  expect(answerBillQuestion(excessive,{kind:"partial-payment"},"2026-10-15","personal")).toContain("maior que o total");
+ });
  it("identifica cartões ativos sem fatura recebida",()=>{
   const reply=answerBillQuestion(overview,{kind:"missing"},"2026-10-15","personal");
   expect(reply).toContain("Realize · Cartão Renner");expect(reply).not.toContain("Nubank");expect(reply).not.toContain("Inter");

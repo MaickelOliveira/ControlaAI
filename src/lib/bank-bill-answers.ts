@@ -63,6 +63,13 @@ function partiallyPaid(row:BillRow):boolean{
  const paid=positive(row.bill.payment_amount),total=positive(row.bill.total_amount);
  return paid!==null&&total!==null&&paid<total;
 }
+function partialPaymentConflict(row:BillRow):"equal"|"greater"|null{
+ if(!/^(?:partial|partially_paid|parcial)$/i.test(row.bill.status))return null;
+ const paid=positive(row.bill.payment_amount),total=positive(row.bill.total_amount);
+ if(paid===null||total===null)return null;
+ const difference=Math.round(paid*100)-Math.round(total*100);
+ return difference===0?"equal":difference>0?"greater":null;
+}
 
 /** Payment state is evidence, never inferred from a missing bank confirmation. */
 export function answerBillQuestion(overview:BankOverview,question:BillQuestion,today:string,mode:"personal"|"business",entries?:readonly LedgerEntry[]):string{
@@ -91,12 +98,17 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
    const confirmed=rows.filter(paymentReported).sort((a,b)=>(b.bill.due_date??"").localeCompare(a.bill.due_date??""));
    const seen=new Set<string>();
    result=confirmed.filter(row=>{if(seen.has(row.bank.id))return false;seen.add(row.bank.id);return true;})
-    .map(row=>`• ${safe(row.bank.institution_name)} · fatura com vencimento ${bankDate(row.bill.due_date)} · pagamento informado${positive(row.bill.payment_amount)!==null?` ${bankMoney(row.bill.payment_amount,row.bill.currency)}`:" (valor não informado)"}${partiallyPaid(row)?" · parcial":""}`);
+    .map(row=>`• ${safe(row.bank.institution_name)} · fatura com vencimento ${bankDate(row.bill.due_date)} · pagamento informado${positive(row.bill.payment_amount)!==null?` ${bankMoney(row.bill.payment_amount,row.bill.currency)}`:" (valor não informado)"}${partialPaymentConflict(row)?" · dados de pagamento inconsistentes":partiallyPaid(row)?" · parcial":""}`);
    return `Bancos com pagamento de fatura informado · ${label}\n${listed(result)||"Nenhum banco conectado informou pagamento de fatura nos registros recebidos."}\nAusência de confirmação não prova que não foram pagas. Um pagamento parcial informado não confirma a quitação total.`;
   }
   case "partial-payment":
    result=rows.filter(partiallyPaid).sort((a,b)=>(b.bill.due_date??"").localeCompare(a.bill.due_date??""))
-    .map(row=>`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · pagamento parcial informado ${positive(row.bill.payment_amount)!==null?bankMoney(row.bill.payment_amount,row.bill.currency):"Não informado"} · total da fatura ${amount(row,"total_amount")}`);
+    .map(row=>{
+     const conflict=partialPaymentConflict(row);
+     return conflict
+      ?`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · banco marcou como parcial, mas informou pagamento ${conflict==="equal"?"igual ao total":"maior que o total"} (${bankMoney(row.bill.payment_amount,row.bill.currency)} de ${amount(row,"total_amount")}); dados contraditórios, não dá para confirmar saldo em aberto ou quitação`
+      :`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · pagamento parcial informado ${positive(row.bill.payment_amount)!==null?bankMoney(row.bill.payment_amount,row.bill.currency):"Não informado"} · total da fatura ${amount(row,"total_amount")}`;
+    });
    return `Pagamentos parciais informados nas faturas · ${label}\n${listed(result)||"Nenhum pagamento parcial informado nas faturas recebidas."}\nSem evidência de pagamento parcial não posso concluir que não houve pagamento; confira no banco.`;
   case "missing":{
    const active=new Map(overview.connections.filter(c=>c.status==="active"&&!c.archived_at).map(c=>[c.id,c]));
