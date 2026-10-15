@@ -64,7 +64,8 @@ import {asksForManualAndBankAccounts,separatedAccountList} from "./separated-acc
 import {getOpenFinanceAccess} from "./open-finance-access";
 import {openFinanceRpc} from "./open-finance-http";
 import type {BankOverview} from "./open-finance-display";
-import {answerBillQuestion,parseBillQuestion} from "./bank-bill-answers";
+import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer} from "./bank-bill-answers";
+import {readUnifiedFinances} from "./unified-finances";
 import {currentCompanyContext} from "./company-context";
 import {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
 import {googleWhatsAppMessageUUID,googleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
@@ -2870,6 +2871,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       .map(messageForAiContext);
     if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
     setVirtualAgentIntent("finance_query");
+    const billHistoryAnswer=paidBillHistoryAnswer(messageText);
+    if(billHistoryAnswer){await wppSend(from,billHistoryAnswer);return;}
     const billQuestion=parseBillQuestion(messageText);
     if(billQuestion){
       const requestedMode=/\b(?:empresa|empresarial|pj)\b/i.test(messageText)?"business":/\b(?:pessoal|pf)\b/i.test(messageText)?"personal":mode;
@@ -2878,11 +2881,18 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const selectedCompany=currentCompanyContext()?.companyId;
         const scope=await getOpenFinanceAccess(user,requestedMode,{throwOnStorageError:true,companyId:selectedCompany});
         if(!scope){await wppSend(from,"A consulta bancária não está disponível neste modo. Confira Contas no painel.");return;}
-        const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+        const periodEnd=todayStrBR();
+        const separated=billQuestion.kind==="separate"
+          ?await readUnifiedFinances(user,requestedMode,`${periodEnd.slice(0,7)}-01`,periodEnd)
+          :null;
+        const overview=billQuestion.kind==="separate"
+          ?separated?.bank?.overview
+          :await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+        if(!overview)throw Error("BANK_CARD_PURCHASES_UNAVAILABLE");
         const freshAccess=await getPhoneAccess(user.id,from);
         const freshUser=await getUserById(user.id);
         if(!freshUser||!hasAccess(freshUser)||!freshAccess||(freshAccess!=="both"&&freshAccess!==requestedMode)||currentCompanyContext()?.companyId!==selectedCompany)return;
-        await wppSendLong(from,answerBillQuestion(overview,billQuestion,todayStrBR(),requestedMode),3500,true);
+        await wppSendLong(from,answerBillQuestion(overview,billQuestion,periodEnd,requestedMode,separated?.entries),3500,true);
       }catch{await wppSend(from,"Não consegui consultar as faturas recebidas agora. Tente novamente em Contas.");}
       return;
     }
