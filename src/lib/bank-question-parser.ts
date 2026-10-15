@@ -10,7 +10,7 @@ export type BankQuestion = {
   settledOnly?: boolean;
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
-  limitView?: "used" | "available-known";
+  limitView?: "used" | "available-known" | "shared";
 };
 
 export const normalizeBankText = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -87,6 +87,8 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     return {kind:"limits",...monthPeriod(today,false),limitView:"used"};
   if (/^mostre apenas os cartoes com limite disponivel informado$/.test(text))
     return {kind:"limits",...monthPeriod(today,false),limitView:"available-known"};
+  if (/^(?:ha|existem?) linhas? de credito compartilhadas? que nao devem ser somadas$/.test(text))
+    return {kind:"limits",...monthPeriod(today,false),limitView:"shared"};
   if (/^(?:existe|ha|tem) (?:alguma conta(?: pessoal)? com|algum) saldo negativo(?:\? mostre (?:somente|apenas) essas contas)?$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
   if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))

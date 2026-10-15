@@ -50,6 +50,8 @@ it("recognizes focused card-limit questions without inventing a bank filter", ()
     .toMatchObject({kind:"limits",limitView:"used"});
   expect(parseBankQuestion("Mostre apenas os cartões com limite disponível informado.", "2026-10-15"))
     .toMatchObject({kind:"limits",limitView:"available-known"});
+  expect(parseBankQuestion("Há linhas de crédito compartilhadas que não devem ser somadas?", "2026-10-15"))
+    .toMatchObject({kind:"limits",limitView:"shared"});
 });
 
 it.each(["quanto falta pra min pagar do carro", "Quanto ainda devo no financiamento do carro?", "Quanto falta para quitar minha casa?"])("recognizes remaining financed debt rather than monthly bills: %s", message => {

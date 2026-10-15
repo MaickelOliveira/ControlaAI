@@ -85,6 +85,19 @@ describe("saved bank positions", () => {
     expect(text).not.toContain("Sicredi Gold");expect(text).not.toContain("Realize Gold");expect(text).not.toContain("SAQUE");
     expect(text).not.toContain("O banco ainda não informou crédito");
   });
+  it("distinguishes consolidated credit lines from proven sharing between cards", () => {
+    const data=overview();
+    data.resources.push(resource("nu-card","nu","card","Nubank Gold"),resource("si-card","si","card","Sicredi Gold"));
+    data.limits=[
+      {id:"consolidated",resource_id:"nu-card",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"1000",used_amount:"200",available_amount:"800",is_flexible:false},
+      {id:"individual",resource_id:"si-card",line_name:"CREDITO_A_VISTA",consolidation_type:"INDIVIDUAL",currency:"BRL",total_amount:"1000",used_amount:"200",available_amount:"800",is_flexible:false},
+    ];
+    const text=answer(data,"Há linhas de crédito compartilhadas que não devem ser somadas?");
+    expect(text).toContain("Nubank");expect(text).toContain("1 linha consolidada");
+    expect(text).toContain("não informam quais cartões compartilham");
+    expect(text).toContain("não soma");expect(text).not.toContain("R$ 2.000");
+    expect(text).not.toContain("Sicredi Gold");
+  });
   it("does not invent zero or add currencies when debt values are missing", () => {
     const data = overview(); data.credit[0].outstanding_amount = null; data.credit[1].currency = "USD";
     const text = answer(data, "Mostre meus empréstimos");
