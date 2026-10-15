@@ -98,6 +98,48 @@ describe("saved bank positions", () => {
     expect(text).toContain("não soma");expect(text).not.toContain("R$ 2.000");
     expect(text).not.toContain("Sicredi Gold");
   });
+  it("shows only inconsistent received credit lines when asked if any do not add up", () => {
+    const data=overview();
+    data.resources.push(resource("good","nu","card","Cartão certo"),resource("bad","real","card","Cartão divergente"));
+    data.limits=[
+      {id:"ok",resource_id:"good",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"20",available_amount:"80",is_flexible:false},
+      {id:"wrong",resource_id:"bad",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"100",available_amount:"20",is_flexible:false},
+    ];
+    const text=answer(data,"Algum limite recebido está inconsistente com o total e o utilizado?");
+    expect(text).toContain("Cartão divergente");expect(text).toContain("Realize");
+    expect(text).toContain(bankMoney("100","BRL"));expect(text).toContain(bankMoney("20","BRL"));
+    expect(text).not.toContain("Cartão certo");expect(text).not.toContain("Sicredi");
+    expect(text).toContain("confirme");
+  });
+  it("identifies the highest and lowest reported available card lines without adding shared credit", () => {
+    const data=overview();
+    data.resources.push(resource("high","nu","card","Cartão alto"),resource("low","si","card","Cartão baixo"),resource("unknown","real","card","Cartão sem dado"));
+    data.limits=[
+      {id:"high-a",resource_id:"high",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"1200",used_amount:"200",available_amount:"1000",is_flexible:false},
+      {id:"high-b",resource_id:"high",line_name:"SAQUE",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"500",used_amount:"0",available_amount:"500",is_flexible:false},
+      {id:"low",resource_id:"low",line_name:"CREDITO_A_VISTA",consolidation_type:"INDIVIDUAL",currency:"BRL",total_amount:"100",used_amount:"100",available_amount:"0",is_flexible:false},
+      {id:"missing",resource_id:"unknown",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:null,used_amount:null,available_amount:null,is_flexible:false},
+    ];
+    const highest=answer(data,"Qual cartão tem o maior limite disponível?");
+    expect(highest).toContain("Cartão alto");expect(highest).toContain(bankMoney("1000","BRL"));
+    expect(highest).not.toContain("Cartão baixo");expect(highest).not.toContain("1.500");
+    const lowest=answer(data,"Qual cartão tem o menor limite disponível?");
+    expect(lowest).toContain("Cartão baixo");expect(lowest).toContain(bankMoney("0","BRL"));
+    expect(lowest).not.toContain("Cartão sem dado");expect(lowest).not.toContain("Cartão alto");
+  });
+  it("names received accounts and cards with missing positions without inventing an update schedule", () => {
+    const data=overview();
+    data.resources.push({...resource("known-account","nu","account","Conta atualizada"),available_amount:"50"},
+      resource("missing-account","si","account","Conta sem saldo"),resource("missing-card","real","card","Cartão sem limite"),
+      resource("revoked-card","old","card","Cartão antigo"));
+    data.sync=[{status:"error",last_successful_sync_at:null,covered_from:null,covered_to:null}];
+    const text=answer(data,"Explique quais saldos e limites ainda dependem de atualização bancária.");
+    expect(text).toContain("Conta sem saldo");expect(text).toContain("Sicredi");
+    expect(text).toContain("Cartão sem limite");expect(text).toContain("Realize");
+    expect(text).toContain("importação pendente ou com falha");
+    expect(text).not.toContain("Conta atualizada");expect(text).not.toContain("Cartão antigo");
+    expect(text).not.toContain("várias vezes ao dia");
+  });
   it("does not invent zero or add currencies when debt values are missing", () => {
     const data = overview(); data.credit[0].outstanding_amount = null; data.credit[1].currency = "USD";
     const text = answer(data, "Mostre meus empréstimos");
