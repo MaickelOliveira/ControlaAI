@@ -127,6 +127,19 @@ describe("saved bank positions", () => {
     expect(lowest).toContain("Cartão baixo");expect(lowest).toContain(bankMoney("0","BRL"));
     expect(lowest).not.toContain("Cartão sem dado");expect(lowest).not.toContain("Cartão alto");
   });
+  it("names received accounts and cards with missing positions without inventing an update schedule", () => {
+    const data=overview();
+    data.resources.push({...resource("known-account","nu","account","Conta atualizada"),available_amount:"50"},
+      resource("missing-account","si","account","Conta sem saldo"),resource("missing-card","real","card","Cartão sem limite"),
+      resource("revoked-card","old","card","Cartão antigo"));
+    data.sync=[{status:"error",last_successful_sync_at:null,covered_from:null,covered_to:null}];
+    const text=answer(data,"Explique quais saldos e limites ainda dependem de atualização bancária.");
+    expect(text).toContain("Conta sem saldo");expect(text).toContain("Sicredi");
+    expect(text).toContain("Cartão sem limite");expect(text).toContain("Realize");
+    expect(text).toContain("importação pendente ou com falha");
+    expect(text).not.toContain("Conta atualizada");expect(text).not.toContain("Cartão antigo");
+    expect(text).not.toContain("várias vezes ao dia");
+  });
   it("does not invent zero or add currencies when debt values are missing", () => {
     const data = overview(); data.credit[0].outstanding_amount = null; data.credit[1].currency = "USD";
     const text = answer(data, "Mostre meus empréstimos");

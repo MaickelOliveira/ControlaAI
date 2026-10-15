@@ -1,5 +1,5 @@
 export type BankQuestion = {
-  kind: "spending" | "limits" | "balances" | "investments" | "bills" | "loans" | "financings";
+  kind: "spending" | "limits" | "balances" | "investments" | "bills" | "loans" | "financings" | "coverage";
   from: string;
   to: string;
   source?: "card" | "account";
@@ -81,6 +81,8 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
   let text = normalizeBankText(question);
   if (text.length > 500) return null;
   text = queryText(question);
+  if (/^explique quais saldos e limites ainda dependem de atualizacao bancaria$/.test(text))
+    return {kind:"coverage",...monthPeriod(today,false)};
   if (/^qual (?:era|foi) o saldo (?:informado )?por cada banco na ultima atualizacao$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),latestSnapshot:true};
   if (/^quanto do limite de cada cartao ja foi usado$/.test(text))

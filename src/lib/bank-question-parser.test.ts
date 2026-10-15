@@ -59,6 +59,10 @@ it("recognizes focused card-limit questions without inventing a bank filter", ()
   expect(parseBankQuestion("Qual cartão tem o menor limite disponível?", "2026-10-15"))
     .toMatchObject({kind:"limits",limitView:"min-available"});
 });
+it("routes a joint balance-and-limit coverage question to received bank data", () => {
+  expect(parseBankQuestion("Explique quais saldos e limites ainda dependem de atualização bancária.","2026-10-15"))
+    .toMatchObject({kind:"coverage"});
+});
 
 it.each(["quanto falta pra min pagar do carro", "Quanto ainda devo no financiamento do carro?", "Quanto falta para quitar minha casa?"])("recognizes remaining financed debt rather than monthly bills: %s", message => {
   expect(parseBankQuestion(message, "2026-10-11")).toMatchObject({ kind: "financings", keyword: /carro/.test(message) ? "carro" : "casa" });

@@ -53,6 +53,18 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   if (!connectedGroups.length) return question.bankName || question.last4
     ? `Não encontrei ${safe(question.bankName ?? "esse cartão")}${question.last4 ? ` · final ${question.last4}` : ""} entre os bancos conectados em ${safe(modeLabel)}. Confira Contas e o modo/empresa selecionado.`
     : `Nenhum banco conectado em ${safe(modeLabel)}. A conexão fica na aba Contas.`;
+  if(question.kind==="coverage"){
+    const missing=connectedGroups.flatMap(group=>group.resources.flatMap(resource=>{
+      const name=`${safe(group.name)} · ${safe(bankResourceName(resource.name))}${resource.identification_last4?` · final ${safe(resource.identification_last4)}`:""}`;
+      if(resource.resource_type==="account")return bankMoney(resource.available_amount,resource.currency)==="Não informado"?[`• ${name}: saldo disponível não informado (posição: ${bankDate(resource.synced_at)}).`]:[];
+      if(resource.resource_type!=="card")return [];
+      const limits=displayCardLimits(data.limits.filter(limit=>limit.resource_id===resource.id));
+      if(!limits.length)return [`• ${name}: limite disponível não informado (posição: ${bankDate(resource.synced_at)}).`];
+      return limits.filter(limit=>bankMoney(limit.available_amount,limit.currency)==="Não informado")
+        .map(limit=>`• ${name} · ${safe(limit.line_name??"Linha de crédito")}: limite disponível não informado (posição: ${bankDate(resource.synced_at)}).`);
+    }));
+    return `Saldos e limites que ainda não vieram completos · ${safe(modeLabel)}\n${missing.slice(0,15).join("\n")||"Todas as contas e linhas de cartão recebidas têm valor disponível informado."}${missing.length>15?`\nMais ${missing.length-15} item(ns) em Contas.`:""}\nIsso descreve apenas os dados recebidos; não confirma saldo zero, limite zero nem prazo de atualização do banco.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+  }
   if(question.kind==="balances"&&question.balanceFilter){
     const missing=question.balanceFilter==="missing";
     const accounts=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="account"&&(
@@ -98,7 +110,7 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
     });
     return `${highest?"Maior":"Menor"} limite disponível recebido por cartão · ${safe(modeLabel)}\n${lines.join("\n")||"Nenhum cartão com limite disponível informado foi recebido."}\nA comparação usa uma linha representativa por cartão, sem somar linhas que podem compartilhar crédito.${byCurrency.size>1?" Moedas diferentes foram comparadas separadamente.":""} Valores não informados ficaram fora da comparação.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
   }
-  const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos" };
+  const labels = { loans: "Empréstimos", financings: "Financiamentos", limits: "Crédito dos cartões", balances: "Saldos bancários", investments: "Investimentos", bills: "Faturas", spending: "Gastos", coverage: "Dados bancários" };
   const debt = question.kind === "loans" || question.kind === "financings";
   const wantedDebtType = question.kind === "loans" ? "loan" : "financing";
   const limitGroups = question.limitView ? connectedGroups.map(group => ({...group, resources: group.resources.filter(resource => resource.resource_type === "card" && (
@@ -124,7 +136,7 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   let omitted = false;
   let shownDebtCount = 0;
   const blocks = groups.map(group => {
-    const wanted = { loans: "loan", financings: "financing", limits: "card", balances: "account", investments: "investment", bills: "card", spending: "account" }[question.kind];
+    const wanted = { loans: "loan", financings: "financing", limits: "card", balances: "account", investments: "investment", bills: "card", spending: "account", coverage: "account" }[question.kind];
     const candidates = group.resources.filter(r => r.resource_type === wanted && (!debt || matchesBankDebtPurpose(r, question.keyword)));
     const resources = candidates.filter(r => question.settledOnly ? hasZeroBankDebt(r,data) : !debt || !hasZeroBankDebt(r, data));
     if (debt) shownDebtCount += resources.length;
