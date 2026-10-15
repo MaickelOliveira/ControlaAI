@@ -52,7 +52,7 @@ import {
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription, findDueRecurringMatches, descriptionsLikelyMatch, upsertImportedInstallmentSchedules, type RecurringTransaction } from "@/lib/recurring";
 import { collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
-import {readFinancialAgenda} from "@/lib/financial-agenda";
+import {readBankAgenda,readFinancialAgenda} from "@/lib/financial-agenda";
 import {formatBankAgenda} from "@/lib/open-finance-schedules";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import type { Appointment } from "@/lib/agenda";
@@ -65,6 +65,7 @@ import {getOpenFinanceAccess} from "./open-finance-access";
 import {openFinanceRpc} from "./open-finance-http";
 import type {BankOverview} from "./open-finance-display";
 import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer,closedBillAnswer} from "./bank-bill-answers";
+import {formatBankInstallmentFocus,parseBankInstallmentFocus} from "./bank-installment-focus";
 import {readUnifiedFinances} from "./unified-finances";
 import {currentCompanyContext} from "./company-context";
 import {prepareGoogleWhatsAppIntent,replayGoogleWhatsAppIntent,type GoogleWhatsAppIntent,type GoogleWhatsAppOperation} from "./google-whatsapp-intent";
@@ -2875,6 +2876,25 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     if(billHistoryAnswer){await wppSend(from,billHistoryAnswer);return;}
     const billDifferenceAnswer=closedBillAnswer(messageText);
     if(billDifferenceAnswer){await wppSend(from,billDifferenceAnswer);return;}
+    const installmentFocus=parseBankInstallmentFocus(messageText);
+    if(installmentFocus){
+      const requestedMode=/\b(?:empresa|empresarial|pj)\b/i.test(messageText)?"business":/\b(?:pessoal|pf)\b/i.test(messageText)?"personal":mode;
+      if(!allowsFinanceMode(requestedMode)){await wppSend(from,replyModeAccessDenied(mode,user.locale));return;}
+      if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true"){await wppSend(from,"As consultas bancárias pelo WhatsApp estão indisponíveis. Confira Contas no painel.");return;}
+      try{
+        const selectedCompany=currentCompanyContext()?.companyId;
+        const scope=await getOpenFinanceAccess(user,requestedMode,{throwOnStorageError:true,companyId:selectedCompany});
+        if(!scope){await wppSend(from,"A consulta bancária não está disponível neste modo. Confira Contas no painel.");return;}
+        const today=todayStrBR();
+        const shifted=(days:number)=>new Date(Date.parse(`${today}T12:00:00Z`)+days*86400000).toISOString().slice(0,10);
+        const agenda=await readBankAgenda(user,requestedMode,{from:shifted(-365),to:shifted(365),includeUndated:true,includeObservedInstallments:true});
+        const freshAccess=await getPhoneAccess(user.id,from);
+        const freshUser=await getUserById(user.id);
+        if(!freshUser||!hasAccess(freshUser)||!freshAccess||(freshAccess!=="both"&&freshAccess!==requestedMode)||currentCompanyContext()?.companyId!==selectedCompany)return;
+        await wppSendLong(from,formatBankInstallmentFocus(agenda,installmentFocus,today,requestedMode==="business"?"Empresa":"Pessoal"),3500,true);
+      }catch{await wppSend(from,"Não consegui consultar as parcelas recebidas agora. Tente novamente em Contas.");}
+      return;
+    }
     const billQuestion=parseBillQuestion(messageText);
     if(billQuestion){
       const requestedMode=/\b(?:empresa|empresarial|pj)\b/i.test(messageText)?"business":/\b(?:pessoal|pf)\b/i.test(messageText)?"personal":mode;

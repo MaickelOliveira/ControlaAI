@@ -1448,8 +1448,8 @@ export function getExplicitRecurringQueryResult(message: string, anchor: Date = 
     return {from:`${anchor.getFullYear()}-${pad(anchor.getMonth()+1)}-${pad(anchor.getDate())}`,to:`${year}-${pad(month)}-${pad(new Date(year,month,0).getDate())}`};
   })():null;
   const scoped=(result:AIResult)=>withExplicitRelativePeriod(message,{...result,period:result.period??throughPeriod??explicitPurchaseCalendarPeriod(message,anchor,true)??undefined,...(mode?{mode}:{})},anchor);
-  const reliefQuestion = /\b(?:quanto|o\s+que|quais?|cuanto|que)\b[\s\S]*\b(?:me\s+livro|vou\s+me\s+livrar|deixo\s+de\s+pagar|libero|terminam|acabam|finalizam|me\s+libero|dejo\s+de\s+pagar|terminan|acaban)\b[\s\S]*\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b/.test(normalized)
-    || /\b(?:contas?|parcelas?|prestacoes?|cuentas?|cuotas?)\b[\s\S]*\b(?:terminam|acabam|finalizam|terminan|acaban)\b/.test(normalized);
+  const reliefQuestion = /\b(?:quanto|o\s+que|quais?|cuanto|que)\b[\s\S]*\b(?:me\s+livro|vou\s+me\s+livrar|deixo\s+de\s+pagar|libero|terminam|acabam|finalizam|me\s+libero|dejo\s+de\s+pagar|terminan|acaban)\b[\s\S]*\b(?:contas?|parcelas?|parcelamentos?|prestacoes?|cuentas?|cuotas?)\b/.test(normalized)
+    || /\b(?:contas?|parcelas?|parcelamentos?|prestacoes?|cuentas?|cuotas?)\b[\s\S]*\b(?:terminam|acabam|finalizam|terminan|acaban)\b/.test(normalized);
   if (reliefQuestion) {
     const monthNames = Object.keys(PURCHASE_MONTHS).join("|");
     const target = normalized.match(new RegExp(`\\b(?:ate|hasta)\\s+(${monthNames})(?:\\s+(?:de\\s+)?(20\\d{2}))?\\b`));

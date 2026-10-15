@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), accounts: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn() }));
+const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), accounts: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn(), imported: vi.fn() }));
 vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner }));
 vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: vi.fn().mockResolvedValue("holder"), getPhoneAccess: vi.fn().mockResolvedValue("both"), getPhonesForUser: vi.fn().mockResolvedValue([{ phone: "5511999990000", name: "Ana Teste", relation: "Titular" }]) }));
 vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: vi.fn().mockResolvedValue(null) }));
@@ -11,6 +11,7 @@ vi.mock("./open-finance-access", () => ({ getOpenFinanceAccess: m.access, canEnr
 vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
 vi.mock("./recurring", async original => ({ ...await original<typeof import("./recurring")>(), getRecurringByUser: m.recurring, findDueRecurringMatches: m.due, confirmRecurring: m.confirm }));
 vi.mock("./accounts", async original => ({ ...await original<typeof import("./accounts")>(), getManualAccountsByUser: m.accounts }));
+vi.mock("./finances", async original => ({ ...await original<typeof import("./finances")>(), getImportedInstallmentStatuses: m.imported }));
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
 import { handleIncomingMessage } from "./message-handler";
 import { bankMoney } from "./open-finance-display";
@@ -21,6 +22,7 @@ beforeEach(() => {
   vi.clearAllMocks(); vi.stubEnv("MULTI_COMPANY_ENABLED", "false"); vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED", "true");
   m.owner.mockResolvedValue(user); m.send.mockResolvedValue(true); m.process.mockRejectedValue(Error("Generic classifier must not handle a bank position"));
   m.recurring.mockResolvedValue([]); m.due.mockResolvedValue([{ id: "due-rent", description: "Aluguel", nextDueDate: "2026-10-01" }]);
+  m.imported.mockResolvedValue([]);
   m.access.mockResolvedValue({ userId: "holder", mode: "personal", environment: "production" });
   m.accounts.mockResolvedValue([]);
   m.rpc.mockResolvedValue({ connections: [{ id: "nu", institution_name: "Nubank", status: "active" }], resources: [{ id: "loan", connection_id: "nu", resource_type: "loan", name: "Crédito pessoal", synced_at: "2026-10-11" }, { id: "card", connection_id: "nu", resource_type: "card", name: "Platinum", synced_at: "2026-10-11" }], credit: [{ resource_id: "loan", currency: "BRL", outstanding_amount: "1200.10", contract_amount: "5000" }], limits: [{ resource_id: "card", line_name: "Crédito à vista", currency: "BRL", available_amount: "1245.92", total_amount: "2000", used_amount: "754.08" }], bills: [], sync: [] });
@@ -84,6 +86,27 @@ it("includes bank installments when the manual recurring list is empty, retainin
   const response = m.send.mock.calls.map(call => call[1]).join("\n");
   expect(response).toContain("Compra teste"); expect(response).toContain("Última parcela identificada: 12 de 12"); expect(response).toContain("moeda não informada"); expect(response).not.toContain("Nenhum lançamento recorrente ou parcelado ativo");
   expect(m.send.mock.calls.every(call => call[2]?.privateFinancial)).toBe(true);
+});
+it("separates annuities from purchases using bank records without falling into generic help",async()=>{
+ m.rpc.mockResolvedValue({incomplete:false,items:[
+  {id:"fee",kind:"installment",resource_id:"card",description:"ANUIDADE DIFERENCIADA",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:12,observed_installments:1},
+  {id:"purchase",kind:"installment",resource_id:"card",description:"Geladeira",institution_name:"Banco fictício",resource_name:"Gold",amount:"80",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:10,observed_installments:2},
+ ]});
+ await handleIncomingMessage({from:"5511999990000",text:"Separe anuidade de compras parceladas."});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Anuidades (1)");expect(response).toContain("Compras parceladas (1)");
+ expect(response).toContain("Geladeira");expect(response).not.toContain("Você gostaria de ver");
+ expect(m.process).not.toHaveBeenCalled();expect(m.confirm).not.toHaveBeenCalled();
+ expect(m.send.mock.calls.every(call=>call[2]?.privateFinancial)).toBe(true);
+});
+it("says bank installment end dates cannot be projected from undated observations",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message,new Date(2026,9,15,12,0,0)));
+ m.rpc.mockResolvedValue({incomplete:false,items:[{id:"undated",kind:"installment",resource_id:"card",description:"Geladeira",institution_name:"Banco fictício",resource_name:"Gold",amount:"80",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:10,observed_installments:2}]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais parcelamentos terminam neste mês?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Não projetei o mês de término dos parcelamentos bancários");
+ expect(response).not.toContain("termina em 10/2026");
+ expect(m.confirm).not.toHaveBeenCalled();
 });
 afterEach(() => vi.unstubAllEnvs());
 it("answers the exact reported parcelados phrase with manual and bank installments only",async()=>{
