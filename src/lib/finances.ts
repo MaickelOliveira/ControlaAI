@@ -438,6 +438,31 @@ export async function deleteFinance(id: string, userId: string, allowedMode?: Fi
   return !error && !!count && count > 0;
 }
 
+/** Organiza apenas lançamentos criados na plataforma, em qualquer mês.
+ *  O vínculo com uma conta registrada não cria transação bancária. Uma só
+ *  atualização no banco evita anunciar sucesso após uma mudança parcial. */
+function platformFinancesToMove(userId: string, mode: FinanceMode, accountId: string) {
+  return getSupabase().from("finances")
+    .select("id", {count:"exact",head:true})
+    .eq("user_id",userId).eq("mode",mode).eq("source","web").is("card_invoice_id",null)
+    .or(`account_id.is.null,account_id.neq.${accountId}`);
+}
+
+export async function countPlatformFinancesForAccount(userId: string, mode: FinanceMode, accountId: string): Promise<number> {
+  const {count,error}=await platformFinancesToMove(userId,mode,accountId);
+  if(error||count===null)throw Error("FINANCE_ACCOUNT_COUNT_UNAVAILABLE");
+  return count;
+}
+
+export async function movePlatformFinancesToAccount(userId: string, mode: FinanceMode, accountId: string): Promise<number> {
+  const {count,error}=await getSupabase().from("finances")
+    .update({account_id:accountId},{count:"exact"})
+    .eq("user_id",userId).eq("mode",mode).eq("source","web").is("card_invoice_id",null)
+    .or(`account_id.is.null,account_id.neq.${accountId}`);
+  if(error||count===null)throw Error("FINANCE_ACCOUNT_MOVE_UNAVAILABLE");
+  return count;
+}
+
 /** Conta quantos lançamentos seriam afetados por "apaga todo o histórico"
  *  ANTES de executar — usado só pra montar a mensagem de confirmação, nunca
  *  pra decidir se apaga (a contagem real é recontada na hora de apagar de
