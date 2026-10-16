@@ -94,3 +94,14 @@ it("searches Amazonas in every connected bank and in recorded origins instead of
   const response=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,keyword:"Amazonas"},["2026-10-01","2026-10-31"],"quanto gastei no amazonas");
   expect(response).toContain(bankMoney("70","BRL")); expect(response).toContain("Nubank"); expect(response).toContain("Sicredi"); expect(response).toContain("WhatsApp"); expect(response).not.toContain("Mercado diferente");
 });
+it("matches a Facebook question to FACEBK card descriptions in the complete WhatsApp answer",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"facebook",mode:"personal",source:"bank",included:true,type:"expense",date:"2026-10-13",category:"Marketing",description:"FACEBK *65ZTF6SP34",amount:26.67,bank:{institution_name:"Mercado Pago",resource_type:"card"}},
+    {id:"other",mode:"personal",source:"bank",included:true,type:"expense",date:"2026-10-13",category:"Marketing",description:"GOOGLE ADS",amount:100,bank:{institution_name:"Mercado Pago",resource_type:"card"}},
+  ],bank:{overview:{connections:data.connections},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-16"}}});
+  const response=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,keyword:"facebook"},["2026-10-01","2026-10-31"],"Quanto gastei no Facebook neste mês?");
+  expect(response).toContain("FACEBK");
+  expect(response).toContain(bankMoney("26.67","BRL"));
+  expect(response).not.toContain("GOOGLE ADS");
+  expect(response).not.toContain("R$ 0,00");
+});

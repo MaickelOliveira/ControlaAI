@@ -45,10 +45,61 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(/^explique se saldo zero prova quitacao do emprestimo$/.test(plainWording))
     return "Saldo devedor informado como zero não prova quitação do empréstimo. O banco pode ter enviado uma posição parcial ou antiga, e o contrato pode continuar aberto por outras condições. Para confirmar o encerramento, consulte o contrato e a confirmação de quitação no banco.";
   const positionQuestion=isBankPositionQuestion(message);
-  const scopedFinanceQuestion=positionQuestion||/banco|bancaria|conex|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac|estabelec|compras?|lancament|transfer|fatura|gastos?/.test(text);
+  const scopedFinanceQuestion=positionQuestion||/banco|bancaria|conex|sincroniz|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac|estabelec|compras?|lancament|transfer|fatura|gastos?/.test(text);
   if(business&&personal&&scopedFinanceQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return scopedFinanceQuestion?"Este número não tem acesso a esse modo da Zelo.":null;
+  const bankSync=/\bsincronizac(?:ao|oes)\b/.test(text)&&/\bbancos?\b|\bpendente\b|\bfalha\b/.test(text);
+  const lastSync=bankSync&&/\bultima\b/.test(text);
+  const pendingSync=bankSync&&/\bpendente\b/.test(text);
+  const failedSync=bankSync&&/\bfalha\b/.test(text);
+  const incompleteBankData=/\bdados?\b.*\bbancos?\b.*\bincompletos?\b/.test(text);
+  const expiredConnection=/\bconex(?:ao|oes)\b.*\bbancos?\b.*\bexpirou\b/.test(text);
+  const reconnectBank=/\breconectar\b.*\bbancos?\b.*\bhistorico\b/.test(text);
+  const disconnectBank=/\bdesconectar\b.*\bbancos?\b.*\bhistorico\b/.test(text);
+  const missingInstallmentDue=/\bbancos?\b.*\bnao informou\b.*\bvencimentos?\b.*\bparcelas?\b/.test(text);
+  const missingCurrency=/\bbancos?\b.*\bnao informou\b.*\bmoeda\b/.test(text);
+  if(reconnectBank)return `Para reconectar sem perder o histórico, abra Contas no modo ${bankModeLabel(requested)}, clique em Conectar banco e faça uma nova autorização no banco desejado. Os dados já recebidos continuam no histórico; a nova conexão só poderá trazer dados que o banco autorizar e disponibilizar.`;
+  if(disconnectBank)return `Para desconectar preservando o histórico, abra Contas no modo ${bankModeLabel(requested)}, expanda Permissões e histórico de conexões e clique em Desconectar banco na autorização desejada. Isso interrompe o compartilhamento; os dados recebidos permanecem para consulta. Se quiser tirar o cartão antigo da lista, use Remover da lista depois.`;
+  if(lastSync||pendingSync||failedSync||expiredConnection){
+    try{
+      const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
+      if(!scope)return `Não consigo consultar as conexões bancárias em ${bankModeLabel(requested)}. Confira Contas.`;
+      const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+      const label=bankModeLabel(requested,scope.companyName);
+      if(lastSync){
+        const active=overview.connections.filter(connection=>connection.status==="active"&&!connection.archived_at);
+        const lines=active.slice(0,20).map(connection=>`• ${safeSummary(connection.institution_name)}: ${bankDate(connection.last_successful_sync_at)}`);
+        return `Última sincronização concluída de cada banco · ${label}\n${lines.join("\n")||"Nenhuma conexão ativa nos dados recebidos."}${active.length>20?`\nMais ${active.length-20} em Contas.`:""}\nData não informada significa que ainda não recebi confirmação de sincronização concluída para aquela conexão.`;
+      }
+      if(pendingSync||failedSync){
+        const status=pendingSync?["pending","running"]:["failed"];
+        const count=(overview.sync??[]).filter(item=>status.includes(item.status)).length;
+        return `${count?"Sim":"Nenhuma identificada"}: ${pendingSync?"sincronização pendente/em andamento":"sincronização com falha"} · ${label}\n${count} etapa(s) com esse estado nos dados recebidos. Essas etapas não foram contadas como concluídas. Confira Contas para acompanhar a atualização; a ausência de etapas aqui não prova que todos os dados bancários estejam completos.`;
+      }
+      const expired=overview.connections.filter(connection=>!connection.archived_at&&(connection.status==="expired"||(connection.status==="active"&&!!connection.consent_expires_at&&connection.consent_expires_at.slice(0,10)<today)));
+      const lines=expired.slice(0,10).map(connection=>`• ${safeSummary(connection.institution_name)} · Expirado${connection.consent_expires_at?` em ${bankDate(connection.consent_expires_at)}`:""}`);
+      return `Conexões bancárias expiradas · ${label}\n${lines.join("\n")||"Nenhuma conexão expirada identificada nos dados recebidos."}\nPara voltar a compartilhar dados, abra Contas e use Conectar banco para uma nova autorização. O histórico recebido permanece.`;
+    }catch{return "Não consegui conferir o estado das conexões bancárias agora. Confira Contas; não vou adivinhar se há atualização pendente, falha ou autorização expirada.";}
+  }
+  if(incompleteBankData){
+    try{
+      const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
+      if(!scope)return `Não consigo verificar os dados bancários em ${bankModeLabel(requested)}. Confira Contas.`;
+      const from=`${today.slice(0,7)}-01`,{report,overview}=await readBankLedger(scope,{from,to:today});
+      return `Dados bancários possivelmente incompletos · ${bankModeLabel(requested,scope.companyName)} · ${bankDate(from)} a ${bankDate(today)}\n${overview.connections.length?`Movimentos sem data recebidos: ${report.missing_dates??0}. ${report.sync_pending?"Há sincronização pendente ou com falha.":"Não há sincronização pendente ou com falha identificada neste relatório."} Última atualização concluída: ${bankDate(report.last_successful_sync_at)}.`:"Nenhuma conexão bancária recebida neste modo."}\nO banco também pode não enviar vencimento, valor de parcela, moeda ou confirmação de pagamento. A Zelo mostra esses campos como não informados quando faltam; não é possível deduzir quais dias do extrato estão completos.`;
+    }catch{return "Não consegui conferir a cobertura bancária agora. Confira Contas; não vou afirmar que o extrato está completo sem consultar os dados.";}
+  }
+  if(missingInstallmentDue||missingCurrency){
+    try{
+      const from=today,to=shiftDay(today,365);
+      const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:true});
+      const missing=agenda.items.filter(item=>missingInstallmentDue?item.kind==="installment"&&!item.due_date:!!item.amount&&!item.currency);
+      const names=[...new Set(missing.map(item=>safeSummary(item.institution_name)))];
+      const field=missingInstallmentDue?"vencimento da próxima parcela":"moeda de um valor";
+      return `Bancos com ${field} não informado · ${bankModeLabel(requested)}\n${names.slice(0,10).map(name=>`• ${name}`).join("\n")||"Nenhum banco com esse campo ausente nos itens recebidos."}${names.length>10?`\nMais ${names.length-10} em Contas.`:""}\n${missingInstallmentDue?"A parcela identificada não fornece por si só a data da próxima cobrança; confira a fatura do cartão no banco.":"Valores sem moeda não foram convertidos nem somados a valores em reais."} ${agenda.incomplete?"A consulta bancária está incompleta.":"Outros dados ainda podem não ter sido enviados pelo banco."}`;
+    }catch{return "Não consegui conferir os campos ausentes dos bancos agora. Confira Contas; não vou atribuir a falta de dados a um banco sem consultar os registros.";}
+  }
   const individualCategory=plainWording.match(/\bmaior compra individual (?:em|na categoria) (.+?)(?: (?:neste|no) mes)?$/)?.[1]?.trim();
   const listOthers=/\b(?:quais|liste|mostre)\b.*\blancamentos?\b.*\bem outros\b/.test(text);
   if(individualCategory||listOthers){
