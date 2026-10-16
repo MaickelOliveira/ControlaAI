@@ -15,6 +15,7 @@ import {
   getExplicitDriveRenameResult,
   getExplicitDriveSearchResult,
   getExplicitModeSwitchResult,
+  getScopedModeReadResult,
   getExplicitGroceryListAddResult,
   getExplicitGroceryListManagementResult,
   getExplicitGroceryHistoryQueryResult,
@@ -235,6 +236,21 @@ describe("Drive command parity", () => {
 });
 
 describe("mode switch parity", () => {
+  it("leaves requests about another feature to that feature", () => {
+    expect(getScopedModeReadResult("Mostre os dados das tarefas do modo Pessoal.")).toBeNull();
+    expect(getScopedModeReadResult("Mostre informações do calendário do modo Empresa.")).toBeNull();
+  });
+  it("treats a read-only scoped request as a financial overview, even with AI-first enabled", async () => {
+    vi.stubEnv("AI_FIRST_INTENT_ENABLED", "true");
+    try {
+      expect(await processMessage("Mostre somente dados do modo Pessoal; não acesse a empresa."))
+        .toMatchObject({ intent: "finance_query", mode: "personal" });
+      expect(await processMessage("Mostre o resumo financeiro do modo Empresa."))
+        .toMatchObject({ intent: "finance_query", mode: "business" });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("switches personal and business modes deterministically", () => {
     expect(getExplicitModeSwitchResult("Pasa a la cuenta empresarial"))
       .toMatchObject({ intent: "mode_switch", mode: "business" });

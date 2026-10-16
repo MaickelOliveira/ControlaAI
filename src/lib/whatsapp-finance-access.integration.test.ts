@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), access: vi.fn(), find: vi.fn(), range: vi.fn(), remove: vi.fn(), update: vi.fn(), pending: vi.fn(), clear: vi.fn(), setPending: vi.fn(), batch: vi.fn(), code: vi.fn(), count: vi.fn(), financeCount: vi.fn(), removeAll: vi.fn(), balance: vi.fn(), rangeBalance: vi.fn(), accounts: vi.fn(), due: vi.fn(), confirm: vi.fn() }));
-vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner, generateWppVerifyCode: m.code }));
+const m = vi.hoisted(() => ({ owner: vi.fn(), userUpdate: vi.fn(), send: vi.fn(), process: vi.fn(), access: vi.fn(), find: vi.fn(), range: vi.fn(), remove: vi.fn(), update: vi.fn(), pending: vi.fn(), clear: vi.fn(), setPending: vi.fn(), batch: vi.fn(), code: vi.fn(), count: vi.fn(), financeCount: vi.fn(), removeAll: vi.fn(), balance: vi.fn(), rangeBalance: vi.fn(), accounts: vi.fn(), due: vi.fn(), confirm: vi.fn() }));
+vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner, updateUser: m.userUpdate, generateWppVerifyCode: m.code }));
 vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: async () => "fixture-owner", getPhoneAccess: m.access, getPhonesForUser: async () => [{ userId: "fixture-owner", phone: "5511999990000", name: "Fixture", relation: "Titular" }], countPhonesForUser: m.count, findPhoneByName: async () => "5511999990002", findPhoneByRelation: async () => null }));
 vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: m.pending, clearPendingAction: m.clear, setPendingAction: m.setPending }));
 vi.mock("./conversations", async original => ({ ...await original<typeof import("./conversations")>(), addMessage: vi.fn(), getAiPaused: async () => false, getAiHistory: async () => [], getLastFinanceBatch: m.batch }));
@@ -114,4 +114,20 @@ it("does not query or reveal another mode's account during a pending account sel
   m.accounts.mockResolvedValue([{ ...ownAccount, id: "fixture-personal-account", name: "Reserva pessoal", mode: "personal" }]);
   await receive("reserva pessoal");
   expect(m.accounts).not.toHaveBeenCalled(); expect(reply()).not.toContain("Reserva pessoal");
+});
+it("shows personal data without switching modes when the model misreads a scoped request", async () => {
+  m.access.mockResolvedValue("both");
+  m.process.mockResolvedValue({ intent: "mode_switch", confidence: .99, mode: "personal" });
+  await receive("Mostre somente dados do modo Pessoal; não acesse a empresa.");
+  expect(m.userUpdate).not.toHaveBeenCalled();
+  expect(m.rangeBalance).toHaveBeenCalledExactlyOnceWith("fixture-owner", "personal", expect.any(String), expect.any(String));
+  expect(reply()).toContain("*Pessoal*");
+  expect(reply()).not.toContain("*Empresa*");
+});
+it("does not include business data in a personal-only financial overview", async () => {
+  m.access.mockResolvedValue("both");
+  m.process.mockResolvedValue({ intent: "finance_query", confidence: .99, mode: "personal" });
+  await receive("Mostre o resumo financeiro do modo Pessoal.");
+  expect(m.rangeBalance).toHaveBeenCalledExactlyOnceWith("fixture-owner", "personal", expect.any(String), expect.any(String));
+  expect(reply()).not.toContain("*Empresa*");
 });

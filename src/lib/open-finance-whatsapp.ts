@@ -234,6 +234,10 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
     return "Saldo disponível é o valor que o banco informa como disponível na sua conta; confira as regras da conta para saber se inclui crédito adicional. Limite disponível do cartão é crédito para compras, que gera cobrança na fatura quando usado. Ele não é dinheiro na conta e não deve ser somado ao saldo disponível.";
   if(/\bopen\s*(finance|banking)\b/.test(text)||(/\b(conectar|conecto|sincronizar|vincular)\b/.test(text)&&/\b(banco|bancos|bancaria|bancarias)\b/.test(text))){
     if(!canEnrollOpenFinance(user,requested)&&!await getOpenFinanceAccess(user,requested))return null;
+    if(/\b(?:nao recebe|nao tem acesso|nao ve|deixa de receber)\b/.test(text))
+      return "A Zelo não recebe sua senha bancária nem códigos de acesso pelo Open Finance. O banco compartilha somente os dados autorizados. Conforme o banco e a conexão, o histórico pode vir incompleto e campos como vencimento, valor de parcela, moeda ou confirmação de pagamento podem não ser enviados. Quando um campo faltar, a Zelo deve mostrar “não informado”, sem adivinhar; confira a informação no banco.";
+    if(/\b(?:permite consultar|pode consultar|posso consultar|quais dados|o que.*(?:consultar|ver))\b/.test(text))
+      return "Na Zelo, o Open Finance permite consultar os dados que o banco compartilhou com sua autorização: saldos de contas, limites e faturas de cartões, empréstimos, financiamentos, investimentos, parcelas e movimentações. A disponibilidade varia conforme o banco e os produtos autorizados. Saldos, limites e dívidas são posições atuais recebidas; o histórico de movimentações pode estar incompleto. A Zelo não inventa campos que o banco não enviou.";
     return "O Open Finance está disponível para contas bancárias do Brasil. Na Zelo, abra Contas → Conectar banco no modo Pessoal (PF) ou Empresa (PJ). Você autoriza diretamente no banco; a Zelo não pede sua senha. Depois, as consultas usam os dados recebidos e salvos na Zelo.";
   }
   const dayCount=Number(text.match(/\bproximos? (\d{1,2}) dias\b/)?.[1]??0);
