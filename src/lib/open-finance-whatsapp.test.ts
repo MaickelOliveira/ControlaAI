@@ -1,16 +1,41 @@
 import {beforeEach,expect,it,vi} from "vitest";
 vi.mock("server-only",()=>({}));
-const m=vi.hoisted(()=>({access:vi.fn(),read:vi.fn(),bank:vi.fn(),pending:vi.fn(),recurring:vi.fn(),agenda:vi.fn(),financial:vi.fn()}));
+const m=vi.hoisted(()=>({access:vi.fn(),read:vi.fn(),bank:vi.fn(),pending:vi.fn(),recurring:vi.fn(),agenda:vi.fn(),financial:vi.fn(),rpc:vi.fn(),ledger:vi.fn()}));
 vi.mock("./financial-agenda",()=>({readBankAgenda:m.agenda,readFinancialAgenda:m.financial}));
 vi.mock("./open-finance-access",()=>({getOpenFinanceAccess:m.access,canEnrollOpenFinance:()=>true}));
 vi.mock("./unified-finances",()=>({readUnifiedFinances:m.read}));
 vi.mock("./open-finance-question",()=>({answerBankQuestion:m.bank,parseBankQuestion:()=>null}));
+vi.mock("./open-finance-http",()=>({openFinanceRpc:m.rpc}));
+vi.mock("./finance-ledger-storage",()=>({readBankLedger:m.ledger}));
 vi.mock("./finances",()=>({expandMerchantAliases:(s:string)=>[s],getPendingFinances:m.pending}));
 vi.mock("./recurring",()=>({getRecurringByUser:m.recurring}));
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "./open-finance-whatsapp";
 import {bankMoney} from "./open-finance-display";
 const user={id:"own-user",email:"user@example.test",plan:"business",activeMode:"personal",status:"active"} as const;
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});m.financial.mockResolvedValue({commitments:[],bank:{items:[],incomplete:false},forecasts:[],coverage:""});});
+it("answers which bank connection is inactive from the selected mode without inventing status",async()=>{
+  m.rpc.mockResolvedValue({connections:[
+    {institution_name:"Banco Ativo",status:"active",archived_at:null},
+    {institution_name:"Banco Inter PJ",status:"revoked",archived_at:"2026-10-10"},
+    {institution_name:"Banco Expirado",status:"expired",archived_at:null},
+  ],sync:[]});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Qual conexão bancária está inativa?","2026-10-16");
+  expect(answer).toContain("Banco Inter PJ");expect(answer).toContain("Banco Expirado");
+  expect(answer).not.toContain("Banco Ativo");expect(answer).toContain("histórico");
+  expect(m.rpc).toHaveBeenCalledWith(expect.objectContaining({userId:user.id,mode:"personal"}),"zelo_of_overview",{p_environment:"production"});
+});
+it("does not query bank connection status outside the phone's permitted mode",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","Qual conexão bancária está inativa na empresa?","2026-10-16");
+  expect(answer).toContain("não tem acesso");expect(m.rpc).not.toHaveBeenCalled();
+});
+it("answers future bank movement dates from stored movements without treating future due dates as errors",async()=>{
+  m.ledger.mockResolvedValue({report:{movements:[{date:"2026-10-18",description:"Movimento futuro",institution_name:"Banco A",amount:"12",currency:"BRL"}],sync_pending:false},overview:{connections:[{status:"active"}]}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Há datas bancárias que parecem estar no futuro?","2026-10-16");
+  expect(answer).toContain("Movimento futuro");expect(answer).toContain("18/10/2026");
+  expect(answer).not.toContain("fontes públicas");
+  expect(answer).toContain("Datas de vencimentos futuros são esperadas");
+  expect(m.ledger).toHaveBeenCalledWith(expect.objectContaining({userId:user.id,mode:"personal"}),expect.objectContaining({from:"2026-10-17"}));
+});
 it("answers due-today with only known dates in the selected mode",async()=>{
   m.financial.mockResolvedValue({commitments:[{id:"manual",mode:"personal",type:"expense",description:"Conta manual",amount:25,dueDate:"2026-10-16",origin:"scheduled"},{id:"other",mode:"business",type:"expense",description:"Outra empresa",amount:90,dueDate:"2026-10-16",origin:"scheduled"}],bank:{items:[{id:"bill",mode:"personal",kind:"bill",description:"Fatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-16",amount:"50",currency:"BRL"},{id:"estimate",mode:"personal",kind:"recurring",description:"Cobrança estimada",institution_name:"Banco B",resource_name:"Cartão",due_date:"2026-10-16",amount:"10",currency:"BRL"}],incomplete:true},forecasts:[],coverage:""});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","O que vence hoje com data confirmada?","2026-10-16");
