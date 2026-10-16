@@ -18,6 +18,10 @@ import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
 const safeSummary=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,120);
+const shiftDay=(date:string,days:number)=>new Date(Date.parse(`${date}T12:00:00Z`)+days*86400000).toISOString().slice(0,10);
+const realizedTotal=(entries:readonly LedgerEntry[],mode:"personal"|"business",type:"income"|"expense",from:string,to:string)=>
+  entries.filter(entry=>entry.mode===mode&&entry.included&&entry.status!=="pending"&&entry.type===type&&entry.date>=from&&entry.date<=to)
+    .reduce((cents,entry)=>cents+Math.round(entry.amount*100),0)/100;
 
 export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"business",phoneAccess:string,message:string,today:string):Promise<string|null>{
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true")return null;
@@ -202,11 +206,52 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
     const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
     if(!scope)return null;
     const from=ai.period?.from??defaultPeriod[0],to=ai.period?.to??defaultPeriod[1];
+    const text=normalize(message);
+    const source:FinanceQuery["source"]=/\b(cartao|cartoes)\b/.test(text)?"card":/\b(contas bancarias|bancos conectados)\b/.test(text)?"account":undefined;
+    const compares=/\bcompar(?:e|ar|acao)\b/.test(text);
+    const compareWeek=compares&&/\b(?:esta|desta|nesta) semana\b/.test(text)&&/\bsemana (?:anterior|passada)\b/.test(text);
+    const compareMonth=compares&&/\b(?:este|deste|neste) mes\b/.test(text)&&/\bmes (?:passado|anterior)\b/.test(text);
+    if((compareWeek||compareMonth)&&!ai.account&&!ai.category&&!ai.keyword&&!source){
+      const today=todayStrBR();
+      const income=/\b(?:entradas?|receitas?|recebimentos?)\b/.test(text)&&!/\b(?:gastos?|despesas?|saidas?)\b/.test(text);
+      const type: "income"|"expense"=income?"income":"expense";
+      let currentFrom:string,previousFrom:string,previousTo:string,comparableTo:string;
+      if(compareWeek){
+        const weekday=(new Date(`${today}T12:00:00Z`).getUTCDay()+6)%7;
+        currentFrom=shiftDay(today,-weekday);
+        previousFrom=shiftDay(currentFrom,-7);
+        previousTo=shiftDay(previousFrom,6);
+        comparableTo=shiftDay(previousFrom,weekday);
+      }else{
+        currentFrom=`${today.slice(0,7)}-01`;
+        const year=Number(today.slice(0,4)),month=Number(today.slice(5,7));
+        previousFrom=new Date(Date.UTC(year,month-2,1)).toISOString().slice(0,10);
+        previousTo=new Date(Date.UTC(year,month-1,0)).toISOString().slice(0,10);
+        comparableTo=`${previousFrom.slice(0,8)}${String(Math.min(Number(today.slice(8)),Number(previousTo.slice(8)))).padStart(2,"0")}`;
+      }
+      const [current,previous]=await Promise.all([
+        readUnifiedFinances(user,requested,currentFrom,today),
+        readUnifiedFinances(user,requested,previousFrom,previousTo),
+      ]);
+      if(!current.bank?.overview.connections.length||!previous.bank?.overview.connections.length)return null;
+      const currentTotal=realizedTotal(current.entries,requested,type,currentFrom,today);
+      const comparableTotal=realizedTotal(previous.entries,requested,type,previousFrom,comparableTo);
+      const previousTotal=realizedTotal(previous.entries,requested,type,previousFrom,previousTo);
+      const difference=Math.round((currentTotal-comparableTotal)*100)/100;
+      const label=type==="income"?"entradas":"saídas";
+      return `Comparação de ${label} · ${requested==="personal"?"Pessoal":"Empresa"}\nPeríodo atual até hoje (${bankDate(currentFrom)} a ${bankDate(today)}): ${bankMoney(currentTotal,"BRL")}\nMesmo intervalo anterior (${bankDate(previousFrom)} a ${bankDate(comparableTo)}): ${bankMoney(comparableTotal,"BRL")}\nPeríodo anterior completo (${bankDate(previousFrom)} a ${bankDate(previousTo)}): ${bankMoney(previousTotal,"BRL")}\nDiferença entre intervalos comparáveis: ${bankMoney(Math.abs(difference),"BRL")} ${difference>0?"a mais":difference<0?"a menos":"de diferença"}. O período atual ainda está em andamento; totais representam os lançamentos recebidos.${financeCoverageNotice(current.bank,[...current.entries,...previous.entries])}`;
+    }
     const {entries,bank}=await readUnifiedFinances(user,requested,from,to);
     if(!bank?.overview.connections.length)return null;
     if(ai.account)return "Para consultar uma conta específica, use o filtro em Finanças. Posso informar aqui o total de todos os bancos conectados neste modo ou o gasto por categoria e estabelecimento.";
-    const text=normalize(message);
-    const source:FinanceQuery["source"]=/\b(cartao|cartoes)\b/.test(text)?"card":/\b(contas bancarias|bancos conectados)\b/.test(text)?"account":undefined;
+    const topMatch=text.match(/\b(?:cinco|5)\s+(?:maiores|mais (?:altas|altos))\s+(despesas?|gastos?|saidas?|receitas?|entradas?)\b/);
+    if(topMatch&&!ai.category&&!ai.keyword){
+      const type: "income"|"expense"=/^(?:receita|entrada)/.test(topMatch[1])?"income":"expense";
+      const selected=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.type===type&&entry.amount>0&&entry.date>=from&&entry.date<=to&&(!source||entry.bank?.resource_type===source))
+        .sort((a,b)=>b.amount-a.amount||b.date.localeCompare(a.date)||a.id.localeCompare(b.id)).slice(0,5);
+      const lines=selected.map((entry,index)=>`${index+1}. ${safeSummary(entry.description)} · ${bankMoney(entry.amount,"BRL")} · ${bankDate(entry.date)} · ${safeSummary(entry.source==="bank"?entry.bank?.institution_name?.trim()||"Banco não informado":financeOrigin(entry))}`);
+      return `Cinco maiores ${type==="income"?"receitas":"despesas"} realizadas · ${requested==="personal"?"Pessoal":"Empresa"} · ${bankDate(from)} a ${bankDate(to)}\n${lines.join("\n")||"Nenhum lançamento correspondente nos dados recebidos."}\nValores futuros e movimentos fora dos totais não entram nesta lista.${financeCoverageNotice(bank,entries)}`;
+    }
     if(/\b(?:maior gasto|compra mais cara)\b/.test(text)){
       const largest=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.type==="expense"&&entry.amount>0&&entry.date>=from&&entry.date<=to&&(!source||entry.bank?.resource_type===source))
         .sort((a,b)=>b.amount-a.amount)[0];
@@ -237,7 +282,8 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
       const summary=summarizeFinanceQuery(entries,{from,to,type:"result"},requested);
       return `${summary}\n\n*Principais categorias de despesas*\n${categories.map(group=>`• ${safeSummary(group.name)}: ${bankMoney(group.value,"BRL")}`).join("\n")||"Nenhuma despesa realizada no período."}\n\n*Maiores gastos realizados*\n${largest.map(item=>`• ${safeSummary(item.description)}: ${bankMoney(item.amount,"BRL")} (${bankDate(item.date)})`).join("\n")||"Nenhum gasto realizado no período."}\n\n*Próximos vencimentos com data informada*\n${upcoming}\n\nVencimentos previstos não entram no resultado já realizado. Valores do banco podem repetir obrigações cadastradas; confira se foram pagos.${financeCoverageNotice(bank,entries)}`;
     }
-    const query:FinanceQuery={from,to,type:ai.intent==="balance_query"?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail",byBank:/\bpor banco\b|\bsepare\b[^.!?]*\bbancos?\b/.test(text)};
+    const generalResult=/\bresultado financeiro\b/.test(text)&&!source&&!ai.category&&!ai.keyword;
+    const query:FinanceQuery={from,to,type:ai.intent==="balance_query"||generalResult?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail",byBank:/\bpor banco\b|\bsepare\b[^.!?]*\bbancos?\b/.test(text)};
     let answer=summarizeFinanceQuery(entries,query,requested)+financeCoverageNotice(bank,entries);
     if(ai.intent==="finance_detail"&&!query.source){
       const [pending,recurring]=await Promise.all([getPendingFinances(user.id,requested),getRecurringByUser(user.id,requested,"active")]);

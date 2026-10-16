@@ -3857,6 +3857,21 @@ function unresolvedDeliveryMerchant(message: string, keyword: unknown, bank?: st
 function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): AIResult {
   const deliverySpending=explicitDeliverySpendingResult(message);
   const merchant = explicitMerchantInQuestion(message);
+  const financeText=normalizeCapabilityText(message);
+  const modelBank=validateBankQuery(result.bankQuery)?.bankName;
+  const bankSpecific=/\b(?:bancos?|bancari[oa]s?|cartao|cartoes|open finance)\b/.test(financeText)
+    ||!!modelBank&&financeText.includes(normalizeCapabilityText(modelBank));
+  const generalResult=/\bresultado financeiro\b/.test(financeText)&&/\b(?:mes|semana|periodo|ano)\b/.test(financeText);
+  const comparesPeriods=/\bcompar(?:e|ar|acao)\b/.test(financeText)&&/\b(?:gastos?|despesas?|saidas?|entradas?|receitas?|recebimentos?)\b/.test(financeText);
+  const generalComparison=comparesPeriods&&(
+    /\b(?:esta|desta|nesta) semana\b/.test(financeText)&&/\bsemana (?:anterior|passada)\b/.test(financeText)
+    ||/\b(?:este|deste|neste) mes\b/.test(financeText)&&/\bmes (?:passado|anterior)\b/.test(financeText)
+  );
+  const generalTopFive=/\b(?:cinco|5)\s+(?:maiores|mais (?:altas|altos))\s+(?:despesas?|gastos?|saidas?|receitas?|entradas?)\b/.test(financeText);
+  if(!bankSpecific&&(generalResult||generalComparison||generalTopFive)&&["bank_query","finance_query","finance_analysis","how_to","unknown"].includes(result.intent)){
+    const income=/\b(?:entradas?|receitas?|recebimentos?)\b/.test(financeText)&&!/\b(?:gastos?|despesas?|saidas?)\b/.test(financeText);
+    return withExplicitRelativePeriod(message,{...result,intent:"finance_query",confidence:Math.max(result.confidence,.95),financeType:generalResult?undefined:income?"income":"expense",bankQuery:undefined,account:undefined,category:undefined,keyword:undefined,personName:undefined,response:undefined});
+  }
   if (deliverySpending && !merchant && ["how_to", "unknown", "finance_query", "finance_analysis", "bank_query"].includes(result.intent)) {
     const query = result.intent === "bank_query" ? validateBankQuery(result.bankQuery) : undefined;
     if (unresolvedDeliveryMerchant(message, query?.keyword ?? result.keyword, query?.bankName)) {

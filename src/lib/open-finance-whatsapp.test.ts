@@ -61,6 +61,56 @@ it("uses the requested previous month and the own connected ledger",async()=>{
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"]);
   expect(answer).toContain("R$ 35,00");expect(answer).toContain("01/09/2026");expect(m.read).toHaveBeenCalledWith(user,"personal","2026-09-01","2026-09-30");
 });
+it("includes manual and bank entries in a general financial result",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"bank-income",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"income",category:"Outros",description:"Crédito bancário",amount:100},
+    {id:"manual-expense",mode:"personal",included:true,source:"whatsapp",date:"2026-09-11",type:"expense",category:"Saúde",description:"Farmácia",amount:35},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-16"}}});
+  const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"],"Qual foi meu resultado financeiro no mês passado?");
+  expect(reply).toContain(`Entradas: ${bankMoney(100,"BRL")}`);
+  expect(reply).toContain(`Saídas: ${bankMoney(35,"BRL")}`);
+  expect(reply).toContain(`Resultado do período: ${bankMoney(65,"BRL")}`);
+  expect(reply).not.toContain("registros manuais ficam fora");
+});
+it("compares this week with the previous week instead of returning only one period",async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-16T15:00:00Z"));
+  try{
+    m.read.mockImplementation(async(_user:unknown,_mode:string,from:string)=>({entries:from==="2026-10-12"
+      ?[{id:"current",mode:"personal",included:true,source:"bank",date:"2026-10-14",type:"expense",category:"Outros",description:"Atual",amount:80}]
+      :[{id:"previous",mode:"personal",included:true,source:"bank",date:"2026-10-07",type:"expense",category:"Outros",description:"Anterior",amount:100}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-16"}}}));
+    const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_analysis",confidence:1,period:{from:"2026-10-05",to:"2026-10-11"}},["2026-10-01","2026-10-31"],"Compare o gasto desta semana com a semana anterior.");
+    expect(reply).toContain("12/10/2026 a 16/10/2026");expect(reply).toContain("05/10/2026 a 09/10/2026");
+    expect(reply).toContain(bankMoney(80,"BRL"));expect(reply).toContain(bankMoney(100,"BRL"));
+    expect(reply).toContain("R$ 20,00 a menos");
+    expect(m.read).toHaveBeenCalledWith(user,"personal","2026-10-12","2026-10-16");
+    expect(m.read).toHaveBeenCalledWith(user,"personal","2026-10-05","2026-10-11");
+  }finally{vi.useRealTimers();}
+});
+it("compares this month's income with last month's, showing comparable and full periods",async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-16T15:00:00Z"));
+  try{
+    m.read.mockImplementation(async(_user:unknown,_mode:string,from:string)=>({entries:from==="2026-10-01"
+      ?[{id:"current",mode:"personal",included:true,source:"bank",date:"2026-10-10",type:"income",category:"Outros",description:"Atual",amount:60}]
+      :[{id:"previous",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"income",category:"Outros",description:"Anterior",amount:100},{id:"late",mode:"personal",included:true,source:"bank",date:"2026-09-29",type:"income",category:"Outros",description:"Fim do mês",amount:50}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-16"}}}));
+    const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,financeType:"income",period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"],"Compare as entradas deste mês com as do mês passado.");
+    expect(reply).toContain("01/10/2026 a 16/10/2026");expect(reply).toContain("01/09/2026 a 16/09/2026");
+    expect(reply).toContain(bankMoney(60,"BRL"));expect(reply).toContain(bankMoney(100,"BRL"));expect(reply).toContain(bankMoney(150,"BRL"));
+    expect(reply).toContain("R$ 40,00 a menos");
+  }finally{vi.useRealTimers();}
+});
+it("lists the five largest posted entries in the requested direction",async()=>{
+  m.read.mockResolvedValue({entries:[
+    ...[10,90,40,70,30,50].map((amount,index)=>({id:`expense-${index}`,mode:"personal",included:true,source:"bank",date:"2026-10-10",type:"expense",category:"Outros",description:`Gasto ${index}`,amount})),
+    {id:"pending",mode:"personal",included:false,status:"pending",source:"web",date:"2026-10-10",type:"expense",category:"Outros",description:"Pendente",amount:999},
+    {id:"business",mode:"business",included:true,source:"bank",date:"2026-10-10",type:"expense",category:"Outros",description:"Outra empresa",amount:888},
+    {id:"income",mode:"personal",included:true,source:"bank",date:"2026-10-11",type:"income",category:"Outros",description:"Salário",amount:200},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-16"}}});
+  const expenses=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,financeType:"expense"},["2026-10-01","2026-10-31"],"Quais foram as cinco maiores despesas deste mês?");
+  expect(expenses).toContain("Gasto 1");expect(expenses).toContain("Gasto 3");expect(expenses).toContain("Gasto 5");expect(expenses).toContain("Gasto 2");expect(expenses).toContain("Gasto 4");
+  expect(expenses).not.toContain("Gasto 0");expect(expenses).not.toContain("Pendente");expect(expenses).not.toContain("Outra empresa");expect(expenses).not.toContain("Salário");
+  const income=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,financeType:"income"},["2026-10-01","2026-10-31"],"Quais foram as cinco maiores receitas deste mês?");
+  expect(income).toContain("Salário");expect(income).not.toContain("Gasto 1");
+});
 it("answers five recent movements with both directions and no sixth item",async()=>{
   m.read.mockResolvedValue({entries:[
     {id:"sixth",mode:"personal",source:"web",date:"2026-10-09",type:"expense",description:"Sexto",amount:6,category:"Outros",included:true},
