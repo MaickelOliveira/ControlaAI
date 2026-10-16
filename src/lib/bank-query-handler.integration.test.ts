@@ -101,6 +101,31 @@ it("answers bank subscriptions missing a manual registration without listing cap
  expect(response).toContain("Google One");expect(response).not.toContain("Netflix");expect(response).not.toContain("Zé Delivery");
  expect(response).not.toContain("Posso consultar saldos bancários");expect(response).toContain("cadastro manual semelhante");
 });
+it("names only recurring charges with missing amount or currency and explains the limit of bank estimates",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+ m.recurring.mockResolvedValue([{description:"Cadastro manual",type:"expense",recurrenceType:"recurring",amount:30,nextDueDate:"2026-11-10"}]);
+ const due=new Date(Date.parse(`${todayStrBR()}T12:00:00Z`)+30*86400000).toISOString().slice(0,10);
+ m.rpc.mockResolvedValue({incomplete:false,items:[
+  {id:"missing-amount",kind:"recurring",description:"Sem valor",institution_name:"Nubank",resource_name:"Platinum",amount:null,currency:"BRL",due_date:due,synced_at:todayStrBR()},
+  {id:"missing-currency",kind:"recurring",description:"Sem moeda",institution_name:"Sicredi",resource_name:"Gold",amount:"20.90",currency:null,due_date:due,synced_at:todayStrBR()},
+  {id:"estimate",kind:"recurring",description:"Estimativa completa",institution_name:"Nubank",resource_name:"Platinum",amount:"55",currency:"BRL",due_date:due,synced_at:todayStrBR()},
+ ]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais cobranças recorrentes não têm valor confiável?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Sem valor");expect(response).toContain("Sem moeda");
+ expect(response).not.toContain("Estimativa completa");expect(response).not.toContain("Cadastro manual");
+ expect(response).toContain("indicador de confiança");expect(response).toContain("estimativas");
+ expect(m.confirm).not.toHaveBeenCalled();
+});
+it("does not pretend to identify unreliable amounts when every bank recurrence has amount and currency",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+ const due=new Date(Date.parse(`${todayStrBR()}T12:00:00Z`)+30*86400000).toISOString().slice(0,10);
+ m.rpc.mockResolvedValue({incomplete:false,items:[{id:"estimate",kind:"recurring",description:"Estimativa completa",institution_name:"Nubank",resource_name:"Platinum",amount:"55",currency:"BRL",due_date:due,synced_at:todayStrBR()}]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais cobranças recorrentes não têm valor confiável?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("não consigo identificar quais valores estão incorretos");
+ expect(response).not.toContain("Estimativa completa");
+});
 it("separates annuities from purchases using bank records without falling into generic help",async()=>{
  m.rpc.mockResolvedValue({incomplete:false,items:[
   {id:"fee",kind:"installment",resource_id:"card",description:"ANUIDADE DIFERENCIADA",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:12,observed_installments:1},

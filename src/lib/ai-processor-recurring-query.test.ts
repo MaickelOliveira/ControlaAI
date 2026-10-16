@@ -46,6 +46,10 @@ it.each([
  generateContent.mockResolvedValue({response:{text:()=>JSON.stringify(modeled)}});
  expect(await processMessage("Quais assinaturas foram detectadas pelo banco e não cadastradas por mim?",context)).toMatchObject({intent:"recurring_query"});
 });
+it("routes uncertain recurring values to a focused lookup even when AI chooses a generic bank query",async()=>{
+ generateContent.mockResolvedValue({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.98,bankQuery:{kind:"recurring"}})}});
+ expect(await processMessage("Quais cobranças recorrentes não têm valor confiável?",context)).toMatchObject({intent:"recurring_query"});
+});
 it.each(["registra 50 reais em compra parcelada","cancela minhas assinaturas","quanto gastei com assinaturas"])("does not turn a mutation or past spending into a schedule lookup: %s",message=>{
  expect(getExplicitRecurringQueryResult(message)).toBeNull();
 });
