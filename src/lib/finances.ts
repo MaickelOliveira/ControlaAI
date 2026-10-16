@@ -438,27 +438,26 @@ export async function deleteFinance(id: string, userId: string, allowedMode?: Fi
   return !error && !!count && count > 0;
 }
 
-/** Organiza apenas lançamentos criados na Zelo (painel ou WhatsApp), em qualquer mês.
- *  O vínculo com uma conta registrada não cria transação bancária. Uma só
- *  atualização no banco evita anunciar sucesso após uma mudança parcial. */
-function platformFinancesToMove(userId: string, mode: FinanceMode, accountId: string) {
-  return getSupabase().from("finances")
-    .select("id", {count:"exact",head:true})
+/** A prévia mostra apenas lançamentos da Zelo que mudariam de conta.
+ *  A seleção é feita pelo cliente; nenhuma leitura modifica os lançamentos. */
+export type PlatformFinancePreviewItem={id:string;description:string;amount:number;date:string;source:FinanceSource;accountId:string|null};
+export async function previewPlatformFinancesForAccount(userId:string,mode:FinanceMode,accountId:string,offset=0):Promise<{count:number;items:PlatformFinancePreviewItem[]}>{
+  const {data,count,error}=await getSupabase().from("finances")
+    .select("id,description,amount,date,source,account_id",{count:"exact"})
     .eq("user_id",userId).eq("mode",mode).in("source",["web","whatsapp"]).is("card_invoice_id",null)
-    .or(`account_id.is.null,account_id.neq.${accountId}`);
+    .or(`account_id.is.null,account_id.neq.${accountId}`)
+    .order("date",{ascending:false}).order("created_at",{ascending:false}).order("id",{ascending:false}).range(offset,offset+49);
+  if(error||count===null||!data)throw Error("FINANCE_ACCOUNT_PREVIEW_UNAVAILABLE");
+  return {count,items:data.map(row=>({id:row.id,description:row.description,amount:Number(row.amount),date:row.date,source:row.source as FinanceSource,accountId:row.account_id}))};
 }
 
-export async function countPlatformFinancesForAccount(userId: string, mode: FinanceMode, accountId: string): Promise<number> {
-  const {count,error}=await platformFinancesToMove(userId,mode,accountId);
-  if(error||count===null)throw Error("FINANCE_ACCOUNT_COUNT_UNAVAILABLE");
-  return count;
-}
-
-export async function movePlatformFinancesToAccount(userId: string, mode: FinanceMode, accountId: string): Promise<number> {
+/** A atualização restringe os IDs escolhidos ao usuário, modo e origem elegíveis.
+ *  Vincular um registro a uma conta não cria transação bancária. */
+export async function moveSelectedPlatformFinancesToAccount(userId: string, mode: FinanceMode, accountId: string, ids: string[]): Promise<number> {
   const {count,error}=await getSupabase().from("finances")
     .update({account_id:accountId},{count:"exact"})
     .eq("user_id",userId).eq("mode",mode).in("source",["web","whatsapp"]).is("card_invoice_id",null)
-    .or(`account_id.is.null,account_id.neq.${accountId}`);
+    .or(`account_id.is.null,account_id.neq.${accountId}`).in("id",ids);
   if(error||count===null)throw Error("FINANCE_ACCOUNT_MOVE_UNAVAILABLE");
   return count;
 }

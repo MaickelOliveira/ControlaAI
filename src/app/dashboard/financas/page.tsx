@@ -647,7 +647,7 @@ function FinancasContent() {
                 )}
 
                 {/* Lançamentos confirmados de todas as origens, em ordem de data */}
-                <FinanceLedgerRows entries={postedFinances.slice(0,visibleCount)} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} onCategory={setBankCategoryTarget} onCreditPix={entry=>setBankCreditPixId(entry.id)} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
+                <FinanceLedgerRows entries={postedFinances.slice(0,visibleCount)} accounts={ledger?.accounts??[]} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} onCategory={setBankCategoryTarget} onCreditPix={entry=>setBankCreditPixId(entry.id)} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
                 {postedFinances.length>visibleCount&&<button onClick={()=>setVisibleCount(n=>n+50)} className="w-full rounded-xl border border-line py-3 text-xs font-semibold text-muted">Ver mais lançamentos ({postedFinances.length-visibleCount})</button>}
                 {ledger?.bank&&<p className="px-3 pt-3 text-[11px] leading-5 text-subtle">Resumo em reais. Pagamentos de fatura, transferências identificadas e investimentos aparecem no extrato sem alterar receitas/gastos. O histórico enviado pelo banco pode estar incompleto.</p>}
               </div>
@@ -660,7 +660,7 @@ function FinancasContent() {
       {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onClose={()=>setBankCategoryTarget(null)} onSaved={matched=>{setBankCategoryTarget(null);setBanner(matched===undefined?"✅ Categoria salva. Os gráficos usam sua escolha.":`✅ Transferência confirmada. ${matched} movimentação(ões) com a mesma conta, descrição e valor foram atualizadas no histórico.`);loadAll(mode);}}/>}
       {bankCreditPixTarget&&<BankCreditPixDialog key={`${mode}:${bankCreditPixTarget.id}`} credit={bankCreditPixTarget} movements={ledger?.bank?.report.movements??[]} mode={mode} onClose={()=>setBankCreditPixId(null)} onSaved={()=>{setBankCreditPixId(null);setBanner("✅ Confirmação salva. O histórico e a dívida no cartão foram preservados.");loadAll(mode);}}/>}
 
-      {showMovePlatform && <PlatformAccountMoveDialog mode={mode} accounts={ledger?.accounts??[]} onClose={()=>setShowMovePlatform(false)} onMoved={(moved,accountName)=>{setShowMovePlatform(false);setBanner(`✅ ${moved} lançamento(s) feitos na plataforma foram vinculados à conta ${accountName}. Os valores e as datas não mudaram.`);loadAll(mode);}}/>}
+      {showMovePlatform && <PlatformAccountMoveDialog mode={mode} accounts={ledger?.accounts??[]} onClose={()=>setShowMovePlatform(false)} onMoved={(moved,accountName)=>{setShowMovePlatform(false);setBanner(`✅ ${moved} lançamento(s) selecionado(s) foram vinculados à conta ${accountName}. Os valores e as datas não mudaram.`);loadAll(mode);}}/>}
 
       {/* ── Modal Adicionar (único + recorrente + parcelado) ── */}
       {showForm && (
