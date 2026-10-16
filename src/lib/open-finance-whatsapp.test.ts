@@ -293,7 +293,7 @@ it("answers unconfirmed bank installments with a count and a few examples, witho
   const items=Array.from({length:8},(_,index)=>({id:`item-${index}`,mode:"personal",kind:"installment",description:`Compra ${index}`,resource_name:"Cartão",institution_name:"Banco",due_date:null,amount:"20",currency:"BRL",payment_evidence:index===2,synced_at:"2026-10-15"}));
   m.agenda.mockResolvedValue({items,incomplete:true});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais parcelas não têm confirmação de pagamento?","2026-10-15");
-  expect(answer).toContain("7 parcelas");
+  expect(answer).toContain("7 parcelamentos identificados");
   expect(answer).toContain("Compra 0");
   expect(answer).toContain(bankMoney("20","BRL"));
   expect(answer).not.toContain("Compra 2");
@@ -301,6 +301,26 @@ it("answers unconfirmed bank installments with a count and a few examples, witho
   expect(answer).toContain("não confirma que estão em aberto");
   expect(answer).toContain("dados bancários incompletos");
   expect(m.agenda).toHaveBeenCalledWith(user,"personal",expect.objectContaining({includeUndated:true}));
+});
+it("honors a request for at most three examples of installments without payment confirmation",async()=>{
+  const items=Array.from({length:8},(_,index)=>({id:`item-${index}`,mode:"personal",kind:"installment",description:`Compra ${index}`,resource_name:"Cartão",institution_name:"Banco",due_date:null,amount:"20",currency:"BRL",payment_evidence:false,synced_at:"2026-10-15"}));
+  m.agenda.mockResolvedValue({items,incomplete:true});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais parcelas não têm confirmação de pagamento? Resuma a quantidade e dê até três exemplos.","2026-10-15");
+  expect(answer).toContain("8 parcelamentos identificados");
+  expect(answer).toContain("Compra 0");
+  expect(answer).toContain("Compra 2");
+  expect(answer).not.toContain("Compra 3");
+  expect(answer).toContain("Mais 5 em Contas");
+  expect(answer).toContain("não confirma que estão em aberto");
+});
+it("answers a count-only paraphrase without examples and leaves manual installments to their own flow",async()=>{
+  m.agenda.mockResolvedValue({items:[{id:"bank-1",mode:"personal",kind:"installment",description:"Compra 1",resource_name:"Cartão",institution_name:"Banco",due_date:null,amount:"20",currency:"BRL",payment_evidence:false,synced_at:"2026-10-15"}],incomplete:false});
+  const count=await answerBankWhatsAppMessage(user as never,"personal","both","Quantas parcelas estão sem confirmação de pagamento?","2026-10-15");
+  expect(count).toContain("1 parcelamento identificado");
+  expect(count).not.toContain("Compra 1");
+  m.agenda.mockClear();
+  expect(await answerBankWhatsAppMessage(user as never,"personal","both","Quais parcelas cadastradas na Zelo não têm confirmação de pagamento?","2026-10-15")).toBeNull();
+  expect(m.agenda).not.toHaveBeenCalled();
 });
 it("does not turn missing bank access into a claim that there are no unconfirmed installments",async()=>{
   m.access.mockResolvedValue(null);
