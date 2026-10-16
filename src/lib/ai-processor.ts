@@ -3861,7 +3861,8 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
   const modelBank=validateBankQuery(result.bankQuery)?.bankName;
   const bankSpecific=/\b(?:bancos?|bancari[oa]s?|cartao|cartoes|open finance)\b/.test(financeText)
     ||!!modelBank&&financeText.includes(normalizeCapabilityText(modelBank));
-  const generalResult=/\bresultado financeiro\b/.test(financeText)&&/\b(?:mes|semana|periodo|ano)\b/.test(financeText);
+  const generalResult=/\bresultado financeiro\b/.test(financeText)&&/\b(?:mes|semana|periodo|ano)\b/.test(financeText)
+    ||/\bresumo (?:de|do) (?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|mes passado)\b/.test(financeText);
   const comparesPeriods=/\bcompar(?:e|ar|acao)\b/.test(financeText)&&/\b(?:gastos?|despesas?|saidas?|entradas?|receitas?|recebimentos?)\b/.test(financeText);
   const generalComparison=comparesPeriods&&(
     /\b(?:esta|desta|nesta) semana\b/.test(financeText)&&/\bsemana (?:anterior|passada)\b/.test(financeText)

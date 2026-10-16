@@ -282,7 +282,7 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
       const summary=summarizeFinanceQuery(entries,{from,to,type:"result"},requested);
       return `${summary}\n\n*Principais categorias de despesas*\n${categories.map(group=>`• ${safeSummary(group.name)}: ${bankMoney(group.value,"BRL")}`).join("\n")||"Nenhuma despesa realizada no período."}\n\n*Maiores gastos realizados*\n${largest.map(item=>`• ${safeSummary(item.description)}: ${bankMoney(item.amount,"BRL")} (${bankDate(item.date)})`).join("\n")||"Nenhum gasto realizado no período."}\n\n*Próximos vencimentos com data informada*\n${upcoming}\n\nVencimentos previstos não entram no resultado já realizado. Valores do banco podem repetir obrigações cadastradas; confira se foram pagos.${financeCoverageNotice(bank,entries)}`;
     }
-    const generalResult=/\bresultado financeiro\b/.test(text)&&!source&&!ai.category&&!ai.keyword;
+    const generalResult=(/\bresultado financeiro\b/.test(text)||/\bresumo (?:de|do) (?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|mes passado)\b/.test(text))&&!source&&!ai.category&&!ai.keyword;
     const query:FinanceQuery={from,to,type:ai.intent==="balance_query"||generalResult?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail",byBank:/\bpor banco\b|\bsepare\b[^.!?]*\bbancos?\b/.test(text)};
     let answer=summarizeFinanceQuery(entries,query,requested)+financeCoverageNotice(bank,entries);
     if(ai.intent==="finance_detail"&&!query.source){

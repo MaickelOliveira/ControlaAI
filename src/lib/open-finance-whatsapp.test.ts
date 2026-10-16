@@ -72,6 +72,16 @@ it("includes manual and bank entries in a general financial result",async()=>{
   expect(reply).toContain(`Resultado do período: ${bankMoney(65,"BRL")}`);
   expect(reply).not.toContain("registros manuais ficam fora");
 });
+it("returns both directions for a requested monthly summary",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"income",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"income",category:"Outros",description:"Recebimento",amount:100},
+    {id:"expense",mode:"personal",included:true,source:"bank",date:"2026-09-11",type:"expense",category:"Outros",description:"Compra",amount:35},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-16"}}});
+  const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,financeType:"expense",period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"],"Me dê um resumo de setembro sem trazer itens de outubro.");
+  expect(reply).toContain(`Entradas: ${bankMoney(100,"BRL")}`);
+  expect(reply).toContain(`Saídas: ${bankMoney(35,"BRL")}`);
+  expect(reply).toContain(`Resultado do período: ${bankMoney(65,"BRL")}`);
+});
 it("compares this week with the previous week instead of returning only one period",async()=>{
   vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-16T15:00:00Z"));
   try{

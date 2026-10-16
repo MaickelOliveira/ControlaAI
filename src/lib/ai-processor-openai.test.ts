@@ -124,6 +124,7 @@ describe("AI provider routing", () => {
     ["Compare as entradas deste mês com as do mês passado.", "income"],
     ["Quais foram as cinco maiores despesas deste mês?", "spending"],
     ["Quais foram as cinco maiores receitas deste mês?", "income"],
+    ["Me dê um resumo de setembro sem trazer itens de outubro.", "spending"],
   ])("keeps a general finance request in the unified ledger despite a bank-only model guess: %s", async(message,kind)=>{
     process.env.OPENAI_TEST_USER_IDS="another-user";
     googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.95,bankQuery:{kind}})}});
