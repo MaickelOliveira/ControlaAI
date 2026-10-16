@@ -11,6 +11,7 @@ export type BankQuestion = {
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
   debtView?: "balance" | "contracted" | "next-installment" | "missing-next-installment" | "missing-due-date" | "zero" | "positive" | "max-balance" | "min-positive" | "exists" | "currency" | "missing-currency" | "by-bank" | "due-date";
+  financingView?: "next-installment" | "last-installment-date" | "remaining-count" | "contracted" | "missing-balance" | "zero";
   investmentView?: "gross-net" | "latest" | "missing-date" | "missing-bank" | "currency";
   limitView?: "used" | "available-known" | "shared" | "inconsistent" | "max-available" | "min-available";
 };
@@ -97,6 +98,20 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     return {kind:"limits",...monthPeriod(today,false),limitView:"inconsistent"};
   if (/^qual cartao tem o (maior|menor) limite disponivel$/.test(text))
     return {kind:"limits",...monthPeriod(today,false),limitView:text.includes("maior")?"max-available":"min-available"};
+  const focusedCarFinancing: Array<[RegExp,NonNullable<BankQuestion["financingView"]>]> = [
+    [/^qual (?:e )?(?:o )?valor da proxima parcela (?:do financiamento )?do (carro|veiculo|automovel|moto|motocicleta|casa|imovel)$/, "next-installment"],
+    [/^quando vence a ultima parcela (?:do financiamento )?do (carro|veiculo|automovel|moto|motocicleta|casa|imovel)$/, "last-installment-date"],
+    [/^quantas parcelas (?:do financiamento )?do (carro|veiculo|automovel|moto|motocicleta|casa|imovel) ainda faltam(?:,? se o banco informar)?$/, "remaining-count"],
+    [/^qual (?:foi|e) o valor contratado do financiamento do (carro|veiculo|automovel|moto|motocicleta|casa|imovel)$/, "contracted"],
+  ];
+  for(const [pattern,financingView] of focusedCarFinancing){
+    const match=text.match(pattern);
+    if(match)return {kind:"financings",...monthPeriod(today,false),keyword:match[1],financingView};
+  }
+  if(/^quais financiamentos (?:nao tem|nao informaram|estao sem) saldo devedor informado$/.test(text))
+    return {kind:"financings",...monthPeriod(today,false),financingView:"missing-balance"};
+  if(/^(?:ha|existe|tem) financiamento com saldo zero$/.test(text))
+    return {kind:"financings",...monthPeriod(today,false),financingView:"zero"};
   if (/^(?:(?:qual (?:e )?(?:o )?|mostre (?:o )?)saldo devedor (?:de cada|de todos os meus|dos meus|de meus) emprestimos?|quanto falta pagar (?:em|de) cada emprestimo)$/.test(text))
     return {kind:"loans",...monthPeriod(today,false),debtView:"balance"};
   const focusedLoans: Array<[RegExp, NonNullable<BankQuestion["debtView"]>]> = [

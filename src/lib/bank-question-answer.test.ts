@@ -361,3 +361,39 @@ it("filters vehicle financing by purpose across banks and hides exact zero debts
   const loans = answer(data, "Mostre meus empréstimos");
   expect(loans).not.toContain("Quitado teste"); expect(loans).toContain("Sem posição teste"); expect(loans).toContain("Saldo pequeno teste");
 });
+
+it("answers each focused car-financing question without inventing installments or confusing the contract date",()=>{
+  const data=overview();
+  data.resources.find(resource=>resource.id==="fin")!.name="VEICULOS E UTILITARIOS LEVES - REVENDAS";
+  data.credit.find(credit=>credit.resource_id==="fin")!.due_date="2027-05-20";
+  const next=answer(data,"Qual é o valor da próxima parcela do carro?");
+  expect(next).toContain("VEICULOS E UTILITARIOS");
+  expect(next).toContain("não informado pelo banco");
+  expect(next).not.toContain("Contratado:");
+  const final=answer(data,"Quando vence a última parcela do carro?");
+  expect(final).toContain("20/05/2027");
+  expect(final).toContain("data final do contrato");
+  expect(final).toContain("Vencimento da última parcela: não informado");
+  expect(final).toContain("não confirma o vencimento da última parcela");
+  const remaining=answer(data,"Quantas parcelas do carro ainda faltam, se o banco informar?");
+  expect(remaining).toContain("quantidade de parcelas restantes não informada pelo banco");
+  expect(remaining).not.toContain("8 parcelas");
+  const contracted=answer(data,"Qual foi o valor contratado do financiamento do carro?");
+  expect(contracted).toContain(bankMoney("12000.99","BRL"));
+  expect(contracted).not.toContain("Saldo devedor:");
+});
+
+it("lists only financings with missing balances or reported zero, without claiming settlement",()=>{
+  const data=overview();
+  data.resources.push(resource("unknown-fin","nu","financing","Imóvel sem saldo"),resource("zero-fin","real","financing","Moto saldo zero"));
+  data.credit.push({resource_id:"zero-fin",currency:"BRL",outstanding_amount:"0.00000000",contract_amount:"500",next_installment_amount:null,due_date:null});
+  const missing=answer(data,"Quais financiamentos não têm saldo devedor informado?");
+  expect(missing).toContain("Imóvel sem saldo");
+  expect(missing).not.toContain("Moto saldo zero");
+  expect(missing).not.toContain("Veículo");
+  const zero=answer(data,"Há financiamento com saldo zero?");
+  expect(zero).toContain("1 contrato");
+  expect(zero).toContain("Moto saldo zero");
+  expect(zero).not.toContain("Imóvel sem saldo");
+  expect(zero).toContain("não confirma quitação");
+});
