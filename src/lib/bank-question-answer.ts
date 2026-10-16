@@ -78,7 +78,7 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   if(question.kind==="loans"&&question.debtView){
     const view=question.debtView;
     const rows=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="loan")
-      .filter(resource=>view==="balance"||view==="contracted"||view==="zero"||!hasZeroBankDebt(resource,data))
+      .filter(resource=>["balance","contracted","zero","exists","currency","missing-currency","by-bank","due-date"].includes(view)||!hasZeroBankDebt(resource,data))
       .map(resource=>({bank:group.name,resource,detail:data.credit.find(credit=>credit.resource_id===resource.id)})));
     const balanceUnits=(row:typeof rows[number]):bigint|null=>{
       const amount=String(row.detail?.outstanding_amount??"");
@@ -87,6 +87,32 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
       const units=BigInt(whole)*BigInt(100000000)+BigInt(fraction.padEnd(8,"0"));
       return amount.startsWith("-")?-units:units;
     };
+    const coverage=`${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+    if(view==="exists"){
+      const zero=rows.filter(row=>balanceUnits(row)===BigInt(0)).length;
+      const banks=question.bankName?` · ${connectedGroups.map(group=>safe(group.name)).join(", ")}`:"";
+      return `Empréstimos recebidos${banks} · ${safe(modeLabel)}\n${rows.length} ${rows.length===1?"contrato de empréstimo recebido":"contratos de empréstimo recebidos"} nos dados do banco.${zero?` ${zero} com saldo informado como zero.`:""} ${rows.length?"Isso não confirma que o contrato ainda esteja ativo nem que esteja quitado.":"A ausência nos dados não confirma que não exista empréstimo."}${coverage}`;
+    }
+    if(view==="currency"||view==="missing-currency"){
+      const missing=rows.filter(row=>!row.detail?.currency);
+      if(view==="missing-currency")return `Empréstimos sem moeda informada · ${safe(modeLabel)}\n${missing.length} ${missing.length===1?"contrato":"contratos"} fora do total por falta de moeda.\n${missing.slice(0,12).map(row=>`• ${safe(row.bank)} · ${safe(bankResourceName(row.resource.name))}`).join("\n")||"Nenhum contrato recebido ficou fora por falta de moeda."}${missing.length>12?`\nMais ${missing.length-12} contrato(s) em Contas.`:""}\nIsso não significa saldo zero; confira o banco.${coverage}`;
+      const totals=bankAmountTotals(rows.map(row=>({amount:row.detail?.outstanding_amount,currency:row.detail?.currency})),!!data.truncated||missing.length>0);
+      return `Saldos de empréstimos separados por moeda · ${safe(modeLabel)}\n${totals.join("\n")||"Nenhum saldo com valor e moeda informados para somar."}\n${missing.length} ${missing.length===1?"contrato":"contratos"} fora da soma por falta de moeda. Valores de moedas diferentes não são somados entre si; posições sem saldo informado também ficam fora.${coverage}`;
+    }
+    if(view==="by-bank"){
+      const lines=connectedGroups.map(group=>{
+        const ids=new Set(group.resources.map(resource=>resource.id));
+        const bankRows=rows.filter(row=>ids.has(row.resource.id));
+        if(!bankRows.length)return `• ${safe(group.name)}: nenhum empréstimo recebido`;
+        const totals=bankAmountTotals(bankRows.map(row=>({amount:row.detail?.outstanding_amount,currency:row.detail?.currency})),!!data.truncated);
+        return `• ${safe(group.name)}: ${bankRows.length} ${bankRows.length===1?"contrato":"contratos"}${totals.length?` · ${totals.join(" · ")}`:" · sem saldo devedor informado"}`;
+      });
+      return `Empréstimos por banco · ${safe(modeLabel)}\n${lines.join("\n")}\nBancos e moedas não são somados entre si. Saldo informado como zero não prova quitação.${coverage}`;
+    }
+    if(view==="due-date"){
+      const lines=rows.slice(0,20).map(row=>`• ${safe(row.bank)} · ${safe(bankResourceName(row.resource.name))} · Vencimento final do contrato: ${bankDate(row.detail?.due_date)}`);
+      return `Vencimento final dos empréstimos · ${safe(modeLabel)}\n${lines.join("\n")||"Nenhum contrato de empréstimo recebido."}${rows.length>20?`\nMais ${rows.length-20} contrato(s) em Contas.`:""}\nA data final do contrato não informa necessariamente a data de cada parcela; datas ausentes não foram estimadas.${coverage}`;
+    }
     if(view==="max-balance"||view==="min-positive"){
       const byCurrency=new Map<string,Array<{row:typeof rows[number];units:bigint}>>();
       for(const row of rows){

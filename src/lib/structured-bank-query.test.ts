@@ -19,6 +19,17 @@ it.each([{ kind: "invented" }, { kind: "limits", bankName: 42 }, { kind: "loans"
 it("returns only allowed fields; model-supplied totals and tenant identities never enter execution", () => {
   expect(validateBankQuery({ kind: "limits", bankName: " Nubank ", userId: "other", companyId: "other", total: 999999 })).toEqual({ kind: "limits", bankName: "Nubank" });
 });
+it("accepts only supported focused bank-position views from the model",async()=>{
+  expect(validateBankQuery({kind:"loans",debtView:"currency"})).toEqual({kind:"loans",debtView:"currency"});
+  expect(validateBankQuery({kind:"investments",investmentView:"missing-date"})).toEqual({kind:"investments",investmentView:"missing-date"});
+  expect(validateBankQuery({kind:"balances",debtView:"currency"})).toBeNull();
+  expect(validateBankQuery({kind:"loans",debtView:"invented"})).toBeNull();
+  expect(validateBankQuery({kind:"investments",investmentView:"invented"})).toBeNull();
+  m.rpc.mockResolvedValue({...overview,resources:[{id:"loan",connection_id:"nu",resource_type:"loan",name:"Crédito teste"}],credit:[{resource_id:"loan",currency:"BRL",outstanding_amount:"123.45",due_date:"2027-01-01"}]});
+  const response=await answerStructuredBankQuery(user,"personal","both",ai({kind:"loans",debtView:"due-date"}),"2026-10-11");
+  expect(response).toContain("01/01/2027");
+  expect(response).not.toContain("Contratado:");
+});
 it("executes a semantically interpreted card question against saved values", async () => {
   const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "limits", bankName: "Nubank" }), "2026-10-11");
   expect(response).toContain(bankMoney("1234.56", "BRL")); expect(response).not.toContain("Você gastou"); expect(m.read).not.toHaveBeenCalled();

@@ -26,6 +26,17 @@ it("explains cash versus invested value without treating one as the other",async
   expect(answer).toContain("não são somados");
   expect(await answerBankWhatsAppMessage(user as never,"personal","both","Qual a diferença entre saldo da conta e investimento?","2026-10-15")).toContain("investimento");
 });
+it("separates loans from financings using two scoped bank queries",async()=>{
+  m.bank.mockImplementation(async (_user:unknown,_mode:string,question:string)=>question.includes("empréstimos")?"Empréstimos: contrato A.":"Financiamentos: contrato B.");
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Separe empréstimos de financiamentos.","2026-10-15");
+  expect(answer).toContain("Empréstimos: contrato A.");expect(answer).toContain("Financiamentos: contrato B.");
+  expect(m.bank).toHaveBeenCalledTimes(2);
+});
+it("does not treat a bank-reported zero loan balance as proof of discharge",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Explique se saldo zero prova quitação do empréstimo.","2026-10-15");
+  expect(answer).toContain("não prova quitação");
+  expect(answer).toContain("banco");
+});
 it("uses the requested previous month and the own connected ledger",async()=>{
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"]);
   expect(answer).toContain("R$ 35,00");expect(answer).toContain("01/09/2026");expect(m.read).toHaveBeenCalledWith(user,"personal","2026-09-01","2026-09-30");

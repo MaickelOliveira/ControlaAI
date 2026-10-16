@@ -10,7 +10,7 @@ export type BankQuestion = {
   settledOnly?: boolean;
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
-  debtView?: "balance" | "contracted" | "next-installment" | "missing-next-installment" | "missing-due-date" | "zero" | "positive" | "max-balance" | "min-positive";
+  debtView?: "balance" | "contracted" | "next-installment" | "missing-next-installment" | "missing-due-date" | "zero" | "positive" | "max-balance" | "min-positive" | "exists" | "currency" | "missing-currency" | "by-bank" | "due-date";
   investmentView?: "gross-net" | "latest" | "missing-date" | "missing-bank" | "currency";
   limitView?: "used" | "available-known" | "shared" | "inconsistent" | "max-available" | "min-available";
 };
@@ -110,6 +110,19 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     [/^qual emprestimo tem o menor saldo devedor positivo$/, "min-positive"],
   ];
   for (const [pattern,debtView] of focusedLoans) if (pattern.test(text))
+    return {kind:"loans",...monthPeriod(today,false),debtView};
+  const loanExists=text.match(/^(?:existe|ha|tem) (?:algum )?emprestimo (?:no|na|do|da) (.+)$/);
+  if(loanExists&&!mutation.test(text)){
+    const filter=bankFilter(` no ${loanExists[1]}`);
+    if(filter?.bankName)return {kind:"loans",...monthPeriod(today,false),debtView:"exists",...filter};
+  }
+  const focusedLoanFollowups: Array<[RegExp,NonNullable<BankQuestion["debtView"]>]> = [
+    [/^some emprestimos apenas da mesma moeda$/, "currency"],
+    [/^algum emprestimo ficou fora do total por falta de moeda$/, "missing-currency"],
+    [/^separe emprestimos (?:por banco|separadamente)$/, "by-bank"],
+    [/^quando (?:termina|vence) cada emprestimo(?:, se o banco informou)?$/, "due-date"],
+  ];
+  for(const [pattern,debtView] of focusedLoanFollowups)if(pattern.test(text))
     return {kind:"loans",...monthPeriod(today,false),debtView};
   if (/\b(?:investimentos?|aplicacoes?)\b/.test(text)) {
     const investmentView: BankQuestion["investmentView"] =
