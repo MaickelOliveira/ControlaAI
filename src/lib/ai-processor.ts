@@ -3792,7 +3792,11 @@ export function withExplicitFinanceCategoryEdit(message: string, result: AIResul
   const explicitAccount = /\b(?:conta|cuenta)\b/i.test(message);
   const finance = { ...(result.finance ?? {}), category } as FinanceData;
   if (!explicitAccount) delete finance.accountHint;
-  const target = named?.[1]?.trim();
+  // Valor e data qualificam o lançamento; não fazem parte do nome buscado.
+  const target = named?.[1]?.trim()
+    .replace(/\s+registrad[oa]s?\s+em\s+\d{1,2}\/\d{1,2}(?:\/\d{4})?$/i, "")
+    .replace(/\s+de\s+R\$\s*[\d.,]+$/i, "")
+    .trim();
   const namedTarget = target && !/^(?:[oua]\s+)?(?:[uú]ltim[oa]|ess[ea]|est[ea])\b/i.test(target);
   return {
     ...result,
@@ -3800,6 +3804,12 @@ export function withExplicitFinanceCategoryEdit(message: string, result: AIResul
     ...(!explicitAccount ? { account: undefined } : {}),
     ...(namedTarget ? { keyword: target, lastFinanceReference: undefined } : {}),
   };
+}
+
+/** Sem validar valor/data do alvo, exigir escolha humana antes de alterar. */
+export function financeEditNeedsChoice(message: string): boolean {
+  return /\bregistrad[oa]s?\s+em\s+\d{1,2}\/\d{1,2}\b/i.test(message)
+    || /\bde\s+R\$\s*[\d.,]+/i.test(message);
 }
 
 export function withExplicitAgendaAllDay(message: string, result: AIResult): AIResult {

@@ -47,6 +47,7 @@ import {
   withExplicitFinanceDestinationMode,
   withExplicitFinanceAccount,
   withExplicitFinanceCategoryEdit,
+  financeEditNeedsChoice,
   withExplicitFinanceType,
 } from "./ai-processor";
 
@@ -1176,6 +1177,12 @@ describe("manual account commands", () => {
     expect(result.lastFinanceReference).toBeUndefined();
     expect(withExplicitFinanceCategoryEdit("Mude a categoria da despesa TESTE AUDITORIA para Serviços", classified))
       .toMatchObject({ keyword: "TESTE AUDITORIA", finance: { category: "Serviços" } });
+    expect(withExplicitFinanceCategoryEdit("Altere a categoria da despesa TESTE AUDITORIA de R$ 1,00 registrada em 15/10 para Serviços.", classified))
+      .toMatchObject({ keyword: "TESTE AUDITORIA", finance: { category: "Serviços" } });
+    expect(withExplicitFinanceCategoryEdit("Altere a categoria da despesa Casa de Carne para Alimentação.", classified))
+      .toMatchObject({ keyword: "Casa de Carne", finance: { category: "Alimentação" } });
+    expect(financeEditNeedsChoice("Altere a categoria da despesa TESTE AUDITORIA de R$ 1,00 registrada em 15/10 para Serviços.")).toBe(true);
+    expect(financeEditNeedsChoice("Altere a categoria da despesa Casa de Carne para Alimentação.")).toBe(false);
   });
 
   it.each([
