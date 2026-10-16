@@ -247,16 +247,25 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       return `Extrato bancário consultado · ${requested==="personal"?"Pessoal":"Empresa"}\nPeríodo solicitado: ${interval}. O histórico recebido pode estar incompleto${report.sync_pending?"; há uma atualização pendente ou com falha":""}.${report.missing_dates?` O banco enviou ${report.missing_dates} movimento(s) sem data; eles não entram nesse período.`:""} Com esses dados, não consigo identificar os dias exatos que faltam nem afirmar que um dia sem lançamentos esteja completo. Última atualização recebida: ${bankDate(report.last_successful_sync_at)}.`;
     }catch{return "Não consegui conferir a cobertura do extrato agora. Tente novamente em Finanças; não vou inventar o período ausente.";}
   }
-  if(/^quais parcelas (?:nao tem|estao sem) confirmacao de pagamento$/.test(plainWording)){
+  const unconfirmedInstallments=/\bparcelas?\b/.test(text)
+    &&/\b(?:nao (?:tem|tenham|possui|possuem)|sem) confirmacao de pagamento\b|\bpagamento nao confirmado\b/.test(text)
+    &&/\b(?:quais|quantas|mostre|liste|diga|resuma)\b/.test(text)
+    &&!/\b(?:cadastrad[oa]s?|manuais?)\b/.test(text);
+  if(unconfirmedInstallments){
     const [year,month,day]=today.split("-").map(Number);
     const to=new Date(Date.UTC(year+1,month-1,day)).toISOString().slice(0,10);
+    const requestedExamples=text.match(/\b(?:ate|no maximo|apenas|somente)\s+(\d+|um|uma|dois|duas|tres|quatro|cinco)\s+exemplos?\b/)?.[1];
+    const wordCounts:Record<string,number>={um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5};
+    const exampleLimit=/^quantas\b/.test(text)&&!requestedExamples?0:Math.min(5,Math.max(1,requestedExamples?(wordCounts[requestedExamples]??Number(requestedExamples)):5));
     try{
       if(!await getOpenFinanceAccess(user,requested,{throwOnStorageError:true}))
         return "A consulta de parcelas bancárias não está disponível nesse modo. Confira Contas e a conexão; não vou informar zero sem dados do banco.";
       const agenda=await readBankAgenda(user,requested,{from:today,to,includeUndated:true});
       const unconfirmed=agenda.items.filter(item=>item.kind==="installment"&&item.payment_evidence!==true&&(!item.mode||item.mode===requested));
-      const examples=unconfirmed.slice(0,5).map(item=>`• ${safeSummary(item.description)} · ${safeSummary(item.institution_name)} · ${bankMoney(item.amount,item.currency)} por parcela · próxima data: ${bankDate(item.due_date)}`);
-      return `Parcelas dos bancos sem confirmação de pagamento · ${requested==="personal"?"Pessoal":"Empresa"}\n${unconfirmed.length} ${unconfirmed.length===1?"parcela recebida":"parcelas recebidas"} nos próximos 12 meses ou sem data informada.\n${examples.join("\n")||"Nenhuma parcela correspondente nos dados recebidos."}${unconfirmed.length>5?`\nMais ${unconfirmed.length-5} em Contas.`:""}\nA falta de confirmação não confirma que estão em aberto, atrasadas ou não pagas; confira a fatura no banco.${agenda.incomplete?" Há dados bancários incompletos.":""}`;
+      const examples=unconfirmed.slice(0,exampleLimit).map(item=>`• ${safeSummary(item.description)} · ${safeSummary(item.institution_name)} · ${bankMoney(item.amount,item.currency)} por parcela · próxima data: ${bankDate(item.due_date)}`);
+      const exampleLines=examples.length?`\n${examples.join("\n")}`:unconfirmed.length?"":"\nNenhuma parcela correspondente nos dados recebidos.";
+      const remaining=exampleLimit&&unconfirmed.length>exampleLimit?`\nMais ${unconfirmed.length-exampleLimit} em Contas.`:"";
+      return `Parcelamentos dos bancos sem confirmação de pagamento · ${requested==="personal"?"Pessoal":"Empresa"}\n${unconfirmed.length} ${unconfirmed.length===1?"parcelamento identificado":"parcelamentos identificados"} nos próximos 12 meses ou sem data informada.${exampleLines}${remaining}\nCada item representa uma compra/cobrança parcelada, não uma parcela individual. A falta de confirmação não confirma que estão em aberto, atrasadas ou não pagas; confira a fatura no banco.${agenda.incomplete?" Há dados bancários incompletos.":""}`;
     }catch{return "Não consegui conferir as parcelas bancárias agora. Consulte Contas ou tente novamente; não vou afirmar que estejam em aberto sem confirmação do banco.";}
   }
   if(/^separe emprestimos de financiamentos$/.test(plainWording)){
