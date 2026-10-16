@@ -14,6 +14,7 @@ import {readBankAgenda,readFinancialAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
 import {BANK_STATUSES,bankDate,bankMoney,type BankOverview} from "./open-finance-display";
 import {openFinanceRpc} from "./open-finance-http";
+import {readBankLedger} from "./finance-ledger-storage";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
@@ -54,6 +55,18 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const lines=inactive.map(connection=>`• ${safeSummary(connection.institution_name)} · ${BANK_STATUSES[connection.status]}${connection.archived_at?" · no histórico":""}`);
       return `Conexões bancárias inativas · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.join("\n")||"Nenhuma conexão inativa nos dados recebidos."}\nUma conexão inativa pode manter dados antigos no histórico; confira Contas para reconectar ou remover da lista.`;
     }catch{return "Não consegui consultar o estado das conexões bancárias agora. Confira Contas; não vou adivinhar quais estão inativas.";}
+  }
+  if(/\bdatas? bancarias?\b/.test(text)&&/\bfuturo\b/.test(text)){
+    try{
+      const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
+      if(!scope)return "Não consigo conferir datas de movimentações bancárias neste modo. Confira Contas e a conexão.";
+      const from=shiftDay(today,1),to=shiftDay(today,365);
+      const {report,overview}=await readBankLedger(scope,{from,to});
+      if(!overview.connections.length)return "Não recebi movimentações de um banco conectado neste modo para conferir datas futuras.";
+      const future=report.movements.filter(item=>item.date>today&&item.date<=to);
+      const lines=future.slice(0,5).map(item=>`• ${bankDate(item.date)} · ${safeSummary(item.institution_name)} · ${safeSummary(item.description)} · ${bankMoney(item.amount,item.currency)}`);
+      return `Movimentações bancárias com data futura · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.join("\n")||"Nenhuma movimentação recebida com data posterior a hoje nos próximos 12 meses."}${future.length>5?`\nMais ${future.length-5} movimentação(ões) em Contas.`:""}\nDatas de vencimentos futuros são esperadas e não foram tratadas como erro. Confira no banco qualquer movimentação acima: o histórico recebido pode estar incompleto${report.sync_pending?" e a sincronização pode estar pendente ou com falha":""}.`;
+    }catch{return "Não consegui conferir datas futuras das movimentações bancárias agora. Confira Contas; não vou afirmar que há ou não erros sem consultar os dados.";}
   }
   const undatedDue=/\b(?:cobrancas?|parcelas?|contas?|obrigacoes?)\b/.test(text)&&/\b(?:sem data|nao (?:tem|possuem|temos) data|data nao informada)\b/.test(text);
   const dueToday=/\b(?:vence|vencem|vencimento|vencimentos) hoje\b/.test(text);
