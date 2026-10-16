@@ -130,6 +130,59 @@ it("does not query bank connection status outside the phone's permitted mode",as
   const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","Qual conexão bancária está inativa na empresa?","2026-10-16");
   expect(answer).toContain("não tem acesso");expect(m.rpc).not.toHaveBeenCalled();
 });
+it("reports the last successful synchronization for each active bank",async()=>{
+  m.rpc.mockResolvedValue({connections:[
+    {institution_name:"Sicredi",status:"active",last_successful_sync_at:"2026-10-15T12:00:00Z"},
+    {institution_name:"Nubank",status:"active",last_successful_sync_at:null},
+    {institution_name:"Banco antigo",status:"revoked",last_successful_sync_at:"2026-10-10"},
+  ],sync:[]});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Qual foi a última sincronização de cada banco?","2026-10-16");
+  expect(answer).toContain("Sicredi");expect(answer).toContain("15/10/2026");expect(answer).toContain("Nubank");
+  expect(answer).toContain("Não informado");expect(answer).not.toContain("Banco antigo");
+});
+it("distinguishes pending and failed synchronization without claiming completion",async()=>{
+  m.rpc.mockResolvedValue({connections:[{institution_name:"Sicredi",status:"active"}],sync:[
+    {status:"pending"},{status:"running"},{status:"failed"},{status:"complete"},
+  ]});
+  const pending=await answerBankWhatsAppMessage(user as never,"personal","both","Há alguma sincronização pendente?","2026-10-16");
+  const failed=await answerBankWhatsAppMessage(user as never,"personal","both","Há alguma sincronização com falha?","2026-10-16");
+  expect(pending).toContain("Sim");expect(pending).toContain("2");
+  expect(failed).toContain("Sim");expect(failed).toContain("1");
+});
+it("does not disclose company synchronization to a personal-only phone",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","Há alguma sincronização pendente na empresa?","2026-10-16");
+  expect(answer).toContain("não tem acesso");expect(m.rpc).not.toHaveBeenCalled();
+});
+it("reports incompleteness from received data without inventing missing days",async()=>{
+  m.ledger.mockResolvedValue({report:{missing_dates:2,sync_pending:true,last_successful_sync_at:"2026-10-15T12:00:00Z",movements:[]},overview:{connections:[{institution_name:"Sicredi",status:"active"}]}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais dados de um banco podem estar incompletos?","2026-10-16");
+  expect(answer).toContain("2");expect(answer).toContain("sincronização");expect(answer).not.toContain("todos os dias completos");
+});
+it("reports expired bank authorization only from the selected mode",async()=>{
+  m.rpc.mockResolvedValue({connections:[
+    {institution_name:"Banco vencido",status:"expired",consent_expires_at:"2026-10-15"},
+    {institution_name:"Banco ativo",status:"active",consent_expires_at:"2026-11-15"},
+  ],sync:[]});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Minha conexão com o banco expirou?","2026-10-16");
+  expect(answer).toContain("Banco vencido");expect(answer).not.toContain("Banco ativo · Expirado");
+});
+it("gives the actual reconnection and disconnection steps while preserving history",async()=>{
+  const reconnect=await answerBankWhatsAppMessage(user as never,"personal","both","Como reconectar um banco sem perder o histórico?","2026-10-16");
+  const disconnect=await answerBankWhatsAppMessage(user as never,"personal","both","Como desconectar um banco preservando o histórico?","2026-10-16");
+  expect(reconnect).toContain("Contas");expect(reconnect).toContain("Conectar banco");expect(reconnect).toContain("histórico");
+  expect(disconnect).toContain("Contas");expect(disconnect).toContain("Desconectar banco");expect(disconnect).toContain("histórico");
+});
+it("names only banks with received installment dates or currencies missing",async()=>{
+  m.agenda.mockResolvedValue({items:[
+    {kind:"installment",institution_name:"Sicredi",description:"Compra A",due_date:null,currency:"BRL"},
+    {kind:"installment",institution_name:"Nubank",description:"Compra B",due_date:"2026-11-10",amount:"25.00",currency:null},
+    {kind:"bill",institution_name:"Mercado Pago",description:"Fatura",due_date:"2026-11-10",currency:"BRL"},
+  ],incomplete:false});
+  const dates=await answerBankWhatsAppMessage(user as never,"personal","both","Qual banco não informou vencimentos de parcelas?","2026-10-16");
+  const currency=await answerBankWhatsAppMessage(user as never,"personal","both","Qual banco não informou moeda para um valor?","2026-10-16");
+  expect(dates).toContain("Sicredi");expect(dates).not.toContain("Mercado Pago");
+  expect(currency).toContain("Nubank");expect(currency).not.toContain("Mercado Pago");
+});
 it("routes a personal-only overview without treating the excluded company as a second request",async()=>{
   const message="Mostre somente dados do modo Pessoal; não acesse a empresa.";
   expect(await answerBankWhatsAppMessage(user as never,"business","both",message,"2026-10-16")).toBeNull();
