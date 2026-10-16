@@ -4,7 +4,7 @@ import { getOpenFinanceAccess, type OpenFinanceIdentity } from "./open-finance-a
 import { readBankAgenda } from "./financial-agenda";
 import { formatBankSchedules } from "./bank-schedule-answer";
 import { formatBankAgenda,visibleBankSchedules } from "./open-finance-schedules";
-import {recurringQueryKind,isUnregisteredBankRecurringRequest} from "./recurring-query-kind";
+import {recurringQueryKind,isUnregisteredBankRecurringRequest,isUnreliableRecurringValueRequest} from "./recurring-query-kind";
 import {descriptionsLikelyMatch,type RecurringTransaction} from "./recurring";
 import { expandMerchantAliases, merchantDescriptionMatchesTerms } from "./finances";
 
@@ -28,6 +28,19 @@ export async function connectedRecurringAppendix(user: OpenFinanceIdentity, mode
     const selected={...agenda,items:ai.period?matches.filter(item=>item.due_date&&(!ai.period?.from||item.due_date>=ai.period.from)&&(!ai.period?.to||item.due_date<=ai.period.to)):matches,incomplete:agenda.incomplete||undated>0};
     const selectedBills=ai.period?bills.filter(item=>item.due_date&&(!ai.period?.from||item.due_date>=ai.period.from)&&(!ai.period?.to||item.due_date<=ai.period.to)):bills;
     const label = mode === "business" ? `Empresa${scope.companyName ? ` · ${scope.companyName}` : ""}` : "Pessoal";
+    if(isUnreliableRecurringValueRequest(message)){
+      const charges=selected.items.filter(item=>item.kind==="recurring");
+      const uncertain=charges.flatMap(item=>{
+        const amountMissing=item.amount===null||!item.amount.trim()||!Number.isFinite(Number(item.amount));
+        const currencyMissing=!item.currency?.trim();
+        if(!amountMissing&&!currencyMissing)return [];
+        const name=item.description.replace(/[\r\n*`_~<>]/g," ").slice(0,120);
+        const bank=item.institution_name.replace(/[\r\n*`_~<>]/g," ").slice(0,80);
+        return [`• ${name} · ${bank}: ${[amountMissing?"valor não informado":"",currencyMissing?"moeda não informada":""].filter(Boolean).join(" e ")}.`];
+      });
+      const listed=uncertain.slice(0,10).join("\n");
+      return `🏦 *Valores de cobranças recorrentes · ${label}*\nNão recebi um indicador de confiança para o valor de cada cobrança bancária; por isso não consigo identificar quais valores estão incorretos.\n${listed?`\nCom valor ou moeda ausente nos dados recebidos:\n${listed}${uncertain.length>10?`\nMais ${uncertain.length-10} item(ns) com dados ausentes.`:""}`:"\nNão encontrei cobrança recorrente com valor ou moeda ausente nos dados recebidos."}\nOs demais valores recebidos são estimativas, não cobranças futuras confirmadas.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+    }
     if(comparingManual&&!selected.items.length)return `🏦 Não encontrei assinatura bancária sem cadastro manual semelhante nos dados recebidos. Isso não confirma que todas foram cadastradas.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
     const result = [requestedKind!=="recurring" ? formatBankSchedules(selected, "installments", label) : "", requestedKind!=="installment" ? formatBankSchedules(selected, "recurring", label) : "", wantsBills?formatBankAgenda(selectedBills,agenda.incomplete):""].filter(Boolean).join("\n\n");
     const comparisonNote=comparingManual?"\nNão encontrei cadastro manual semelhante para os itens listados. Nomes diferentes podem impedir a correspondência; confira antes de cadastrar novamente.":"";

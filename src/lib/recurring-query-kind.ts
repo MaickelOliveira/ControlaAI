@@ -14,3 +14,14 @@ export function isUnregisteredBankRecurringRequest(message:string):boolean{
   && recurringQueryKind(message)==="recurring"
   && /\b(?:nao|sem)\s+(?:foram?\s+)?(?:cadastrad[oa]s?|registrad[oa]s?|anotad[oa]s?)\b/.test(text);
 }
+
+/** Valor recebido e regularidade não provam que uma cobrança futura terá esse valor. */
+export function isUnreliableRecurringValueRequest(message:string):boolean{
+ const text=normalizeBankText(message);
+ return /^(?:quais?|mostre|me mostre|liste|lista)\b/.test(text)
+  && recurringQueryKind(message)==="recurring"
+  && /\b(?:valor(?:es)?|quantia|montante)\b/.test(text)
+  && (/(?:\b(?:nao|sem|pouco)\s+(?:tem\s+)?(?:valor(?:es)?\s+)?(?:confiavel|confiaveis)\b)/.test(text)
+   || /\bvalor(?:es)?\s+(?:nao|pouco)\s+(?:confiavel|confiaveis)\b/.test(text)
+   || /\bvalor(?:es)?\s+(?:incertos?|desconhecidos?|nao informados?)\b/.test(text));
+}
