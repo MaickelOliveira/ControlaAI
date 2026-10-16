@@ -62,6 +62,17 @@ it("rejects moving a business record into a restricted personal mode", async () 
   await receive("mude o lançamento private entry para pessoal");
   expect(m.update).not.toHaveBeenCalled();
 });
+it("finds a qualified category edit by name but asks before changing the dated amount", async () => {
+  m.access.mockResolvedValue("personal");
+  rows = [{ ...entry("personal"), description: "TESTE AUDITORIA", amount: 1, date: "2026-10-15" }];
+  m.process.mockResolvedValue({ intent: "finance_edit", confidence: .99, keyword: "TESTE AUDITORIA de R$ 1,00 registrada em 15/10", finance: { category: "Serviços" } });
+  m.find.mockImplementation(async (_owner, _mode, keyword) => keyword === "TESTE AUDITORIA" ? rows : []);
+  await receive("Altere a categoria da despesa TESTE AUDITORIA de R$ 1,00 registrada em 15/10 para Serviços.");
+  expect(m.find).toHaveBeenCalledWith("fixture-owner", "personal", "TESTE AUDITORIA");
+  expect(m.update).not.toHaveBeenCalled();
+  expect(reply()).toContain("Encontrei *1 lançamento*");
+  expect(reply()).not.toContain("Não encontrei nada");
+});
 it("rejects a generic delete batch from a different permitted mode", async () => {
   m.batch.mockResolvedValue({ mode: "personal", items: [entry("personal")] });
   m.process.mockResolvedValue({ intent: "finance_delete", confidence: .99, bulkCorrectLastBatch: true });

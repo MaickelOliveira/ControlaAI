@@ -19,7 +19,7 @@ import {recurringQueryKind,isUnregisteredBankRecurringRequest,isUnreliableRecurr
 import {formatRemainingKnownInstallments} from "@/lib/remaining-installments-answer";
 import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, getScopedModeReadResult, withExplicitFinanceCategoryEdit, type AIResult, type FinanceData } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, getScopedModeReadResult, withExplicitFinanceCategoryEdit, financeEditNeedsChoice, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createdDayBoundsBR, isFinanceCreatedTodayQuery, replyFinancesCreatedToday } from "@/lib/finance-created-query";
@@ -3585,7 +3585,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         console.log("[bot] Consulta de alteração financeira");
 
         // Achou exatamente 1 pela palavra-chave e já sabemos o que mudar → aplica direto
-        if (keyword && editCandidates.length === 1 && Object.keys(editPatch).length > 0) {
+        if (keyword && editCandidates.length === 1 && Object.keys(editPatch).length > 0 && !financeEditNeedsChoice(messageText)) {
           const editTarget = editCandidates[0];
           const updated = await updateFinance(editTarget.id, user.id, editPatch as Parameters<typeof updateFinance>[2], financeSearchMode ?? undefined);
           if (updated) {
@@ -3597,7 +3597,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
 
         // Achou exatamente 1 pela palavra-chave mas ainda não sabemos o que mudar
-        if (keyword && editCandidates.length === 1) {
+        if (keyword && editCandidates.length === 1 && Object.keys(editPatch).length === 0) {
           const editTarget = editCandidates[0];
           await setPendingAction(from, {
             type: "finance_select", userId: user.id,
@@ -3610,7 +3610,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
 
         // Palavra-chave achou vários → deixa escolher entre eles
-        if (editCandidates.length > 1) {
+        if (editCandidates.length > 1 || (editCandidates.length === 1 && financeEditNeedsChoice(messageText))) {
           const list = editCandidates.map((c, i) =>
             `${listNumberLabel(i)} ${c.type === "income" ? "💰 Receita" : "💸 Despesa"} · *${c.description}* — ${formatCurrency(c.amount)} · ${c.category} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
           ).join("\n");
@@ -3620,7 +3620,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             candidates: editCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode, type: c.type })),
             patch: editPatch,
           });
-          await wppSend(from, `✏️ Encontrei *${editCandidates.length} lançamentos* com *"${keyword}"*:\n\n${list}\n\nQual deles deseja alterar? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
+          await wppSend(from, `✏️ Encontrei *${editCandidates.length} ${editCandidates.length === 1 ? "lançamento" : "lançamentos"}* com *"${keyword}"*:\n\n${list}\n\nQual deles deseja alterar? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
           break;
         }
 
