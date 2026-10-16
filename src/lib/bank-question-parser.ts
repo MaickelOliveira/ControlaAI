@@ -10,7 +10,7 @@ export type BankQuestion = {
   settledOnly?: boolean;
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
-  debtView?: "balance";
+  debtView?: "balance" | "contracted" | "next-installment" | "missing-next-installment" | "missing-due-date" | "zero" | "positive" | "max-balance" | "min-positive";
   limitView?: "used" | "available-known" | "shared" | "inconsistent" | "max-available" | "min-available";
 };
 
@@ -98,6 +98,18 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     return {kind:"limits",...monthPeriod(today,false),limitView:text.includes("maior")?"max-available":"min-available"};
   if (/^(?:(?:qual (?:e )?(?:o )?|mostre (?:o )?)saldo devedor (?:de cada|de todos os meus|dos meus|de meus) emprestimos?|quanto falta pagar (?:em|de) cada emprestimo)$/.test(text))
     return {kind:"loans",...monthPeriod(today,false),debtView:"balance"};
+  const focusedLoans: Array<[RegExp, NonNullable<BankQuestion["debtView"]>]> = [
+    [/^(?:qual (?:e )?(?:o )?|mostre (?:o )?)valor contratado de cada emprestimo$/, "contracted"],
+    [/^(?:qual (?:e )?(?:o )?valor da proxima parcela|quanto (?:e|sera) a proxima parcela) de cada emprestimo$/, "next-installment"],
+    [/^quais emprestimos (?:nao informaram|estao sem|nao tem) (?:o )?valor da proxima parcela$/, "missing-next-installment"],
+    [/^quais emprestimos (?:nao informaram|estao sem|nao tem) (?:o )?vencimento final$/, "missing-due-date"],
+    [/^quais emprestimos (?:tem|possuem) saldo devedor zero informado$/, "zero"],
+    [/^mostre emprestimos ativos sem incluir contratos de saldo zero$/, "positive"],
+    [/^qual emprestimo tem o maior saldo devedor$/, "max-balance"],
+    [/^qual emprestimo tem o menor saldo devedor positivo$/, "min-positive"],
+  ];
+  for (const [pattern,debtView] of focusedLoans) if (pattern.test(text))
+    return {kind:"loans",...monthPeriod(today,false),debtView};
   if (/^(?:existe|ha|tem) (?:alguma conta(?: pessoal)? com|algum) saldo negativo(?:\? mostre (?:somente|apenas) essas contas)?$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
   if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))

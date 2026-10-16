@@ -53,6 +53,47 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   if (!connectedGroups.length) return question.bankName || question.last4
     ? `Não encontrei ${safe(question.bankName ?? "esse cartão")}${question.last4 ? ` · final ${question.last4}` : ""} entre os bancos conectados em ${safe(modeLabel)}. Confira Contas e o modo/empresa selecionado.`
     : `Nenhum banco conectado em ${safe(modeLabel)}. A conexão fica na aba Contas.`;
+  if(question.kind==="loans"&&question.debtView){
+    const view=question.debtView;
+    const rows=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="loan")
+      .filter(resource=>view==="balance"||view==="contracted"||view==="zero"||!hasZeroBankDebt(resource,data))
+      .map(resource=>({bank:group.name,resource,detail:data.credit.find(credit=>credit.resource_id===resource.id)})));
+    const balanceUnits=(row:typeof rows[number]):bigint|null=>{
+      const amount=String(row.detail?.outstanding_amount??"");
+      if(!row.detail?.currency||!/^-?\d{1,16}(?:\.\d{1,8})?$/.test(amount))return null;
+      const [whole,fraction=""]=amount.replace(/^-/ ,"").split(".");
+      const units=BigInt(whole)*BigInt(100000000)+BigInt(fraction.padEnd(8,"0"));
+      return amount.startsWith("-")?-units:units;
+    };
+    if(view==="max-balance"||view==="min-positive"){
+      const byCurrency=new Map<string,Array<{row:typeof rows[number];units:bigint}>>();
+      for(const row of rows){
+        const units=balanceUnits(row),currency=row.detail?.currency;
+        if(!currency||units===null||units<=BigInt(0)||bankMoney(row.detail?.outstanding_amount,currency)==="Não informado")continue;
+        byCurrency.set(currency,[...(byCurrency.get(currency)??[]),{row,units}]);
+      }
+      const selected=[...byCurrency.values()].flatMap(items=>{
+        const extreme=items.reduce((best,item)=>view==="max-balance"?(item.units>best.units?item:best):(item.units<best.units?item:best));
+        return items.filter(item=>item.units===extreme.units).slice(0,5).map(item=>item.row);
+      });
+      return `${view==="max-balance"?"Maior saldo devedor":"Menor saldo devedor positivo"} por moeda · ${safe(modeLabel)}\n${selected.map(row=>`• ${safe(row.bank)} · ${safe(bankResourceName(row.resource.name))}: ${bankMoney(row.detail?.outstanding_amount,row.detail?.currency)}`).join("\n")||"Nenhum saldo devedor positivo e com moeda informada foi recebido."}\n${byCurrency.size>1?"Moedas diferentes foram comparadas separadamente. ":""}Saldos zero, negativos, sem valor ou sem moeda ficaram fora da comparação. Isso não confirma a situação contratual junto ao banco.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+    }
+    const selected=rows.filter(row=>view==="missing-next-installment"
+      ? bankMoney(row.detail?.next_installment_amount,row.detail?.currency)==="Não informado"
+      : view==="missing-due-date" ? bankDate(row.detail?.due_date)==="Não informado"
+      : view==="zero" ? balanceUnits(row)===BigInt(0)
+      : view==="positive" ? (balanceUnits(row)??BigInt(0))>BigInt(0) : true);
+    const titles={balance:"Saldo devedor de cada empréstimo",contracted:"Valor contratado de cada empréstimo", "next-installment":"Próxima parcela de cada empréstimo", "missing-next-installment":"Empréstimos sem valor informado da próxima parcela", "missing-due-date":"Empréstimos sem vencimento final informado",zero:"Empréstimos com saldo devedor zero informado",positive:"Empréstimos com saldo devedor positivo informado"};
+    const field=(row:typeof rows[number])=>view==="balance"?`Saldo devedor: ${bankMoney(row.detail?.outstanding_amount,row.detail?.currency)}`
+      :view==="contracted"?`Valor contratado: ${bankMoney(row.detail?.contract_amount,row.detail?.currency)}`
+      :view==="missing-due-date"?"Vencimento final: Não informado"
+      :view==="zero"||view==="positive"?`Saldo devedor: ${bankMoney(row.detail?.outstanding_amount,row.detail?.currency)}`
+      :`Valor da próxima parcela: ${bankMoney(row.detail?.next_installment_amount,row.detail?.currency)}`;
+    const lines=selected.slice(0,12).map(row=>`• ${safe(row.bank)} · ${safe(bankResourceName(row.resource.name))} · ${field(row)}`);
+    const empty=rows.length?"Nenhum dos empréstimos recebidos corresponde a esse filtro.":"Nenhum empréstimo foi recebido dos bancos conectados neste modo.";
+    const caveat=view==="balance"||view==="zero"?"Saldo zero informado não confirma quitação contratual.":view==="positive"?"Saldo positivo informado não confirma que o contrato esteja ativo; confira o banco.":view==="contracted"?"O valor contratado é o valor original do contrato, não o saldo ainda devido.":"Valor ou data não informados permanecem desconhecidos; empréstimos com saldo zero informado ficaram fora dos filtros de próximas parcelas.";
+    return `${titles[view]} · ${safe(modeLabel)} · ${selected.length} contrato(s)\n${lines.join("\n")||empty}${selected.length>12?`\nMais ${selected.length-12} contrato(s) em Contas.`:""}\n${caveat} Posição conforme os dados recebidos; contratos encerrados podem não aparecer.${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+  }
   if(question.kind==="coverage"){
     const missing=connectedGroups.flatMap(group=>[
       ...(!group.resources.some(resource=>resource.resource_type==="account")?[`• ${safe(group.name)} não enviou dados de conta; saldo disponível não pôde ser avaliado.`]:[]),
@@ -141,11 +182,11 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   const blocks = groups.map(group => {
     const wanted = { loans: "loan", financings: "financing", limits: "card", balances: "account", investments: "investment", bills: "card", spending: "account", coverage: "account" }[question.kind];
     const candidates = group.resources.filter(r => r.resource_type === wanted && (!debt || matchesBankDebtPurpose(r, question.keyword)));
-    const resources = candidates.filter(r => question.settledOnly ? hasZeroBankDebt(r,data) : question.debtView === "balance" || !debt || !hasZeroBankDebt(r, data));
+    const resources = candidates.filter(r => question.settledOnly ? hasZeroBankDebt(r,data) : !debt || !hasZeroBankDebt(r, data));
     if (debt) shownDebtCount += resources.length;
     const hiddenZero = candidates.length - resources.length;
     const lines: string[] = [];
-    const bankAmounts: Amount[] = candidates.filter(r => debt && question.debtView !== "balance" && hasZeroBankDebt(r, data)).map(r => ({ amount: "0", currency: data.credit.find(c => c.resource_id === r.id)?.currency }));
+    const bankAmounts: Amount[] = candidates.filter(r => debt && hasZeroBankDebt(r, data)).map(r => ({ amount: "0", currency: data.credit.find(c => c.resource_id === r.id)?.currency }));
     for (const resource of resources) {
       const name = `${safe(bankResourceName(resource.name))}${resource.identification_last4 ? ` · final ${safe(resource.identification_last4)}` : ""}`;
       if (debt) {
@@ -155,7 +196,7 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
         const installment = detail?.next_installment_amount == null
           ? "Valor da próxima parcela não informado pelo banco"
           : `Valor da próxima parcela: ${bankMoney(detail.next_installment_amount, detail.currency)}`;
-        lines.push(question.settledOnly ? `${name}\nSaldo devedor informado: ${bankMoney(amount.amount,amount.currency)}` : question.debtView === "balance" ? `${name}\nSaldo devedor: ${bankMoney(amount.amount,amount.currency)}` : `${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · ${installment}\nVencimento final: ${bankDate(detail?.due_date)}`);
+        lines.push(question.settledOnly ? `${name}\nSaldo devedor informado: ${bankMoney(amount.amount,amount.currency)}` : `${name}\nSaldo devedor: ${bankMoney(amount.amount, amount.currency)}\nContratado: ${bankMoney(detail?.contract_amount, detail?.currency)} · ${installment}\nVencimento final: ${bankDate(detail?.due_date)}`);
       } else if (question.kind === "limits") {
         const limits = displayCardLimits(data.limits.filter(l => l.resource_id === resource.id))
           .filter(limit => question.limitView !== "available-known" || bankMoney(limit.available_amount,limit.currency) !== "Não informado");
@@ -189,11 +230,10 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   });
   const title = question.latestSnapshot && question.kind === "balances"
     ? "Saldos bancários da última posição recebida"
-    : question.settledOnly ? "Empréstimos com saldo informado como zero" : question.debtView === "balance" ? "Saldo devedor de cada empréstimo recebido" : `${labels[question.kind]} recebidos`;
+    : question.settledOnly ? "Empréstimos com saldo informado como zero" : `${labels[question.kind]} recebidos`;
   let result = `${title} · ${safe(modeLabel)}${question.keyword ? `\n🔎 Contrato: ${safe(question.keyword)}` : ""}\n\n${blocks.join("\n\n")}`;
   if ((question.kind === "balances" || debt && shownDebtCount !== 1) && !question.settledOnly) result += `\n\n${bankAmountTotals(received, incomplete).join("\n") || "Total não informado pelos bancos."}`;
   if(question.settledOnly)result += "\nSaldo zero recebido não confirma quitação contratual; confirme com o banco. Contratos já encerrados podem não aparecer nos dados recebidos.";
-  if(question.debtView === "balance")result += "\nSaldo zero informado não confirma quitação contratual; confira o banco. Contratos encerrados podem não aparecer nos dados recebidos.";
   if (question.kind === "limits") result += "\n\nLinhas e limites compartilhados não são somados. Crédito disponível não é saldo em conta.";
   result += "\nValores não informados permanecem desconhecidos. Posição conforme os dados recebidos de cada banco; ausência de dados não confirma valor zero.";
   if (data.truncated) result += " Consulta parcial: há dados além do limite recebido; consulte Contas.";

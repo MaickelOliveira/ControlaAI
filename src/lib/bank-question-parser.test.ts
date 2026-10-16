@@ -83,6 +83,19 @@ it.each([
   expect(parseBankQuestion(message,"2026-10-15")).toMatchObject({kind:"loans",debtView:"balance"});
   expect(parseBankQuestion(message,"2026-10-15")?.bankName).toBeUndefined();
 });
+it.each([
+  ["Qual é o valor contratado de cada empréstimo?","contracted"],
+  ["Qual é o valor da próxima parcela de cada empréstimo?","next-installment"],
+  ["Quais empréstimos não informaram o valor da próxima parcela?","missing-next-installment"],
+  ["Quais empréstimos não informaram vencimento final?","missing-due-date"],
+  ["Quais empréstimos têm saldo devedor zero informado?","zero"],
+  ["Mostre empréstimos ativos sem incluir contratos de saldo zero.","positive"],
+  ["Qual empréstimo tem o maior saldo devedor?","max-balance"],
+  ["Qual empréstimo tem o menor saldo devedor positivo?","min-positive"],
+])("recognizes the requested loan field: %s",(message,debtView)=>{
+  expect(parseBankQuestion(message,"2026-10-15")).toMatchObject({kind:"loans",debtView});
+  expect(parseBankQuestion(message,"2026-10-15")?.bankName).toBeUndefined();
+});
 it("recognizes settled loans without accepting the rest of a sentence as a bank name", () => {
   expect(parseBankQuestion("Quais empréstimos já estão quitados? Separe por banco e não conte como dívida.", "2026-10-11"))
     .toMatchObject({kind:"loans",settledOnly:true});

@@ -36,6 +36,63 @@ describe("saved bank positions", () => {
     expect(text).not.toContain("Valor da próxima parcela:");
     expect(text).not.toContain("Banco removido");
   });
+  it("answers contracted and next-installment amounts without relabeling the debt subtotal",()=>{
+    const data=overview();
+    const contracted=answer(data,"Qual é o valor contratado de cada empréstimo?");
+    expect(contracted).toContain(`Valor contratado: ${bankMoney("5000","BRL")}`);
+    expect(contracted).toContain(`Valor contratado: ${bankMoney("2000","BRL")}`);
+    expect(contracted).not.toContain("Saldo devedor:");
+    expect(contracted).not.toContain("Subtotal conhecido:");
+    const next=answer(data,"Qual é o valor da próxima parcela de cada empréstimo?");
+    expect(next).toContain(`Valor da próxima parcela: ${bankMoney("200","BRL")}`);
+    expect(next).toContain("Crédito fácil · Valor da próxima parcela: Não informado");
+    expect(next).not.toContain("Saldo devedor:");
+    expect(next).not.toContain("Subtotal conhecido:");
+  });
+  it("filters only loans missing the requested installment or final date",()=>{
+    const data=overview();
+    const missingAmount=answer(data,"Quais empréstimos não informaram o valor da próxima parcela?");
+    expect(missingAmount).toContain("Sicredi");
+    expect(missingAmount).toContain("Crédito fácil");
+    expect(missingAmount).not.toContain("Crédito pessoal");
+    const missingDate=answer(data,"Quais empréstimos não informaram vencimento final?");
+    expect(missingDate).toContain("Sicredi");
+    expect(missingDate).toContain("Crédito fácil");
+    expect(missingDate).not.toContain("Crédito pessoal");
+  });
+  it("shows only reported zero or positive loan balances, without assuming a contractual status",()=>{
+    const data=overview();
+    data.credit[0].outstanding_amount="0";
+    data.resources.push(resource("unknown","real","loan","Saldo não enviado"));
+    const zero=answer(data,"Quais empréstimos têm saldo devedor zero informado?");
+    expect(zero).toContain("Crédito pessoal");
+    expect(zero).not.toContain("Crédito fácil");
+    expect(zero).not.toContain("Saldo não enviado");
+    expect(zero).toContain("não confirma quitação");
+    const positive=answer(data,"Mostre empréstimos ativos sem incluir contratos de saldo zero.");
+    expect(positive).toContain("Crédito fácil");
+    expect(positive).not.toContain("Crédito pessoal");
+    expect(positive).not.toContain("Saldo não enviado");
+    expect(positive).toContain("não confirma que o contrato esteja ativo");
+  });
+  it("compares known loan balances within each currency and excludes zero and missing positions",()=>{
+    const data=overview();
+    data.resources.push(resource("zero","real","loan","Saldo zero"),resource("unknown","real","loan","Saldo desconhecido"),resource("usd","real","loan","Dólar teste"));
+    data.credit.push({resource_id:"zero",currency:"BRL",outstanding_amount:"0",contract_amount:"100",next_installment_amount:null,due_date:null});
+    data.credit.push({resource_id:"usd",currency:"USD",outstanding_amount:"50",contract_amount:"100",next_installment_amount:null,due_date:null});
+    const max=answer(data,"Qual empréstimo tem o maior saldo devedor?");
+    expect(max).toContain("Crédito pessoal");
+    expect(max).toContain("Dólar teste");
+    expect(max).not.toContain("Crédito fácil");
+    expect(max).not.toContain("Saldo zero");
+    expect(max).toContain("Moedas diferentes");
+    const min=answer(data,"Qual empréstimo tem o menor saldo devedor positivo?");
+    expect(min).toContain("Crédito fácil");
+    expect(min).toContain("Dólar teste");
+    expect(min).not.toContain("Crédito pessoal");
+    expect(min).not.toContain("Saldo zero");
+    expect(min).not.toContain("Saldo desconhecido");
+  });
   it("shows only known zero-balance loans when asked which are settled", () => {
     const data=overview();
     data.credit[0].outstanding_amount="0.00000000";
