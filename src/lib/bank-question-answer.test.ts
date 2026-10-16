@@ -369,6 +369,7 @@ it("answers each focused car-financing question without inventing installments o
   const next=answer(data,"Qual é o valor da próxima parcela do carro?");
   expect(next).toContain("VEICULOS E UTILITARIOS");
   expect(next).toContain("não informado pelo banco");
+  expect(next).toContain("banco\nValores não informados");
   expect(next).not.toContain("Contratado:");
   const final=answer(data,"Quando vence a última parcela do carro?");
   expect(final).toContain("20/05/2027");

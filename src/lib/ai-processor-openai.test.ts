@@ -118,6 +118,26 @@ describe("AI provider routing", () => {
       .toMatchObject({ intent: "bank_query", bankQuery: { kind: "transactions", operation: "max", direction: "debit", source: "account", bankName: "Nubank" } });
   });
 
+  it.each([
+    ["Qual foi meu resultado financeiro no mês passado?", "result"],
+    ["Compare o gasto desta semana com a semana anterior.", "spending"],
+    ["Compare as entradas deste mês com as do mês passado.", "income"],
+    ["Quais foram as cinco maiores despesas deste mês?", "spending"],
+    ["Quais foram as cinco maiores receitas deste mês?", "income"],
+  ])("keeps a general finance request in the unified ledger despite a bank-only model guess: %s", async(message,kind)=>{
+    process.env.OPENAI_TEST_USER_IDS="another-user";
+    googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.95,bankQuery:{kind}})}});
+    const answer=await processMessage(message,context);
+    expect(answer.intent).toBe("finance_query");
+    expect(answer.bankQuery).toBeUndefined();
+  });
+  it("keeps a named bank result as a bank-only query",async()=>{
+    process.env.OPENAI_TEST_USER_IDS="another-user";
+    googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.95,bankQuery:{kind:"result",bankName:"Nubank"}})}});
+    const answer=await processMessage("Qual foi meu resultado financeiro no Nubank mês passado?",context);
+    expect(answer).toMatchObject({intent:"bank_query",bankQuery:{kind:"result",bankName:"Nubank"}});
+  });
+
   it("keeps an explicitly requested merchant when the model drops it and returns a broad expense category", async () => {
     process.env.OPENAI_TEST_USER_IDS = "another-user";
     googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: "finance_query", confidence: .95, category: "Alimentação" }) } });

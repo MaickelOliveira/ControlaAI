@@ -75,11 +75,11 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
       return `• ${name}: saldo devedor informado como zero${row.detail?.currency?` ${safe(row.detail.currency)}`:" (moeda não informada)"}`;
     });
     const title={"next-installment":"Próxima parcela dos financiamentos","last-installment-date":"Última parcela dos financiamentos","remaining-count":"Parcelas restantes dos financiamentos",contracted:"Valor contratado dos financiamentos","missing-balance":"Financiamentos sem saldo devedor informado",zero:"Financiamentos com saldo zero informado"}[view];
-    const note=view==="last-installment-date"?" A data final do contrato não confirma o vencimento da última parcela; o banco não informou essa data separadamente."
-      :view==="remaining-count"?" O banco não informou a quantidade de parcelas restantes; saldo e data final não permitem calculá-la com segurança."
-      :view==="zero"?" Saldo zero não confirma quitação contratual; confirme o encerramento no banco."
-      :view==="missing-balance"?" Ausência de saldo não significa saldo zero."
-      :" Valores não informados permanecem desconhecidos.";
+    const note=view==="last-installment-date"?"\nA data final do contrato não confirma o vencimento da última parcela; o banco não informou essa data separadamente."
+      :view==="remaining-count"?"\nO banco não informou a quantidade de parcelas restantes; saldo e data final não permitem calculá-la com segurança."
+      :view==="zero"?"\nSaldo zero não confirma quitação contratual; confirme o encerramento no banco."
+      :view==="missing-balance"?"\nAusência de saldo não significa saldo zero."
+      :"\nValores não informados permanecem desconhecidos.";
     return `${title} · ${safe(modeLabel)}${question.keyword?` · ${safe(question.keyword)}`:""}\n${selected.length} ${selected.length===1?"contrato":"contratos"} nos dados recebidos.\n${lines.join("\n")||"Nenhum contrato correspondente foi identificado."}${selected.length>12?`\nMais ${selected.length-12} contrato(s) em Contas.`:""}${note}${coverage}`;
   }
   if(question.kind==="investments"&&question.investmentView){
