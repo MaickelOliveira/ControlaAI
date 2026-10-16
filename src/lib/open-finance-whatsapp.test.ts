@@ -13,6 +13,16 @@ import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "./open-fina
 import {bankMoney} from "./open-finance-display";
 const user={id:"own-user",email:"user@example.test",plan:"business",activeMode:"personal",status:"active"} as const;
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});m.financial.mockResolvedValue({commitments:[],bank:{items:[],incomplete:false},forecasts:[],coverage:""});});
+it("explains available Open Finance data instead of returning connection steps",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Explique o que o Open Finance permite consultar na Zelo.","2026-10-16");
+  expect(answer).toContain("saldos");expect(answer).toContain("empréstimos");expect(answer).toContain("movimentações");
+  expect(answer).not.toContain("Contas → Conectar banco");
+});
+it("explains missing or unavailable data without claiming it was received",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais dados a Zelo não recebe pelo Open Finance?","2026-10-16");
+  expect(answer).toContain("senha");expect(answer).toContain("códigos");expect(answer).toContain("não informado");
+  expect(answer).not.toContain("Contas → Conectar banco");
+});
 it("answers which bank connection is inactive from the selected mode without inventing status",async()=>{
   m.rpc.mockResolvedValue({connections:[
     {institution_name:"Banco Ativo",status:"active",archived_at:null},
