@@ -25,3 +25,12 @@ export function isUnreliableRecurringValueRequest(message:string):boolean{
    || /\bvalor(?:es)?\s+(?:nao|pouco)\s+(?:confiavel|confiaveis)\b/.test(text)
    || /\bvalor(?:es)?\s+(?:incertos?|desconhecidos?|nao informados?)\b/.test(text));
 }
+
+/** Pede montante futuro das parcelas, não uma relação de compras ou faturas. */
+export function isRemainingKnownInstallmentsRequest(message:string):boolean{
+ const text=normalizeBankText(message);
+ return /\b(?:quanto|qual|calcule|some)\b/.test(text)
+  && /\b(?:falta|faltam|resta|restam|restante|restantes|devo)\b/.test(text)
+  && recurringQueryKind(message)==="installment"
+  && /\b(?:total|valor|quantidade|numero)\s+(?:conhecid[oa]s?|informad[oa]s?)\b/.test(text);
+}

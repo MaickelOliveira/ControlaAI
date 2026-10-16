@@ -50,6 +50,10 @@ it("routes uncertain recurring values to a focused lookup even when AI chooses a
  generateContent.mockResolvedValue({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.98,bankQuery:{kind:"recurring"}})}});
  expect(await processMessage("Quais cobranças recorrentes não têm valor confiável?",context)).toMatchObject({intent:"recurring_query"});
 });
+it("routes the requested remaining installment total away from a generic bank list",async()=>{
+ generateContent.mockResolvedValue({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.98,bankQuery:{kind:"installments"}})}});
+ expect(await processMessage("Quanto ainda falta nas parcelas com total conhecido?",context)).toMatchObject({intent:"recurring_query"});
+});
 it.each(["registra 50 reais em compra parcelada","cancela minhas assinaturas","quanto gastei com assinaturas"])("does not turn a mutation or past spending into a schedule lookup: %s",message=>{
  expect(getExplicitRecurringQueryResult(message)).toBeNull();
 });

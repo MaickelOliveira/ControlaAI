@@ -126,6 +126,34 @@ it("does not pretend to identify unreliable amounts when every bank recurrence h
  expect(response).toContain("não consigo identificar quais valores estão incorretos");
  expect(response).not.toContain("Estimativa completa");
 });
+it("totals only future installments whose amount, count and currency are known",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+ m.recurring.mockResolvedValue([{id:"manual",description:"Parcela manual",type:"expense",recurrenceType:"installment",amount:20,totalInstallments:5,paidInstallments:2,nextDueDate:"2026-11-10"}]);
+ m.rpc.mockResolvedValue({incomplete:false,items:[
+  {id:"bank",kind:"installment",description:"Compra bancária",institution_name:"Banco fictício",resource_name:"Gold",amount:"40",currency:"BRL",due_date:null,synced_at:todayStrBR(),total_installments:4,observed_installments:1},
+  {id:"unknown",kind:"installment",description:"Compra sem total",institution_name:"Banco fictício",resource_name:"Gold",amount:"90",currency:"BRL",due_date:null,synced_at:todayStrBR(),total_installments:null,observed_installments:1},
+  {id:"subscription",kind:"recurring",description:"Assinatura",institution_name:"Banco fictício",resource_name:"Gold",amount:"100",currency:"BRL",due_date:null,synced_at:todayStrBR()},
+ ]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quanto ainda falta nas parcelas com total conhecido?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain(bankMoney("60", "BRL"));expect(response).toContain(bankMoney("120", "BRL"));
+ expect(response).not.toContain(bankMoney("180", "BRL"));
+ expect(response).toContain("Parcela manual");expect(response).toContain("Compra bancária");
+ expect(response).not.toContain("Compra sem total");expect(response).not.toContain("Assinatura");
+ expect(response).toContain("não confirma pagamento");
+ expect(response).not.toContain("Parcelamentos recebidos dos bancos");
+ expect(m.confirm).not.toHaveBeenCalled();
+});
+it("does not invent reais for bank installments without currency",async()=>{
+ m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+ m.rpc.mockResolvedValue({incomplete:false,items:[{id:"bank",kind:"installment",description:"Compra sem moeda",institution_name:"Banco fictício",resource_name:"Gold",amount:"40",currency:null,due_date:null,synced_at:todayStrBR(),total_installments:4,observed_installments:1}]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quanto ainda falta nas parcelas com total conhecido?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("120,00");expect(response).toContain("moeda não informada");
+ expect(response).toContain("não há subtotal em moeda informada");
+ expect(response).not.toContain("R$ 120,00");
+ expect(response).not.toContain("Nenhum recorrente ou parcelamento cadastrado manualmente");
+});
 it("separates annuities from purchases using bank records without falling into generic help",async()=>{
  m.rpc.mockResolvedValue({incomplete:false,items:[
   {id:"fee",kind:"installment",resource_id:"card",description:"ANUIDADE DIFERENCIADA",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:12,observed_installments:1},
