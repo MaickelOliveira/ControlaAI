@@ -69,6 +69,10 @@ describe("expandMerchantAliases", () => {
     expect(expandMerchantAliases("Zé Delivery")).toEqual(["ze delivery", "zedelivery", "ze delivey"]);
     expect(merchantDescriptionMatchesTerms("Pg *Zé Delivery", expandMerchantAliases("ze delivery"))).toBe(true);
   });
+
+  it("matches the Facebook card-statement abbreviation", () => {
+    expect(merchantDescriptionMatchesTerms("FACEBK *65ZTF6SP34", expandMerchantAliases("Facebook"))).toBe(true);
+  });
 });
 
 describe("merchantPurchaseDate", () => {

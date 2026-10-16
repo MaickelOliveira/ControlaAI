@@ -45,10 +45,31 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(/^explique se saldo zero prova quitacao do emprestimo$/.test(plainWording))
     return "Saldo devedor informado como zero não prova quitação do empréstimo. O banco pode ter enviado uma posição parcial ou antiga, e o contrato pode continuar aberto por outras condições. Para confirmar o encerramento, consulte o contrato e a confirmação de quitação no banco.";
   const positionQuestion=isBankPositionQuestion(message);
-  const scopedFinanceQuestion=positionQuestion||/banco|bancaria|conex|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac|estabelec|compras?|transfer|fatura|gastos?/.test(text);
+  const scopedFinanceQuestion=positionQuestion||/banco|bancaria|conex|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac|estabelec|compras?|lancament|transfer|fatura|gastos?/.test(text);
   if(business&&personal&&scopedFinanceQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return scopedFinanceQuestion?"Este número não tem acesso a esse modo da Zelo.":null;
+  const individualCategory=plainWording.match(/\bmaior compra individual (?:em|na categoria) (.+?)(?: (?:neste|no) mes)?$/)?.[1]?.trim();
+  const listOthers=/\b(?:quais|liste|mostre)\b.*\blancamentos?\b.*\bem outros\b/.test(text);
+  if(individualCategory||listOthers){
+    const from=individualCategory?`${today.slice(0,7)}-01`:shiftDay(today,-365);
+    try{
+      const {entries,bank}=await readUnifiedFinances(user,requested,from,today);
+      const scoped=entries.filter(e=>e.mode===requested&&e.included&&e.status!=="pending"&&e.date>=from&&e.date<=today);
+      const label=requested==="personal"?"Pessoal":"Empresa";
+      const coverage=bank?.report.sync_pending?"Há sincronização bancária pendente ou com falha.":"O histórico bancário recebido pode estar incompleto.";
+      if(individualCategory){
+        const purchases=scoped.filter(e=>e.type==="expense"&&e.amount>0&&normalize(e.category)===individualCategory
+          &&!isBankBillPaymentDescription(e.description)
+          &&(e.source!=="bank"||e.bank?.resource_type==="card"||e.bank?.classification==="purchase"));
+        const largest=purchases.sort((a,b)=>b.amount-a.amount||b.date.localeCompare(a.date))[0];
+        return `Maior compra individual em ${safeSummary(largest?.category??individualCategory)} · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${largest?`${safeSummary(largest.description)} · ${bankMoney(largest.amount,"BRL")} · ${bankDate(largest.date)} · ${safeSummary(financeOrigin(largest))}`:"Nenhuma compra individual dessa categoria identificada nos dados recebidos."}\n${largest?"O valor é de uma compra, não o total da categoria. ":""}${coverage}`;
+      }
+      const others=scoped.filter(e=>normalize(e.category)==="outros");
+      const lines=others.slice(0,10).map(e=>`• ${bankDate(e.date)} · ${safeSummary(e.description)} · ${e.type==="income"?"Entrada":"Saída"} ${bankMoney(e.amount,"BRL")} · ${safeSummary(financeOrigin(e))}`);
+      return `Lançamentos em Outros · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${others.length} lançamento(s) incluído(s) nessa categoria.\n${lines.join("\n")||"Nenhum lançamento identificado nessa categoria nos dados recebidos."}${others.length>10?`\nMais ${others.length-10} em Finanças.`:""}\n${coverage}`;
+    }catch{return "Não consegui consultar os lançamentos dessa categoria agora. Confira Finanças; não vou responder com uma previsão no lugar do extrato.";}
+  }
   if(/\b(?:quais|quantos|liste|mostre|tenho)\b/.test(text)
     &&/\b(?:bancos?|conexoes? bancarias?)\b/.test(text)
     &&/\b(?:conectad[oa]s?|ativ[ao]s?)\b/.test(text)){

@@ -70,6 +70,31 @@ it("ranks establishments by purchase count rather than expense category",async()
   expect(answer).toContain("Padaria Boa");expect(answer).toContain("2 compras");
   expect(answer).not.toContain("Maior categoria");
 });
+it("answers the largest individual purchase in a category rather than its total",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"food-small",mode:"personal",source:"bank",date:"2026-10-12",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Padaria",amount:20,bank:{resource_type:"card",institution_name:"Banco A",currency:"BRL"}},
+    {id:"food-large",mode:"personal",source:"bank",date:"2026-10-11",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Mercado",amount:40,bank:{resource_type:"card",institution_name:"Banco A",currency:"BRL"}},
+    {id:"company",mode:"business",source:"bank",date:"2026-10-13",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Compra empresa",amount:90,bank:{resource_type:"card",institution_name:"Banco B",currency:"BRL"}},
+  ],bank:{overview:{connections:[{status:"active"}]},report:{sync_pending:false}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Qual foi a maior compra individual em alimentação?","2026-10-16");
+  expect(answer).toContain("Mercado");expect(answer).toMatch(/R\$\s*40,00/);
+  expect(answer).not.toMatch(/R\$\s*60,00/);expect(answer).not.toContain("Compra empresa");
+  expect(m.read).toHaveBeenCalledWith(user,"personal","2026-10-01","2026-10-16");
+});
+it("lists entries still in Outros in only the active mode rather than a two-mode forecast",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"own",mode:"personal",source:"whatsapp",date:"2026-10-10",status:"confirmed",type:"expense",included:true,category:"Outros",description:"Compra sem categoria",amount:35},
+    {id:"categorized",mode:"personal",source:"web",date:"2026-10-11",status:"confirmed",type:"expense",included:true,category:"Delivery",description:"Pedido delivery",amount:20},
+    {id:"company",mode:"business",source:"web",date:"2026-10-12",status:"confirmed",type:"expense",included:true,category:"Outros",description:"Segredo empresa",amount:100},
+  ],bank:{overview:{connections:[]},report:{sync_pending:false}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais lançamentos ainda estão em Outros?","2026-10-16");
+  expect(answer).toContain("Compra sem categoria");expect(answer).toContain("Pessoal");
+  expect(answer).not.toContain("Segredo empresa");expect(answer).not.toContain("Pedido delivery");expect(answer).not.toContain("Previsão");
+});
+it("does not read company entries in Outros for a personal-only phone",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","Quais lançamentos da empresa ainda estão em Outros?","2026-10-16");
+  expect(answer).toContain("não tem acesso");expect(m.read).not.toHaveBeenCalled();
+});
 it("does not read company purchases for a phone authorized only for Personal",async()=>{
   const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","Qual estabelecimento teve mais compras no mês na empresa?","2026-10-16");
   expect(answer).toContain("não tem acesso");

@@ -312,6 +312,7 @@ export async function getCategoryTotal(userId: string, mode: FinanceMode, type: 
  *  em vez de confiar só na substring literal que a IA mandou. */
 const MERCHANT_ALIASES: Record<string, string[]> = {
   ifood: ["ifood", "ifd", "i food"],
+  facebook: ["facebook", "facebk", "meta ads", "fb ads"],
   amazonas: ["amazonas mercad", "mercado amazonas", "amazonas mercado", "amazonas"],
   zedelivery: ["ze delivery", "zedelivery", "ze delivey"],
   aiqfome: ["aiqfome", "aiq fome", "ai que fome", "aiquefome"],
