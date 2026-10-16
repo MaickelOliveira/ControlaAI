@@ -231,10 +231,17 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       if(!await getOpenFinanceAccess(user,requested,{throwOnStorageError:true}))return "Não tenho dados de um banco conectado neste modo para confirmar pagamentos. Confira Contas; não vou tratar ausência de dados como ausência de cobrança.";
       const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:paidForecast,includeObservedInstallments:paidForecast});
       const items=agenda.items.filter(item=>(!item.mode||item.mode===requested)&&(paidForecast?item.payment_evidence===true:Boolean(item.due_date&&item.due_date>=today&&item.payment_evidence!==true)));
-      const lines=items.slice(0,10).map(item=>`• ${safeSummary(item.description||"Fatura")} · ${safeSummary(item.institution_name)} · ${item.due_date?bankDate(item.due_date):"data não informada"} · ${bankMoney(item.amount,item.currency)} · ${paidForecast?`pagamento informado${item.payment_amount?` (${bankMoney(item.payment_amount,item.currency)})`:"; valor pago não informado"}`:item.kind==="recurring"?"previsão estimada; pagamento não confirmado":"pagamento não confirmado"}`);
+      const lines=items.slice(0,10).map(item=>{
+        const billed=Number(item.amount),paid=Number(item.payment_amount);
+        const aboveBill=paidForecast&&item.kind==="bill"&&item.amount!=null&&item.payment_amount!=null
+          &&Number.isFinite(billed)&&Number.isFinite(paid)&&billed>0&&paid>0&&Math.round(paid*100)>Math.round(billed*100);
+        const payment=paidForecast?`pagamento informado${item.payment_amount?` (${bankMoney(item.payment_amount,item.currency)})`:"; valor pago não informado"}${aboveBill?"; valor pago informado acima do valor da fatura; confira no banco":""}`
+          :item.kind==="recurring"?"previsão estimada; pagamento não confirmado":"pagamento não confirmado";
+        return `• ${safeSummary(item.description||"Fatura")} · ${safeSummary(item.institution_name)} · ${item.due_date?bankDate(item.due_date):"data não informada"} · ${bankMoney(item.amount,item.currency)} · ${payment}`;
+      });
       const title=paidForecast?"Previsões com pagamento informado pelo banco":"Obrigações futuras sem pagamento confirmado pelo banco";
       const empty=paidForecast?"O banco não informou pagamento dessas previsões no período consultado; isso não prova que não foram pagas.":"Não recebi obrigações futuras datadas sem confirmação de pagamento; isso não prova que não existam.";
-      const caveat=paidForecast?"Um pagamento informado pode ser parcial; isso não confirma quitação total.":"Sem confirmação não significa dívida em aberto ou atraso. Itens sem data não foram classificados como futuros.";
+      const caveat=paidForecast?"Pagamento informado não confirma quitação total; confira no banco.":"Sem confirmação não significa dívida em aberto ou atraso. Itens sem data não foram classificados como futuros.";
       return `${title} · ${requested==="personal"?"Pessoal":"Empresa"} · ${bankDate(from)} a ${bankDate(to)}\n${lines.join("\n")||empty}${items.length>10?`\nMais ${items.length-10} item(ns) em Contas.`:""}\n${caveat}${agenda.incomplete?" Há dados incompletos do banco.":""}`;
     }catch{return "Não consegui conferir a confirmação de pagamentos agora. Consulte Contas ou o banco; não vou afirmar que uma cobrança foi paga ou ficou em aberto sem dados.";}
   }
