@@ -24,10 +24,10 @@ it("lists only authorized active banks in the requested personal mode",async()=>
   expect(m.rpc).toHaveBeenCalledWith(expect.objectContaining({mode:"personal"}),"zelo_of_overview",{p_environment:"production"});
 });
 it("uses the company scope for business connection lists and enforces phone access",async()=>{
-  m.access.mockResolvedValue({userId:user.id,mode:"business",environment:"production"});
+  m.access.mockResolvedValue({userId:user.id,mode:"business",environment:"production",companyName:"Samira"});
   m.rpc.mockResolvedValue({connections:[{institution_name:"Banco Empresa",status:"active",archived_at:null}],sync:[]});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais bancos estão conectados no modo Empresa?","2026-10-16");
-  expect(answer).toContain("Banco Empresa");expect(m.rpc).toHaveBeenCalledWith(expect.objectContaining({mode:"business"}),"zelo_of_overview",{p_environment:"production"});
+  expect(answer).toContain("Banco Empresa");expect(answer).toContain("Empresa · Samira");expect(m.rpc).toHaveBeenCalledWith(expect.objectContaining({mode:"business"}),"zelo_of_overview",{p_environment:"production"});
   m.rpc.mockClear();
   expect(await answerBankWhatsAppMessage(user as never,"personal","personal","Quais bancos estão conectados no modo Empresa?","2026-10-16")).toContain("não tem acesso");
   expect(m.rpc).not.toHaveBeenCalled();
@@ -105,6 +105,13 @@ it("does not query bank connection status outside the phone's permitted mode",as
   const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","Qual conexão bancária está inativa na empresa?","2026-10-16");
   expect(answer).toContain("não tem acesso");expect(m.rpc).not.toHaveBeenCalled();
 });
+it("routes a personal-only overview without treating the excluded company as a second request",async()=>{
+  const message="Mostre somente dados do modo Pessoal; não acesse a empresa.";
+  expect(await answerBankWhatsAppMessage(user as never,"business","both",message,"2026-10-16")).toBeNull();
+  const answer=await answerConnectedFinanceQuery(user,"business","both",{intent:"finance_query",confidence:1,mode:"personal"},["2026-10-01","2026-10-16"],message);
+  expect(answer).not.toContain("Escolha um modo");
+  expect(m.access).toHaveBeenCalledWith(expect.anything(),"personal",expect.anything());
+});
 it("answers future bank movement dates from stored movements without treating future due dates as errors",async()=>{
   m.ledger.mockResolvedValue({report:{movements:[{date:"2026-10-18",description:"Movimento futuro",institution_name:"Banco A",amount:"12",currency:"BRL"}],sync_pending:false},overview:{connections:[{status:"active"}]}});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Há datas bancárias que parecem estar no futuro?","2026-10-16");
@@ -112,6 +119,13 @@ it("answers future bank movement dates from stored movements without treating fu
   expect(answer).not.toContain("fontes públicas");
   expect(answer).toContain("Datas de vencimentos futuros são esperadas");
   expect(m.ledger).toHaveBeenCalledWith(expect.objectContaining({userId:user.id,mode:"personal"}),expect.objectContaining({from:"2026-10-17"}));
+});
+it("does not refer to listed future movements when none were received",async()=>{
+  m.ledger.mockResolvedValue({report:{movements:[],sync_pending:true},overview:{connections:[{status:"active"}]}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Há datas bancárias que parecem estar no futuro?","2026-10-16");
+  expect(answer).toContain("Nenhuma movimentação recebida");
+  expect(answer).not.toContain("movimentação acima");
+  expect(answer).toContain("sincronização");
 });
 it("answers due-today with only known dates in the selected mode",async()=>{
   m.financial.mockResolvedValue({commitments:[{id:"manual",mode:"personal",type:"expense",description:"Conta manual",amount:25,dueDate:"2026-10-16",origin:"scheduled"},{id:"other",mode:"business",type:"expense",description:"Outra empresa",amount:90,dueDate:"2026-10-16",origin:"scheduled"}],bank:{items:[{id:"bill",mode:"personal",kind:"bill",description:"Fatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-16",amount:"50",currency:"BRL"},{id:"estimate",mode:"personal",kind:"recurring",description:"Cobrança estimada",institution_name:"Banco B",resource_name:"Cartão",due_date:"2026-10-16",amount:"10",currency:"BRL"}],incomplete:true},forecasts:[],coverage:""});

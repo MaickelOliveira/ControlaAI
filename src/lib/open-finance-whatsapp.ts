@@ -19,7 +19,9 @@ import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
+const excludedMode=(text:string,mode:"pessoal"|"empresa")=>new RegExp(`\\b(?:nao (?:acesse|consulte|use|inclua|mostre)|sem (?:misturar|incluir|consultar|acessar|mostrar))(?: (?:os )?dados)?(?: (?:com )?(?:a|o|da|do))? ${mode}\\b`).test(text);
 const safeSummary=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,120);
+const bankModeLabel=(mode:"personal"|"business",companyName?:string)=>mode==="personal"?"Pessoal":`Empresa${companyName?` · ${safeSummary(companyName)}`:""}`;
 const shiftDay=(date:string,days:number)=>new Date(Date.parse(`${date}T12:00:00Z`)+days*86400000).toISOString().slice(0,10);
 const realizedTotal=(entries:readonly LedgerEntry[],mode:"personal"|"business",type:"income"|"expense",from:string,to:string)=>
   entries.filter(entry=>entry.mode===mode&&entry.included&&entry.status!=="pending"&&entry.type===type&&entry.date>=from&&entry.date<=to)
@@ -28,7 +30,7 @@ const realizedTotal=(entries:readonly LedgerEntry[],mode:"personal"|"business",t
 export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"business",phoneAccess:string,message:string,today:string):Promise<string|null>{
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true")return null;
   const text=normalize(message);
-  const business=/\b(empresa|empresarial|empresariais|pj)\b/.test(text),personal=/\b(pessoal|pessoais|pf)\b/.test(text);
+  const business=/\b(empresa|empresarial|empresariais|pj)\b/.test(text)&&!excludedMode(text,"empresa"),personal=/\b(pessoal|pessoais|pf)\b/.test(text)&&!excludedMode(text,"pessoal");
   const plainWording=text.trim().replace(/[?!.]+$/g,"");
   if(/^(?:explique (?:a )?|qual (?:e )?a )diferenca entre (?:o )?(?:dinheiro em conta|saldo da conta) e (?:o )?(?:valor investido|investimento)$/.test(plainWording))
     return "Dinheiro em conta é o saldo que o banco informa como disponível; confira no extrato se esse saldo inclui crédito adicional. O valor de um investimento é a posição de uma aplicação, que pode variar e não equivale a dinheiro disponível para gastar; resgate, prazo e impostos dependem do produto. Esses valores não são somados como se fossem o mesmo saldo. Confira cada posição no banco.";
@@ -56,7 +58,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
       const active=[...new Set(overview.connections.filter(connection=>connection.status==="active"&&!connection.archived_at)
         .map(connection=>safeSummary(connection.institution_name)))];
-      return `Bancos conectados · ${requested==="personal"?"Pessoal":"Empresa"}\n${active.map(name=>`• ${name} · ${BANK_STATUSES.active}`).join("\n")||"Nenhum banco com autorização ativa nos dados recebidos."}\nConexões expiradas ou canceladas ficam no histórico de Contas e não foram contadas como ativas.`;
+      return `Bancos conectados · ${bankModeLabel(requested,scope.companyName)}\n${active.map(name=>`• ${name} · ${BANK_STATUSES.active}`).join("\n")||"Nenhum banco com autorização ativa nos dados recebidos."}\nConexões expiradas ou canceladas ficam no histórico de Contas e não foram contadas como ativas.`;
     }catch{return "Não consegui consultar os bancos conectados agora. Confira Contas; não vou adivinhar quais estão ativos.";}
   }
   if(/\bconex(?:ao|oes) bancaria(?:s)?\b/.test(text)&&/\binativ[ao]s?\b/.test(text)){
@@ -66,7 +68,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
       const inactive=overview.connections.filter(connection=>["pending","expired","revoking","revoked","error"].includes(connection.status));
       const lines=inactive.map(connection=>`• ${safeSummary(connection.institution_name)} · ${BANK_STATUSES[connection.status]}${connection.archived_at?" · no histórico":""}`);
-      return `Conexões bancárias inativas · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.join("\n")||"Nenhuma conexão inativa nos dados recebidos."}\nUma conexão inativa pode manter dados antigos no histórico; confira Contas para reconectar ou remover da lista.`;
+      return `Conexões bancárias inativas · ${bankModeLabel(requested,scope.companyName)}\n${lines.join("\n")||"Nenhuma conexão inativa nos dados recebidos."}\nUma conexão inativa pode manter dados antigos no histórico; confira Contas para reconectar ou remover da lista.`;
     }catch{return "Não consegui consultar o estado das conexões bancárias agora. Confira Contas; não vou adivinhar quais estão inativas.";}
   }
   const billInOthers=/\bpagamentos? de fatura\b/.test(text)&&/\bclassificad[oa]s? como outros\b/.test(text);
@@ -123,7 +125,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       if(!overview.connections.length)return "Não recebi movimentações de um banco conectado neste modo para conferir datas futuras.";
       const future=report.movements.filter(item=>item.date>today&&item.date<=to);
       const lines=future.slice(0,5).map(item=>`• ${bankDate(item.date)} · ${safeSummary(item.institution_name)} · ${safeSummary(item.description)} · ${bankMoney(item.amount,item.currency)}`);
-      return `Movimentações bancárias com data futura · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.join("\n")||"Nenhuma movimentação recebida com data posterior a hoje nos próximos 12 meses."}${future.length>5?`\nMais ${future.length-5} movimentação(ões) em Contas.`:""}\nDatas de vencimentos futuros são esperadas e não foram tratadas como erro. Confira no banco qualquer movimentação acima: o histórico recebido pode estar incompleto${report.sync_pending?" e a sincronização pode estar pendente ou com falha":""}.`;
+      return `Movimentações bancárias com data futura · ${bankModeLabel(requested,scope.companyName)}\n${lines.join("\n")||"Nenhuma movimentação recebida com data posterior a hoje nos próximos 12 meses."}${future.length>5?`\nMais ${future.length-5} movimentação(ões) em Contas.`:""}\nDatas de vencimentos futuros são esperadas e não foram tratadas como erro. ${future.length?"Confira no banco as movimentações listadas. ":""}O histórico recebido pode estar incompleto${report.sync_pending?" e a sincronização pode estar pendente ou com falha":""}.`;
     }catch{return "Não consegui conferir datas futuras das movimentações bancárias agora. Confira Contas; não vou afirmar que há ou não erros sem consultar os dados.";}
   }
   const undatedDue=/\b(?:cobrancas?|parcelas?|contas?|obrigacoes?)\b/.test(text)&&/\b(?:sem data|nao (?:tem|possuem|temos) data|data nao informada)\b/.test(text);
@@ -332,7 +334,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
 export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:"personal"|"business",phoneAccess:string,ai:AIResult,defaultPeriod:[string,string],message=""):Promise<string|null>{
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true"||!["finance_query","balance_query","finance_detail","finance_analysis"].includes(ai.intent))return null;
   const messageMode=normalize(message);
-  const explicitBusiness=/\b(?:empresa|empresarial|pj)\b/.test(messageMode),explicitPersonal=/\b(?:pessoal|pf)\b/.test(messageMode);
+  const explicitBusiness=/\b(?:empresa|empresarial|pj)\b/.test(messageMode)&&!excludedMode(messageMode,"empresa"),explicitPersonal=/\b(?:pessoal|pf)\b/.test(messageMode)&&!excludedMode(messageMode,"pessoal");
   if(explicitBusiness&&explicitPersonal)return "Escolha um modo por consulta: Pessoal ou Empresa.";
   const requested=message?explicitBusiness?"business":explicitPersonal?"personal":mode:ai.mode??mode;
   if(requested!=="personal"&&requested!=="business")return null;
