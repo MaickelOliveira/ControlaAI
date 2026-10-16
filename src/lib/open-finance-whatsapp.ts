@@ -12,7 +12,8 @@ import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
 import {readBankAgenda,readFinancialAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
-import {bankDate,bankMoney} from "./open-finance-display";
+import {BANK_STATUSES,bankDate,bankMoney,type BankOverview} from "./open-finance-display";
+import {openFinanceRpc} from "./open-finance-http";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
@@ -43,7 +44,17 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const positionQuestion=isBankPositionQuestion(message);
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
-  if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|bancaria|conex|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(/\bconex(?:ao|oes) bancaria(?:s)?\b/.test(text)&&/\binativ[ao]s?\b/.test(text)){
+    try{
+      const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
+      if(!scope)return "Não consigo consultar conexões bancárias neste modo. Confira seu acesso e a página Contas.";
+      const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+      const inactive=overview.connections.filter(connection=>["pending","expired","revoking","revoked","error"].includes(connection.status));
+      const lines=inactive.map(connection=>`• ${safeSummary(connection.institution_name)} · ${BANK_STATUSES[connection.status]}${connection.archived_at?" · no histórico":""}`);
+      return `Conexões bancárias inativas · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.join("\n")||"Nenhuma conexão inativa nos dados recebidos."}\nUma conexão inativa pode manter dados antigos no histórico; confira Contas para reconectar ou remover da lista.`;
+    }catch{return "Não consegui consultar o estado das conexões bancárias agora. Confira Contas; não vou adivinhar quais estão inativas.";}
+  }
   const undatedDue=/\b(?:cobrancas?|parcelas?|contas?|obrigacoes?)\b/.test(text)&&/\b(?:sem data|nao (?:tem|possuem|temos) data|data nao informada)\b/.test(text);
   const dueToday=/\b(?:vence|vencem|vencimento|vencimentos) hoje\b/.test(text);
   const dueSeven=/\b(?:vence|vencem|vencimento|vencimentos)\b/.test(text)&&/\bproximos? (?:sete|7) dias\b/.test(text);
