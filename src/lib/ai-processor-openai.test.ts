@@ -138,6 +138,13 @@ describe("AI provider routing", () => {
     const answer=await processMessage("Qual foi meu resultado financeiro no Nubank mês passado?",context);
     expect(answer).toMatchObject({intent:"bank_query",bankQuery:{kind:"result",bankName:"Nubank"}});
   });
+  it.each(["Transporte","Alimentação"]) ("keeps %s spending by bank in the unified ledger",async category=>{
+    process.env.OPENAI_TEST_USER_IDS="another-user";
+    googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.95,bankQuery:{kind:"spending",category}})}});
+    const answer=await processMessage(`Quanto gastei em ${category.toLowerCase()} neste mês por banco?`,context);
+    expect(answer).toMatchObject({intent:"finance_query",category,financeType:"expense"});
+    expect(answer.bankQuery).toBeUndefined();
+  });
 
   it("keeps an explicitly requested merchant when the model drops it and returns a broad expense category", async () => {
     process.env.OPENAI_TEST_USER_IDS = "another-user";

@@ -10,7 +10,7 @@ import {BANK_QUERY_GUIDANCE} from "./bank-query-intent";
 import {expandMerchantAliases,getPendingFinances} from "./finances";
 import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
-import {readBankAgenda} from "./financial-agenda";
+import {readBankAgenda,readFinancialAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
 import {bankDate,bankMoney} from "./open-finance-display";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
@@ -43,7 +43,54 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const positionQuestion=isBankPositionQuestion(message);
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
-  if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  const undatedDue=/\b(?:cobrancas?|parcelas?|contas?|obrigacoes?)\b/.test(text)&&/\b(?:sem data|nao (?:tem|possuem|temos) data|data nao informada)\b/.test(text);
+  const dueToday=/\b(?:vence|vencem|vencimento|vencimentos) hoje\b/.test(text);
+  const dueSeven=/\b(?:vence|vencem|vencimento|vencimentos)\b/.test(text)&&/\bproximos? (?:sete|7) dias\b/.test(text);
+  const dueMonth=/\b(?:vence|vencem|vencimento|vencimentos)\b/.test(text)&&/\bate o fim do mes\b/.test(text);
+  if(undatedDue||((dueToday||dueSeven||dueMonth)&&!/\bfaturas?\b|\bparcelas? do cartao\b/.test(text))){
+    const to=undatedDue?shiftDay(today,365):dueToday?today:dueSeven?shiftDay(today,6)
+      :new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
+    const confirmedDate=/\bdata confirmada\b/.test(text);
+    try{
+      const agenda=await readFinancialAgenda(user,requested,{from:today,to,today,includeUndated:undatedDue,includeBank:true});
+      const manual=agenda.commitments.filter(item=>item.mode===requested&&item.type==="expense"&&(undatedDue?!item.dueDate:Boolean(item.dueDate&&item.dueDate>=today&&item.dueDate<=to))&&(!confirmedDate||item.origin==="scheduled"));
+      const bank=agenda.bank.items.filter(item=>!item.mode||item.mode===requested).filter(item=>undatedDue?!item.due_date:Boolean(item.due_date&&item.due_date>=today&&item.due_date<=to)).filter(item=>!confirmedDate||item.kind==="bill");
+      const lines=[
+        ...manual.map(item=>`• ${safeSummary(item.description)} · ${bankMoney(item.amount,"BRL")}${item.dueDate?` · ${bankDate(item.dueDate)}`:" · data não informada"} · ${item.origin==="scheduled"?"cadastrado na Zelo":"previsão cadastrada na Zelo"}`),
+        ...bank.map(item=>`• ${safeSummary(item.kind==="bill"?"Fatura":item.description)} · ${safeSummary(item.institution_name)} · ${bankMoney(item.amount,item.currency)}${item.due_date?` · ${bankDate(item.due_date)}`:" · data não informada"} · ${item.kind==="recurring"?"data estimada a partir do histórico bancário":"pagamento não confirmado"}`),
+      ];
+      const title=undatedDue?"Cobranças recebidas sem data informada":dueToday?"Vencimentos de hoje com data informada":`Vencimentos de ${bankDate(today)} a ${bankDate(to)}`;
+      const empty=undatedDue?"Não recebi cobranças sem data neste modo; isso não prova que não existam.":"Não recebi vencimentos com data neste período; isso não prova que não existam.";
+      const note=undatedDue?"Sem uma data, não posso confirmar que essas cobranças vencerão no futuro nem que ainda não foram pagas.":"Datas estimadas pelo banco são previsões. O pagamento precisa ser conferido; valores de fontes diferentes podem representar a mesma cobrança.";
+      return `${title} · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.slice(0,10).join("\n")||empty}${lines.length>10?`\nMais ${lines.length-10} item(ns) em Finanças e Contas.`:""}\n${note}${agenda.bank.incomplete?" Há dados incompletos do banco.":""}`;
+    }catch{return "Não consegui conferir os vencimentos agora. Tente novamente em Finanças ou Contas; não vou afirmar que não há cobranças sem consultar os dados.";}
+  }
+  const paidForecast=/\bprevis(?:ao|oes)\b/.test(text)&&/\b(?:pagas?|pagos?|quitadas?|quitados?)\b/.test(text);
+  const unconfirmedFuture=/\b(?:obrigacoes?|cobrancas?|faturas?|parcelas?) futuras?\b/.test(text)&&/\b(?:nao confirmadas?|sem confirmacao)\b/.test(text);
+  if(paidForecast||unconfirmedFuture){
+    const to=shiftDay(today,365);
+    const from=paidForecast?`${today.slice(0,7)}-01`:today;
+    try{
+      if(!await getOpenFinanceAccess(user,requested,{throwOnStorageError:true}))return "Não tenho dados de um banco conectado neste modo para confirmar pagamentos. Confira Contas; não vou tratar ausência de dados como ausência de cobrança.";
+      const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:paidForecast,includeObservedInstallments:paidForecast});
+      const items=agenda.items.filter(item=>(!item.mode||item.mode===requested)&&(paidForecast?item.payment_evidence===true:Boolean(item.due_date&&item.due_date>=today&&item.payment_evidence!==true)));
+      const lines=items.slice(0,10).map(item=>`• ${safeSummary(item.description||"Fatura")} · ${safeSummary(item.institution_name)} · ${item.due_date?bankDate(item.due_date):"data não informada"} · ${bankMoney(item.amount,item.currency)} · ${paidForecast?`pagamento informado${item.payment_amount?` (${bankMoney(item.payment_amount,item.currency)})`:"; valor pago não informado"}`:item.kind==="recurring"?"previsão estimada; pagamento não confirmado":"pagamento não confirmado"}`);
+      const title=paidForecast?"Previsões com pagamento informado pelo banco":"Obrigações futuras sem pagamento confirmado pelo banco";
+      const empty=paidForecast?"O banco não informou pagamento dessas previsões no período consultado; isso não prova que não foram pagas.":"Não recebi obrigações futuras datadas sem confirmação de pagamento; isso não prova que não existam.";
+      const caveat=paidForecast?"Um pagamento informado pode ser parcial; isso não confirma quitação total.":"Sem confirmação não significa dívida em aberto ou atraso. Itens sem data não foram classificados como futuros.";
+      return `${title} · ${requested==="personal"?"Pessoal":"Empresa"} · ${bankDate(from)} a ${bankDate(to)}\n${lines.join("\n")||empty}${items.length>10?`\nMais ${items.length-10} item(ns) em Contas.`:""}\n${caveat}${agenda.incomplete?" Há dados incompletos do banco.":""}`;
+    }catch{return "Não consegui conferir a confirmação de pagamentos agora. Consulte Contas ou o banco; não vou afirmar que uma cobrança foi paga ou ficou em aberto sem dados.";}
+  }
+  if(/\b(?:qual|quais) periodo\b/.test(text)&&/\bextrato\b/.test(text)&&/\bincompleto\b/.test(text)){
+    try{
+      const {bank}=await readUnifiedFinances(user,requested,`${today.slice(0,7)}-01`,today);
+      if(!bank?.overview.connections.length)return "Não recebi um extrato bancário neste modo. Confira Contas e a conexão; não consigo identificar um período faltante.";
+      const report=bank.report;
+      const interval=`${bankDate(report.from)} a ${bankDate(report.to)}`;
+      return `Extrato bancário consultado · ${requested==="personal"?"Pessoal":"Empresa"}\nPeríodo solicitado: ${interval}. O histórico recebido pode estar incompleto${report.sync_pending?"; há uma atualização pendente ou com falha":""}.${report.missing_dates?` O banco enviou ${report.missing_dates} movimento(s) sem data; eles não entram nesse período.`:""} Com esses dados, não consigo identificar os dias exatos que faltam nem afirmar que um dia sem lançamentos esteja completo. Última atualização recebida: ${bankDate(report.last_successful_sync_at)}.`;
+    }catch{return "Não consegui conferir a cobertura do extrato agora. Tente novamente em Finanças; não vou inventar o período ausente.";}
+  }
   if(/^quais parcelas (?:nao tem|estao sem) confirmacao de pagamento$/.test(plainWording)){
     const [year,month,day]=today.split("-").map(Number);
     const to=new Date(Date.UTC(year+1,month-1,day)).toISOString().slice(0,10);
@@ -198,7 +245,10 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
 /** The model supplies filters only. Financial rows and totals never enter its prompt. */
 export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:"personal"|"business",phoneAccess:string,ai:AIResult,defaultPeriod:[string,string],message=""):Promise<string|null>{
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true"||!["finance_query","balance_query","finance_detail","finance_analysis"].includes(ai.intent))return null;
-  const requested=ai.mode??mode;
+  const messageMode=normalize(message);
+  const explicitBusiness=/\b(?:empresa|empresarial|pj)\b/.test(messageMode),explicitPersonal=/\b(?:pessoal|pf)\b/.test(messageMode);
+  if(explicitBusiness&&explicitPersonal)return "Escolha um modo por consulta: Pessoal ou Empresa.";
+  const requested=message?explicitBusiness?"business":explicitPersonal?"personal":mode:ai.mode??mode;
   if(requested!=="personal"&&requested!=="business")return null;
   if(phoneAccess!=="both"&&requested!==mode)return "Este número não tem acesso a esse modo da Zelo.";
   if(ai.personName)return null;

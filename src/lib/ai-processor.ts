@@ -3873,6 +3873,15 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
     const income=/\b(?:entradas?|receitas?|recebimentos?)\b/.test(financeText)&&!/\b(?:gastos?|despesas?|saidas?)\b/.test(financeText);
     return withExplicitRelativePeriod(message,{...result,intent:"finance_query",confidence:Math.max(result.confidence,.95),financeType:generalResult?undefined:income?"income":"expense",bankQuery:undefined,account:undefined,category:undefined,keyword:undefined,personName:undefined,response:undefined});
   }
+  const categoryByBank=/\bpor banco\b/.test(financeText)&&/\b(?:quanto (?:eu )?gastei|gastos?|despesas?)\b/.test(financeText)
+    ?[...CATEGORIES_EXPENSE,...(ctx?.user.customCategoriesExpense??[])].find(category=>{
+      const escaped=normalizeCapabilityText(category).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+      return new RegExp(`\\b(?:em|com|de)\\s+${escaped}\\b`).test(financeText);
+    }):undefined;
+  if(categoryByBank&&["bank_query","finance_query","finance_analysis","how_to","unknown"].includes(result.intent)
+    &&(!modelBank||normalizeCapabilityText(modelBank)===normalizeCapabilityText(categoryByBank)||!financeText.includes(normalizeCapabilityText(modelBank)))){
+    return withExplicitRelativePeriod(message,{...result,intent:"finance_query",confidence:Math.max(result.confidence,.95),financeType:"expense",category:categoryByBank,bankQuery:undefined,account:undefined,keyword:undefined,personName:undefined,response:undefined});
+  }
   if (deliverySpending && !merchant && ["how_to", "unknown", "finance_query", "finance_analysis", "bank_query"].includes(result.intent)) {
     const query = result.intent === "bank_query" ? validateBankQuery(result.bankQuery) : undefined;
     if (unresolvedDeliveryMerchant(message, query?.keyword ?? result.keyword, query?.bankName)) {
