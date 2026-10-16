@@ -108,6 +108,38 @@ describe("saved bank positions", () => {
     const shown=answer(data,"Mostre meus investimentos");
     expect(shown).toContain("CDB teste");expect(shown).toContain("Sicredi");expect(shown).not.toContain("Nubank");
   });
+  it("answers focused investment questions from bank positions without inventing missing data",()=>{
+    const data=overview();
+    data.resources.push(
+      {...resource("cdb","si","investment","CDB teste"),gross_amount:"300",net_amount:"290",valuation_date:"2026-10-10"},
+      {...resource("fund","nu","investment","Fundo sem data"),currency:"USD",gross_amount:"50",net_amount:"48",valuation_date:null},
+    );
+    const amounts=answer(data,"Mostre valor bruto e líquido de cada investimento.");
+    expect(amounts).toContain("CDB teste");expect(amounts).toContain("Fundo sem data");
+    expect(amounts).toContain("Bruto:");expect(amounts).toContain("Líquido:");
+    const latest=answer(data,"Qual investimento tem a posição mais recente?");
+    expect(latest).toContain("CDB teste");expect(latest).not.toContain("Fundo sem data");
+    const missingDate=answer(data,"Quais investimentos estão sem data de avaliação?");
+    expect(missingDate).toContain("Fundo sem data");expect(missingDate).not.toContain("CDB teste");
+    expect(answer(data,"Mostre aplicações sem data de posição.")).toContain("Fundo sem data");
+    const banks=answer(data,"Quais bancos não enviaram dados de investimento?");
+    expect(banks).toContain("Realize");expect(banks).not.toContain("Nubank");expect(banks).not.toContain("Sicredi");
+    const currencies=answer(data,"Não some investimentos em moedas diferentes.");
+    expect(currencies).toContain("BRL");expect(currencies).toContain("USD");
+    expect(currencies).toContain("não são somados");
+    expect(currencies).not.toContain("Total informado");
+    expect(answer(data,"Separe aplicações por moedas diferentes.")).toContain("não são somados");
+  });
+  it("identifies all connected banks with no investment data without saying the user has no investments",()=>{
+    const answerText=answer(overview(),"Quais bancos não enviaram dados de investimento?");
+    expect(answerText).toContain("Nubank");expect(answerText).toContain("Sicredi");expect(answerText).toContain("Realize");
+    expect(answerText).not.toContain("Banco removido");
+    expect(answerText).toContain("não confirma ausência de investimentos");
+    expect(answer(overview(),"Quais investimentos estão sem data de avaliação?")).toContain("para conferir quais estão sem data");
+  });
+  it("does not drop a named-bank qualifier from a focused investment request",()=>{
+    expect(parseBankQuestion("Quais investimentos estão sem data de avaliação no Banco Teste?","2026-10-11")).toBeNull();
+  });
   it("answers financing separately and keeps unknown installments unknown", () => {
     const text = answer(overview(), "Mostre meus financiamentos no Sicredi");
     expect(text).toContain("Veículo"); expect(text).toContain(bankMoney("8000.81", "BRL"));

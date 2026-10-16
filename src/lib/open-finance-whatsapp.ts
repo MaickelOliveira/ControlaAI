@@ -23,6 +23,17 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true")return null;
   const text=normalize(message);
   const business=/\b(empresa|empresarial|empresariais|pj)\b/.test(text),personal=/\b(pessoal|pessoais|pf)\b/.test(text);
+  const investmentWording=text.trim().replace(/[?!.]+$/g,"");
+  if(/^(?:explique (?:a )?|qual (?:e )?a )diferenca entre (?:o )?(?:dinheiro em conta|saldo da conta) e (?:o )?(?:valor investido|investimento)$/.test(investmentWording))
+    return "Dinheiro em conta é o saldo que o banco informa como disponível; confira no extrato se esse saldo inclui crédito adicional. O valor de um investimento é a posição de uma aplicação, que pode variar e não equivale a dinheiro disponível para gastar; resgate, prazo e impostos dependem do produto. Esses valores não são somados como se fossem o mesmo saldo. Confira cada posição no banco.";
+  if(/^(?:separe|mostre) (?:os )?investimentos? pesso(?:al|ais) (?:separados? )?(?:de|dos) (?:os )?investimentos? da empresa$/.test(investmentWording)){
+    if(phoneAccess!=="both")return "Este número precisa ter acesso aos modos Pessoal e Empresa para comparar as duas posições. Confira o acesso no painel da Zelo.";
+    const [personalAnswer,businessAnswer]=await Promise.all([
+      answerBankQuestion(user,"personal","Mostre meus investimentos",today),
+      answerBankQuestion(user,"business","Mostre meus investimentos",today),
+    ]);
+    return `Investimentos separados por modo\n\nPessoal: ${personalAnswer??"consulta indisponível neste modo"}\n\nEmpresa: ${businessAnswer??"consulta indisponível para a empresa selecionada"}\nAs posições de Pessoal e Empresa não são somadas.`;
+  }
   const positionQuestion=isBankPositionQuestion(message);
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;

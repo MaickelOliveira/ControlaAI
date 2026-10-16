@@ -11,6 +11,7 @@ export type BankQuestion = {
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
   debtView?: "balance" | "contracted" | "next-installment" | "missing-next-installment" | "missing-due-date" | "zero" | "positive" | "max-balance" | "min-positive";
+  investmentView?: "gross-net" | "latest" | "missing-date" | "missing-bank" | "currency";
   limitView?: "used" | "available-known" | "shared" | "inconsistent" | "max-available" | "min-available";
 };
 
@@ -110,6 +111,19 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
   ];
   for (const [pattern,debtView] of focusedLoans) if (pattern.test(text))
     return {kind:"loans",...monthPeriod(today,false),debtView};
+  if (/\b(?:investimentos?|aplicacoes?)\b/.test(text)) {
+    const investmentView: BankQuestion["investmentView"] =
+      /\b(?:valor(?:es)? )?bruto\b/.test(text) && /\bliquido\b/.test(text) ? "gross-net" :
+      /\b(?:posicao|avaliacao) mais recente\b/.test(text) ? "latest" :
+      /\bsem data de (?:avaliacao|posicao)\b/.test(text) ? "missing-date" :
+      /\b(?:bancos?|instituicoes?)\b/.test(text) && /\bnao (?:enviaram|informaram|tem|receberam)\b/.test(text) ? "missing-bank" :
+      /\b(?:nao some|nao somar|separe|separar)\b/.test(text) && /\b(?:por )?moedas? diferentes\b/.test(text) ? "currency" : undefined;
+    // Do not silently discard a named-bank qualifier from a focused question.
+    const namedBankQualifier=/\b(?:investimentos?|aplicacoes?)\b.*\b(?:no|na|do|da) (?!modo\b|mes\b|periodo\b)(?:banco )?[a-z]/.test(text);
+    if (investmentView && namedBankQualifier) return null;
+    if (investmentView && !namedBankQualifier && !mutation.test(text) && !/\b(?:ontem|mes passado|ano passado)\b/.test(text))
+      return {kind:"investments",...monthPeriod(today,false),investmentView};
+  }
   if (/^(?:existe|ha|tem) (?:alguma conta(?: pessoal)? com|algum) saldo negativo(?:\? mostre (?:somente|apenas) essas contas)?$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
   if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))
