@@ -75,6 +75,14 @@ it("recognizes the next installment across all personal loans", () => {
   expect(parseBankQuestion("Qual é o valor da próxima parcela de cada empréstimo? Avise quais bancos não informaram esse valor.", "2026-10-11"))
     .toMatchObject({kind:"loans"});
 });
+it.each([
+  "Qual é o saldo devedor de cada empréstimo?",
+  "Mostre o saldo devedor de todos os meus empréstimos.",
+  "Quanto falta pagar em cada empréstimo?",
+])("recognizes each-loan balance without treating the rest of the sentence as a bank: %s", message => {
+  expect(parseBankQuestion(message,"2026-10-15")).toMatchObject({kind:"loans",debtView:"balance"});
+  expect(parseBankQuestion(message,"2026-10-15")?.bankName).toBeUndefined();
+});
 it("recognizes settled loans without accepting the rest of a sentence as a bank name", () => {
   expect(parseBankQuestion("Quais empréstimos já estão quitados? Separe por banco e não conte como dívida.", "2026-10-11"))
     .toMatchObject({kind:"loans",settledOnly:true});

@@ -22,6 +22,20 @@ describe("saved bank positions", () => {
     expect(text).toContain("não informou"); expect(text).not.toContain("Banco removido"); expect(text).not.toContain("Não autorizado");
     expect(text).not.toContain("8.000"); expect(text).not.toContain("Você gastou");
   });
+  it("shows only each loan balance, including a reported zero and an unknown value", () => {
+    const data=overview();
+    data.credit[1].outstanding_amount="0";
+    data.resources.push(resource("real-loan","real","loan","Contrato sem posição"));
+    const text=answer(data,"Qual é o saldo devedor de cada empréstimo?");
+    expect(text).toContain("Crédito pessoal");
+    expect(text).toContain("Crédito fácil");
+    expect(text).toContain("Contrato sem posição");
+    expect(text).toContain(`Saldo devedor: ${bankMoney("0","BRL")}`);
+    expect(text).toContain("Saldo devedor: Não informado");
+    expect(text).not.toContain("Contratado:");
+    expect(text).not.toContain("Valor da próxima parcela:");
+    expect(text).not.toContain("Banco removido");
+  });
   it("shows only known zero-balance loans when asked which are settled", () => {
     const data=overview();
     data.credit[0].outstanding_amount="0.00000000";

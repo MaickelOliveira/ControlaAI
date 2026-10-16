@@ -10,6 +10,7 @@ export type BankQuestion = {
   settledOnly?: boolean;
   balanceFilter?: "negative" | "missing";
   latestSnapshot?: boolean;
+  debtView?: "balance";
   limitView?: "used" | "available-known" | "shared" | "inconsistent" | "max-available" | "min-available";
 };
 
@@ -95,6 +96,8 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     return {kind:"limits",...monthPeriod(today,false),limitView:"inconsistent"};
   if (/^qual cartao tem o (maior|menor) limite disponivel$/.test(text))
     return {kind:"limits",...monthPeriod(today,false),limitView:text.includes("maior")?"max-available":"min-available"};
+  if (/^(?:(?:qual (?:e )?(?:o )?|mostre (?:o )?)saldo devedor (?:de cada|de todos os meus|dos meus|de meus) emprestimos?|quanto falta pagar (?:em|de) cada emprestimo)$/.test(text))
+    return {kind:"loans",...monthPeriod(today,false),debtView:"balance"};
   if (/^(?:existe|ha|tem) (?:alguma conta(?: pessoal)? com|algum) saldo negativo(?:\? mostre (?:somente|apenas) essas contas)?$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),balanceFilter:"negative"};
   if (/^quais (?:sao as )?contas (?:conectadas )?(?:nao (?:enviaram|informaram|tem) saldo|sem saldo(?: informado)?)$/.test(text))
