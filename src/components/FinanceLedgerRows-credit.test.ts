@@ -19,3 +19,10 @@ it("labels a confirmed own-account transfer as outside the result while keeping 
  expect(text).toContain("Alterar categoria");
  expect(text).not.toContain("Valor/direção não informados");
 });
+it("shows the manual account that received a WhatsApp expense",()=>{
+ const entry={id:"expense",type:"expense",amount:90,category:"Saúde",description:"Farmacia",date:"2026-10-15",mode:"personal",source:"whatsapp" as const,accountId:"cash"};
+ const text=renderToStaticMarkup(createElement(FinanceLedgerRows,{entries:createFinanceLedger([entry],[],"personal"),accounts:[{id:"cash",name:"Dinheiro"}],selectMode:false,selectedIds:new Set<string>(),onToggle:()=>{},onEdit:()=>{},onDelete:()=>{},displayDescription:value=>value,displayDate:item=>item.date}));
+ expect(text).toContain("Farmacia");
+ expect(text).toContain("WhatsApp");
+ expect(text).toContain("Conta: Dinheiro");
+});
