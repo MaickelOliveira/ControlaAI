@@ -3861,7 +3861,8 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
   const modelBank=validateBankQuery(result.bankQuery)?.bankName;
   const bankSpecific=/\b(?:bancos?|bancari[oa]s?|cartao|cartoes|open finance)\b/.test(financeText)
     ||!!modelBank&&financeText.includes(normalizeCapabilityText(modelBank));
-  const generalResult=/\bresultado financeiro\b/.test(financeText)&&/\b(?:mes|semana|periodo|ano)\b/.test(financeText);
+  const generalResult=/\bresultado financeiro\b/.test(financeText)&&/\b(?:mes|semana|periodo|ano)\b/.test(financeText)
+    ||/\bresumo (?:de|do) (?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|mes passado)\b/.test(financeText);
   const comparesPeriods=/\bcompar(?:e|ar|acao)\b/.test(financeText)&&/\b(?:gastos?|despesas?|saidas?|entradas?|receitas?|recebimentos?)\b/.test(financeText);
   const generalComparison=comparesPeriods&&(
     /\b(?:esta|desta|nesta) semana\b/.test(financeText)&&/\bsemana (?:anterior|passada)\b/.test(financeText)
@@ -3871,6 +3872,15 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
   if(!bankSpecific&&(generalResult||generalComparison||generalTopFive)&&["bank_query","finance_query","finance_analysis","how_to","unknown"].includes(result.intent)){
     const income=/\b(?:entradas?|receitas?|recebimentos?)\b/.test(financeText)&&!/\b(?:gastos?|despesas?|saidas?)\b/.test(financeText);
     return withExplicitRelativePeriod(message,{...result,intent:"finance_query",confidence:Math.max(result.confidence,.95),financeType:generalResult?undefined:income?"income":"expense",bankQuery:undefined,account:undefined,category:undefined,keyword:undefined,personName:undefined,response:undefined});
+  }
+  const categoryByBank=/\bpor banco\b/.test(financeText)&&/\b(?:quanto (?:eu )?gastei|gastos?|despesas?)\b/.test(financeText)
+    ?[...CATEGORIES_EXPENSE,...(ctx?.user.customCategoriesExpense??[])].find(category=>{
+      const escaped=normalizeCapabilityText(category).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+      return new RegExp(`\\b(?:em|com|de)\\s+${escaped}\\b`).test(financeText);
+    }):undefined;
+  if(categoryByBank&&["bank_query","finance_query","finance_analysis","how_to","unknown"].includes(result.intent)
+    &&(!modelBank||normalizeCapabilityText(modelBank)===normalizeCapabilityText(categoryByBank)||!financeText.includes(normalizeCapabilityText(modelBank)))){
+    return withExplicitRelativePeriod(message,{...result,intent:"finance_query",confidence:Math.max(result.confidence,.95),financeType:"expense",category:categoryByBank,bankQuery:undefined,account:undefined,keyword:undefined,personName:undefined,response:undefined});
   }
   if (deliverySpending && !merchant && ["how_to", "unknown", "finance_query", "finance_analysis", "bank_query"].includes(result.intent)) {
     const query = result.intent === "bank_query" ? validateBankQuery(result.bankQuery) : undefined;

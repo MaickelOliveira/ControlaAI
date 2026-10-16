@@ -124,6 +124,7 @@ describe("AI provider routing", () => {
     ["Compare as entradas deste mês com as do mês passado.", "income"],
     ["Quais foram as cinco maiores despesas deste mês?", "spending"],
     ["Quais foram as cinco maiores receitas deste mês?", "income"],
+    ["Me dê um resumo de setembro sem trazer itens de outubro.", "spending"],
   ])("keeps a general finance request in the unified ledger despite a bank-only model guess: %s", async(message,kind)=>{
     process.env.OPENAI_TEST_USER_IDS="another-user";
     googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.95,bankQuery:{kind}})}});
@@ -136,6 +137,13 @@ describe("AI provider routing", () => {
     googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.95,bankQuery:{kind:"result",bankName:"Nubank"}})}});
     const answer=await processMessage("Qual foi meu resultado financeiro no Nubank mês passado?",context);
     expect(answer).toMatchObject({intent:"bank_query",bankQuery:{kind:"result",bankName:"Nubank"}});
+  });
+  it.each(["Transporte","Alimentação"]) ("keeps %s spending by bank in the unified ledger",async category=>{
+    process.env.OPENAI_TEST_USER_IDS="another-user";
+    googleGenerateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({intent:"bank_query",confidence:.95,bankQuery:{kind:"spending",category}})}});
+    const answer=await processMessage(`Quanto gastei em ${category.toLowerCase()} neste mês por banco?`,context);
+    expect(answer).toMatchObject({intent:"finance_query",category,financeType:"expense"});
+    expect(answer.bankQuery).toBeUndefined();
   });
 
   it("keeps an explicitly requested merchant when the model drops it and returns a broad expense category", async () => {

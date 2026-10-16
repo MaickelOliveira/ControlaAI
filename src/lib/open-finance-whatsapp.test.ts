@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from "vitest";
 vi.mock("server-only",()=>({}));
-const m=vi.hoisted(()=>({access:vi.fn(),read:vi.fn(),bank:vi.fn(),pending:vi.fn(),recurring:vi.fn(),agenda:vi.fn()}));
-vi.mock("./financial-agenda",()=>({readBankAgenda:m.agenda}));
+const m=vi.hoisted(()=>({access:vi.fn(),read:vi.fn(),bank:vi.fn(),pending:vi.fn(),recurring:vi.fn(),agenda:vi.fn(),financial:vi.fn()}));
+vi.mock("./financial-agenda",()=>({readBankAgenda:m.agenda,readFinancialAgenda:m.financial}));
 vi.mock("./open-finance-access",()=>({getOpenFinanceAccess:m.access,canEnrollOpenFinance:()=>true}));
 vi.mock("./unified-finances",()=>({readUnifiedFinances:m.read}));
 vi.mock("./open-finance-question",()=>({answerBankQuestion:m.bank,parseBankQuestion:()=>null}));
@@ -10,7 +10,65 @@ vi.mock("./recurring",()=>({getRecurringByUser:m.recurring}));
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "./open-finance-whatsapp";
 import {bankMoney} from "./open-finance-display";
 const user={id:"own-user",email:"user@example.test",plan:"business",activeMode:"personal",status:"active"} as const;
-beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});});
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});m.financial.mockResolvedValue({commitments:[],bank:{items:[],incomplete:false},forecasts:[],coverage:""});});
+it("answers due-today with only known dates in the selected mode",async()=>{
+  m.financial.mockResolvedValue({commitments:[{id:"manual",mode:"personal",type:"expense",description:"Conta manual",amount:25,dueDate:"2026-10-16",origin:"scheduled"},{id:"other",mode:"business",type:"expense",description:"Outra empresa",amount:90,dueDate:"2026-10-16",origin:"scheduled"}],bank:{items:[{id:"bill",mode:"personal",kind:"bill",description:"Fatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-16",amount:"50",currency:"BRL"},{id:"estimate",mode:"personal",kind:"recurring",description:"Cobrança estimada",institution_name:"Banco B",resource_name:"Cartão",due_date:"2026-10-16",amount:"10",currency:"BRL"}],incomplete:true},forecasts:[],coverage:""});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","O que vence hoje com data confirmada?","2026-10-16");
+  expect(answer).toContain("Conta manual");expect(answer).toContain("Fatura");
+  expect(answer).not.toContain("Outra empresa");expect(answer).not.toContain("Cobrança estimada");expect(answer).not.toContain("Resultado realizado");
+  expect(answer).toContain("dados incompletos");
+  expect(m.financial).toHaveBeenCalledWith(user,"personal",expect.objectContaining({from:"2026-10-16",to:"2026-10-16"}));
+});
+it("does not reveal company due dates to a personal-only phone",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","O que vence hoje na empresa?","2026-10-16");
+  expect(answer).toContain("não tem acesso");expect(m.financial).not.toHaveBeenCalled();
+});
+it("uses seven inclusive dates and separates dated bank estimates from manual bills",async()=>{
+  m.financial.mockResolvedValue({commitments:[],bank:{items:[{id:"a",mode:"personal",kind:"recurring",description:"Via Laser",institution_name:"Mercado Pago",resource_name:"Cartão",due_date:"2026-10-20",amount:"89.90",currency:"BRL"}],incomplete:false},forecasts:[],coverage:""});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","O que vence nos próximos sete dias?","2026-10-16");
+  expect(answer).toContain("16/10/2026 a 22/10/2026");expect(answer).toContain("Via Laser");expect(answer).toContain("estimada");
+  expect(answer).not.toContain("Não encontrei despesas");expect(answer).not.toContain("Resultado realizado");
+  expect(m.financial).toHaveBeenCalledWith(user,"personal",expect.objectContaining({from:"2026-10-16",to:"2026-10-22"}));
+});
+it("lists undated bank installments without calling their payment future or confirmed",async()=>{
+  m.financial.mockResolvedValue({commitments:[],bank:{items:[{id:"undated",mode:"personal",kind:"installment",description:"Compra parcelada",institution_name:"Banco A",resource_name:"Cartão",due_date:null,amount:"25",currency:"BRL"},{id:"dated",mode:"personal",kind:"recurring",description:"Assinatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-20",amount:"10",currency:"BRL"}],incomplete:false},forecasts:[],coverage:""});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais cobranças futuras não têm data informada?","2026-10-16");
+  expect(answer).toContain("Compra parcelada");expect(answer).toContain("data não informada");expect(answer).toContain("não posso confirmar");
+  expect(answer).not.toContain("Assinatura");expect(answer).not.toContain("Resultado realizado");
+  expect(m.financial).toHaveBeenCalledWith(user,"personal",expect.objectContaining({includeUndated:true}));
+});
+it("reports only explicit bank payment evidence for forecasts",async()=>{
+  m.agenda.mockResolvedValue({items:[{id:"paid",mode:"personal",kind:"bill",description:"Fatura A",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-18",amount:"100",currency:"BRL",payment_evidence:true,payment_amount:"40"},{id:"unknown",mode:"personal",kind:"recurring",description:"Via Laser",institution_name:"Banco B",resource_name:"Cartão",due_date:"2026-10-20",amount:"20",currency:"BRL",payment_evidence:false}],incomplete:false});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Alguma previsão já aparece como paga?","2026-10-16");
+  expect(answer).toContain("Fatura A");expect(answer).toContain("pagamento informado");expect(answer?.replace(/\s/g," ")).toContain("R$ 40,00");
+  expect(answer).not.toContain("Via Laser");expect(answer).not.toContain("totalmente quitada");
+});
+it("does not report zero paid forecasts without a bank connection",async()=>{
+  m.access.mockResolvedValue(null);
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Alguma previsão já aparece como paga?","2026-10-16");
+  expect(answer).toContain("Não tenho dados de um banco conectado");expect(m.agenda).not.toHaveBeenCalled();
+});
+it("lists only dated future bank obligations without payment confirmation",async()=>{
+  m.agenda.mockResolvedValue({items:[{id:"a",mode:"personal",kind:"bill",description:"Fatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-20",amount:"100",currency:"BRL",payment_evidence:false},{id:"b",mode:"personal",kind:"bill",description:"Paga",institution_name:"Banco B",resource_name:"Cartão",due_date:"2026-10-21",amount:"40",currency:"BRL",payment_evidence:true},{id:"c",mode:"personal",kind:"installment",description:"Sem data",institution_name:"Banco C",resource_name:"Cartão",due_date:null,amount:"20",currency:"BRL"}],incomplete:true});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre apenas obrigações futuras ainda não confirmadas pelo banco.","2026-10-16");
+  expect(answer).toContain("Fatura");expect(answer).toContain("Banco A");expect(answer).toContain("pagamento não confirmado");
+  expect(answer).not.toContain("Paga");expect(answer).not.toContain("Sem data");expect(answer).toContain("dados incompletos");
+});
+it("states the queried bank statement interval without inventing an exact gap",async()=>{
+  m.read.mockResolvedValue({entries:[],bank:{overview:{connections:[{}]},report:{from:"2026-10-01",to:"2026-10-16",history_complete:false,sync_pending:true,missing_dates:2,last_successful_sync_at:"2026-10-15T12:00:00Z"}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Qual período do meu extrato está incompleto?","2026-10-16");
+  expect(answer).toContain("01/10/2026 a 16/10/2026");expect(answer).toContain("2 movimento");expect(answer).toContain("não consigo identificar os dias exatos");
+  expect(answer).not.toContain("zero");
+});
+it("uses the active personal mode when the model guesses company for an unqualified category question",async()=>{
+  const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,mode:"business",category:"Marketing",financeType:"expense"},["2026-10-01","2026-10-31"],"Quanto gastei em marketing neste mês?");
+  expect(answer).toContain("Pessoal");expect(answer).not.toContain("🏢 Empresa");
+  expect(m.read).toHaveBeenCalledWith(user,"personal","2026-10-01","2026-10-31");
+});
+it("honors an explicit company request even when the model guesses personal",async()=>{
+  const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,mode:"personal",category:"Marketing",financeType:"expense"},["2026-10-01","2026-10-31"],"Quanto gastei em marketing na empresa neste mês?");
+  expect(answer).toContain("Empresa");expect(m.read).toHaveBeenCalledWith(user,"business","2026-10-01","2026-10-31");
+});
 it("separates personal and business investment queries without mixing their positions",async()=>{
   m.bank.mockImplementation(async (_user:unknown,mode:string)=>mode==="personal"?"Pessoal: nenhum investimento informado.":"Empresa: posição bancária recebida.");
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Separe investimento pessoal de investimento da empresa.","2026-10-15");
@@ -71,6 +129,16 @@ it("includes manual and bank entries in a general financial result",async()=>{
   expect(reply).toContain(`Saídas: ${bankMoney(35,"BRL")}`);
   expect(reply).toContain(`Resultado do período: ${bankMoney(65,"BRL")}`);
   expect(reply).not.toContain("registros manuais ficam fora");
+});
+it("returns both directions for a requested monthly summary",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"income",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"income",category:"Outros",description:"Recebimento",amount:100},
+    {id:"expense",mode:"personal",included:true,source:"bank",date:"2026-09-11",type:"expense",category:"Outros",description:"Compra",amount:35},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-16"}}});
+  const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,financeType:"expense",period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"],"Me dê um resumo de setembro sem trazer itens de outubro.");
+  expect(reply).toContain(`Entradas: ${bankMoney(100,"BRL")}`);
+  expect(reply).toContain(`Saídas: ${bankMoney(35,"BRL")}`);
+  expect(reply).toContain(`Resultado do período: ${bankMoney(65,"BRL")}`);
 });
 it("compares this week with the previous week instead of returning only one period",async()=>{
   vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-16T15:00:00Z"));
