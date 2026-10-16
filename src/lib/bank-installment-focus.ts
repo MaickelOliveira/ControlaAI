@@ -4,7 +4,7 @@ import {bankAmountTotals} from "./bank-question-answer";
 import {weekBoundsBR} from "./date-br";
 import {bankInstallmentPosition,type BankAgenda,type BankAgendaItem} from "./open-finance-schedules";
 
-export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"|"due-next-week"};
+export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"|"due-next-week"|"missing-total"};
 const safe=(text:string)=>text.replace(/[\r\n*`_~<>]/g," ").trim().slice(0,100);
 const isAnnuity=(item:BankAgendaItem)=>/\b(?:anuidade|anualidade|annual fee)\b/.test(normalizeBankText(item.description));
 const amount=(item:BankAgendaItem)=>item.currency?bankMoney(item.amount,item.currency):`${bankAmountWithoutCurrency(item.amount)} (moeda não informada)`;
@@ -16,6 +16,9 @@ export function parseBankInstallmentFocus(message:string):BankInstallmentFocus|n
  const text=normalizeBankText(message).replace(/[?.!]+$/g,"");
  if(text.length>300||/\b(?:pague|pagar|cancele|exclua|altere|cadastre|registre)\b/.test(text))return null;
  if(/\b(?:parcelas?|parcelamentos?)\b/.test(text)&&/\bcart(?:ao|oes)\b/.test(text)&&/\b(?:proxima semana|semana que vem)\b/.test(text)&&/\b(?:vence|vencem|vencimento|quanto)\b/.test(text))return {kind:"due-next-week"};
+ if(/\b(?:parcelas?|parcelamentos?)\b/.test(text)
+  && /\b(?:nao tem|sem|nao possuem?)\b/.test(text)
+  && /\b(?:numero total|quantidade total|total (?:de )?parcelas?)\b/.test(text))return {kind:"missing-total"};
  if(/\b(?:separe|separar|separado|distinga|diferencie)\b/.test(text)&&/\banuidade\b/.test(text)&&/\bcompras? parcelad[ao]s?\b/.test(text))return {kind:"separate-annuity"};
  if(/\b(?:compras? parcelad[ao]s?|parcelamentos?)\b/.test(text)&&/\b(?:futura|futuras|futuro|futuros)\b/.test(text)&&/\b(?:data|vencimento)\b/.test(text))return {kind:"future-dated"};
  if(/\b(?:proxima|proximas) parcelas?\b/.test(text)&&/\b(?:cada|por) cartao\b/.test(text))return {kind:"next-by-card"};
@@ -30,6 +33,13 @@ export function formatBankInstallmentFocus(agenda:BankAgenda,focus:BankInstallme
  const appendix=agenda.incomplete?"\nConsulta bancária incompleta; pode haver dados em atualização ou indisponíveis.":"";
  const caveat="\nAs parcelas identificadas não confirmam pagamento nem datas futuras que o banco não informou.";
  switch(focus.kind){
+  case "missing-total":{
+   const missing=all.filter(item=>{
+    const total=item.total_installments;
+    return typeof total!=="number"||!Number.isInteger(total)||total<1||total>1000;
+   });
+   return `Parcelas bancárias sem número total informado · ${safe(modeLabel)} · ${missing.length} item(ns)\n${missing.length?listed(missing,item=>`• ${label(item)} · ${bankInstallmentPosition(item)} · ${amount(item)} por parcela`):"Nenhuma parcela sem número total apareceu nos dados recebidos."}${appendix}\nIsso não prova que os bancos não tenham outros parcelamentos; a consulta mostra apenas os dados recebidos.${caveat}`;
+  }
   case "future-dated":{
    const dated=purchases.filter(item=>item.due_date&&item.due_date>today).sort((a,b)=>a.due_date!.localeCompare(b.due_date!));
    const undated=purchases.filter(item=>!item.due_date).length;

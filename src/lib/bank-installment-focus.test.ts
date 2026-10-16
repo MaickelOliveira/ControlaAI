@@ -17,6 +17,7 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   ["Quais parcelas têm valor informado mas vencimento desconhecido?","undated-valued"],
   ["Separe anuidade de compras parceladas.","separate-annuity"],
   ["Quanto vence em parcelas de cartão na próxima semana?","due-next-week"],
+  ["Quais parcelas não têm número total informado?","missing-total"],
  ] as const)("entende %s",(message,kind)=>expect(parseBankInstallmentFocus(message)).toEqual({kind}));
  it("não intercepta edição, pagamento nem perguntas sem filtro claro",()=>{
   expect(parseBankInstallmentFocus("Pague a parcela da geladeira")).toBeNull();
@@ -55,5 +56,13 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   const unknown=formatBankInstallmentFocus({...agenda,items:agenda.items.filter(item=>!item.due_date)},{kind:"due-next-week"},"2026-10-15","Pessoal");
   expect(unknown).toContain("não há valor confirmado para somar");
   expect(unknown).not.toContain("R$ 0,00");
+ });
+ it("lista só parcelas sem quantidade total, mesmo quando outras têm posição conhecida",()=>{
+  const data={...agenda,items:[...agenda.items,{id:"unknown",kind:"installment" as const,description:"Compra sem total",resource_name:"Gold",institution_name:"Sicredi",due_date:null,amount:"30",currency:"BRL",synced_at:"2026-10-14",observed_installments:2,total_installments:null}]};
+  const answer=formatBankInstallmentFocus(data,{kind:"missing-total"},"2026-10-15","Pessoal");
+  expect(answer).toContain("Compra sem total");
+  expect(answer).not.toContain("Loja de móveis");expect(answer).not.toContain("Geladeira");expect(answer).not.toContain("ANUIDADE");
+  const empty=formatBankInstallmentFocus(agenda,{kind:"missing-total"},"2026-10-15","Pessoal");
+  expect(empty).toContain("Nenhuma parcela sem número total");
  });
 });
