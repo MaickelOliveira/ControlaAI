@@ -6,6 +6,7 @@ import {explicitBankQueryPlan, validateBankQuery, type StructuredBankQuery} from
 import {isUnregisteredBankRecurringRequest,isUnreliableRecurringValueRequest,isRemainingKnownInstallmentsRequest} from "./recurring-query-kind";
 import {descriptionExpenseCategory, normalizeExpenseCategories} from "./expense-category";
 import {categoryDetailQuestion} from "./category-detail-question";
+import {asksForManualAndBankAccounts} from "./separated-account-list";
 import { nowBR, nowISOBR, todayStrBR, weekBoundsBR } from "./date-br";
 import type { UserMode, User } from "./users";
 import { CATEGORIES_EXPENSE, CATEGORIES_INCOME, parseFinanceDestinationMode, explicitMerchantInQuestion } from "./finances";
@@ -4167,6 +4168,7 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   // Para comparar com cadastros manuais, a consulta precisa das duas fontes.
   // Um plano bancário sem essa comparação daria uma lista incompleta.
   if (explicit?.intent === "recurring_query" && (isUnregisteredBankRecurringRequest(message)||isUnreliableRecurringValueRequest(message)||isRemainingKnownInstallmentsRequest(message))) return explicit;
+  if (explicit?.intent === "account_list" && asksForManualAndBankAccounts(message)) return explicit;
 
   // Respostas do modelo com intenção ou confiança ausentes não executam ações.
   if (modeled?.intent === "unknown" && modeled.response?.trim() && !explicit) return modeled;
