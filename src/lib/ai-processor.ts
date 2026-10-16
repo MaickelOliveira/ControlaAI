@@ -1959,6 +1959,18 @@ export function getExplicitModeSwitchResult(
     : null;
 }
 
+/** Pedido de leitura em um modo específico não é uma ordem para trocar o modo
+ * ativo. A referência negativa ao outro modo nunca amplia o escopo. */
+export function getScopedModeReadResult(message: string): AIResult | null {
+  const normalized = normalizeCapabilityText(message.trim());
+  if (!/\b(?:mostre|mostrar|exiba|exibir|liste|listar|consulte|consultar|resuma|resumir|veja|ver)\b/.test(normalized)) return null;
+  if (!/\b(?:dados|resumo|visao|informacoes|financas|financeiro|financeira)\b/.test(normalized)) return null;
+  if (/\b(?:tarefas?|lembretes?|agenda|calendario|eventos?|reunioes?|veiculos?|carros?|contatos?|clientes?|funcionarios?|arquivos?|drive|metas?|supermercado|bancos?|contas?|cartoes?|faturas?|parcelas?|emprestimos?|financiamentos?)\b/.test(normalized)) return null;
+  const namedMode = normalized.match(/\bmodo\s+(pessoal|personal|empresa|empresarial|business)\b/)?.[1];
+  if (!namedMode) return null;
+  return { intent: "finance_query", confidence: 1, mode: /^(?:pessoal|personal)$/.test(namedMode) ? "personal" : "business" };
+}
+
 /** Atalho para comandos explícitos de CRUD de veículo. Além de reduzir a
  * dependência do classificador externo, garante que frases básicas como
  * "quero alterar meu veículo" nunca terminem sem resposta. Os dados que não
@@ -4126,6 +4138,8 @@ export function preserveOtherReminderRecipient(message: string, result: AIResult
 /** A IA interpreta primeiro para todos os usuários reais após o rollout.
  * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  const scopedRead = getScopedModeReadResult(message);
+  if (scopedRead) return scopedRead;
   const aiFirstForThisPhone = shouldUseWhatsAppAiFirst(
     ctx?.user?.id, ctx?.phone,
     process.env.AI_FIRST_INTENT_ENABLED, process.env.AI_FIRST_INTENT_TEST_PHONES,

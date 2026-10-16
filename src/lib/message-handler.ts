@@ -19,7 +19,7 @@ import {recurringQueryKind,isUnregisteredBankRecurringRequest,isUnreliableRecurr
 import {formatRemainingKnownInstallments} from "@/lib/remaining-installments-answer";
 import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, withExplicitFinanceCategoryEdit, type AIResult, type FinanceData } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, getScopedModeReadResult, withExplicitFinanceCategoryEdit, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createdDayBoundsBR, isFinanceCreatedTodayQuery, replyFinancesCreatedToday } from "@/lib/finance-created-query";
@@ -2944,9 +2944,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       return;
     }
     const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
-    const ai = withExplicitFinanceCategoryEdit(messageText, actionContinuation
+    const ai = withExplicitFinanceCategoryEdit(messageText, getScopedModeReadResult(messageText) ?? (actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
-      : classifiedAi);
+      : classifiedAi));
     setVirtualAgentIntent(ai.intent);
 
     // Read-only banking requests terminate before payment reconciliation and all mutations.
@@ -4032,8 +4032,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             await wppSend(from, replyPersonNotFound(ai.personName, user.locale));
             break;
           }
-          const personal = allowsFinanceMode("personal") ? await getBalanceInRange(user.id, "personal", pFrom, pTo, personPhone) : null;
-          const business = allowsFinanceMode("business") ? await getBalanceInRange(user.id, "business", pFrom, pTo, personPhone) : undefined;
+          const personal = (!ai.mode || queryMode === "personal") && allowsFinanceMode("personal") ? await getBalanceInRange(user.id, "personal", pFrom, pTo, personPhone) : null;
+          const business = (!ai.mode || queryMode === "business") && allowsFinanceMode("business") ? await getBalanceInRange(user.id, "business", pFrom, pTo, personPhone) : undefined;
           await wppSend(from, replyBalance(personal, business, ai.personName, periodLabel, user.locale));
           break;
         }
@@ -4044,8 +4044,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           await wppSend(from, `🏦 *${accountFilter.name}* — ${periodLabel}\n\n💰 ${language ? "Ingresos" : "Receitas"}: *${formatCurrency(income)}*\n💸 ${language ? "Gastos" : "Despesas"}: *${formatCurrency(expense)}*\n📊 ${language ? "Saldo" : "Saldo"}: *${formatCurrency(income - expense)}*`);
           break;
         }
-        const personal = allowsFinanceMode("personal") ? await getBalanceInRange(user.id, "personal", pFrom, pTo) : null;
-        const business = allowsFinanceMode("business") ? await getBalanceInRange(user.id, "business", pFrom, pTo) : undefined;
+        const personal = (!ai.mode || queryMode === "personal") && allowsFinanceMode("personal") ? await getBalanceInRange(user.id, "personal", pFrom, pTo) : null;
+        const business = (!ai.mode || queryMode === "business") && allowsFinanceMode("business") ? await getBalanceInRange(user.id, "business", pFrom, pTo) : undefined;
         await wppSend(from, replyBalance(personal, business, undefined, periodLabel, user.locale));
         break;
       }
