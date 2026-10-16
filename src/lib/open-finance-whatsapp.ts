@@ -23,10 +23,10 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true")return null;
   const text=normalize(message);
   const business=/\b(empresa|empresarial|empresariais|pj)\b/.test(text),personal=/\b(pessoal|pessoais|pf)\b/.test(text);
-  const investmentWording=text.trim().replace(/[?!.]+$/g,"");
-  if(/^(?:explique (?:a )?|qual (?:e )?a )diferenca entre (?:o )?(?:dinheiro em conta|saldo da conta) e (?:o )?(?:valor investido|investimento)$/.test(investmentWording))
+  const plainWording=text.trim().replace(/[?!.]+$/g,"");
+  if(/^(?:explique (?:a )?|qual (?:e )?a )diferenca entre (?:o )?(?:dinheiro em conta|saldo da conta) e (?:o )?(?:valor investido|investimento)$/.test(plainWording))
     return "Dinheiro em conta é o saldo que o banco informa como disponível; confira no extrato se esse saldo inclui crédito adicional. O valor de um investimento é a posição de uma aplicação, que pode variar e não equivale a dinheiro disponível para gastar; resgate, prazo e impostos dependem do produto. Esses valores não são somados como se fossem o mesmo saldo. Confira cada posição no banco.";
-  if(/^(?:separe|mostre) (?:os )?investimentos? pesso(?:al|ais) (?:separados? )?(?:de|dos) (?:os )?investimentos? da empresa$/.test(investmentWording)){
+  if(/^(?:separe|mostre) (?:os )?investimentos? pesso(?:al|ais) (?:separados? )?(?:de|dos) (?:os )?investimentos? da empresa$/.test(plainWording)){
     if(phoneAccess!=="both")return "Este número precisa ter acesso aos modos Pessoal e Empresa para comparar as duas posições. Confira o acesso no painel da Zelo.";
     const [personalAnswer,businessAnswer]=await Promise.all([
       answerBankQuestion(user,"personal","Mostre meus investimentos",today),
@@ -34,10 +34,19 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
     ]);
     return `Investimentos separados por modo\n\nPessoal: ${personalAnswer??"consulta indisponível neste modo"}\n\nEmpresa: ${businessAnswer??"consulta indisponível para a empresa selecionada"}\nAs posições de Pessoal e Empresa não são somadas.`;
   }
+  if(/^explique se saldo zero prova quitacao do emprestimo$/.test(plainWording))
+    return "Saldo devedor informado como zero não prova quitação do empréstimo. O banco pode ter enviado uma posição parcial ou antiga, e o contrato pode continuar aberto por outras condições. Para confirmar o encerramento, consulte o contrato e a confirmação de quitação no banco.";
   const positionQuestion=isBankPositionQuestion(message);
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(/^separe emprestimos de financiamentos$/.test(plainWording)){
+    const [loans,financings]=await Promise.all([
+      answerBankQuestion(user,requested,"Mostre meus empréstimos",today),
+      answerBankQuestion(user,requested,"Mostre meus financiamentos",today),
+    ]);
+    return `Empréstimos e financiamentos separados · ${requested==="personal"?"Pessoal":"Empresa"}\n\nEmpréstimos: ${loans??"consulta indisponível"}\n\nFinanciamentos: ${financings??"consulta indisponível"}\nOs saldos recebidos não comprovam que os contratos estejam ativos ou quitados.`;
+  }
   // A largest movement is a transaction query, even when "crédito" also resembles a credit-line position.
   // Leave it to the validated AI query plan instead of returning generic position guidance.
   if(/\b(?:maior|mais alto|mais alta)\b/.test(text)

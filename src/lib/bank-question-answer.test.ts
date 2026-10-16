@@ -93,6 +93,45 @@ describe("saved bank positions", () => {
     expect(min).not.toContain("Saldo zero");
     expect(min).not.toContain("Saldo desconhecido");
   });
+  it("answers whether a bank reported loans even when the only reported balance is zero",()=>{
+    const data=overview();
+    data.connections.push(connection("san","Banco Santander Pessoa Física"));
+    data.resources.push(resource("san-loan","san","loan","Cheque Especial"));
+    data.credit.push({resource_id:"san-loan",currency:"BRL",outstanding_amount:"0",contract_amount:"1000",next_installment_amount:null,due_date:null});
+    const text=answer(data,"Existe algum empréstimo no Santander?");
+    expect(text).toContain("Banco Santander Pessoa Física");
+    expect(text).toContain("1 contrato");
+    expect(text).toContain("saldo informado como zero");
+    expect(text).not.toContain("Nubank");
+    expect(text).not.toContain("não encontrei empréstimo");
+  });
+  it("sums loan balances by currency and names positions omitted for missing currency",()=>{
+    const data=overview();
+    data.resources.push(resource("usd","real","loan","Dólar teste"),resource("unknown","real","loan","Moeda ausente"));
+    data.credit.push({resource_id:"usd",currency:"USD",outstanding_amount:"50",contract_amount:null,next_installment_amount:null,due_date:null});
+    data.credit.push({resource_id:"unknown",currency:null,outstanding_amount:"35",contract_amount:null,next_installment_amount:null,due_date:null});
+    const sum=answer(data,"Some empréstimos apenas da mesma moeda.");
+    expect(sum).toContain(bankMoney("1900.65","BRL"));
+    expect(sum).toContain(bankMoney("50","USD"));
+    expect(sum).toContain("1 contrato");
+    expect(sum).toContain("fora da soma");
+    expect(sum).not.toContain(bankMoney("1985.65","BRL"));
+    const omitted=answer(data,"Algum empréstimo ficou fora do total por falta de moeda?");
+    expect(omitted).toContain("Moeda ausente");
+    expect(omitted).not.toContain("Dólar teste");
+    expect(omitted).not.toContain("Crédito pessoal");
+  });
+  it("separates loan positions by bank and shows only received contract end dates",()=>{
+    const data=overview();
+    const byBank=formatBankQuestion(data,parseBankQuestion("Separe empréstimos por banco.","2026-10-11")!,"Empresa · Teste");
+    expect(byBank).toContain("Empresa · Teste");expect(byBank).toContain("Nubank");expect(byBank).toContain("Sicredi");
+    expect(byBank).toContain("Realize: nenhum empréstimo recebido");
+    expect(byBank).not.toContain("Veículo");
+    const dates=answer(data,"Quando termina cada empréstimo, se o banco informou?");
+    expect(dates).toContain("Crédito pessoal");expect(dates).toContain("10/01/2027");
+    expect(dates).toContain("Crédito fácil");expect(dates).toContain("Não informado");
+    expect(dates).not.toContain("Valor da próxima parcela:");
+  });
   it("shows only known zero-balance loans when asked which are settled", () => {
     const data=overview();
     data.credit[0].outstanding_amount="0.00000000";
