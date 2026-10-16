@@ -154,6 +154,16 @@ it("does not invent reais for bank installments without currency",async()=>{
  expect(response).not.toContain("R$ 120,00");
  expect(response).not.toContain("Nenhum recorrente ou parcelamento cadastrado manualmente");
 });
+it("answers the exact missing installment total question without listing known totals",async()=>{
+ m.rpc.mockResolvedValue({incomplete:false,items:[
+  {id:"known",kind:"installment",resource_id:"card",description:"Compra 2 de 10",institution_name:"Banco fictício",resource_name:"Gold",amount:"20",currency:"BRL",due_date:null,synced_at:todayStrBR(),total_installments:10,observed_installments:2},
+  {id:"missing",kind:"installment",resource_id:"card",description:"Compra sem total",institution_name:"Banco fictício",resource_name:"Gold",amount:"30",currency:"BRL",due_date:null,synced_at:todayStrBR(),total_installments:null,observed_installments:1},
+ ]});
+ await handleIncomingMessage({from:"5511999990000",text:"Quais parcelas não têm número total informado?"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain("Compra sem total");expect(response).not.toContain("Compra 2 de 10");
+ expect(m.process).not.toHaveBeenCalled();expect(m.confirm).not.toHaveBeenCalled();
+});
 it("separates annuities from purchases using bank records without falling into generic help",async()=>{
  m.rpc.mockResolvedValue({incomplete:false,items:[
   {id:"fee",kind:"installment",resource_id:"card",description:"ANUIDADE DIFERENCIADA",institution_name:"Banco fictício",resource_name:"Gold",amount:"25",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:12,observed_installments:1},
