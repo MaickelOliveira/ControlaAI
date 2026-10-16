@@ -13,6 +13,73 @@ import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "./open-fina
 import {bankMoney} from "./open-finance-display";
 const user={id:"own-user",email:"user@example.test",plan:"business",activeMode:"personal",status:"active"} as const;
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});m.financial.mockResolvedValue({commitments:[],bank:{items:[],incomplete:false},forecasts:[],coverage:""});});
+it("lists only authorized active banks in the requested personal mode",async()=>{
+  m.rpc.mockResolvedValue({connections:[
+    {institution_name:"Banco Pessoal",status:"active",archived_at:null},
+    {institution_name:"Banco Antigo",status:"revoked",archived_at:"2026-10-10"},
+  ],sync:[]});
+  const answer=await answerBankWhatsAppMessage(user as never,"business","both","Quais bancos estão conectados no modo Pessoal?","2026-10-16");
+  expect(answer).toContain("Banco Pessoal");expect(answer).toContain("Autorizado");
+  expect(answer).not.toContain("Banco Antigo");
+  expect(m.rpc).toHaveBeenCalledWith(expect.objectContaining({mode:"personal"}),"zelo_of_overview",{p_environment:"production"});
+});
+it("uses the company scope for business connection lists and enforces phone access",async()=>{
+  m.access.mockResolvedValue({userId:user.id,mode:"business",environment:"production"});
+  m.rpc.mockResolvedValue({connections:[{institution_name:"Banco Empresa",status:"active",archived_at:null}],sync:[]});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais bancos estão conectados no modo Empresa?","2026-10-16");
+  expect(answer).toContain("Banco Empresa");expect(m.rpc).toHaveBeenCalledWith(expect.objectContaining({mode:"business"}),"zelo_of_overview",{p_environment:"production"});
+  m.rpc.mockClear();
+  expect(await answerBankWhatsAppMessage(user as never,"personal","personal","Quais bancos estão conectados no modo Empresa?","2026-10-16")).toContain("não tem acesso");
+  expect(m.rpc).not.toHaveBeenCalled();
+});
+it("answers whether identified bill payments were categorized as Outros instead of using a spending total",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"manual-bill",mode:"personal",source:"web",date:"2026-10-10",status:"confirmed",type:"expense",included:true,category:"Outros",description:"Pagamento de fatura",amount:100},
+    {id:"bank-bill",mode:"personal",source:"bank",date:"2026-10-11",status:"posted",type:"expense",included:false,category:"Transferências e pagamentos",description:"DEB. AUTOM. DE FATURA EM C/C",amount:100,bank:{resource_type:"account",institution_name:"Banco A"}},
+  ],bank:{overview:{connections:[{status:"active"}]},report:{sync_pending:false}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Há pagamentos de fatura classificados como Outros?","2026-10-16");
+  expect(answer).toContain("Sim");expect(answer).toContain("Pagamento de fatura");expect(answer).toContain("Outros");
+  expect(answer).not.toContain("Você gastou R$ 0,00");
+});
+it("identifies included transfer-like debits without claiming they are own-account transfers",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"possible",mode:"personal",source:"bank",date:"2026-10-10",status:"posted",type:"expense",included:true,category:"Outros",description:"Transferência enviada pelo Pix|Samira",amount:50,bank:{resource_type:"account",institution_name:"Banco A",classification:"transfer",direction:"debit"}},
+    {id:"own",mode:"personal",source:"bank",date:"2026-10-11",status:"posted",type:"expense",included:false,category:"Transferência entre contas próprias",description:"Pix entre contas",amount:50,bank:{resource_type:"account",institution_name:"Banco A",classification:"transfer",direction:"debit"}},
+  ],bank:{overview:{connections:[{status:"active"}]},report:{sync_pending:false}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Há transferências classificadas como despesas?","2026-10-16");
+  expect(answer).toContain("Samira");expect(answer).toContain("despesas");
+  expect(answer).not.toContain("Pix entre contas");expect(answer).toContain("não comprova");
+});
+it("groups only card purchases by category without adding account debits",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"card-a",mode:"personal",source:"bank",date:"2026-10-10",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Padaria",amount:40,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit"}},
+    {id:"card-b",mode:"personal",source:"bank",date:"2026-10-11",status:"posted",type:"expense",included:true,category:"Delivery",description:"Zé Delivery",amount:30,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit"}},
+    {id:"account",mode:"personal",source:"bank",date:"2026-10-12",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Débito da conta",amount:90,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit"}},
+  ],bank:{overview:{connections:[{status:"active"}]},report:{sync_pending:false}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre gastos de cartão por categoria sem duplicar débitos da conta.","2026-10-16");
+  expect(answer).toContain("Alimentação");expect(answer).toContain("Delivery");expect(answer).toMatch(/R\$\s*70,00/);
+  expect(answer).not.toMatch(/R\$\s*160,00/);expect(answer).toContain("conta bancária");
+});
+it("ranks establishments by purchase count rather than expense category",async()=>{
+  m.read.mockResolvedValue({entries:[
+    {id:"a",mode:"personal",source:"bank",date:"2026-10-10",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Padaria Boa",amount:20,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",classification:"purchase"}},
+    {id:"b",mode:"personal",source:"bank",date:"2026-10-11",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Padaria Boa",amount:30,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",classification:"purchase"}},
+    {id:"c",mode:"personal",source:"bank",date:"2026-10-12",status:"posted",type:"expense",included:true,category:"Alimentação",description:"Mercado Bom",amount:50,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",classification:"purchase"}},
+  ],bank:{overview:{connections:[{status:"active"}]},report:{sync_pending:false}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Qual estabelecimento teve mais compras no mês?","2026-10-16");
+  expect(answer).toContain("Padaria Boa");expect(answer).toContain("2 compras");
+  expect(answer).not.toContain("Maior categoria");
+});
+it("does not read company purchases for a phone authorized only for Personal",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","personal","Qual estabelecimento teve mais compras no mês na empresa?","2026-10-16");
+  expect(answer).toContain("não tem acesso");
+  expect(m.read).not.toHaveBeenCalled();
+});
+it("asks for one mode when a merchant comparison spans Personal and Empresa",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Qual estabelecimento teve mais compras no Pessoal e na Empresa?","2026-10-16");
+  expect(answer).toContain("Escolha um modo");
+  expect(m.read).not.toHaveBeenCalled();
+});
 it("explains available Open Finance data instead of returning connection steps",async()=>{
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Explique o que o Open Finance permite consultar na Zelo.","2026-10-16");
   expect(answer).toContain("saldos");expect(answer).toContain("empréstimos");expect(answer).toContain("movimentações");

@@ -43,9 +43,22 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(/^explique se saldo zero prova quitacao do emprestimo$/.test(plainWording))
     return "Saldo devedor informado como zero não prova quitação do empréstimo. O banco pode ter enviado uma posição parcial ou antiga, e o contrato pode continuar aberto por outras condições. Para confirmar o encerramento, consulte o contrato e a confirmação de quitação no banco.";
   const positionQuestion=isBankPositionQuestion(message);
-  if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
+  const scopedFinanceQuestion=positionQuestion||/banco|bancaria|conex|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac|estabelec|compras?|transfer|fatura|gastos?/.test(text);
+  if(business&&personal&&scopedFinanceQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
-  if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|bancaria|conex|cartao|cartoes|finance|saldo|limite|venc|cobranc|previs|extrato|parcel|obrigac/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(phoneAccess!=="both"&&phoneAccess!==requested)return scopedFinanceQuestion?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(/\b(?:quais|quantos|liste|mostre|tenho)\b/.test(text)
+    &&/\b(?:bancos?|conexoes? bancarias?)\b/.test(text)
+    &&/\b(?:conectad[oa]s?|ativ[ao]s?)\b/.test(text)){
+    try{
+      const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
+      if(!scope)return "Não consigo consultar as conexões bancárias neste modo. Confira seu acesso e a página Contas.";
+      const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+      const active=[...new Set(overview.connections.filter(connection=>connection.status==="active"&&!connection.archived_at)
+        .map(connection=>safeSummary(connection.institution_name)))];
+      return `Bancos conectados · ${requested==="personal"?"Pessoal":"Empresa"}\n${active.map(name=>`• ${name} · ${BANK_STATUSES.active}`).join("\n")||"Nenhum banco com autorização ativa nos dados recebidos."}\nConexões expiradas ou canceladas ficam no histórico de Contas e não foram contadas como ativas.`;
+    }catch{return "Não consegui consultar os bancos conectados agora. Confira Contas; não vou adivinhar quais estão ativos.";}
+  }
   if(/\bconex(?:ao|oes) bancaria(?:s)?\b/.test(text)&&/\binativ[ao]s?\b/.test(text)){
     try{
       const scope=await getOpenFinanceAccess(user,requested,{throwOnStorageError:true});
@@ -55,6 +68,51 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const lines=inactive.map(connection=>`• ${safeSummary(connection.institution_name)} · ${BANK_STATUSES[connection.status]}${connection.archived_at?" · no histórico":""}`);
       return `Conexões bancárias inativas · ${requested==="personal"?"Pessoal":"Empresa"}\n${lines.join("\n")||"Nenhuma conexão inativa nos dados recebidos."}\nUma conexão inativa pode manter dados antigos no histórico; confira Contas para reconectar ou remover da lista.`;
     }catch{return "Não consegui consultar o estado das conexões bancárias agora. Confira Contas; não vou adivinhar quais estão inativas.";}
+  }
+  const billInOthers=/\bpagamentos? de fatura\b/.test(text)&&/\bclassificad[oa]s? como outros\b/.test(text);
+  const transferExpenses=/\btransferencias?\b/.test(text)&&/\bclassificad[oa]s? como despesas?\b/.test(text);
+  const cardByCategory=/\bgastos? de cartao\b/.test(text)&&/\bpor categoria\b/.test(text)&&/\b(?:duplicar|somar)\b/.test(text);
+  const topMerchant=/\b(?:qual|quais|mostre)\b/.test(text)&&/\bestabelecimentos?\b/.test(text)&&/\bmais compras?\b/.test(text);
+  if(billInOthers||transferExpenses||cardByCategory||topMerchant){
+    const from=`${today.slice(0,7)}-01`;
+    try{
+      const {entries,bank}=await readUnifiedFinances(user,requested,from,today);
+      const scoped=entries.filter(e=>e.mode===requested&&e.status!=="pending"&&e.date>=from&&e.date<=today);
+      const label=requested==="personal"?"Pessoal":"Empresa";
+      const amount=(e:LedgerEntry)=>e.bank?bankMoney(e.bank.amount,e.bank.currency):bankMoney(e.amount,"BRL");
+      if(billInOthers){
+        const found=scoped.filter(e=>isBankBillPaymentDescription(e.description)&&normalize(e.category)==="outros");
+        const lines=found.slice(0,5).map(e=>`• ${bankDate(e.date)} · ${safeSummary(e.description)} · ${amount(e)} · ${safeSummary(financeOrigin(e))}`);
+        return `${found.length?"Sim":"Nenhum identificado"}: pagamentos de fatura classificados como Outros · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${lines.join("\n")||"Nenhum pagamento identificado nessa categoria nos registros consultados."}${found.length>5?`\nMais ${found.length-5} em Finanças.`:""}\nPagamentos com descrição diferente podem não ser reconhecidos; a ausência aqui não comprova que todos foram classificados corretamente.${bank?.report.sync_pending?" Há sincronização bancária pendente ou com falha.":""}`;
+      }
+      if(transferExpenses){
+        const possible=scoped.filter(e=>e.source==="bank"&&e.bank?.resource_type==="account"&&e.type==="expense"&&e.included&&/\b(?:transferencia|pix)\b/.test(normalize(e.description)));
+        const lines=possible.slice(0,5).map(e=>`• ${bankDate(e.date)} · ${safeSummary(e.description)} · ${amount(e)} · ${safeSummary(financeOrigin(e))}`);
+        return `Transferências/Pix incluídos nas despesas · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${possible.length} movimento(s) candidato(s) nos dados recebidos.\n${lines.join("\n")||"Nenhum movimento correspondente identificado."}${possible.length>5?`\nMais ${possible.length-5} em Finanças.`:""}\nA descrição não comprova que sejam transferências entre contas suas; confirme a titularidade antes de excluí-las dos gastos.${bank?.report.sync_pending?" Há sincronização bancária pendente ou com falha.":""}`;
+      }
+      if(topMerchant){
+        const purchases=scoped.filter(e=>e.included&&e.type==="expense"&&e.amount>0&&e.description.trim()
+          &&(e.source!=="bank"||e.bank?.classification==="purchase"||e.bank?.resource_type==="card")
+          &&!isBankBillPaymentDescription(e.description));
+        const merchants=new Map<string,{name:string;count:number;cents:number}>();
+        for(const purchase of purchases){
+          const key=normalize(purchase.description).replace(/[^a-z0-9]+/g," ").trim();
+          if(!key)continue;
+          const current=merchants.get(key)??{name:safeSummary(purchase.description),count:0,cents:0};
+          current.count++;current.cents+=Math.round(purchase.amount*100);merchants.set(key,current);
+        }
+        const ranked=[...merchants.values()].sort((a,b)=>b.count-a.count||b.cents-a.cents||a.name.localeCompare(b.name));
+        const leaders=ranked.filter(item=>item.count===ranked[0]?.count).slice(0,5);
+        const lines=leaders.map(item=>`• ${item.name} · ${item.count} ${item.count===1?"compra":"compras"} · ${bankMoney(item.cents/100,"BRL")}`);
+        return `Estabelecimento com mais compras identificadas · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${lines.join("\n")||"Nenhuma compra com estabelecimento identificável nos dados recebidos."}\nComparei a quantidade de compras, não o total da categoria. Nomes diferentes para a mesma loja podem aparecer separados; ${bank?.report.sync_pending?"há sincronização bancária pendente ou com falha.":"o histórico bancário recebido pode estar incompleto."}`;
+      }
+      if(!bank?.overview.connections.length)return "Não recebi compras de cartão de um banco conectado neste modo. Confira Contas; não vou estimar gastos por categoria.";
+      const card=scoped.filter(e=>e.source==="bank"&&e.bank?.resource_type==="card"&&e.type==="expense"&&e.included&&!isBankBillPaymentDescription(e.description));
+      const groups=ledgerExpenseGroups(card,"category").sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name));
+      const total=groups.reduce((cents,group)=>cents+Math.round(group.value*100),0)/100;
+      const lines=groups.slice(0,15).map(group=>`• ${safeSummary(group.name)}: ${bankMoney(group.value,"BRL")}`);
+      return `Gastos de cartão por categoria · ${label} · ${bankDate(from)} a ${bankDate(today)}\nTotal das compras de cartão recebidas: ${bankMoney(total,"BRL")}\n${lines.join("\n")||"Nenhuma compra de cartão recebida nesse período."}${groups.length>15?`\nMais ${groups.length-15} categorias em Finanças.`:""}\nDébitos de conta bancária e pagamentos de fatura não entraram nessa soma; o histórico recebido pode estar incompleto.${bank.report.sync_pending?" Há sincronização pendente ou com falha.":""}`;
+    }catch{return "Não consegui consultar esses lançamentos agora. Confira Finanças e tente novamente; não vou concluir a partir de um total incompleto.";}
   }
   if(/\bdatas? bancarias?\b/.test(text)&&/\bfuturo\b/.test(text)){
     try{
