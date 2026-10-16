@@ -30,6 +30,16 @@ it("accepts only supported focused bank-position views from the model",async()=>
   expect(response).toContain("01/01/2027");
   expect(response).not.toContain("Contratado:");
 });
+it("keeps a validated financing recut while rejecting a recut for unrelated data",async()=>{
+  expect(validateBankQuery({kind:"financings",financingView:"remaining-count",keyword:"carro"}))
+    .toEqual({kind:"financings",financingView:"remaining-count",keyword:"carro"});
+  expect(validateBankQuery({kind:"loans",financingView:"remaining-count"})).toBeNull();
+  expect(validateBankQuery({kind:"financings",financingView:"invented"})).toBeNull();
+  m.rpc.mockResolvedValue({...overview,resources:[{id:"car",connection_id:"nu",resource_type:"financing",name:"Veículo"}],credit:[{resource_id:"car",currency:"BRL",outstanding_amount:"1000",due_date:"2027-01-01"}]});
+  const response=await answerStructuredBankQuery(user,"personal","both",ai({kind:"financings",financingView:"remaining-count",keyword:"carro"}),"2026-10-11");
+  expect(response).toContain("quantidade de parcelas restantes não informada");
+  expect(response).not.toContain("Saldo devedor:");
+});
 it("executes a semantically interpreted card question against saved values", async () => {
   const response = await answerStructuredBankQuery(user, "personal", "both", ai({ kind: "limits", bankName: "Nubank" }), "2026-10-11");
   expect(response).toContain(bankMoney("1234.56", "BRL")); expect(response).not.toContain("Você gastou"); expect(m.read).not.toHaveBeenCalled();

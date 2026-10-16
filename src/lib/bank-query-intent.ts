@@ -3,6 +3,7 @@ import type { BankQuestion } from "./bank-question-parser";
 export type StructuredBankQuery = {
   kind: BankQuestion["kind"] | "income" | "transactions" | "result" | "installments" | "recurring" | "bill_due";
   debtView?: BankQuestion["debtView"];
+  financingView?: BankQuestion["financingView"];
   investmentView?: BankQuestion["investmentView"];
   bankName?: string;
   last4?: string;
@@ -17,6 +18,7 @@ const positions = new Set(["loans", "financings", "limits", "balances", "investm
 export const isBankPositionKind = (kind: string) => positions.has(kind);
 const kinds = new Set([...positions, "spending", "income", "transactions", "result", "installments", "recurring", "bill_due"]);
 const debtViews = new Set<NonNullable<BankQuestion["debtView"]>>(["balance","contracted","next-installment","missing-next-installment","missing-due-date","zero","positive","max-balance","min-positive","exists","currency","missing-currency","by-bank","due-date"]);
+const financingViews = new Set<NonNullable<BankQuestion["financingView"]>>(["next-installment","last-installment-date","remaining-count","contracted","missing-balance","zero"]);
 const investmentViews = new Set<NonNullable<BankQuestion["investmentView"]>>(["gross-net","latest","missing-date","missing-bank","currency"]);
 
 /** Model output is untrusted: retain filters only, never tenant IDs or financial values. */
@@ -28,6 +30,10 @@ export function validateBankQuery(value: unknown): StructuredBankQuery | null {
   if (raw.debtView != null) {
     if (raw.kind !== "loans" || typeof raw.debtView !== "string" || !debtViews.has(raw.debtView as NonNullable<BankQuestion["debtView"]>)) return null;
     result.debtView = raw.debtView as NonNullable<BankQuestion["debtView"]>;
+  }
+  if (raw.financingView != null) {
+    if (raw.kind !== "financings" || typeof raw.financingView !== "string" || !financingViews.has(raw.financingView as NonNullable<BankQuestion["financingView"]>)) return null;
+    result.financingView = raw.financingView as NonNullable<BankQuestion["financingView"]>;
   }
   if (raw.investmentView != null) {
     if (raw.kind !== "investments" || typeof raw.investmentView !== "string" || !investmentViews.has(raw.investmentView as NonNullable<BankQuestion["investmentView"]>)) return null;

@@ -53,6 +53,35 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   if (!connectedGroups.length) return question.bankName || question.last4
     ? `Não encontrei ${safe(question.bankName ?? "esse cartão")}${question.last4 ? ` · final ${question.last4}` : ""} entre os bancos conectados em ${safe(modeLabel)}. Confira Contas e o modo/empresa selecionado.`
     : `Nenhum banco conectado em ${safe(modeLabel)}. A conexão fica na aba Contas.`;
+  if(question.kind==="financings"&&question.financingView){
+    const rows=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="financing"&&matchesBankDebtPurpose(resource,question.keyword))
+      .map(resource=>({bank:group.name,resource,detail:data.credit.find(credit=>credit.resource_id===resource.id)})));
+    const coverage=`${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+    if(!rows.length)return `Não encontrei financiamento correspondente a ${safe(question.keyword??"essa consulta")} nos dados recebidos em ${safe(modeLabel)}. Isso não confirma ausência de contrato; confira o banco.${coverage}`;
+    const view=question.financingView;
+    const selected=view==="missing-balance"?rows.filter(row=>bankMoney(row.detail?.outstanding_amount,row.detail?.currency)==="Não informado")
+      :view==="zero"?rows.filter(row=>hasZeroBankDebt(row.resource,data)):rows;
+    const description=(row:typeof rows[number])=>`${safe(row.bank)} · ${safe(bankResourceName(row.resource.name))}`;
+    const lines=selected.slice(0,12).map(row=>{
+      const name=description(row);
+      if(view==="next-installment"){
+        const amount=bankMoney(row.detail?.next_installment_amount,row.detail?.currency);
+        return `• ${name}: ${amount==="Não informado"?"valor da próxima parcela não informado pelo banco":`próxima parcela de ${amount}`}`;
+      }
+      if(view==="last-installment-date")return `• ${name}: Vencimento da última parcela: não informado pelo banco · data final do contrato: ${bankDate(row.detail?.due_date)}`;
+      if(view==="remaining-count")return `• ${name}: quantidade de parcelas restantes não informada pelo banco`;
+      if(view==="contracted")return `• ${name}: valor contratado ${bankMoney(row.detail?.contract_amount,row.detail?.currency)}`;
+      if(view==="missing-balance")return `• ${name}: saldo devedor não informado`;
+      return `• ${name}: saldo devedor informado como zero${row.detail?.currency?` ${safe(row.detail.currency)}`:" (moeda não informada)"}`;
+    });
+    const title={"next-installment":"Próxima parcela dos financiamentos","last-installment-date":"Última parcela dos financiamentos","remaining-count":"Parcelas restantes dos financiamentos",contracted:"Valor contratado dos financiamentos","missing-balance":"Financiamentos sem saldo devedor informado",zero:"Financiamentos com saldo zero informado"}[view];
+    const note=view==="last-installment-date"?" A data final do contrato não confirma o vencimento da última parcela; o banco não informou essa data separadamente."
+      :view==="remaining-count"?" O banco não informou a quantidade de parcelas restantes; saldo e data final não permitem calculá-la com segurança."
+      :view==="zero"?" Saldo zero não confirma quitação contratual; confirme o encerramento no banco."
+      :view==="missing-balance"?" Ausência de saldo não significa saldo zero."
+      :" Valores não informados permanecem desconhecidos.";
+    return `${title} · ${safe(modeLabel)}${question.keyword?` · ${safe(question.keyword)}`:""}\n${selected.length} ${selected.length===1?"contrato":"contratos"} nos dados recebidos.\n${lines.join("\n")||"Nenhum contrato correspondente foi identificado."}${selected.length>12?`\nMais ${selected.length-12} contrato(s) em Contas.`:""}${note}${coverage}`;
+  }
   if(question.kind==="investments"&&question.investmentView){
     const view=question.investmentView;
     const rows=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="investment").map(resource=>({bank:group.name,resource})));
