@@ -94,6 +94,13 @@ describe("AI provider routing", () => {
     expect(answer.bankQuery).not.toHaveProperty("userId"); expect(answer.bankQuery).not.toHaveProperty("total");
   });
 
+  it("keeps a requested manual-versus-bank account list when the model mistakes it for spending", async () => {
+    process.env.OPENAI_TEST_USER_IDS = "another-user";
+    googleGenerateContent.mockResolvedValueOnce({ response: { text: () => JSON.stringify({ intent: "finance_query", confidence: .96 }) } });
+    await expect(processMessage("Mostre minhas contas registradas manualmente separadas dos bancos.", context))
+      .resolves.toMatchObject({ intent: "account_list", confidence: 1 });
+  });
+
   it.each([
     ["Mostre tarifas bancárias cobradas neste mês.", "finance_query", { kind: "transactions", operation: "list", direction: "debit", movementClass: "bank_fee" }],
     ["Qual foi o maior débito bancário do mês?", "finance_analysis", { kind: "transactions", operation: "max", direction: "debit", source: "account" }],
