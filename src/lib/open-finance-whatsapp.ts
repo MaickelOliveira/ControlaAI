@@ -40,6 +40,18 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(business&&personal&&positionQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return positionQuestion||/banco|cartao|cartoes|finance|saldo|limite/.test(text)?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(/^quais parcelas (?:nao tem|estao sem) confirmacao de pagamento$/.test(plainWording)){
+    const [year,month,day]=today.split("-").map(Number);
+    const to=new Date(Date.UTC(year+1,month-1,day)).toISOString().slice(0,10);
+    try{
+      if(!await getOpenFinanceAccess(user,requested,{throwOnStorageError:true}))
+        return "A consulta de parcelas bancárias não está disponível nesse modo. Confira Contas e a conexão; não vou informar zero sem dados do banco.";
+      const agenda=await readBankAgenda(user,requested,{from:today,to,includeUndated:true});
+      const unconfirmed=agenda.items.filter(item=>item.kind==="installment"&&item.payment_evidence!==true&&(!item.mode||item.mode===requested));
+      const examples=unconfirmed.slice(0,5).map(item=>`• ${safeSummary(item.description)} · ${safeSummary(item.institution_name)} · ${bankMoney(item.amount,item.currency)} por parcela · próxima data: ${bankDate(item.due_date)}`);
+      return `Parcelas dos bancos sem confirmação de pagamento · ${requested==="personal"?"Pessoal":"Empresa"}\n${unconfirmed.length} ${unconfirmed.length===1?"parcela recebida":"parcelas recebidas"} nos próximos 12 meses ou sem data informada.\n${examples.join("\n")||"Nenhuma parcela correspondente nos dados recebidos."}${unconfirmed.length>5?`\nMais ${unconfirmed.length-5} em Contas.`:""}\nA falta de confirmação não confirma que estão em aberto, atrasadas ou não pagas; confira a fatura no banco.${agenda.incomplete?" Há dados bancários incompletos.":""}`;
+    }catch{return "Não consegui conferir as parcelas bancárias agora. Consulte Contas ou tente novamente; não vou afirmar que estejam em aberto sem confirmação do banco.";}
+  }
   if(/^separe emprestimos de financiamentos$/.test(plainWording)){
     const [loans,financings]=await Promise.all([
       answerBankQuestion(user,requested,"Mostre meus empréstimos",today),
