@@ -53,6 +53,28 @@ export function formatBankQuestion(data: BankOverview, question: BankQuestion, m
   if (!connectedGroups.length) return question.bankName || question.last4
     ? `Não encontrei ${safe(question.bankName ?? "esse cartão")}${question.last4 ? ` · final ${question.last4}` : ""} entre os bancos conectados em ${safe(modeLabel)}. Confira Contas e o modo/empresa selecionado.`
     : `Nenhum banco conectado em ${safe(modeLabel)}. A conexão fica na aba Contas.`;
+  if(question.kind==="investments"&&question.investmentView){
+    const view=question.investmentView;
+    const rows=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="investment").map(resource=>({bank:group.name,resource})));
+    const coverage=`${data.truncated?" Consulta parcial: há dados além do limite recebido.":""}${data.sync.some(sync=>sync.status!=="complete")?" Há uma importação pendente ou com falha.":""}`;
+    if(view==="missing-bank"){
+      const names=connectedGroups.filter(group=>!group.resources.some(resource=>resource.resource_type==="investment")).map(group=>safe(group.name));
+      return `Bancos sem investimentos recebidos · ${safe(modeLabel)}\n${names.length?names.slice(0,20).map(name=>`• ${name}`).join("\n"):"Todos os bancos conectados enviaram ao menos um investimento nos dados recebidos."}${names.length>20?`\nMais ${names.length-20} banco(s) em Contas.`:""}\nIsso não confirma ausência de investimentos nesses bancos; confira o banco e o compartilhamento de dados.${coverage}`;
+    }
+    if(!rows.length){
+      const focus={"gross-net":"Não há valores bruto e líquido para listar.",latest:"Não há posição de investimento para comparar datas.","missing-date":"Não há investimentos recebidos para conferir quais estão sem data.",currency:"Não há valores de investimentos para separar por moeda."}[view];
+      return `${focus} Nenhum investimento foi informado pelos bancos conectados em ${safe(modeLabel)}. Isso não confirma ausência de investimentos; confira cada banco. Valores de moedas diferentes não são somados.${coverage}`;
+    }
+    const validDate=(value:string|null)=>value&&/^\d{4}-\d{2}-\d{2}/.test(value)?value:null;
+    const dated=rows.filter(row=>validDate(row.resource.valuation_date));
+    const selected=view==="latest"?dated.filter(row=>row.resource.valuation_date===dated.map(item=>item.resource.valuation_date).sort().at(-1))
+      :view==="missing-date"?rows.filter(row=>!validDate(row.resource.valuation_date)):rows;
+    const heading={"gross-net":"Valores bruto e líquido dos investimentos",latest:"Investimento com posição mais recente","missing-date":"Investimentos sem data de avaliação",currency:"Investimentos separados por moeda"}[view];
+    const lines=selected.slice(0,20).map(({bank,resource})=>`• ${safe(bank)} · ${safe(bankResourceName(resource.name))} · Bruto: ${bankMoney(resource.gross_amount,resource.currency)} · Líquido: ${bankMoney(resource.net_amount,resource.currency)} · Posição: ${bankDate(resource.valuation_date)}`);
+    const empty=view==="latest"?"Nenhum investimento recebido tem data de avaliação informada.":"Nenhum investimento recebido está sem data de avaliação.";
+    const currencies=[...new Set(selected.map(row=>row.resource.currency).filter((currency):currency is string=>!!currency))];
+    return `${heading} · ${safe(modeLabel)}\n${lines.join("\n")||empty}${selected.length>20?`\nMais ${selected.length-20} investimento(s) em Contas.`:""}\n${view==="currency"?`Moedas recebidas: ${currencies.join(", ")||"não informadas"}. Valores de moedas diferentes não são somados entre si.`:"Valores ausentes permanecem desconhecidos; nenhuma posição foi estimada."} Isso não confirma que o banco tenha enviado todos os investimentos.${coverage}`;
+  }
   if(question.kind==="loans"&&question.debtView){
     const view=question.debtView;
     const rows=connectedGroups.flatMap(group=>group.resources.filter(resource=>resource.resource_type==="loan")

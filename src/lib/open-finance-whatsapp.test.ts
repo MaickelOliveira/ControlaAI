@@ -11,6 +11,21 @@ import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "./open-fina
 import {bankMoney} from "./open-finance-display";
 const user={id:"own-user",email:"user@example.test",plan:"business",activeMode:"personal",status:"active"} as const;
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});});
+it("separates personal and business investment queries without mixing their positions",async()=>{
+  m.bank.mockImplementation(async (_user:unknown,mode:string)=>mode==="personal"?"Pessoal: nenhum investimento informado.":"Empresa: posição bancária recebida.");
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Separe investimento pessoal de investimento da empresa.","2026-10-15");
+  expect(answer).toContain("Pessoal: nenhum investimento informado.");
+  expect(answer).toContain("Empresa: posição bancária recebida.");
+  expect(m.bank).toHaveBeenCalledWith(user,"personal",expect.any(String),"2026-10-15");
+  expect(m.bank).toHaveBeenCalledWith(user,"business",expect.any(String),"2026-10-15");
+  expect(await answerBankWhatsAppMessage(user as never,"personal","both","Mostre os investimentos pessoais separados dos investimentos da empresa.","2026-10-15")).toContain("As posições de Pessoal e Empresa não são somadas.");
+});
+it("explains cash versus invested value without treating one as the other",async()=>{
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Explique a diferença entre dinheiro em conta e valor investido.","2026-10-15");
+  expect(answer).toContain("conta");expect(answer).toContain("investimento");
+  expect(answer).toContain("não são somados");
+  expect(await answerBankWhatsAppMessage(user as never,"personal","both","Qual a diferença entre saldo da conta e investimento?","2026-10-15")).toContain("investimento");
+});
 it("uses the requested previous month and the own connected ledger",async()=>{
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"]);
   expect(answer).toContain("R$ 35,00");expect(answer).toContain("01/09/2026");expect(m.read).toHaveBeenCalledWith(user,"personal","2026-09-01","2026-09-30");
