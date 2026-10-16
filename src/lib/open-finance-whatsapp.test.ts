@@ -37,6 +37,26 @@ it("does not treat a bank-reported zero loan balance as proof of discharge",asyn
   expect(answer).toContain("não prova quitação");
   expect(answer).toContain("banco");
 });
+it("answers unconfirmed bank installments with a count and a few examples, without calling them overdue",async()=>{
+  const items=Array.from({length:8},(_,index)=>({id:`item-${index}`,mode:"personal",kind:"installment",description:`Compra ${index}`,resource_name:"Cartão",institution_name:"Banco",due_date:null,amount:"20",currency:"BRL",payment_evidence:index===2,synced_at:"2026-10-15"}));
+  m.agenda.mockResolvedValue({items,incomplete:true});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais parcelas não têm confirmação de pagamento?","2026-10-15");
+  expect(answer).toContain("7 parcelas");
+  expect(answer).toContain("Compra 0");
+  expect(answer).toContain(bankMoney("20","BRL"));
+  expect(answer).not.toContain("Compra 2");
+  expect(answer).not.toContain("Compra 7");
+  expect(answer).toContain("não confirma que estão em aberto");
+  expect(answer).toContain("dados bancários incompletos");
+  expect(m.agenda).toHaveBeenCalledWith(user,"personal",expect.objectContaining({includeUndated:true}));
+});
+it("does not turn missing bank access into a claim that there are no unconfirmed installments",async()=>{
+  m.access.mockResolvedValue(null);
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais parcelas não têm confirmação de pagamento?","2026-10-15");
+  expect(answer).toContain("não está disponível");
+  expect(answer).not.toContain("0 parcelas");
+  expect(m.agenda).not.toHaveBeenCalled();
+});
 it("uses the requested previous month and the own connected ledger",async()=>{
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,period:{from:"2026-09-01",to:"2026-09-30"}},["2026-10-01","2026-10-31"]);
   expect(answer).toContain("R$ 35,00");expect(answer).toContain("01/09/2026");expect(m.read).toHaveBeenCalledWith(user,"personal","2026-09-01","2026-09-30");
