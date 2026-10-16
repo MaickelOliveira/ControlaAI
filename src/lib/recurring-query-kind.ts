@@ -6,6 +6,14 @@ export function recurringQueryKind(message:string):"recurring"|"installment"|nul
  return installment&&!recurring?"installment":recurring&&!installment?"recurring":null;
 }
 
+/** Cadastro feito na Zelo, sem pedir as estimativas recebidas dos bancos. */
+export function isManualRecurringListRequest(message:string):boolean{
+ const text=normalizeBankText(message);
+ return recurringQueryKind(message)!==null
+  && /\b(?:cadastrad[oa]s?|registrad[oa]s?|anotad[oa]s?|que\s+(?:eu\s+)?(?:cadastrei|registrei|anotei))\b/.test(text)
+  && !/\b(?:banco|bancari[oa]s?|open finance|detectad[oa]s?|nao\s+cadastrad[oa]s?|sem\s+cadastro)\b/.test(text);
+}
+
 /** Consulta de comparação, não pedido para criar ou apagar uma assinatura. */
 export function isUnregisteredBankRecurringRequest(message:string):boolean{
  const text=normalizeBankText(message);

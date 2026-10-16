@@ -4,13 +4,14 @@ import { getOpenFinanceAccess, type OpenFinanceIdentity } from "./open-finance-a
 import { readBankAgenda } from "./financial-agenda";
 import { formatBankSchedules } from "./bank-schedule-answer";
 import { formatBankAgenda,visibleBankSchedules } from "./open-finance-schedules";
-import {recurringQueryKind,isUnregisteredBankRecurringRequest,isUnreliableRecurringValueRequest,isRemainingKnownInstallmentsRequest} from "./recurring-query-kind";
+import {recurringQueryKind,isManualRecurringListRequest,isUnregisteredBankRecurringRequest,isUnreliableRecurringValueRequest,isRemainingKnownInstallmentsRequest} from "./recurring-query-kind";
 import {descriptionsLikelyMatch,type RecurringTransaction} from "./recurring";
 import { expandMerchantAliases, merchantDescriptionMatchesTerms } from "./finances";
 import { formatRemainingKnownInstallments } from "./remaining-installments-answer";
 
-/** Every manual recurring answer receives the same bank appendix, including empty/forecast branches. */
+/** Adds bank estimates unless the customer explicitly asks for Zelo's own registrations. */
 export async function connectedRecurringAppendix(user: OpenFinanceIdentity, mode: "personal" | "business", ai: AIResult, message: string, today: string, registered:ReadonlyArray<Pick<RecurringTransaction,"description"|"type"|"recurrenceType">&Partial<Pick<RecurringTransaction,"amount"|"totalInstallments"|"paidInstallments">>>): Promise<string> {
+  if (isManualRecurringListRequest(message)) return "";
   if (process.env.OPEN_FINANCE_WHATSAPP_ENABLED !== "true") return "";
   try {
     const scope = await getOpenFinanceAccess(user, mode, { throwOnStorageError: true });

@@ -33,3 +33,21 @@ it("does not claim that every subscription was registered when the bank list has
  expect(result).toContain("consulta bancária está incompleta");
  expect(result).not.toContain("Zé Delivery");
 });
+
+it("shows only manually registered recurring charges when that is what the user asks for",async()=>{
+ const result=await connectedRecurringAppendix(user,"personal",{intent:"recurring_query",confidence:1},"Mostre minhas cobranças recorrentes cadastradas.","2026-10-15",[
+  {description:"TESTE AUDITORIA",type:"expense",recurrenceType:"recurring"},
+ ]);
+ expect(result).toBe("");
+ expect(m.agenda).not.toHaveBeenCalled();
+});
+
+it("still includes bank estimates for a general recurring charges question",async()=>{
+ const result=await connectedRecurringAppendix(user,"personal",{intent:"recurring_query",confidence:1},"Mostre minhas cobranças recorrentes.","2026-10-15",[]);
+ expect(result).toContain("Netflix");
+});
+
+it("includes bank estimates when comparing them with manual registrations",async()=>{
+ const result=await connectedRecurringAppendix(user,"personal",{intent:"recurring_query",confidence:1},"Quais assinaturas registradas por mim aparecem no banco?","2026-10-15",[]);
+ expect(result).toContain("Netflix");
+});
