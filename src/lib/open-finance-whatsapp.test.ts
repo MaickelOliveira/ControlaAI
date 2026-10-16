@@ -235,7 +235,14 @@ it("reports only explicit bank payment evidence for forecasts",async()=>{
   m.agenda.mockResolvedValue({items:[{id:"paid",mode:"personal",kind:"bill",description:"Fatura A",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-18",amount:"100",currency:"BRL",payment_evidence:true,payment_amount:"40"},{id:"unknown",mode:"personal",kind:"recurring",description:"Via Laser",institution_name:"Banco B",resource_name:"Cartão",due_date:"2026-10-20",amount:"20",currency:"BRL",payment_evidence:false}],incomplete:false});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Alguma previsão já aparece como paga?","2026-10-16");
   expect(answer).toContain("Fatura A");expect(answer).toContain("pagamento informado");expect(answer?.replace(/\s/g," ")).toContain("R$ 40,00");
-  expect(answer).not.toContain("Via Laser");expect(answer).not.toContain("totalmente quitada");
+  expect(answer).not.toContain("Via Laser");expect(answer).not.toContain("totalmente quitada");expect(answer).not.toContain("acima do valor da fatura");
+});
+it("calls out a bank-reported payment above the invoice amount without claiming settlement",async()=>{
+  m.agenda.mockResolvedValue({items:[{id:"overpaid",mode:"personal",kind:"bill",description:"Fatura Santander",institution_name:"Santander",resource_name:"Cartão",due_date:"2026-10-13",amount:"1614.20",currency:"BRL",payment_evidence:true,payment_amount:"1692.24"}],incomplete:false});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Alguma previsão já aparece como paga?","2026-10-16");
+  expect(answer?.replace(/\s/g," ")).toContain("R$ 1.614,20");expect(answer?.replace(/\s/g," ")).toContain("R$ 1.692,24");
+  expect(answer).toContain("acima do valor da fatura");expect(answer).toContain("confira no banco");
+  expect(answer).not.toContain("fatura quitada");
 });
 it("does not report zero paid forecasts without a bank connection",async()=>{
   m.access.mockResolvedValue(null);
