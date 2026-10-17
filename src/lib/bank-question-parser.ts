@@ -139,6 +139,10 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
   ];
   for(const [pattern,debtView] of focusedLoanFollowups)if(pattern.test(text))
     return {kind:"loans",...monthPeriod(today,false),debtView};
+  const firstClause=text.split(/[?!.]/,1)[0].trim();
+  if(/^(?:quando (?:termina|terminam|vence|vencem) (?:cada|todos os meus|meus) emprestimos?|qual (?:e )?a data final de cada emprestimo)(?: pessoal| empresarial| da empresa)?$/.test(firstClause)
+    &&!/\b(?:mes passado|mes anterior|ano passado|ontem)\b/.test(text))
+    return {kind:"loans",...monthPeriod(today,false),debtView:"due-date"};
   if (/\b(?:investimentos?|aplicacoes?)\b/.test(text)) {
     const investmentView: BankQuestion["investmentView"] =
       /\b(?:valor(?:es)? )?bruto\b/.test(text) && /\bliquido\b/.test(text) ? "gross-net" :
