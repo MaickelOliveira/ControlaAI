@@ -46,6 +46,15 @@ it("reads fresh data after completion and does not let a consumer mutate another
  expect((await readBankOverview(scope)).connections[0].id).toBe("updated");expect(rpc).toHaveBeenCalledTimes(2);
 });
 
+it("folds complementary provider installment fragments in the account overview only",async()=>{
+ const first={id:"first",kind:"installment",resource_id:"card",description:"DM*HOSTINGER.COM.BR",resource_name:"Card",institution_name:"Bank",due_date:null,amount:"43.71",currency:null,synced_at:"2026-10-17",purchase_date:"2026-07-13",source_ordinals:[1,2,3],total_installments:12,observed_installments:3,last_observed_installment:3,last_observed_month:"2026-09-01"};
+ const rest={...first,id:"rest",description:"DM*HOSTINGER.COM.",amount:"43.61",source_ordinals:[4,5,6,7,8,9,10,11,12],observed_installments:9,last_observed_installment:4,last_observed_month:"2026-10-01"};
+ rpc.mockResolvedValue({connections:[],agenda:{items:[first,rest],incomplete:false}});
+ const overview=await readBankOverview(scope);
+ expect(overview.agenda?.items).toHaveLength(1);
+ expect(overview.agenda?.items[0]).toMatchObject({observed_installments:4,amount_varies:true});
+});
+
 it("clears a failed overview so a later request can recover",async()=>{
  rpc.mockRejectedValue(Error("OF_STORAGE_ERROR"));
  const failures=await Promise.allSettled([readBankOverview(scope),readBankOverview(scope)]);

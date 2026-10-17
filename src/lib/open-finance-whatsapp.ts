@@ -68,7 +68,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const repeatedIds=[...byId.values()].filter(group=>group.length>1);
       const similar=[...groups.values()].filter(group=>new Set(group.map(item=>item.id)).size>1);
       const candidates=[...repeatedIds.map(group=>({group,note:"mesmo identificador repetido"})),...similar.map(group=>({group,note:"identificadores diferentes; possível coincidência"}))];
-      if(!candidates.length)return `Nenhum registro idêntico encontrado entre os parcelamentos recebidos para o mesmo cartão em ${bankModeLabel(requested)}. Nomes parecidos ou parcelas com valores ou números diferentes não comprovam duplicação. Confira a fatura no banco.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+      if(!candidates.length)return `Nenhum registro idêntico encontrado entre os parcelamentos recebidos para o mesmo cartão em ${bankModeLabel(requested)}.${installments.some(item=>(item.merged_source_count??0)>1)?" Algumas sequências que o banco enviou em partes foram mostradas como uma só compra após conferir a data e os números das parcelas.":""} Nomes parecidos ou parcelas com valores ou números diferentes não comprovam duplicação. Confira a fatura no banco.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
       const lines=candidates.slice(0,5).map(({group,note})=>{
         const item=group[0],value=item.currency?bankMoney(item.amount,item.currency):"valor/moeda não informados com segurança";
         return `• ${safeSummary(item.institution_name)} · ${safeSummary(item.resource_name)} · ${safeSummary(item.description)} · ${value} por parcela · ${group.length} registros (${note})`;
