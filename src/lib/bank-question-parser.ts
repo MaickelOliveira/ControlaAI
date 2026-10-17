@@ -79,13 +79,13 @@ function settledLoans(text: string): Pick<BankQuestion, "kind" | "settledOnly"> 
   return /^(?:quais (?:sao )?(?:os )?(?:meus )?|(?:me )?mostre (?:os )?(?:meus )?)emprestimos (?:ja )?(?:estao )?quitados$/.test(clause)?{kind:"loans",settledOnly:true}:null;
 }
 
-function focusedLimitPresentation(text: string): string | null {
+function focusedBankPresentation(text: string): string | null {
   const clause=text.split(/[?!.]/,1)[0].trim();
   const suffix=text.slice(clause.length).replace(/^[?!.]+\s*/,"").trim();
   if (!suffix) return clause;
   // Only discard a follow-up that changes presentation. A bank, mode or date
   // filter must not be silently dropped from a financial answer.
-  return /^(?:mostre|liste|apresente) (?:so|somente|apenas) (?:(?:as )?linhas? afetadas?|esse cartao)(?:(?:, | e )(?:nao corrija valores por suposicao|avise se o banco nao informou algum limite|incluindo valor zero se foi informado))?$/.test(suffix)
+  return /^(?:(?:mostre|liste|apresente) (?:so|somente|apenas) (?:(?:as )?linhas? afetadas?|esse cartao)(?:(?:, | e )(?:nao corrija valores por suposicao|avise se o banco nao informou algum limite|incluindo valor zero se foi informado))?|cite somente os dados faltantes e nao invente prazo de sincronizacao)$/.test(suffix)
     ? clause : null;
 }
 
@@ -94,7 +94,8 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
   let text = normalizeBankText(question);
   if (text.length > 500) return null;
   text = queryText(question);
-  if (/^explique quais saldos e limites ainda dependem de atualizacao bancaria$/.test(text))
+  const focusedBank=focusedBankPresentation(text);
+  if (focusedBank&&/^explique quais saldos e limites ainda dependem de atualizacao bancaria$/.test(focusedBank))
     return {kind:"coverage",...monthPeriod(today,false)};
   if (/^qual (?:era|foi) o saldo (?:informado )?por cada banco na ultima atualizacao$/.test(text))
     return {kind:"balances",...monthPeriod(today,false),latestSnapshot:true};
@@ -104,11 +105,10 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     return {kind:"limits",...monthPeriod(today,false),limitView:"available-known"};
   if (/^(?:ha|existem?) linhas? de credito compartilhadas? que nao devem ser somadas$/.test(text))
     return {kind:"limits",...monthPeriod(today,false),limitView:"shared"};
-  const focusedLimit=focusedLimitPresentation(text);
-  if (focusedLimit&&/^algum limite recebido esta inconsistente com o total e o utilizado$/.test(focusedLimit))
+  if (focusedBank&&/^algum limite recebido esta inconsistente com o total e o utilizado$/.test(focusedBank))
     return {kind:"limits",...monthPeriod(today,false),limitView:"inconsistent"};
-  if (focusedLimit&&/^qual cartao tem o (maior|menor) limite disponivel$/.test(focusedLimit))
-    return {kind:"limits",...monthPeriod(today,false),limitView:focusedLimit.includes("maior")?"max-available":"min-available"};
+  if (focusedBank&&/^qual cartao tem o (maior|menor) limite disponivel$/.test(focusedBank))
+    return {kind:"limits",...monthPeriod(today,false),limitView:focusedBank.includes("maior")?"max-available":"min-available"};
   const focusedCarFinancing: Array<[RegExp,NonNullable<BankQuestion["financingView"]>]> = [
     [/^qual (?:e )?(?:o )?valor da proxima parcela (?:do financiamento )?do (carro|veiculo|automovel|moto|motocicleta|casa|imovel)$/, "next-installment"],
     [/^quando vence a ultima parcela (?:do financiamento )?do (carro|veiculo|automovel|moto|motocicleta|casa|imovel)$/, "last-installment-date"],

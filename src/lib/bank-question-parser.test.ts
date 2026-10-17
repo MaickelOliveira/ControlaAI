@@ -70,6 +70,10 @@ it("recognizes focused card-limit questions without inventing a bank filter", ()
 it("routes a joint balance-and-limit coverage question to received bank data", () => {
   expect(parseBankQuestion("Explique quais saldos e limites ainda dependem de atualização bancária.","2026-10-15"))
     .toMatchObject({kind:"coverage"});
+  expect(parseBankQuestion("Explique quais saldos e limites ainda dependem de atualização bancária. Cite somente os dados faltantes e não invente prazo de sincronização.","2026-10-15"))
+    .toMatchObject({kind:"coverage"});
+  expect(parseBankQuestion("Explique quais saldos e limites ainda dependem de atualização bancária. Na empresa.","2026-10-15"))
+    .toBeNull();
 });
 
 it.each(["quanto falta pra min pagar do carro", "Quanto ainda devo no financiamento do carro?", "Quanto falta para quitar minha casa?"])("recognizes remaining financed debt rather than monthly bills: %s", message => {

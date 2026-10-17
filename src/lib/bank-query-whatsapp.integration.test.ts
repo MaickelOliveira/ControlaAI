@@ -65,6 +65,15 @@ it("keeps explanatory WhatsApp follow-ups focused on the requested card-limit su
   expect(lowest).toContain("Cartão zero");expect(lowest).not.toContain("Cartão certo");
   expect(m.rpc).toHaveBeenCalledTimes(3);
 });
+it("answers bank-update follow-ups with missing received fields, not a capabilities list",async()=>{
+  m.rpc.mockResolvedValue({...data,resources:[...data.resources,
+    {...data.resources[0],id:"account",resource_type:"account",name:"Conta sem saldo",available_amount:null},
+    {...data.resources[0],id:"card",resource_type:"card",name:"Cartão sem limite"}]});
+  const response=await answerBankWhatsAppMessage(user,"personal","both","Explique quais saldos e limites ainda dependem de atualização bancária. Cite somente os dados faltantes e não invente prazo de sincronização.","2026-10-15");
+  expect(response).toContain("Conta sem saldo");expect(response).toContain("Cartão sem limite");
+  expect(response).toContain("não confirma saldo zero");expect(response).not.toContain("Posso consultar saldos bancários");
+  expect(m.rpc).toHaveBeenCalledOnce();
+});
 it.each(["Por favor, qual era meu limite mês passado?", "Me mostra meus empréstimos mês passado", "Mostre meus saldos nos bancos mês passado"]) ("keeps historical positions out of the expense classifier even with courteous/colloquial wording: %s", async text => {
   expect(await answerBankWhatsAppMessage(user, "personal", "both", text, "2026-10-11")).toContain("dados atuais"); expect(m.rpc).not.toHaveBeenCalled();
 });
