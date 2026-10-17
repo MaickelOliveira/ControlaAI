@@ -50,6 +50,16 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   expect(split).toContain("ANUIDADE DIFERENCIADA");expect(split).toContain("Geladeira");
   expect(split).toContain("mesma descrição não prova duplicidade");
  });
+ it("respeita no máximo três exemplos sem esconder a quantidade de parcelas sem data",()=>{
+  const question=parseBankInstallmentFocus("Quais parcelas têm valor informado mas vencimento desconhecido? Resuma a quantidade e mostre no máximo três exemplos.");
+  expect(question).toEqual({kind:"undated-valued",exampleLimit:3});
+  const data={...agenda,items:[...agenda.items,...Array.from({length:6},(_,i)=>({...agenda.items[2],id:`extra-${i}`,description:`Compra ${i}`}))]};
+  const answer=formatBankInstallmentFocus(data,question!,"2026-10-15","Pessoal");
+  expect(answer).toContain("9 item(ns)");
+  expect((answer.match(/^• /gm)??[])).toHaveLength(3);
+  expect(answer).toContain("Mais 6 item(ns) em Contas");
+  expect(answer).toContain("Sem data recebida");
+ });
  it("resume assinaturas, recorrências bancárias e compras parceladas sem misturar anuidades",()=>{
   const data={...agenda,items:[...agenda.items,{id:"netflix",kind:"recurring" as const,description:"Netflix",resource_name:"Gold",institution_name:"Sicredi",due_date:"2026-10-20",amount:"35",currency:"BRL",synced_at:"2026-10-14"},{id:"delivery",kind:"recurring" as const,description:"Pg Ze Delivery",resource_name:"Gold",institution_name:"Nubank",due_date:"2026-10-25",amount:"35",currency:"BRL",synced_at:"2026-10-14"}]};
   const manual=[
