@@ -14,6 +14,7 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   ["Quais compras parceladas ainda têm parcela futura com data?","future-dated"],
   ["Qual é a próxima parcela de cada cartão?","next-by-card"],
   ["Mostre a quantidade total e a última parcela identificada de cada compra parcelada.","position"],
+  ["Mostre a quantidade total e a última parcela identificada.","position"],
   ["Quais parcelas têm valor informado mas vencimento desconhecido?","undated-valued"],
   ["Separe anuidade de compras parceladas.","separate-annuity"],
   ["Quanto vence em parcelas de cartão na próxima semana?","due-next-week"],
