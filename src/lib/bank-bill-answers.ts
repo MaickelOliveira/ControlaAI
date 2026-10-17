@@ -3,7 +3,7 @@ import {normalizeBankText} from "./bank-question-parser";
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import type {LedgerEntry} from "./finance-ledger";
 
-export type BillQuestion = {kind:"overdue"|"latest"|"total"|"minimum"|"next"|"undated"|"separate"|"confirmed-payment"|"partial-payment"|"missing";bankName?:string};
+export type BillQuestion = {kind:"overdue"|"latest"|"total"|"minimum"|"next"|"undated"|"separate"|"confirmed-payment"|"partial-payment"|"missing";bankName?:string;requestedCurrent?:boolean};
 
 export function paidBillHistoryAnswer(message:string):string|null{
  const text=normalizeBankText(message);
@@ -27,7 +27,7 @@ export function parseBillQuestion(message:string):BillQuestion|null{
  if(/\bfaturas?\b/.test(text)&&/\bcartoes\b/.test(text)&&/\b(?:nao enviaram|sem dados|sem fatura)\b/.test(text))return {kind:"missing"};
  if(/\b(?:separe|separado|diferenc[ie]|distinga|compare|versus|vs)\b/.test(text)&&/\bfaturas?\b/.test(text)&&/\bcompras?\b/.test(text)&&/\bcart(?:ao|oes)\b/.test(text))return {kind:"separate"};
  if(/\bfaturas?\b/.test(text)&&/\b(?:ja venceram|vencidas?|atrasadas?)\b/.test(text)&&/\b(?:pagamento|paga|pagas|confirmad[oa]s?)\b/.test(text))return {kind:"overdue"};
- if(/\bfaturas?\b/.test(text)&&/\b(?:atual|mais recente|ultima)\b/.test(text)&&/\b(?:cada|por banco|todos os cartoes)\b/.test(text))return {kind:"latest"};
+ if(/\bfaturas?\b/.test(text)&&/\b(?:atual|mais recente|ultima)\b/.test(text)&&/\b(?:cada|por banco|todos os cartoes)\b/.test(text))return {kind:"latest",requestedCurrent:/\batual\b/.test(text)};
  const total=text.match(/^(?:qual (?:e )?o |quanto (?:e|foi) o )?(?:total|valor) (?:informado )?da fatura (?:do|da) (.+)$/);
  if(total&&total[1].length<=80)return {kind:"total",bankName:total[1].replace(/^banco /,"")};
  if(/\bminimo\b/.test(text)&&/\bfaturas?\b/.test(text))return {kind:"minimum"};
@@ -125,7 +125,13 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
     .map(row=>`• ${cardLabel(row)} · venceu em ${bankDate(row.bill.due_date)} · total informado ${amount(row,"total_amount")} · pagamento não confirmado nos dados recebidos`);
    return `Faturas mais recentes de cada cartão com vencimento passado · ${label}\n${listed(result)||"Nenhuma fatura mais recente de cartão apareceu com vencimento passado e pagamento sem confirmação."}\nIsso não prova que exista dívida: o banco pode não ter informado o pagamento. Confira cada fatura em Contas.`;
   case "latest":
-   result=latest.map(row=>`• ${cardLabel(row)} · último vencimento recebido ${bankDate(row.bill.due_date)} · total ${amount(row,"total_amount")} · mínimo ${amount(row,"minimum_payment_amount")}`);
+   result=latest.map(row=>question.requestedCurrent
+    ?`• ${cardLabel(row)} · ${row.bill.due_date&&row.bill.due_date>=today
+      ?/^(?:paid|pago|paga|settled|liquidado|quitado)$/i.test(row.bill.status)
+       ?`fatura com vencimento recebido ${bankDate(row.bill.due_date)} · banco informou pagamento; não apresento valor em aberto`
+       :`fatura com vencimento recebido ${bankDate(row.bill.due_date)} · total informado ${amount(row,"total_amount")}; ${partiallyPaid(row)?"pagamento parcial informado, saldo a pagar não confirmado":"pagamento não confirmado"}`
+      :`não recebi fatura com vencimento de hoje em diante (último vencimento recebido ${bankDate(row.bill.due_date)})`}`
+    :`• ${cardLabel(row)} · último vencimento recebido ${bankDate(row.bill.due_date)} · total ${amount(row,"total_amount")} · mínimo ${amount(row,"minimum_payment_amount")}`);
    {
     const active=new Map(overview.connections.filter(c=>c.status==="active"&&!c.archived_at).map(c=>[c.id,c]));
     const covered=new Set(latest.map(row=>row.card.id));
@@ -134,7 +140,9 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
       if(bank)result.push(`• ${safe(bank.institution_name)} · ${safe(card.name)}${card.identification_last4?` final ${card.identification_last4}`:""} · fatura não informada pelo banco`);
     }
    }
-   return `Última fatura recebida de cada cartão · ${label}\n${listed(result)||"Nenhuma fatura recebida dos bancos conectados."}\nA última fatura recebida pode já ter sido paga; não equivale ao valor em aberto.`;
+   return question.requestedCurrent
+    ?`Não consigo confirmar qual fatura está aberta agora.\nFaturas recebidas por cartão · ${label}\n${listed(result)||"Nenhuma fatura recebida dos bancos conectados."}\nVencimento futuro não confirma que a fatura ainda está em aberto; faturas antigas podem já estar pagas. Confira no banco antes de pagar.`
+    :`Última fatura recebida de cada cartão · ${label}\n${listed(result)||"Nenhuma fatura recebida dos bancos conectados."}\nA última fatura recebida pode já ter sido paga; não equivale ao valor em aberto.`;
   case "total":
    result=latest.map(row=>`• ${cardLabel(row)} · vencimento ${bankDate(row.bill.due_date)} · total informado ${amount(row,"total_amount")}`);
    return `Última fatura recebida ${question.bankName?`de ${safe(question.bankName)}`:""} · ${label}\n${listed(result)||"Não encontrei fatura recebida desse banco neste modo."}${result.length>1?"\nHá mais de um cartão; não somei as faturas. Diga o final do cartão se quiser apenas uma.":""}\nO total informado não confirma quanto ainda falta pagar.`;
