@@ -4,7 +4,7 @@ import {bankAmountTotals} from "./bank-question-answer";
 import {weekBoundsBR} from "./date-br";
 import {bankInstallmentPosition,bankInstallmentProgress,visibleBankSchedules,type BankAgenda,type BankAgendaItem} from "./open-finance-schedules";
 
-export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"|"separate-subscriptions"|"due-next-week"|"missing-total"};
+export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"|"separate-subscriptions"|"due-next-week"|"missing-total";exampleLimit?:number};
 type ManualSchedule={description:string;category:string;recurrenceType:"installment"|"recurring";type:"expense"|"income";amount:number};
 const safe=(text:string)=>text.replace(/[\r\n*`_~<>]/g," ").trim().slice(0,100);
 const isAnnuity=(item:BankAgendaItem)=>/\b(?:anuidade|anualidade|annual fee)\b/.test(normalizeBankText(item.description));
@@ -26,7 +26,11 @@ export function parseBankInstallmentFocus(message:string):BankInstallmentFocus|n
  if(/\b(?:proxima|proximas) parcelas?\b/.test(text)&&/\b(?:cada|por) cartao\b/.test(text))return {kind:"next-by-card"};
  if(/\b(?:quantidade total|total de parcelas)\b/.test(text)&&/\bultima parcela\b/.test(text)
   && (/\bcompras? parcelad[ao]s?\b/.test(text)||/^(?:mostre|me mostre|liste|diga) a quantidade total e a ultima parcela identificada$/.test(text)))return {kind:"position"};
- if(/\bparcelas?\b/.test(text)&&/\bvalor informado\b/.test(text)&&/\b(?:vencimento|data) (?:desconhecido|desconhecida|nao informado|nao informada)\b/.test(text))return {kind:"undated-valued"};
+ if(/\bparcelas?\b/.test(text)&&/\bvalor informado\b/.test(text)&&/\b(?:vencimento|data) (?:desconhecido|desconhecida|nao informado|nao informada)\b/.test(text)){
+  const requested=text.match(/\b(?:no maximo|ate|apenas|somente) (um|dois|tres|quatro|cinco|\d{1,2}) exemplos?\b/);
+  const count=requested?({um:1,dois:2,tres:3,quatro:4,cinco:5}[requested[1]]??Number(requested[1])):/\bresuma\b/.test(text)?3:null;
+  return count===null?{kind:"undated-valued"}:{kind:"undated-valued",exampleLimit:Math.min(10,Math.max(1,count))};
+ }
  return null;
 }
 
@@ -74,7 +78,7 @@ export function formatBankInstallmentFocus(agenda:BankAgenda,focus:BankInstallme
    return `Última parcela identificada de cada compra parcelada recebida dos bancos · ${safe(modeLabel)} · ${purchases.length} item(ns)\n${listed(purchases,item=>`• ${label(item)} · ${bankInstallmentPosition(item)} · ${amount(item)} por parcela`)}${appendix}\nAnuidades ficaram separadas das compras. Compras com a mesma descrição podem ser distintas; a posição não confirma pagamento.`;
   case "undated-valued":{
    const rows=all.filter(item=>!item.due_date&&item.amount!==null&&item.amount!==undefined&&/^-?\d+(?:\.\d+)?$/.test(String(item.amount)));
-   return `Parcelas bancárias com valor informado e vencimento desconhecido · ${safe(modeLabel)} · ${rows.length} item(ns)\n${listed(rows,item=>`• ${label(item)} · ${bankInstallmentPosition(item)} · ${amount(item)}`)}${appendix}\nSem data recebida, não consigo dizer quando serão cobradas nem se já foram pagas.`;
+   return `Parcelas bancárias com valor informado e vencimento desconhecido · ${safe(modeLabel)} · ${rows.length} item(ns)\n${listed(rows,item=>`• ${label(item)} · ${bankInstallmentPosition(item)} · ${amount(item)}`,focus.exampleLimit??10)}${appendix}\nSem data recebida, não consigo dizer quando serão cobradas nem se já foram pagas.`;
   }
   case "separate-annuity":{
    const fees=all.filter(isAnnuity);
