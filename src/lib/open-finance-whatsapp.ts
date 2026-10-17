@@ -387,7 +387,11 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       else {label="Lançamentos com valor não informado";selected=scoped.filter(e=>bankMoney(e.bank?.amount,e.bank?.currency)==="Não informado");}
       const sum=cardPurchases?`\nTotal conhecido: ${money(selected.reduce((cents,e)=>cents+Math.round(e.amount*100),0)/100)}.`:"";
       const paymentNote=billPayments?"\nPagamentos marcados “Fora dos totais” não foram somados aos gastos. Entradas e saídas podem representar os dois lados da mesma fatura; não as some. Confira no banco se o pagamento foi concluído.":"";
-      return `${label} · ${bankDate(from)} a ${bankDate(today)}\n${selected.length} movimento(s) recebido(s).${sum}\n${lines(selected)}${selected.length>20?`\nMostrando 20 de ${selected.length}; veja o restante em Finanças.`:""}${paymentNote}${coverage}`;
+      const count=selected.length===1?"1 movimento correspondente":`${selected.length} movimentos correspondentes`;
+      const details=selected.length?lines(selected):missingAmount
+        ?"Nenhum lançamento sem valor informado foi identificado nos dados recebidos deste período."
+        :"Nenhum movimento com esse filtro foi recebido neste período.";
+      return `${label} · ${bankDate(from)} a ${bankDate(today)}\n${count}.${sum}\n${details}${selected.length>20?`\nMostrando 20 de ${selected.length}; veja o restante em Finanças.`:""}${paymentNote}${coverage}`;
     }catch{return "Não consegui consultar esses movimentos agora. Confira Finanças ou tente novamente; nenhum valor foi estimado.";}
   }
   if(/^quais foram minhas cinco movimentacoes mais recentes\s*[?!.]*$/.test(text.trim())){

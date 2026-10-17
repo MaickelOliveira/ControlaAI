@@ -492,6 +492,13 @@ it("reports only missing bank amounts and does not invent dates or zero",async()
   const dates=await answerBankWhatsAppMessage(user as never,"personal","both","Quais lançamentos não têm data informada?","2026-10-15");
   expect(amounts).toContain("Sem valor");expect(amounts).toContain("Não informado");expect(amounts).not.toContain("Valor conhecido");
   expect(dates).toContain("2 movimento(s) sem data");expect(dates).not.toContain("Valor conhecido");
+  m.read.mockResolvedValue({entries:[
+    {id:"known",mode:"personal",source:"bank",date:"2026-10-12",type:"expense",amount:42,description:"Valor conhecido",category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"42",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const noneMissing=await answerBankWhatsAppMessage(user as never,"personal","both","Quais lançamentos do extrato não têm valor informado?","2026-10-15");
+  expect(noneMissing).toContain("0 movimentos correspondentes");
+  expect(noneMissing).toContain("Nenhum lançamento sem valor informado foi identificado");
+  expect(noneMissing).not.toContain("Nenhum movimento recebido neste período");
 });
 it("separates explicit card refunds from income without mistaking a bill payment for a refund",async()=>{
   m.read.mockResolvedValue({entries:[
