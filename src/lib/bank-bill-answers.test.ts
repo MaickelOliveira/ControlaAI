@@ -52,6 +52,24 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   expect(reply).toContain("Nubank");expect(reply).toContain("R$ 2.215,51");expect(reply).not.toContain("704,46");expect(reply).not.toContain("Inter");expect(reply).toContain("pode já ter sido paga");
   expect(reply).toContain("Realize · Cartão Renner · fatura não informada pelo banco");
  });
+ it("não apresenta valores de faturas antigas como fatura atual",()=>{
+  const question=parseBillQuestion("Mostre a fatura atual de cada cartão por banco.")!;
+  expect(question).toMatchObject({kind:"latest",requestedCurrent:true});
+  const reply=answerBillQuestion(overview,question,"2026-10-15","personal");
+  expect(reply).toMatch(/^Não consigo confirmar qual fatura está aberta agora\./);
+  expect(reply).toContain("não recebi fatura com vencimento de hoje em diante");
+  expect(reply).not.toContain("2.215,51");
+  expect(reply).not.toContain("1.614,20");
+  expect(reply).toContain("último vencimento recebido 02/10/2026");
+  expect(reply).toContain("Realize · Cartão Renner · fatura não informada pelo banco");
+ });
+ it("identifica fatura recebida com vencimento futuro sem afirmar que ainda está aberta",()=>{
+  const future={...overview,bills:[...overview.bills,{...overview.bills[0],id:"nu-future",due_date:"2026-11-02",total_amount:"800"}]} as BankOverview;
+  const reply=answerBillQuestion(future,{kind:"latest",requestedCurrent:true},"2026-10-15","personal");
+  expect(reply).toContain("fatura com vencimento recebido 02/11/2026 · total informado R$ 800,00; pagamento não confirmado");
+  expect(reply).not.toContain("2.215,51");
+  expect(reply).toContain("Vencimento futuro não confirma que a fatura ainda está em aberto");
+ });
  it("responde com o último total do banco solicitado e não com todo o histórico",()=>{
   const reply=answerBillQuestion(overview,{kind:"total",bankName:"Nubank"},"2026-10-15","personal");
   expect(reply).toContain("2.215,51");expect(reply).not.toContain("704,46");expect(reply).not.toContain("Santander");
