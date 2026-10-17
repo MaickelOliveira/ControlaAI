@@ -247,7 +247,7 @@ describe("saved bank positions", () => {
       {id:"ok",resource_id:"good",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"20",available_amount:"80",is_flexible:false},
       {id:"wrong",resource_id:"bad",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:"100",used_amount:"100",available_amount:"20",is_flexible:false},
     ];
-    const text=answer(data,"Algum limite recebido está inconsistente com o total e o utilizado?");
+    const text=answer(data,"Algum limite recebido está inconsistente com o total e o utilizado? Mostre só as linhas afetadas e não corrija valores por suposição.");
     expect(text).toContain("Cartão divergente");expect(text).toContain("Realize");
     expect(text).toContain(bankMoney("100","BRL"));expect(text).toContain(bankMoney("20","BRL"));
     expect(text).not.toContain("Cartão certo");expect(text).not.toContain("Sicredi");
@@ -262,10 +262,10 @@ describe("saved bank positions", () => {
       {id:"low",resource_id:"low",line_name:"CREDITO_A_VISTA",consolidation_type:"INDIVIDUAL",currency:"BRL",total_amount:"100",used_amount:"100",available_amount:"0",is_flexible:false},
       {id:"missing",resource_id:"unknown",line_name:"CREDITO_A_VISTA",consolidation_type:"CONSOLIDADO",currency:"BRL",total_amount:null,used_amount:null,available_amount:null,is_flexible:false},
     ];
-    const highest=answer(data,"Qual cartão tem o maior limite disponível?");
+    const highest=answer(data,"Qual cartão tem o maior limite disponível? Mostre somente esse cartão e avise se o banco não informou algum limite.");
     expect(highest).toContain("Cartão alto");expect(highest).toContain(bankMoney("1000","BRL"));
     expect(highest).not.toContain("Cartão baixo");expect(highest).not.toContain("1.500");
-    const lowest=answer(data,"Qual cartão tem o menor limite disponível?");
+    const lowest=answer(data,"Qual cartão tem o menor limite disponível? Mostre somente esse cartão, incluindo valor zero se foi informado.");
     expect(lowest).toContain("Cartão baixo");expect(lowest).toContain(bankMoney("0","BRL"));
     expect(lowest).not.toContain("Cartão sem dado");expect(lowest).not.toContain("Cartão alto");
   });

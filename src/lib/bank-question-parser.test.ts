@@ -58,6 +58,14 @@ it("recognizes focused card-limit questions without inventing a bank filter", ()
     .toMatchObject({kind:"limits",limitView:"max-available"});
   expect(parseBankQuestion("Qual cartão tem o menor limite disponível?", "2026-10-15"))
     .toMatchObject({kind:"limits",limitView:"min-available"});
+  expect(parseBankQuestion("Algum limite recebido está inconsistente com o total e o utilizado? Mostre só as linhas afetadas e não corrija valores por suposição.", "2026-10-15"))
+    .toMatchObject({kind:"limits",limitView:"inconsistent"});
+  expect(parseBankQuestion("Qual cartão tem o maior limite disponível? Mostre somente esse cartão e avise se o banco não informou algum limite.", "2026-10-15"))
+    .toMatchObject({kind:"limits",limitView:"max-available"});
+  expect(parseBankQuestion("Qual cartão tem o menor limite disponível? Mostre somente esse cartão, incluindo valor zero se foi informado.", "2026-10-15"))
+    .toMatchObject({kind:"limits",limitView:"min-available"});
+  expect(parseBankQuestion("Qual cartão tem o maior limite disponível? Apenas no Nubank.", "2026-10-15"))
+    .toBeNull();
 });
 it("routes a joint balance-and-limit coverage question to received bank data", () => {
   expect(parseBankQuestion("Explique quais saldos e limites ainda dependem de atualização bancária.","2026-10-15"))
