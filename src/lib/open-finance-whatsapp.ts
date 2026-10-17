@@ -342,7 +342,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       return `Coincidências de data, valor e sentido para conferir · ${bankDate(from)} a ${bankDate(today)}\n${lines||"Nenhuma coincidência encontrada nos movimentos realizados recebidos."}${candidates.length>10?`\nMostrando 10 de ${candidates.length} grupos; confira Finanças.`:""}\nA coincidência não prova duplicação; não removi nem alterei nenhum lançamento.${financeCoverageNotice(bank,entries)}`;
     }catch{return "Não consegui conferir possíveis repetições agora. Confira Finanças ou tente novamente; nenhum lançamento foi alterado.";}
   }
-  const weeklyAccounts=/^quanto (?:entrou na conta|saiu das contas) nesta semana$/.test(wording);
+  const weeklyAccounts=/^quanto (?:entrou na conta|saiu das contas) nesta semana\b/.test(wording);
   const splitSources=wording==="separe movimentacoes de conta e de cartao nos ultimos sete dias";
   const cardPurchases=wording==="mostre compras de cartao do mes sem pagamentos de fatura";
   const billPayments=wording==="encontre pagamentos de fatura do mes e diga se ficaram fora dos gastos";

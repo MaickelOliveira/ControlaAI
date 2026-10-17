@@ -432,8 +432,10 @@ it("keeps weekly account totals separate from card purchases",async()=>{
   ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
   const incoming=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto entrou na conta nesta semana?","2026-10-15");
   const outgoing=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana?","2026-10-15");
+  const outgoingWithDetail=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana? Não inclua compras de cartão nem transferências entre contas próprias confirmadas.","2026-10-15");
   const split=await answerBankWhatsAppMessage(user as never,"personal","both","Separe movimentações de conta e de cartão nos últimos sete dias.","2026-10-15");
   expect(incoming).toContain("R$ 70,00");expect(outgoing).toContain("R$ 20,00");expect(outgoing).not.toContain("R$ 90,00");
+  expect(outgoingWithDetail).toContain("Saídas das contas bancárias");expect(outgoingWithDetail).toContain("R$ 20,00");expect(outgoingWithDetail).not.toContain("R$ 90,00");
   expect(split).toContain("Contas bancárias");expect(split).toContain("Cartões");expect(split).toContain("R$ 90,00");
 });
 it("filters card purchases, bill payments, own transfers and Pix direction",async()=>{
