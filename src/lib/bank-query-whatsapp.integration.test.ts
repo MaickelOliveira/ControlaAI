@@ -58,6 +58,14 @@ it("uses the requested authorized mode and rejects a phone restricted to Persona
   await answerBankWhatsAppMessage(user, "personal", "both", "Mostre meus empréstimos da empresa", "2026-10-11");
   expect(m.access).toHaveBeenCalledWith(user, "business");
 });
+it("lists company loans separately without searching for a bank named separately",async()=>{
+  m.access.mockResolvedValue({userId:user.id,mode:"business",environment:"production",companyName:"Empresa teste"});
+  const response=await answerBankWhatsAppMessage(user,"personal","both","Mostre empréstimos da empresa separadamente.","2026-10-17");
+  expect(response).toContain("Nubank");
+  expect(response).not.toContain("Não encontrei separadamente");
+  expect(m.access).toHaveBeenCalledWith(user,"business");
+  expect(m.rpc).toHaveBeenCalled();
+});
 it("asks for one mode rather than mixing Personal and companies", async () => {
   expect(await answerBankWhatsAppMessage(user, "personal", "both", "Mostre meus empréstimos pessoal e empresarial", "2026-10-11")).toContain("um modo"); expect(m.rpc).not.toHaveBeenCalled();
 });
