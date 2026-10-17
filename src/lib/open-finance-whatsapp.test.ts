@@ -225,9 +225,9 @@ it("uses seven inclusive dates and separates dated bank estimates from manual bi
   expect(m.financial).toHaveBeenCalledWith(user,"personal",expect.objectContaining({from:"2026-10-16",to:"2026-10-22"}));
 });
 it("lists undated bank installments without calling their payment future or confirmed",async()=>{
-  m.financial.mockResolvedValue({commitments:[],bank:{items:[{id:"undated",mode:"personal",kind:"installment",description:"Compra parcelada",institution_name:"Banco A",resource_name:"Cartão",due_date:null,amount:"25",currency:"BRL"},{id:"dated",mode:"personal",kind:"recurring",description:"Assinatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-20",amount:"10",currency:"BRL"}],incomplete:false},forecasts:[],coverage:""});
+  m.financial.mockResolvedValue({commitments:[],bank:{items:[{id:"undated",mode:"personal",kind:"installment",description:"Compra parcelada",institution_name:"Banco A",resource_name:"Cartão",due_date:null,amount:"25",currency:null},{id:"dated",mode:"personal",kind:"recurring",description:"Assinatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-20",amount:"10",currency:"BRL"}],incomplete:false},forecasts:[],coverage:""});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais cobranças futuras não têm data informada?","2026-10-16");
-  expect(answer).toContain("Compra parcelada");expect(answer).toContain("data não informada");expect(answer).toContain("não posso confirmar");
+  expect(answer).toContain("Compra parcelada");expect(answer).toContain("25,00 (moeda não informada)");expect(answer).toContain("data não informada");expect(answer).toContain("não posso confirmar");
   expect(answer).not.toContain("Assinatura");expect(answer).not.toContain("Resultado realizado");
   expect(m.financial).toHaveBeenCalledWith(user,"personal",expect.objectContaining({includeUndated:true}));
 });
@@ -432,8 +432,10 @@ it("keeps weekly account totals separate from card purchases",async()=>{
   ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
   const incoming=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto entrou na conta nesta semana?","2026-10-15");
   const outgoing=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana?","2026-10-15");
+  const outgoingWithDetail=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana? Não inclua compras de cartão nem transferências entre contas próprias confirmadas.","2026-10-15");
   const split=await answerBankWhatsAppMessage(user as never,"personal","both","Separe movimentações de conta e de cartão nos últimos sete dias.","2026-10-15");
   expect(incoming).toContain("R$ 70,00");expect(outgoing).toContain("R$ 20,00");expect(outgoing).not.toContain("R$ 90,00");
+  expect(outgoingWithDetail).toContain("Saídas das contas bancárias");expect(outgoingWithDetail).toContain("R$ 20,00");expect(outgoingWithDetail).not.toContain("R$ 90,00");
   expect(split).toContain("Contas bancárias");expect(split).toContain("Cartões");expect(split).toContain("R$ 90,00");
 });
 it("filters card purchases, bill payments, own transfers and Pix direction",async()=>{
@@ -492,6 +494,13 @@ it("reports only missing bank amounts and does not invent dates or zero",async()
   const dates=await answerBankWhatsAppMessage(user as never,"personal","both","Quais lançamentos não têm data informada?","2026-10-15");
   expect(amounts).toContain("Sem valor");expect(amounts).toContain("Não informado");expect(amounts).not.toContain("Valor conhecido");
   expect(dates).toContain("2 movimento(s) sem data");expect(dates).not.toContain("Valor conhecido");
+  m.read.mockResolvedValue({entries:[
+    {id:"known",mode:"personal",source:"bank",date:"2026-10-12",type:"expense",amount:42,description:"Valor conhecido",category:"Outros",included:true,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:"42",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const noneMissing=await answerBankWhatsAppMessage(user as never,"personal","both","Quais lançamentos do extrato não têm valor informado?","2026-10-15");
+  expect(noneMissing).toContain("0 movimentos correspondentes");
+  expect(noneMissing).toContain("Nenhum lançamento sem valor informado foi identificado");
+  expect(noneMissing).not.toContain("Nenhum movimento recebido neste período");
 });
 it("separates explicit card refunds from income without mistaking a bill payment for a refund",async()=>{
   m.read.mockResolvedValue({entries:[

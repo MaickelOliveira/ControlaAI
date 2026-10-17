@@ -12,7 +12,7 @@ import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
 import {readBankAgenda,readFinancialAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
-import {BANK_STATUSES,bankDate,bankMoney,type BankOverview} from "./open-finance-display";
+import {BANK_STATUSES,bankAmountWithoutCurrency,bankDate,bankMoney,type BankOverview} from "./open-finance-display";
 import {openFinanceRpc} from "./open-finance-http";
 import {readBankLedger} from "./finance-ledger-storage";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
@@ -239,7 +239,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const bank=agenda.bank.items.filter(item=>!item.mode||item.mode===requested).filter(item=>undatedDue?!item.due_date:Boolean(item.due_date&&item.due_date>=today&&item.due_date<=to)).filter(item=>!confirmedDate||item.kind==="bill");
       const lines=[
         ...manual.map(item=>`• ${safeSummary(item.description)} · ${bankMoney(item.amount,"BRL")}${item.dueDate?` · ${bankDate(item.dueDate)}`:" · data não informada"} · ${item.origin==="scheduled"?"cadastrado na Zelo":"previsão cadastrada na Zelo"}`),
-        ...bank.map(item=>`• ${safeSummary(item.kind==="bill"?"Fatura":item.description)} · ${safeSummary(item.institution_name)} · ${bankMoney(item.amount,item.currency)}${item.due_date?` · ${bankDate(item.due_date)}`:" · data não informada"} · ${item.kind==="recurring"?"data estimada a partir do histórico bancário":"pagamento não confirmado"}`),
+        ...bank.map(item=>`• ${safeSummary(item.kind==="bill"?"Fatura":item.description)} · ${safeSummary(item.institution_name)} · ${item.currency?bankMoney(item.amount,item.currency):`${bankAmountWithoutCurrency(item.amount)} (moeda não informada)`}${item.due_date?` · ${bankDate(item.due_date)}`:" · data não informada"} · ${item.kind==="recurring"?"data estimada a partir do histórico bancário":"pagamento não confirmado"}`),
       ];
       const title=undatedDue?"Cobranças recebidas sem data informada":dueToday?"Vencimentos de hoje com data informada":`Vencimentos de ${bankDate(today)} a ${bankDate(to)}`;
       const empty=undatedDue?"Não recebi cobranças sem data neste modo; isso não prova que não existam.":"Não recebi vencimentos com data neste período; isso não prova que não existam.";
@@ -342,7 +342,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       return `Coincidências de data, valor e sentido para conferir · ${bankDate(from)} a ${bankDate(today)}\n${lines||"Nenhuma coincidência encontrada nos movimentos realizados recebidos."}${candidates.length>10?`\nMostrando 10 de ${candidates.length} grupos; confira Finanças.`:""}\nA coincidência não prova duplicação; não removi nem alterei nenhum lançamento.${financeCoverageNotice(bank,entries)}`;
     }catch{return "Não consegui conferir possíveis repetições agora. Confira Finanças ou tente novamente; nenhum lançamento foi alterado.";}
   }
-  const weeklyAccounts=/^quanto (?:entrou na conta|saiu das contas) nesta semana$/.test(wording);
+  const weeklyAccounts=/^quanto (?:entrou na conta|saiu das contas) nesta semana\b/.test(wording);
   const splitSources=wording==="separe movimentacoes de conta e de cartao nos ultimos sete dias";
   const cardPurchases=wording==="mostre compras de cartao do mes sem pagamentos de fatura";
   const billPayments=wording==="encontre pagamentos de fatura do mes e diga se ficaram fora dos gastos";
@@ -387,7 +387,11 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       else {label="Lançamentos com valor não informado";selected=scoped.filter(e=>bankMoney(e.bank?.amount,e.bank?.currency)==="Não informado");}
       const sum=cardPurchases?`\nTotal conhecido: ${money(selected.reduce((cents,e)=>cents+Math.round(e.amount*100),0)/100)}.`:"";
       const paymentNote=billPayments?"\nPagamentos marcados “Fora dos totais” não foram somados aos gastos. Entradas e saídas podem representar os dois lados da mesma fatura; não as some. Confira no banco se o pagamento foi concluído.":"";
-      return `${label} · ${bankDate(from)} a ${bankDate(today)}\n${selected.length} movimento(s) recebido(s).${sum}\n${lines(selected)}${selected.length>20?`\nMostrando 20 de ${selected.length}; veja o restante em Finanças.`:""}${paymentNote}${coverage}`;
+      const count=selected.length===1?"1 movimento correspondente":`${selected.length} movimentos correspondentes`;
+      const details=selected.length?lines(selected):missingAmount
+        ?"Nenhum lançamento sem valor informado foi identificado nos dados recebidos deste período."
+        :"Nenhum movimento com esse filtro foi recebido neste período.";
+      return `${label} · ${bankDate(from)} a ${bankDate(today)}\n${count}.${sum}\n${details}${selected.length>20?`\nMostrando 20 de ${selected.length}; veja o restante em Finanças.`:""}${paymentNote}${coverage}`;
     }catch{return "Não consegui consultar esses movimentos agora. Confira Finanças ou tente novamente; nenhum valor foi estimado.";}
   }
   if(/^quais foram minhas cinco movimentacoes mais recentes\s*[?!.]*$/.test(text.trim())){
