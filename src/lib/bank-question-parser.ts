@@ -135,6 +135,7 @@ export function parseBankQuestion(question: string, today: string): BankQuestion
     [/^some emprestimos apenas da mesma moeda$/, "currency"],
     [/^algum emprestimo ficou fora do total por falta de moeda$/, "missing-currency"],
     [/^separe emprestimos (?:por banco|separadamente)$/, "by-bank"],
+    [/^(?:mostre|liste) (?:os )?(?:meus )?emprestimos (?:por banco|separadamente)$/, "by-bank"],
     [/^quando (?:termina|vence) cada emprestimo(?:, se o banco informou)?$/, "due-date"],
   ];
   for(const [pattern,debtView] of focusedLoanFollowups)if(pattern.test(text))

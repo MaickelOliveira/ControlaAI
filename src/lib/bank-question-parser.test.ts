@@ -102,6 +102,11 @@ it("understands a natural follow-up asking for each loan's final date",()=>{
   expect(parseBankQuestion(question,"2026-10-17")?.bankName).toBeUndefined();
   expect(parseBankQuestion("Quando terminava cada empréstimo no mês passado?","2026-10-17")).toBeNull();
 });
+it("does not mistake 'separadamente' for a bank name when listing loans",()=>{
+  expect(parseBankQuestion("Mostre empréstimos separadamente.","2026-10-17"))
+    .toMatchObject({kind:"loans",debtView:"by-bank"});
+  expect(parseBankQuestion("Mostre empréstimos separadamente.","2026-10-17")?.bankName).toBeUndefined();
+});
 it("recognizes settled loans without accepting the rest of a sentence as a bank name", () => {
   expect(parseBankQuestion("Quais empréstimos já estão quitados? Separe por banco e não conte como dívida.", "2026-10-11"))
     .toMatchObject({kind:"loans",settledOnly:true});
