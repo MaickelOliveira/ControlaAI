@@ -14,6 +14,7 @@ import { expandMerchantAliases } from "./finances";
 import { bankDate, bankMoney } from "./open-finance-display";
 import { financeOrigin, ledgerAmount, type LedgerEntry } from "./finance-ledger";
 import { visibleBankSchedules, type BankAgenda } from "./open-finance-schedules";
+import { readBankOverview } from "./finance-ledger-storage";
 
 const safe = (value: string) => value.replace(/[\r\n*`_~<>]/g, " ").slice(0, 160);
 const normalize = (value: string) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -50,7 +51,7 @@ export async function answerStructuredBankQuery(user: OpenFinanceIdentity, mode:
       return `Faturas com vencimento informado de ${bankDate(period.from)} a ${bankDate(period.to)} · ${safe(label)}\n${lines.join("\n") || "Não recebi faturas com vencimento informado nesse intervalo; isso não confirma ausência de cobrança."}${items.length > 20 ? `\nMostrando 20 de ${items.length}; confira Contas.` : ""}\nOs valores são os recebidos dos bancos; confira se foram pagos.${agenda.incomplete ? " A consulta bancária está incompleta." : ""}`;
     }
     if (isBankPositionKind(query.kind) || query.kind === "installments" || query.kind === "recurring") {
-      const data = await openFinanceRpc(scope, "zelo_of_overview", { p_environment: scope.environment }) as BankOverview;
+      const data: BankOverview = await readBankOverview(scope);
       if (query.kind !== "installments" && query.kind !== "recurring") return formatBankQuestion(data, { ...query, ...period } as BankQuestion, label);
       const banks = query.bankName ? matchingBankNames(data.connections.filter(c => c.status === "active" && !c.archived_at).map(c => c.institution_name), query.bankName) : null;
       if (banks && !banks.length) return "Não encontrei esse banco conectado no modo e na empresa selecionados. Confira Contas.";

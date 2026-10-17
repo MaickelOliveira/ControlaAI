@@ -1,7 +1,55 @@
 import { bankDate, bankMoney, bankAmountWithoutCurrency } from "./open-finance-display";
 import {descriptionExpenseCategory} from "./expense-category";
-export type BankAgendaItem={id:string;mode?:"personal"|"business";resource_id?:string;kind:"bill"|"recurring"|"installment";description:string;resource_name:string;institution_name:string;due_date:string|null;amount:string|null;currency:string|null;synced_at:string;payment_evidence?:boolean;payment_amount?:string|null;total_installments?:number|null;observed_installments?:number|null;regularity_score?:number|null;last_observed_month?:string|null;last_observed_installment?:number|null};
+export type BankAgendaItem={id:string;mode?:"personal"|"business";resource_id?:string;kind:"bill"|"recurring"|"installment";description:string;resource_name:string;institution_name:string;due_date:string|null;amount:string|null;currency:string|null;synced_at:string;payment_evidence?:boolean;payment_amount?:string|null;total_installments?:number|null;observed_installments?:number|null;regularity_score?:number|null;last_observed_month?:string|null;last_observed_installment?:number|null;purchase_date?:string|null;source_ordinals?:number[]|null;amount_varies?:boolean;merged_source_count?:number};
 export type BankAgenda={items:BankAgendaItem[];incomplete:boolean};
+function cents(value:string|null):number|null {
+  if(value===null||!/^\d{1,16}(?:\.\d{1,8})?$/.test(value))return null;
+  const parsed=Number(value);
+  return Number.isSafeInteger(Math.round(parsed*100))?Math.round(parsed*100):null;
+}
+function matchingPurchase(left:BankAgendaItem,right:BankAgendaItem):boolean {
+  if(left.kind!=="installment"||right.kind!=="installment"||!left.resource_id||left.resource_id!==right.resource_id
+    ||!left.purchase_date||left.purchase_date!==right.purchase_date||left.due_date||right.due_date
+    ||!left.total_installments||left.total_installments!==right.total_installments||left.currency!==right.currency)return false;
+  const names=[left.description,right.description].map(name=>name.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().replace(/[^a-z0-9]/g,""));
+  const [short,long]=names.sort((a,b)=>a.length-b.length);
+  if(short.length<9||!long.startsWith(short))return false;
+  const amounts=[cents(left.amount),cents(right.amount)];
+  if(amounts.some(value=>value===null))return false;
+  const [first,second]=amounts as [number,number];
+  if(Math.abs(first-second)>20||Math.abs(first-second)>Math.min(first,second)*0.02)return false;
+  const total=left.total_installments,ordinals=[left.source_ordinals,right.source_ordinals];
+  if(ordinals.some(values=>!Array.isArray(values)||!values.length||values.some(value=>!Number.isInteger(value)||value<1||value>total)))return false;
+  const combined=ordinals.flatMap(values=>values??[]).sort((a,b)=>a-b);
+  return combined.length===total&&combined.every((value,index)=>value===index+1);
+}
+/** Two provider patterns can be one purchase when their bank installments form
+ * one complete, non-overlapping numbered sequence. This folds display only. */
+export function collapseBankInstallmentFragments(items:readonly BankAgendaItem[]):BankAgendaItem[]{
+  const consumed=new Set<number>(),result:BankAgendaItem[]=[];
+  for(let i=0;i<items.length;i++){
+    if(consumed.has(i))continue;
+    const left=items[i];
+    const partner=items.findIndex((right,j)=>j>i&&!consumed.has(j)&&matchingPurchase(left,right));
+    if(partner<0){result.push(left);continue;}
+    const right=items[partner];consumed.add(partner);
+    const current=[left,right].filter(item=>typeof item.last_observed_installment==="number")
+      .sort((a,b)=>(b.last_observed_installment??0)-(a.last_observed_installment??0))[0];
+    const selected=current??left;
+    result.push({...selected,
+      id:[left.id,right.id].sort()[0],
+      description:left.description.length>=right.description.length?left.description:right.description,
+      observed_installments:current?.last_observed_installment??null,
+      last_observed_installment:current?.last_observed_installment??null,
+      last_observed_month:current?.last_observed_month??null,
+      source_ordinals:[...(left.source_ordinals??[]),...(right.source_ordinals??[])].sort((a,b)=>a-b),
+      amount_varies:left.amount!==right.amount,
+      merged_source_count:2,
+      synced_at:left.synced_at>right.synced_at?left.synced_at:right.synced_at,
+    });
+  }
+  return result;
+}
 function monthIndex(date:string):number|null {
   const match=/^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/.exec(date);
   return match?Number(match[1])*12+Number(match[2])-1:null;
@@ -87,7 +135,7 @@ export function formatBankAgenda(items:BankAgendaItem[],incomplete=false):string
       const future=progress?progress.remaining?`${progress.remaining} parcela${progress.remaining===1?"":"s"} prevista${progress.remaining===1?"":"s"} após essa parcela`:"Sem novas parcelas previstas nesta sequência":"Quantidade restante não informada";
       const position=`${bankInstallmentPosition(item)}\n${future}`;
       const due=item.due_date?`📅 próximo vencimento: ${bankDate(item.due_date)}`:"📅 Data da próxima parcela não enviada pelo banco; confira a fatura do cartão";
-      return `${heading}💰 ${value} por parcela\n${position}\n${due}\nPagamento não confirmado`;
+      return `${heading}💰 ${value} por parcela${item.amount_varies?" (valor das outras parcelas pode variar)":""}\n${position}\n${due}\nPagamento não confirmado`;
     }
     return `${heading}💰 Estimativa ${value}\n📅 cobrança prevista em ${bankDate(item.due_date)}`;
     });

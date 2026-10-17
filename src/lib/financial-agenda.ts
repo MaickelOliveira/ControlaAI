@@ -7,14 +7,14 @@ import {readUnifiedFinances} from "./unified-finances";
 import {ledgerBalance,createFinanceLedger} from "./finance-ledger";
 import {financeCoverageNotice} from "./finance-query";
 import {collectUpcomingFinanceItems,buildBalanceForecast} from "./upcoming-finances";
-import {collectBankAgenda,type BankAgenda} from "./open-finance-schedules";
+import {collectBankAgenda,collapseBankInstallmentFragments,type BankAgenda} from "./open-finance-schedules";
 
 export async function readBankAgenda(user:OpenFinanceIdentity,mode:FinanceMode,range:{from:string;to:string;includeUndated?:boolean;includeObservedInstallments?:boolean}):Promise<BankAgenda>{
   const scope=await getOpenFinanceAccess(user,mode,{throwOnStorageError:true});
   if(!scope)return {items:[],incomplete:false};
   const result=await openFinanceRpc(scope,"zelo_of_agenda",{p_from:range.from,p_to:range.to,p_undated:range.includeUndated??false}) as BankAgenda;
   if(!result||!Array.isArray(result.items)||typeof result.incomplete!=="boolean")throw Error("OF_AGENDA_UNAVAILABLE");
-  return {...result,items:collectBankAgenda(result.items.map(item=>({...item,mode})),range)};
+  return {...result,items:collectBankAgenda(collapseBankInstallmentFragments(result.items.map(item=>({...item,mode}))),range)};
 }
 /** Same financial agenda for daily/weekly briefings and upcoming-payment queries. */
 export async function readFinancialAgenda(user:OpenFinanceIdentity,mode:FinanceMode|undefined,range:{from:string;to:string;today:string;includeUndated?:boolean;includeBank?:boolean}){

@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 vi.mock("server-only",()=>({}));
 import { normalizeCardSchedules } from "./open-finance-schedule-normalize";
-import { collectBankAgenda, formatBankAgenda, formatUpcomingBankAgenda, visibleBankSchedules } from "./open-finance-schedules";
+import { collapseBankInstallmentFragments, collectBankAgenda, formatBankAgenda, formatUpcomingBankAgenda, visibleBankSchedules } from "./open-finance-schedules";
 
 it("treats a detected subscription as a BRL estimate, preserving its original currency and observed transactions",()=>{
   const [item]=normalizeCardSchedules("recurrings",[{description:"Streaming",averageAmount:-39.90,currency:"USD",periodMonths:1,expectedDay:9,firstOccurrenceAt:"2026-07-09",lastOccurrenceAt:"2026-09-09",nextExpectedAt:"2026-10-09",occurrences:["tx-1","tx-2","tx-3"],regularityScore:0.95}]);
@@ -76,4 +76,24 @@ it("keeps a finished old installment in history but not in current schedules",()
  expect(visibleBankSchedules([old],"2026-10-15")).toEqual([]);
  expect(collectBankAgenda([old],{from:"2026-10-01",to:"2026-10-31",includeUndated:true})).toEqual([]);
  expect(collectBankAgenda([old],{from:"2025-12-01",to:"2025-12-31",includeUndated:true})).toEqual([old]);
+});
+
+it("shows one purchase when bank fragments cover complementary installments of the same purchase",()=>{
+ const first={id:"first",resource_id:"card-1",kind:"installment" as const,description:"DM*HOSTINGER.COM.BR",resource_name:"Card",institution_name:"Bank",due_date:null,amount:"43.71",currency:null,synced_at:"2026-10-17",purchase_date:"2026-07-13",source_ordinals:[1,2,3],total_installments:12,observed_installments:3,last_observed_installment:3,last_observed_month:"2026-09-01"};
+ const rest={...first,id:"rest",description:"DM*HOSTINGER.COM.",amount:"43.61",source_ordinals:[4,5,6,7,8,9,10,11,12],observed_installments:9,last_observed_installment:4,last_observed_month:"2026-10-01"};
+ const merged=collapseBankInstallmentFragments([first,rest]);
+ expect(merged).toHaveLength(1);
+ expect(merged[0]).toMatchObject({observed_installments:4,last_observed_installment:4,total_installments:12,amount:"43.61",amount_varies:true,merged_source_count:2});
+ expect(visibleBankSchedules(merged,"2026-10-17")).toHaveLength(1);
+ expect(formatBankAgenda(merged)).toContain("valor das outras parcelas pode variar");
+});
+
+it("keeps separate purchases with different dates, overlapping numbers or substantially different values",()=>{
+ const base={id:"a",resource_id:"card-1",kind:"installment" as const,description:"KIWIFY *AutoDark",resource_name:"Card",institution_name:"Bank",due_date:null,amount:"258.33",currency:null,synced_at:"2026-10-17",purchase_date:"2025-12-21",source_ordinals:[1,2,3,4,5,6,7,8,9,10],total_installments:12,observed_installments:10,last_observed_installment:10,last_observed_month:"2026-10-01"};
+ const tail={...base,id:"b",description:"KIWIFY *Aut",amount:"258.24",source_ordinals:[11,12],observed_installments:2,last_observed_installment:null,last_observed_month:null};
+ expect(collapseBankInstallmentFragments([base,tail])).toHaveLength(1);
+ expect(collapseBankInstallmentFragments([base,{...tail,purchase_date:"2025-12-22"}])).toHaveLength(2);
+ expect(collapseBankInstallmentFragments([base,{...tail,source_ordinals:[10,11]}])).toHaveLength(2);
+ expect(collapseBankInstallmentFragments([base,{...tail,amount:"250.00"}])).toHaveLength(2);
+ expect(collapseBankInstallmentFragments([base,{...tail,purchase_date:null}])).toHaveLength(2);
 });

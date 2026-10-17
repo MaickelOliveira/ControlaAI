@@ -2,6 +2,7 @@ import "server-only";
 import {openFinanceRpc} from "./open-finance-http";
 import type {OpenFinanceScope} from "./open-finance-access";
 import type {BankOverview} from "./open-finance-display";
+import {collapseBankInstallmentFragments} from "./open-finance-schedules";
 import type {BankFinancialData,BankMovement,BankReport} from "./open-finance-report";
 import type {BankInstallmentAnchor} from "./bank-installment-projections";
 const overviewReadsKey=Symbol.for("zelo.pendingBankOverviewReads");
@@ -15,7 +16,10 @@ export async function readBankOverview(scope:OpenFinanceScope):Promise<BankOverv
   const key=JSON.stringify([scope.userId,scope.mode,scope.environment,scope.companyId??null]);
   let pending=pendingOverviews.get(key);
   if(!pending){
-    const load=()=>openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as Promise<BankOverview>;
+    const load=async()=>{
+      const overview=await openFinanceRpc(scope,"zelo_of_overview",{p_environment:scope.environment}) as BankOverview;
+      return overview.agenda?{...overview,agenda:{...overview.agenda,items:collapseBankInstallmentFragments(overview.agenda.items)}}:overview;
+    };
     if(pendingOverviews.size>=128)return structuredClone(await load());
     pending=load().finally(()=>{if(pendingOverviews.get(key)===pending)pendingOverviews.delete(key);});
     pendingOverviews.set(key,pending);
