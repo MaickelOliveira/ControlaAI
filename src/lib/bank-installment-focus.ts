@@ -22,7 +22,8 @@ export function parseBankInstallmentFocus(message:string):BankInstallmentFocus|n
  if(/\b(?:separe|separar|separado|distinga|diferencie)\b/.test(text)&&/\banuidade\b/.test(text)&&/\bcompras? parcelad[ao]s?\b/.test(text))return {kind:"separate-annuity"};
  if(/\b(?:compras? parcelad[ao]s?|parcelamentos?)\b/.test(text)&&/\b(?:futura|futuras|futuro|futuros)\b/.test(text)&&/\b(?:data|vencimento)\b/.test(text))return {kind:"future-dated"};
  if(/\b(?:proxima|proximas) parcelas?\b/.test(text)&&/\b(?:cada|por) cartao\b/.test(text))return {kind:"next-by-card"};
- if(/\bcompras? parcelad[ao]s?\b/.test(text)&&/\b(?:quantidade total|total de parcelas)\b/.test(text)&&/\bultima parcela\b/.test(text))return {kind:"position"};
+ if(/\b(?:quantidade total|total de parcelas)\b/.test(text)&&/\bultima parcela\b/.test(text)
+  && (/\bcompras? parcelad[ao]s?\b/.test(text)||/^(?:mostre|me mostre|liste|diga) a quantidade total e a ultima parcela identificada$/.test(text)))return {kind:"position"};
  if(/\bparcelas?\b/.test(text)&&/\bvalor informado\b/.test(text)&&/\b(?:vencimento|data) (?:desconhecido|desconhecida|nao informado|nao informada)\b/.test(text))return {kind:"undated-valued"};
  return null;
 }
