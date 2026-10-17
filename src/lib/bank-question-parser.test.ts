@@ -96,6 +96,12 @@ it.each([
   expect(parseBankQuestion(message,"2026-10-15")).toMatchObject({kind:"loans",debtView});
   expect(parseBankQuestion(message,"2026-10-15")?.bankName).toBeUndefined();
 });
+it("understands a natural follow-up asking for each loan's final date",()=>{
+  const question="Quando termina cada empréstimo pessoal? Liste as datas finais que o banco informou e indique os contratos sem data.";
+  expect(parseBankQuestion(question,"2026-10-17")).toMatchObject({kind:"loans",debtView:"due-date"});
+  expect(parseBankQuestion(question,"2026-10-17")?.bankName).toBeUndefined();
+  expect(parseBankQuestion("Quando terminava cada empréstimo no mês passado?","2026-10-17")).toBeNull();
+});
 it("recognizes settled loans without accepting the rest of a sentence as a bank name", () => {
   expect(parseBankQuestion("Quais empréstimos já estão quitados? Separe por banco e não conte como dívida.", "2026-10-11"))
     .toMatchObject({kind:"loans",settledOnly:true});

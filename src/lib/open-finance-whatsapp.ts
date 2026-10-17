@@ -49,6 +49,31 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(business&&personal&&scopedFinanceQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return scopedFinanceQuestion?"Este número não tem acesso a esse modo da Zelo.":null;
+  if(/\b(?:parcelamentos?|compras? parceladas?|parcelas?)\b/.test(text)
+    &&/\b(?:repetid[oa]s?|duplicad[oa]s?)\b/.test(text)
+    &&/\b(?:cartao|resposta)\b/.test(text)){
+    try{
+      const agenda=await readBankAgenda(user,requested,{from:today,to:shiftDay(today,365),includeUndated:true,includeObservedInstallments:true});
+      const installments=agenda.items.filter(item=>item.kind==="installment");
+      if(!installments.length)return `Não recebi parcelamentos suficientes em ${bankModeLabel(requested)} para conferir repetições. Confira Contas e a fatura no banco.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+      const groups=new Map<string,typeof installments>();
+      const byId=new Map<string,typeof installments>();
+      for(const item of installments){
+        const key=[normalize(item.institution_name).trim(),normalize(item.resource_id??item.resource_name).trim(),normalize(item.description).replace(/\s+/g," ").trim(),item.amount??"",item.currency??"",item.total_installments??"",item.observed_installments??"",item.last_observed_month??""].join("|");
+        groups.set(key,[...groups.get(key)??[],item]);
+        byId.set(item.id,[...byId.get(item.id)??[],item]);
+      }
+      const repeatedIds=[...byId.values()].filter(group=>group.length>1);
+      const similar=[...groups.values()].filter(group=>new Set(group.map(item=>item.id)).size>1);
+      const candidates=[...repeatedIds.map(group=>({group,note:"mesmo identificador repetido"})),...similar.map(group=>({group,note:"identificadores diferentes; possível coincidência"}))];
+      if(!candidates.length)return `Nenhum registro idêntico encontrado entre os parcelamentos recebidos para o mesmo cartão em ${bankModeLabel(requested)}. Nomes parecidos ou parcelas com valores ou números diferentes não comprovam duplicação. Confira a fatura no banco.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+      const lines=candidates.slice(0,5).map(({group,note})=>{
+        const item=group[0],value=item.currency?bankMoney(item.amount,item.currency):"valor/moeda não informados com segurança";
+        return `• ${safeSummary(item.institution_name)} · ${safeSummary(item.resource_name)} · ${safeSummary(item.description)} · ${value} por parcela · ${group.length} registros (${note})`;
+      });
+      return `${candidates.length} grupo${candidates.length===1?" candidato":"s candidatos"} a repetição no mesmo cartão · ${bankModeLabel(requested)}\n${lines.join("\n")}${candidates.length>5?`\nMais ${candidates.length-5} grupo(s) em Contas.`:""}\nMesmos dados não provam compra duplicada; confira identificadores e faturas no banco. Não excluí nem alterei nenhum lançamento.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+    }catch{return "Não consegui conferir possíveis parcelamentos repetidos agora. Confira Contas e a fatura no banco; não excluí nenhum lançamento.";}
+  }
   const bankSync=/\bsincronizac(?:ao|oes)\b/.test(text)&&/\bbancos?\b|\bpendente\b|\bfalha\b/.test(text);
   const lastSync=bankSync&&/\bultima\b/.test(text);
   const pendingSync=bankSync&&/\bpendente\b/.test(text);
@@ -321,8 +346,11 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const splitSources=wording==="separe movimentacoes de conta e de cartao nos ultimos sete dias";
   const cardPurchases=wording==="mostre compras de cartao do mes sem pagamentos de fatura";
   const billPayments=wording==="encontre pagamentos de fatura do mes e diga se ficaram fora dos gastos";
-  const ownTransfers=wording==="encontre transferencias entre minhas proprias contas no mes";
-  const pixDirection=wording.match(/^quais pix (enviados|recebidos) aparecem no extrato deste mes$/)?.[1];
+  const currentMonth=/\b(?:neste|deste|no) mes\b/.test(text)&&!/\bmes (?:passado|anterior)\b/.test(text);
+  const listing=/^(?:encontre|identifique|liste|mostre|quais)\b/.test(wording);
+  const ownTransfers=currentMonth&&listing&&/\btransferencias?\b/.test(text)
+    &&/\b(?:minhas proprias contas|contas proprias|minhas contas|contas minhas)\b/.test(text);
+  const pixDirection=currentMonth&&listing?wording.match(/\bpix (enviados|recebidos)\b/)?.[1]:undefined;
   const missingAmount=wording==="quais lancamentos do extrato nao tem valor informado";
   const missingDate=wording==="quais lancamentos nao tem data informada";
   if(weeklyAccounts||splitSources||cardPurchases||billPayments||ownTransfers||pixDirection||missingAmount||missingDate){

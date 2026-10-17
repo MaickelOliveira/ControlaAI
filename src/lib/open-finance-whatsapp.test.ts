@@ -447,13 +447,41 @@ it("filters card purchases, bill payments, own transfers and Pix direction",asyn
   const purchases=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre compras de cartão do mês sem pagamentos de fatura.","2026-10-15");
   const payments=await answerBankWhatsAppMessage(user as never,"personal","both","Encontre pagamentos de fatura do mês e diga se ficaram fora dos gastos.","2026-10-15");
   const own=await answerBankWhatsAppMessage(user as never,"personal","both","Encontre transferências entre minhas próprias contas no mês.","2026-10-15");
+  const ownVariant=await answerBankWhatsAppMessage(user as never,"personal","both","Encontre transferências entre minhas próprias contas neste mês. Mostre somente as confirmadas como minhas, sem incluir Pix para outras pessoas.","2026-10-15");
   const sent=await answerBankWhatsAppMessage(user as never,"personal","both","Quais Pix enviados aparecem no extrato deste mês?","2026-10-15");
   const received=await answerBankWhatsAppMessage(user as never,"personal","both","Quais Pix recebidos aparecem no extrato deste mês?","2026-10-15");
+  const sentVariant=await answerBankWhatsAppMessage(user as never,"personal","both","Liste os Pix enviados neste mês, sem misturar os recebidos.","2026-10-15");
+  const receivedVariant=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre os Pix recebidos neste mês, sem misturar os enviados.","2026-10-15");
   expect(purchases).toContain("Padaria");expect(purchases).not.toContain("DEBITO AUT");
   expect(payments).toContain("DEBITO AUT");expect(payments).toContain("Fora dos totais");expect(payments).not.toContain("Padaria");
   expect(own).toContain("Transferência enviada pelo Pix|Samira");expect(own).toContain("PIX RECEBIDO Samira");expect(own).not.toContain("terceiro");
+  expect(ownVariant).toContain("Transferência enviada pelo Pix|Samira");expect(ownVariant).toContain("PIX RECEBIDO Samira");expect(ownVariant).not.toContain("terceiro");
   expect(sent).toContain("Pix para terceiro");expect(sent).toContain("Transferência enviada pelo Pix|Samira");expect(sent).not.toContain("PIX RECEBIDO Samira");
   expect(received).toContain("PIX RECEBIDO Samira");expect(received).not.toContain("Pix para terceiro");
+  expect(sentVariant).toContain("Pix para terceiro");expect(sentVariant).not.toContain("PIX RECEBIDO Samira");
+  expect(receivedVariant).toContain("PIX RECEBIDO Samira");expect(receivedVariant).not.toContain("Pix para terceiro");
+});
+it("checks repeated installments on the same card without treating similar descriptions as proof",async()=>{
+  const base={kind:"installment",mode:"personal",institution_name:"Banco A",resource_id:"card-a",resource_name:"Cartão A",description:"SHEIN",due_date:null,amount:"14.46",currency:"BRL",synced_at:"2026-10-15",total_installments:6,observed_installments:1,last_observed_installment:1,last_observed_month:"2026-10"};
+  m.agenda.mockResolvedValue({items:[
+    {...base,id:"first"},
+    {...base,id:"different-purchase",amount:"14.50",observed_installments:5,last_observed_installment:5},
+    {...base,id:"other-card",resource_id:"card-b",resource_name:"Cartão B"},
+  ],incomplete:false});
+  const similar=await answerBankWhatsAppMessage(user as never,"personal","both","Existe alguma compra parcelada repetida no mesmo cartão? Confira por identificador, sem apagar nada.","2026-10-15");
+  expect(similar).toContain("Nenhum registro idêntico");
+  expect(similar).toContain("não comprova");
+  m.agenda.mockResolvedValue({items:[{...base,id:"first"},{...base,id:"second"}],incomplete:true});
+  const repeated=await answerBankWhatsAppMessage(user as never,"personal","both","Existe parcelamento repetido na resposta de um cartão?","2026-10-15");
+  expect(repeated).toContain("1 grupo candidato");
+  expect(repeated).toContain("Banco A");
+  expect(repeated).toContain("Cartão A");
+  expect(repeated).toContain("identificadores diferentes");
+  expect(repeated).toContain("Não excluí");
+  expect(repeated).toContain("incompleta");
+  m.agenda.mockResolvedValue({items:[{...base,id:"first"},{...base,id:"first"}],incomplete:false});
+  const sameId=await answerBankWhatsAppMessage(user as never,"personal","both","Existe parcelamento repetido na resposta de um cartão?","2026-10-15");
+  expect(sameId).toContain("mesmo identificador");
 });
 it("reports only missing bank amounts and does not invent dates or zero",async()=>{
   m.read.mockResolvedValue({entries:[
