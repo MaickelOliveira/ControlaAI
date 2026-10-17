@@ -70,6 +70,18 @@ describe("perguntas específicas sobre faturas bancárias",()=>{
   expect(reply).not.toContain("2.215,51");
   expect(reply).toContain("Vencimento futuro não confirma que a fatura ainda está em aberto");
  });
+ it("não apresenta fatura já paga como valor atual, mesmo com vencimento futuro",()=>{
+  const paid={...overview,bills:[...overview.bills,{...overview.bills[0],id:"nu-paid",due_date:"2026-11-02",total_amount:"800",status:"paid"}]} as BankOverview;
+  const reply=answerBillQuestion(paid,{kind:"latest",requestedCurrent:true},"2026-10-15","personal");
+  expect(reply).toContain("banco informou pagamento; não apresento valor em aberto");
+  expect(reply).not.toContain("800,00");
+  expect(reply).not.toContain("pagamento não confirmado");
+ });
+ it("distingue pagamento parcial informado do total da fatura futura",()=>{
+  const partial={...overview,bills:[...overview.bills,{...overview.bills[0],id:"nu-partial",due_date:"2026-11-02",total_amount:"800",status:"partial",payment_amount:"200"}]} as BankOverview;
+  const reply=answerBillQuestion(partial,{kind:"latest",requestedCurrent:true},"2026-10-15","personal");
+  expect(reply).toContain("total informado R$ 800,00; pagamento parcial informado, saldo a pagar não confirmado");
+ });
  it("responde com o último total do banco solicitado e não com todo o histórico",()=>{
   const reply=answerBillQuestion(overview,{kind:"total",bankName:"Nubank"},"2026-10-15","personal");
   expect(reply).toContain("2.215,51");expect(reply).not.toContain("704,46");expect(reply).not.toContain("Santander");

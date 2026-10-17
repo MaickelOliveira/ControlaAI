@@ -126,7 +126,11 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
    return `Faturas mais recentes de cada cartão com vencimento passado · ${label}\n${listed(result)||"Nenhuma fatura mais recente de cartão apareceu com vencimento passado e pagamento sem confirmação."}\nIsso não prova que exista dívida: o banco pode não ter informado o pagamento. Confira cada fatura em Contas.`;
   case "latest":
    result=latest.map(row=>question.requestedCurrent
-    ?`• ${cardLabel(row)} · ${row.bill.due_date&&row.bill.due_date>=today?`fatura com vencimento recebido ${bankDate(row.bill.due_date)} · total informado ${amount(row,"total_amount")}; pagamento não confirmado`:`não recebi fatura com vencimento de hoje em diante (último vencimento recebido ${bankDate(row.bill.due_date)})`}`
+    ?`• ${cardLabel(row)} · ${row.bill.due_date&&row.bill.due_date>=today
+      ?/^(?:paid|pago|paga|settled|liquidado|quitado)$/i.test(row.bill.status)
+       ?`fatura com vencimento recebido ${bankDate(row.bill.due_date)} · banco informou pagamento; não apresento valor em aberto`
+       :`fatura com vencimento recebido ${bankDate(row.bill.due_date)} · total informado ${amount(row,"total_amount")}; ${partiallyPaid(row)?"pagamento parcial informado, saldo a pagar não confirmado":"pagamento não confirmado"}`
+      :`não recebi fatura com vencimento de hoje em diante (último vencimento recebido ${bankDate(row.bill.due_date)})`}`
     :`• ${cardLabel(row)} · último vencimento recebido ${bankDate(row.bill.due_date)} · total ${amount(row,"total_amount")} · mínimo ${amount(row,"minimum_payment_amount")}`);
    {
     const active=new Map(overview.connections.filter(c=>c.status==="active"&&!c.archived_at).map(c=>[c.id,c]));
