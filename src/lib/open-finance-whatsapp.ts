@@ -19,6 +19,8 @@ import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
+const isCardCharge=(entry:LedgerEntry)=>/\b(?:juros?|multa|iof|tarifas?|anuidade|encargos?)\b/.test(normalize(entry.description))
+  ||/^(?:BANK_FEES|FEES)(?:_|$)/.test((entry.bank?.source_category??"").toUpperCase());
 const excludedMode=(text:string,mode:"pessoal"|"empresa")=>new RegExp(`\\b(?:nao (?:acesse|consulte|use|inclua|mostre)|sem (?:misturar|incluir|consultar|acessar|mostrar))(?: (?:os )?dados)?(?: (?:com )?(?:a|o|da|do))? ${mode}\\b`).test(text);
 const safeSummary=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,120);
 const bankModeLabel=(mode:"personal"|"business",companyName?:string)=>mode==="personal"?"Pessoal":`Empresa${companyName?` · ${safeSummary(companyName)}`:""}`;
@@ -343,8 +345,9 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
     }catch{return "Não consegui conferir possíveis repetições agora. Confira Finanças ou tente novamente; nenhum lançamento foi alterado.";}
   }
   const weeklyAccounts=/^quanto (?:entrou na conta|saiu das contas) nesta semana\b/.test(wording);
-  const splitSources=wording==="separe movimentacoes de conta e de cartao nos ultimos sete dias";
-  const cardPurchases=wording==="mostre compras de cartao do mes sem pagamentos de fatura";
+  const splitSources=/^separe movimentacoes de conta e de cartao nos ultimos sete dias(?:\. quero as duas secoes sem misturar os totais)?$/.test(wording);
+  const cardPurchases=/^mostre compras de cartao (?:do|deste) mes sem pagamentos de fatura(?:\. liste no maximo cinco exemplos e diga quantas compras foram encontradas)?$/.test(wording);
+  const fiveCardExamples=cardPurchases&&wording.includes("liste no maximo cinco exemplos");
   const billPayments=wording==="encontre pagamentos de fatura do mes e diga se ficaram fora dos gastos";
   const currentMonth=/\b(?:neste|deste|no) mes\b/.test(text)&&!/\bmes (?:passado|anterior)\b/.test(text);
   const listing=/^(?:encontre|identifique|liste|mostre|quais)\b/.test(wording);
@@ -363,7 +366,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const scoped=entries.filter(e=>e.mode===requested&&e.source==="bank"&&e.status!=="pending"&&e.date>=from&&e.date<=today);
       const account=scoped.filter(e=>e.bank?.resource_type==="account"),card=scoped.filter(e=>e.bank?.resource_type==="card");
       const money=(value:number)=>bankMoney(value,"BRL");
-      const lines=(rows:LedgerEntry[])=>rows.sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id)).slice(0,20).map(e=>{
+      const lines=(rows:LedgerEntry[],limit=20)=>rows.sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id)).slice(0,limit).map(e=>{
         const value=bankMoney(e.bank?.amount,e.bank?.currency);
         const direction=e.bank?.direction==="credit"?"Entrada":"Saída";
         return `• ${bankDate(e.date)} · ${safeSummary(e.description)} · ${direction} ${value} · ${safeSummary(financeOrigin(e))}${e.included?"":" · Fora dos totais"}`;
@@ -380,7 +383,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
         return `Movimentações recebidas · ${bankDate(from)} a ${bankDate(today)}\n\n${section("Contas bancárias",account)}\n\n${section("Cartões",card)}\nTotais excluem transferências e pagamentos confirmados; esses movimentos seguem listados como fora dos totais.${coverage}`;
       }
       let label:string,selected:LedgerEntry[];
-      if(cardPurchases){label="Compras de cartão";selected=card.filter(e=>e.bank?.direction==="debit"&&e.included&&!isBankBillPaymentDescription(e.description));}
+      if(cardPurchases){label="Compras de cartão";selected=card.filter(e=>e.bank?.direction==="debit"&&e.included&&!isBankBillPaymentDescription(e.description)&&!isCardCharge(e));}
       else if(billPayments){label="Pagamentos de fatura identificados no extrato";selected=scoped.filter(e=>isBankBillPaymentDescription(e.description));}
       else if(ownTransfers){label="Transferências entre contas próprias confirmadas";selected=account.filter(e=>normalize(e.category)==="transferencia entre contas proprias");}
       else if(pixDirection){label=`Pix ${pixDirection}`;selected=account.filter(e=>/\bpix\b/.test(normalize(e.description))&&e.bank?.direction===(pixDirection==="enviados"?"debit":"credit"));}
@@ -388,13 +391,14 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const sum=cardPurchases?`\nTotal conhecido: ${money(selected.reduce((cents,e)=>cents+Math.round(e.amount*100),0)/100)}.`:"";
       const paymentNote=billPayments?"\nPagamentos marcados “Fora dos totais” não foram somados aos gastos. Entradas e saídas podem representar os dois lados da mesma fatura; não as some. Confira no banco se o pagamento foi concluído.":"";
       const count=selected.length===1?"1 movimento correspondente":`${selected.length} movimentos correspondentes`;
-      const details=selected.length?lines(selected):missingAmount
+      const displayLimit=fiveCardExamples?5:20;
+      const details=selected.length?lines(selected,displayLimit):missingAmount
         ?"Nenhum lançamento sem valor informado foi identificado nos dados recebidos deste período."
         :"Nenhum movimento com esse filtro foi recebido neste período.";
-      return `${label} · ${bankDate(from)} a ${bankDate(today)}\n${count}.${sum}\n${details}${selected.length>20?`\nMostrando 20 de ${selected.length}; veja o restante em Finanças.`:""}${paymentNote}${coverage}`;
+      return `${label} · ${bankDate(from)} a ${bankDate(today)}\n${count}.${sum}\n${details}${selected.length>displayLimit?`\nMostrando ${displayLimit} de ${selected.length}; veja o restante em Finanças.`:""}${paymentNote}${coverage}`;
     }catch{return "Não consegui consultar esses movimentos agora. Confira Finanças ou tente novamente; nenhum valor foi estimado.";}
   }
-  if(/^quais foram minhas cinco movimentacoes mais recentes\s*[?!.]*$/.test(text.trim())){
+  if(/^quais foram minhas cinco movimentacoes mais recentes(?:\? inclua entradas e saidas, mas mostre no maximo cinco)?$/.test(wording)){
     const from=new Date(Date.parse(`${today}T00:00:00Z`)-364*86400000).toISOString().slice(0,10);
     try{
       const {entries,bank}=await readUnifiedFinances(user,requested,from,today);

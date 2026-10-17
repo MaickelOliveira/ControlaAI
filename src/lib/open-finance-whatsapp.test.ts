@@ -412,10 +412,13 @@ it("answers five recent movements with both directions and no sixth item",async(
     {id:"foreign",mode:"business",source:"web",date:"2026-10-15",type:"expense",description:"Outra empresa",amount:9,category:"Outros",included:true},
   ],bank:{overview:{connections:[{}]},report:{sync_pending:true,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais foram minhas cinco movimentações mais recentes?","2026-10-15");
+  const withDetail=await answerBankWhatsAppMessage(user as never,"personal","both","Quais foram minhas cinco movimentações mais recentes? Inclua entradas e saídas, mas mostre no máximo cinco.","2026-10-15");
   expect(answer).toContain("Receita recente");expect(answer).toContain("Transferência própria");expect(answer).toContain("Compra recente");
   expect(answer).toContain("Registro manual");expect(answer).toContain("Quinto");
   expect(answer).not.toContain("Sexto");expect(answer).not.toContain("Pendente");expect(answer).not.toContain("Outra empresa");
   expect(answer).toContain("Não altera o resultado");expect(answer).toContain("importação");
+  expect(withDetail).toContain("Receita recente");expect(withDetail).toContain("Compra recente");
+  expect(withDetail).not.toContain("Sexto");expect(withDetail).not.toContain("Pendente");
   expect(m.read).toHaveBeenCalledWith(user,"personal",expect.any(String),"2026-10-15");
 });
 it("does not label a movement with missing bank amount as a confirmed transfer",async()=>{
@@ -434,9 +437,24 @@ it("keeps weekly account totals separate from card purchases",async()=>{
   const outgoing=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana?","2026-10-15");
   const outgoingWithDetail=await answerBankWhatsAppMessage(user as never,"personal","both","Quanto saiu das contas nesta semana? Não inclua compras de cartão nem transferências entre contas próprias confirmadas.","2026-10-15");
   const split=await answerBankWhatsAppMessage(user as never,"personal","both","Separe movimentações de conta e de cartão nos últimos sete dias.","2026-10-15");
+  const splitWithDetail=await answerBankWhatsAppMessage(user as never,"personal","both","Separe movimentações de conta e de cartão nos últimos sete dias. Quero as duas seções sem misturar os totais.","2026-10-15");
   expect(incoming).toContain("R$ 70,00");expect(outgoing).toContain("R$ 20,00");expect(outgoing).not.toContain("R$ 90,00");
   expect(outgoingWithDetail).toContain("Saídas das contas bancárias");expect(outgoingWithDetail).toContain("R$ 20,00");expect(outgoingWithDetail).not.toContain("R$ 90,00");
   expect(split).toContain("Contas bancárias");expect(split).toContain("Cartões");expect(split).toContain("R$ 90,00");
+  expect(splitWithDetail).toContain("Contas bancárias · 2 movimento(s)");
+  expect(splitWithDetail).toContain("Cartões · 1 movimento(s)");
+  expect(splitWithDetail).not.toContain("📊 Resumo financeiro");
+});
+it("shows at most five card purchases and excludes bank charges and invoice payments",async()=>{
+  const purchases=Array.from({length:6},(_,index)=>({id:`purchase-${index}`,mode:"personal",source:"bank",date:"2026-10-15",type:"expense",amount:1,description:`Compra ${index+1}`,category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",amount:"1",currency:"BRL"}}));
+  m.read.mockResolvedValue({entries:[...purchases,
+    {id:"interest",mode:"personal",source:"bank",date:"2026-10-15",type:"expense",amount:2,description:"Juros do rotativo",category:"Encargos bancários",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",amount:"2",currency:"BRL",source_category:"BANK_FEES"}},
+    {id:"bill",mode:"personal",source:"bank",date:"2026-10-15",type:"expense",amount:9,description:"DEB. AUTOM. DE FATURA EM C/C",category:"Outros",included:true,bank:{resource_type:"card",institution_name:"Banco A",direction:"debit",amount:"9",currency:"BRL"}},
+  ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:"2026-10-15"}}});
+  const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Mostre compras de cartão deste mês sem pagamentos de fatura. Liste no máximo cinco exemplos e diga quantas compras foram encontradas.","2026-10-15");
+  expect(answer).toContain("6 movimentos correspondentes");expect(answer).toContain("Compra 1");
+  expect(answer).not.toContain("Compra 6");expect(answer).not.toContain("Juros do rotativo");
+  expect(answer).not.toContain("DEB. AUTOM.");expect(answer).toContain("Total conhecido: R$ 6,00");
 });
 it("filters card purchases, bill payments, own transfers and Pix direction",async()=>{
   m.read.mockResolvedValue({entries:[
