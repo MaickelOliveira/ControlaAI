@@ -225,9 +225,9 @@ it("uses seven inclusive dates and separates dated bank estimates from manual bi
   expect(m.financial).toHaveBeenCalledWith(user,"personal",expect.objectContaining({from:"2026-10-16",to:"2026-10-22"}));
 });
 it("lists undated bank installments without calling their payment future or confirmed",async()=>{
-  m.financial.mockResolvedValue({commitments:[],bank:{items:[{id:"undated",mode:"personal",kind:"installment",description:"Compra parcelada",institution_name:"Banco A",resource_name:"Cartão",due_date:null,amount:"25",currency:"BRL"},{id:"dated",mode:"personal",kind:"recurring",description:"Assinatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-20",amount:"10",currency:"BRL"}],incomplete:false},forecasts:[],coverage:""});
+  m.financial.mockResolvedValue({commitments:[],bank:{items:[{id:"undated",mode:"personal",kind:"installment",description:"Compra parcelada",institution_name:"Banco A",resource_name:"Cartão",due_date:null,amount:"25",currency:null},{id:"dated",mode:"personal",kind:"recurring",description:"Assinatura",institution_name:"Banco A",resource_name:"Cartão",due_date:"2026-10-20",amount:"10",currency:"BRL"}],incomplete:false},forecasts:[],coverage:""});
   const answer=await answerBankWhatsAppMessage(user as never,"personal","both","Quais cobranças futuras não têm data informada?","2026-10-16");
-  expect(answer).toContain("Compra parcelada");expect(answer).toContain("data não informada");expect(answer).toContain("não posso confirmar");
+  expect(answer).toContain("Compra parcelada");expect(answer).toContain("25,00 (moeda não informada)");expect(answer).toContain("data não informada");expect(answer).toContain("não posso confirmar");
   expect(answer).not.toContain("Assinatura");expect(answer).not.toContain("Resultado realizado");
   expect(m.financial).toHaveBeenCalledWith(user,"personal",expect.objectContaining({includeUndated:true}));
 });

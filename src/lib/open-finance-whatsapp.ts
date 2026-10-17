@@ -12,7 +12,7 @@ import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
 import {readBankAgenda,readFinancialAgenda} from "./financial-agenda";
 import {formatBankAgenda} from "./open-finance-schedules";
-import {BANK_STATUSES,bankDate,bankMoney,type BankOverview} from "./open-finance-display";
+import {BANK_STATUSES,bankAmountWithoutCurrency,bankDate,bankMoney,type BankOverview} from "./open-finance-display";
 import {openFinanceRpc} from "./open-finance-http";
 import {readBankLedger} from "./finance-ledger-storage";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
@@ -239,7 +239,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const bank=agenda.bank.items.filter(item=>!item.mode||item.mode===requested).filter(item=>undatedDue?!item.due_date:Boolean(item.due_date&&item.due_date>=today&&item.due_date<=to)).filter(item=>!confirmedDate||item.kind==="bill");
       const lines=[
         ...manual.map(item=>`• ${safeSummary(item.description)} · ${bankMoney(item.amount,"BRL")}${item.dueDate?` · ${bankDate(item.dueDate)}`:" · data não informada"} · ${item.origin==="scheduled"?"cadastrado na Zelo":"previsão cadastrada na Zelo"}`),
-        ...bank.map(item=>`• ${safeSummary(item.kind==="bill"?"Fatura":item.description)} · ${safeSummary(item.institution_name)} · ${bankMoney(item.amount,item.currency)}${item.due_date?` · ${bankDate(item.due_date)}`:" · data não informada"} · ${item.kind==="recurring"?"data estimada a partir do histórico bancário":"pagamento não confirmado"}`),
+        ...bank.map(item=>`• ${safeSummary(item.kind==="bill"?"Fatura":item.description)} · ${safeSummary(item.institution_name)} · ${item.currency?bankMoney(item.amount,item.currency):`${bankAmountWithoutCurrency(item.amount)} (moeda não informada)`}${item.due_date?` · ${bankDate(item.due_date)}`:" · data não informada"} · ${item.kind==="recurring"?"data estimada a partir do histórico bancário":"pagamento não confirmado"}`),
       ];
       const title=undatedDue?"Cobranças recebidas sem data informada":dueToday?"Vencimentos de hoje com data informada":`Vencimentos de ${bankDate(today)} a ${bankDate(to)}`;
       const empty=undatedDue?"Não recebi cobranças sem data neste modo; isso não prova que não existam.":"Não recebi vencimentos com data neste período; isso não prova que não existam.";
