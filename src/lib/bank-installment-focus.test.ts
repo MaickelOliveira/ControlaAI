@@ -17,6 +17,7 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   ["Mostre a quantidade total e a última parcela identificada.","position"],
   ["Quais parcelas têm valor informado mas vencimento desconhecido?","undated-valued"],
   ["Separe anuidade de compras parceladas.","separate-annuity"],
+  ["Separe assinaturas de compras parceladas.","separate-subscriptions"],
   ["Quanto vence em parcelas de cartão na próxima semana?","due-next-week"],
   ["Quais parcelas não têm número total informado?","missing-total"],
  ] as const)("entende %s",(message,kind)=>expect(parseBankInstallmentFocus(message)).toEqual({kind}));
@@ -48,6 +49,22 @@ describe("perguntas focadas sobre parcelas bancárias",()=>{
   expect(split).toContain("Anuidades (1)");expect(split).toContain("Compras parceladas (3)");
   expect(split).toContain("ANUIDADE DIFERENCIADA");expect(split).toContain("Geladeira");
   expect(split).toContain("mesma descrição não prova duplicidade");
+ });
+ it("resume assinaturas, recorrências bancárias e compras parceladas sem misturar anuidades",()=>{
+  const data={...agenda,items:[...agenda.items,{id:"netflix",kind:"recurring" as const,description:"Netflix",resource_name:"Gold",institution_name:"Sicredi",due_date:"2026-10-20",amount:"35",currency:"BRL",synced_at:"2026-10-14"},{id:"delivery",kind:"recurring" as const,description:"Pg Ze Delivery",resource_name:"Gold",institution_name:"Nubank",due_date:"2026-10-25",amount:"35",currency:"BRL",synced_at:"2026-10-14"}]};
+  const manual=[
+   {description:"Spotify",category:"Assinaturas",recurrenceType:"recurring" as const,type:"expense" as const,amount:20,nextDueDate:"2026-10-21"},
+   {description:"Fogão",category:"Casa",recurrenceType:"installment" as const,type:"expense" as const,amount:80,nextDueDate:"2026-11-02"},
+   {description:"Aluguel",category:"Moradia",recurrenceType:"recurring" as const,type:"expense" as const,amount:100,nextDueDate:"2026-11-01"},
+  ];
+  const answer=formatBankInstallmentFocus(data,{kind:"separate-subscriptions"},"2026-10-15","Pessoal",manual);
+  expect(answer).toContain("Assinaturas registradas na Zelo (1)");
+  expect(answer).toContain("Recorrências estimadas pelos bancos (1)");
+  expect(answer).toContain("Registros de compras parceladas (3)");
+  expect(answer).toContain("Spotify");expect(answer).toContain("Netflix");expect(answer).toContain("Fogão");
+  expect(answer).not.toContain("Aluguel");expect(answer).not.toContain("Tênis");expect(answer).not.toContain("Ze Delivery");
+  expect(answer).toContain("Anuidades (1) separadas");
+  expect(answer).toContain("estimativas");
  });
  it("não informa total zero quando a próxima semana não tem parcelas datadas",()=>{
   const answer=formatBankInstallmentFocus(agenda,{kind:"due-next-week"},"2026-10-15","Pessoal");
