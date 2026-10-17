@@ -27,6 +27,28 @@ beforeEach(() => {
   m.accounts.mockResolvedValue([]);
   m.rpc.mockResolvedValue({ connections: [{ id: "nu", institution_name: "Nubank", status: "active" }], resources: [{ id: "loan", connection_id: "nu", resource_type: "loan", name: "Crédito pessoal", synced_at: "2026-10-11" }, { id: "card", connection_id: "nu", resource_type: "card", name: "Platinum", synced_at: "2026-10-11" }], credit: [{ resource_id: "loan", currency: "BRL", outstanding_amount: "1200.10", contract_amount: "5000" }], limits: [{ resource_id: "card", line_name: "Crédito à vista", currency: "BRL", available_amount: "1245.92", total_amount: "2000", used_amount: "754.08" }], bills: [], sync: [] });
 });
+it("answers the exact subscriptions-versus-installments request in short, separate groups",async()=>{
+  const today=todayStrBR();
+  const tomorrow=new Date(Date.parse(`${today}T12:00:00Z`)+86400000).toISOString().slice(0,10);
+  m.recurring.mockResolvedValue([
+    {description:"Spotify",category:"Assinaturas",recurrenceType:"recurring",type:"expense",amount:20,nextDueDate:tomorrow},
+    {description:"Fogão",category:"Casa",recurrenceType:"installment",type:"expense",amount:80,nextDueDate:tomorrow},
+    {description:"Aluguel",category:"Moradia",recurrenceType:"recurring",type:"expense",amount:100,nextDueDate:tomorrow},
+  ]);
+  m.rpc.mockResolvedValue({items:[
+    {id:"subscription",kind:"recurring",institution_name:"Nubank",resource_name:"Gold",description:"Netflix",due_date:tomorrow,amount:"35",currency:"BRL",synced_at:today},
+    {id:"purchase",kind:"installment",institution_name:"Nubank",resource_name:"Gold",description:"Loja de móveis",due_date:null,amount:"50",currency:"BRL",synced_at:today,observed_installments:2,total_installments:6},
+    {id:"fee",kind:"installment",institution_name:"Nubank",resource_name:"Gold",description:"ANUIDADE DIFERENCIADA",due_date:null,amount:"25",currency:"BRL",synced_at:today,observed_installments:1,total_installments:12},
+  ],incomplete:false});
+  await handleIncomingMessage({from:"5511999990000",text:"Separe assinaturas de compras parceladas."});
+  const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+  expect(response).toContain("Assinaturas registradas na Zelo (1)");
+  expect(response).toContain("Recorrências estimadas pelos bancos (1)");
+  expect(response).toContain("Registros de compras parceladas (2)");
+  expect(response).toContain("Anuidades (1) separadas");
+  expect(response).not.toContain("Aluguel");
+  expect(m.process).not.toHaveBeenCalled();
+});
 it("answers the reported account comparison with manual accounts and active banks in separate sections", async () => {
   m.accounts.mockResolvedValue([{name:"Dinheiro",isDefault:true}]);
   m.process.mockResolvedValue({intent:"account_list",confidence:1});

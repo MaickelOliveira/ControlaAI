@@ -2888,11 +2888,15 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if(!scope){await wppSend(from,"A consulta bancária não está disponível neste modo. Confira Contas no painel.");return;}
         const today=todayStrBR();
         const shifted=(days:number)=>new Date(Date.parse(`${today}T12:00:00Z`)+days*86400000).toISOString().slice(0,10);
-        const agenda=await readBankAgenda(user,requestedMode,{from:shifted(-365),to:shifted(365),includeUndated:true,includeObservedInstallments:true});
+        const [agenda,registered]=await Promise.all([
+          readBankAgenda(user,requestedMode,{from:shifted(-365),to:shifted(365),includeUndated:true,includeObservedInstallments:true}),
+          installmentFocus.kind==="separate-subscriptions"?getRecurringByUser(user.id,requestedMode,"active",true):Promise.resolve([]),
+        ]);
+        const visibleRegistered=registered.filter(item=>requestedMode==="personal"?!item.companyId:!!selectedCompany&&item.companyId===selectedCompany);
         const freshAccess=await getPhoneAccess(user.id,from);
         const freshUser=await getUserById(user.id);
         if(!freshUser||!hasAccess(freshUser)||!freshAccess||(freshAccess!=="both"&&freshAccess!==requestedMode)||currentCompanyContext()?.companyId!==selectedCompany)return;
-        await wppSendLong(from,formatBankInstallmentFocus(agenda,installmentFocus,today,requestedMode==="business"?"Empresa":"Pessoal"),3500,true);
+        await wppSendLong(from,formatBankInstallmentFocus(agenda,installmentFocus,today,requestedMode==="business"?"Empresa":"Pessoal",visibleRegistered),3500,true);
       }catch{await wppSend(from,"Não consegui consultar as parcelas recebidas agora. Tente novamente em Contas.");}
       return;
     }

@@ -2,9 +2,10 @@ import {bankDate,bankMoney,bankAmountWithoutCurrency} from "./open-finance-displ
 import {normalizeBankText} from "./bank-question-parser";
 import {bankAmountTotals} from "./bank-question-answer";
 import {weekBoundsBR} from "./date-br";
-import {bankInstallmentPosition,type BankAgenda,type BankAgendaItem} from "./open-finance-schedules";
+import {bankInstallmentPosition,bankInstallmentProgress,visibleBankSchedules,type BankAgenda,type BankAgendaItem} from "./open-finance-schedules";
 
-export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"|"due-next-week"|"missing-total"};
+export type BankInstallmentFocus={kind:"future-dated"|"next-by-card"|"position"|"undated-valued"|"separate-annuity"|"separate-subscriptions"|"due-next-week"|"missing-total"};
+type ManualSchedule={description:string;category:string;recurrenceType:"installment"|"recurring";type:"expense"|"income";amount:number};
 const safe=(text:string)=>text.replace(/[\r\n*`_~<>]/g," ").trim().slice(0,100);
 const isAnnuity=(item:BankAgendaItem)=>/\b(?:anuidade|anualidade|annual fee)\b/.test(normalizeBankText(item.description));
 const amount=(item:BankAgendaItem)=>item.currency?bankMoney(item.amount,item.currency):`${bankAmountWithoutCurrency(item.amount)} (moeda não informada)`;
@@ -20,6 +21,7 @@ export function parseBankInstallmentFocus(message:string):BankInstallmentFocus|n
   && /\b(?:nao tem|sem|nao possuem?)\b/.test(text)
   && /\b(?:numero total|quantidade total|total (?:de )?parcelas?)\b/.test(text))return {kind:"missing-total"};
  if(/\b(?:separe|separar|separado|distinga|diferencie)\b/.test(text)&&/\banuidade\b/.test(text)&&/\bcompras? parcelad[ao]s?\b/.test(text))return {kind:"separate-annuity"};
+ if(/\b(?:separe|separar|separado|distinga|diferencie)\b/.test(text)&&/\bassinaturas?\b/.test(text)&&/\bcompras? parcelad[ao]s?\b/.test(text))return {kind:"separate-subscriptions"};
  if(/\b(?:compras? parcelad[ao]s?|parcelamentos?)\b/.test(text)&&/\b(?:futura|futuras|futuro|futuros)\b/.test(text)&&/\b(?:data|vencimento)\b/.test(text))return {kind:"future-dated"};
  if(/\b(?:proxima|proximas) parcelas?\b/.test(text)&&/\b(?:cada|por) cartao\b/.test(text))return {kind:"next-by-card"};
  if(/\b(?:quantidade total|total de parcelas)\b/.test(text)&&/\bultima parcela\b/.test(text)
@@ -28,12 +30,23 @@ export function parseBankInstallmentFocus(message:string):BankInstallmentFocus|n
  return null;
 }
 
-export function formatBankInstallmentFocus(agenda:BankAgenda,focus:BankInstallmentFocus,today:string,modeLabel:string):string{
+export function formatBankInstallmentFocus(agenda:BankAgenda,focus:BankInstallmentFocus,today:string,modeLabel:string,manual:readonly ManualSchedule[]=[]):string{
  const all=agenda.items.filter(item=>item.kind==="installment");
  const purchases=all.filter(item=>!isAnnuity(item));
  const appendix=agenda.incomplete?"\nConsulta bancária incompleta; pode haver dados em atualização ou indisponíveis.":"";
  const caveat="\nAs parcelas identificadas não confirmam pagamento nem datas futuras que o banco não informou.";
  switch(focus.kind){
+  case "separate-subscriptions":{
+   const visible=visibleBankSchedules(agenda.items,today);
+   const registeredSubscriptions=manual.filter(item=>item.type==="expense"&&item.recurrenceType==="recurring"&&/^assinaturas?$/.test(normalizeBankText(item.category)));
+   const registeredPurchases=manual.filter(item=>item.type==="expense"&&item.recurrenceType==="installment");
+   const estimatedSubscriptions=visible.filter(item=>item.kind==="recurring");
+   const currentPurchases=visible.filter(item=>item.kind==="installment"&&!isAnnuity(item)&&bankInstallmentProgress(item)?.stage!=="last");
+   const fees=visible.filter(item=>item.kind==="installment"&&isAnnuity(item));
+   const preview=<T>(rows:T[],format:(row:T)=>string)=>`${rows.slice(0,4).map(format).join("\n")||"Nenhum registro recebido."}${rows.length>4?`\nMais ${rows.length-4} registro(s) no painel.`:""}`;
+   const purchaseLines=[...registeredPurchases.map(item=>`• Cadastro na Zelo · ${safe(item.description)} · ${bankMoney(item.amount,"BRL")} por parcela`),...currentPurchases.map(item=>`• Banco · ${label(item)} · ${bankInstallmentPosition(item)} · ${amount(item)} por parcela`)];
+   return `Assinaturas e compras parceladas · ${safe(modeLabel)}\n\nAssinaturas registradas na Zelo (${registeredSubscriptions.length})\n${preview(registeredSubscriptions,item=>`• ${safe(item.description)} · ${bankMoney(item.amount,"BRL")}`)}\n\nRecorrências estimadas pelos bancos (${estimatedSubscriptions.length})\n${preview(estimatedSubscriptions,item=>`• ${label(item)} · estimativa ${amount(item)} · vencimento ${bankDate(item.due_date)}`)}\n\nRegistros de compras parceladas (${purchaseLines.length})\n${preview(purchaseLines,line=>line)}${fees.length?`\n\nAnuidades (${fees.length}) separadas; não são compras parceladas.`:""}${agenda.incomplete?"\nConsulta bancária incompleta; pode haver dados em atualização ou indisponíveis.":""}\nRecorrências bancárias são estimativas, não assinaturas ou pagamentos confirmados. Registros de origens diferentes podem se referir à mesma compra; não os somei nem juntei por semelhança de nome.`;
+  }
   case "missing-total":{
    const missing=all.filter(item=>{
     const total=item.total_installments;
