@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import UiIcon from "@/components/UiIcon";
 import s from "./landing.module.css";
 
@@ -40,7 +40,7 @@ function Conversation() {
 }
 
 function Registration() {
-  return <div className={s.registration}><Chat compact><Bubble outgoing>Gastei <mark>R$ 87</mark> de <mark>combustível</mark> na <mark>empresa</mark>.</Bubble><Bubble>Despesa registrada!<br /><b>R$ 87,00 · Combustível</b><br />No espaço Studio Aurora.</Bubble></Chat><div className={s.receipt}><span className={s.receiptCheck}>✓</span><small>PAINEL ATUALIZADO</small><h3>Mais um detalhe<br />resolvido.</h3><p>Combustível <b>− R$ 87,00</b></p><div><span>Categoria</span><b>Transporte</b></div><div><span>Espaço</span><b>Studio Aurora</b></div><footer><UiIcon name="business" /> Sua vida pessoal segue separada.</footer></div></div>;
+  return <div className={s.registration}><Chat compact><Bubble outgoing>Gastei <mark>R$ 87</mark> de <mark>combustível</mark> na <mark>empresa</mark>.</Bubble><Bubble>Despesa registrada!<br /><b>R$ 87,00 · Combustível</b><br />No espaço Studio Aurora.</Bubble></Chat><div className={s.receipt}><span className={s.receiptCheck}>✓</span><small>PAINEL ATUALIZADO</small><h3>Mais um detalhe<br />resolvido.</h3><p>Combustível <b>− R$ 87,00</b></p><div><span>Categoria</span><b>Combustível</b></div><div><span>Espaço</span><b>Studio Aurora</b></div><footer><UiIcon name="business" /> Sua vida pessoal segue separada.</footer></div></div>;
 }
 
 function Money() {
@@ -60,7 +60,7 @@ function Everything() {
 }
 
 const VISUALS = [Conversation, Registration, Money, Workspaces, Routine, Everything];
-export default function StoryVisual({ scene }: { scene: number }) {
+export default memo(function StoryVisual({ scene }: { scene: number }) {
   const Visual = VISUALS[scene];
   return <Visual />;
-}
+});

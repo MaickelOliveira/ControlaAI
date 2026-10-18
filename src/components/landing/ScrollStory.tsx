@@ -19,7 +19,7 @@ export default function ScrollStory() {
     let request = 0;
     const measure = () => {
       request = 0;
-      if (motion.matches) { setEnhanced(false); return; }
+      if (motion.matches || window.innerHeight < 580) { setEnhanced(false); return; }
       setEnhanced(true);
       const box = section.getBoundingClientRect();
       const viewport = stage.current?.offsetHeight ?? window.innerHeight;
@@ -48,13 +48,14 @@ export default function ScrollStory() {
   }
 
   return <section ref={root} id="apresentacao" className={s.story} data-enhanced={enhanced} data-active-scene={frame.active} aria-label="Conheça o Zelo em seis cenas">
+    <span id="como-funciona" />
     <div ref={stage} className={s.stage}>
       <div className={s.storyTop}><span><i /> GESTÃO INTELIGENTE, DIRETO NO WHATSAPP</span><a href="#recursos">Explorar recursos <UiIcon name="arrow" /></a></div>
       <div className={s.storyGrid}>
         <div className={s.copyStack}>
           {STORY_SCENES.map((scene, index) => {
             const Heading = index === 0 ? "h1" : "h2";
-            return <article key={scene.id} className={s.sceneCopy} aria-hidden={enhanced && frame.active !== index} style={enhanced ? { opacity: frame.weights[index], transform: `translateY(${(index - frame.position) * 24}px)`, visibility: frame.weights[index] > 0 ? "visible" : "hidden", pointerEvents: frame.active === index ? "auto" : "none" } : undefined}>
+            return <article key={scene.id} className={s.sceneCopy} aria-hidden={enhanced && frame.active !== index} inert={enhanced && frame.active !== index} style={enhanced ? { visibility: frame.active === index ? "visible" : "hidden" } : undefined}>
               <p className={s.eyebrow}>{scene.eyebrow}</p>
               <Heading>{scene.title}<br /><em>{scene.accent}</em></Heading>
               <p className={s.sceneDescription}>{scene.description}</p>
@@ -65,7 +66,7 @@ export default function ScrollStory() {
         </div>
         <div className={s.visualStack} aria-hidden="true">
           <div className={s.visualOrbit} />
-          {STORY_SCENES.map((scene, index) => <div key={scene.id} className={s.visualLayer} style={enhanced ? { opacity: frame.weights[index], transform: `translateY(${(index - frame.position) * 28}px) scale(${0.96 + frame.weights[index] * 0.04})`, visibility: frame.weights[index] > 0 ? "visible" : "hidden" } : undefined}><StoryVisual scene={index} /></div>)}
+          {STORY_SCENES.map((scene, index) => <div key={scene.id} className={s.visualLayer} data-scene-index={index} style={enhanced ? { opacity: frame.weights[index], transform: `translateY(${(index - frame.position) * 28}px) scale(${0.96 + frame.weights[index] * 0.04})`, visibility: frame.weights[index] > 0 ? "visible" : "hidden" } : undefined}><StoryVisual scene={index} /></div>)}
         </div>
       </div>
       <div className={s.storyBottom}>
