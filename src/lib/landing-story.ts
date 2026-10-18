@@ -49,8 +49,11 @@ export function routineJourney(progress: number) {
   const active = Math.min(2, Math.floor(value * 3));
   const typing = clamp(((value * 3 - active) + .08) / .45);
   const message = ROUTINE_REQUESTS[active];
+  const phase = value * 3 - active;
+  const reveal = clamp((value - active / 3 - .12) / .18);
+  const mobileReveal = reveal * (active < 2 ? clamp((1 - phase) / .08) : 1);
   return {
-    active, typing,
+    active, typing, mobileReveal,
     typed: message.slice(0, Math.floor(8 + typing * (message.length - 8))),
     results: [0, 1, 2].map(index => clamp((value - index / 3 - .12) / .18)),
   };

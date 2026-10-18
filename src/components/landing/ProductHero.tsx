@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import UiIcon from "@/components/UiIcon";
-import { routineJourney } from "@/lib/landing-story";
+import { ROUTINE_REQUESTS, routineJourney } from "@/lib/landing-story";
 import h from "./hero.module.css";
 
-const TARGETS=[.32,.65,.99];
+const TARGETS=[.305,.638,.99];
 const STEPS=[
   {label:"Seu dinheiro",title:"Um gasto contado. Um detalhe cuidado.",description:"Conte o que gastou, informe a conta e o espaço. O pedido ganha categoria e um lugar no seu financeiro.",reply:"R$ 85 em supermercado, no débito e no Pessoal. Os detalhes do exemplo estão organizados."},
   {label:"Seu tempo",title:"Tempo para estar presente.",description:"Assunto, data, horário e espaço reunidos em um compromisso. Você acompanha sua agenda e o que vem pela frente.",reply:"Reunião da empresa, amanhã às 10h. O exemplo ganhou lugar na agenda."},
@@ -22,18 +22,22 @@ export default function ProductHero(){
   const root=useRef<HTMLElement>(null);
   const stage=useRef<HTMLDivElement>(null);
   const [enhanced,setEnhanced]=useState(false);
+  const [ready,setReady]=useState(false);
   const [progress,setProgress]=useState(0);
-  const [manual,setManual]=useState(0);
+  const [manual,setManual]=useState<number|null>(null);
   useEffect(()=>{
     const media=matchMedia("(prefers-reduced-motion: reduce)");let raf=0;
-    const measure=()=>{raf=0;const e=root.current;if(!e)return;const useScroll=!media.matches&&innerHeight>=740;setEnhanced(useScroll);if(useScroll){const top=e.getBoundingClientRect().top+scrollY-72;setProgress(Math.min(1,Math.max(0,(scrollY-top)/Math.max(1,e.offsetHeight-(stage.current?.offsetHeight??innerHeight)))));}};
+    const measure=()=>{raf=0;const e=root.current;if(!e)return;const useScroll=!media.matches&&innerHeight>=(innerWidth<360?820:740);setReady(true);setEnhanced(useScroll);if(useScroll){const top=e.getBoundingClientRect().top+scrollY-72;setProgress(Math.min(1,Math.max(0,(scrollY-top)/Math.max(1,e.offsetHeight-(stage.current?.offsetHeight??innerHeight)))));}};
     const schedule=()=>{if(!raf)raf=requestAnimationFrame(measure);};const observer=new ResizeObserver(schedule);if(root.current)observer.observe(root.current);
     addEventListener("scroll",schedule,{passive:true});addEventListener("resize",schedule);media.addEventListener("change",schedule);schedule();
     return()=>{cancelAnimationFrame(raf);observer.disconnect();removeEventListener("scroll",schedule);removeEventListener("resize",schedule);media.removeEventListener("change",schedule);};
   },[]);
-  const value=enhanced?progress:TARGETS[manual];
+  const value=ready?(enhanced?progress:manual===null?0:TARGETS[manual]):0;
   const journey=routineJourney(value);
-  const {active,typing,typed,results}=journey;
+  const {active,results,mobileReveal}=journey;
+  const initialStatic=ready&&!enhanced&&manual===null;
+  const typing=initialStatic?1:journey.typing;
+  const typed=initialStatic?ROUTINE_REQUESTS[0]:journey.typed;
   const current=STEPS[active];
   function select(i:number){const e=root.current;if(enhanced&&e)scrollTo({top:e.getBoundingClientRect().top+scrollY-72+TARGETS[i]*(e.offsetHeight-(stage.current?.offsetHeight??innerHeight)),behavior:"smooth"});else setManual(i);}
   return <section ref={root} id="inicio" className={h.heroStory} data-enhanced={enhanced} data-routine-step={active} data-results={results.map(n=>n.toFixed(3)).join(",")} aria-label="Conheça o Zelo">
@@ -42,7 +46,7 @@ export default function ProductHero(){
       <div className={h.heroTop}><span><i/> CADA COISA ENCONTRA SEU LUGAR.</span><span>WHATSAPP + PAINEL WEB</span></div>
       <div className={h.heroGrid}>
         <div className={h.heroCopy}><p className={h.kicker}>MAIS VIDA. MENOS COISAS NA CABEÇA.</p><h1>Seu dia{" "}<br/>acontece.{" "}<br/><em>O Zelo organiza.</em></h1><p className={h.heroLead}>Uma conversa cuida dos detalhes. Seu dinheiro, seus compromissos e seus documentos ganham lugar — no pessoal e na empresa.</p><div className={h.heroActions}><a href="#planos">Quero meu Zelo <UiIcon name="arrow"/></a><a href="#espacos">Pessoal e empresa <span>↓</span></a></div><p className={h.heroTrust}>Converse pelo WhatsApp. Acompanhe também no painel.</p></div>
-        <div className={h.heroArt} data-active={active} role="img" aria-label={`Conversa ilustrativa no WhatsApp com o Zelo: ${current.label}. ${current.description}`}>
+        <div className={h.heroArt} data-active={active} style={{"--mobile-reveal":mobileReveal} as CSSProperties} role="img" aria-label={`Conversa ilustrativa no WhatsApp com o Zelo: ${current.label}. ${current.description}`}>
           <div className={h.artBackdrop} aria-hidden="true"><span>menos pendências.<br/><b>mais presença.</b></span><i/><i/><i/></div>
           <div className={h.artHeading} aria-hidden="true"><span>DA CONVERSA PARA A SUA ROTINA</span><b>↗</b></div>
           <div className={h.phoneShell} aria-hidden="true"><div className={h.phone}>
@@ -57,7 +61,7 @@ export default function ProductHero(){
             {[0,1,2].map(i=><div className={h.resultSlot} key={i} data-active={active===i}>
               <div className={h.resultGuide} style={{opacity:1-results[i]}}><span>0{i+1}</span><UiIcon name={i===0?"wallet":i===1?"calendar":"folder"}/><b>{i===0?"O gasto ganha contexto.":i===1?"O compromisso ganha horário.":"O arquivo ganha lugar."}</b></div>
               <div className={h.resultCard} data-result={i} data-complete={results[i]===1} style={{"--reveal":results[i],"--origin-y":`${162-i*191}px`,opacity:results[i],transform:`translate(${-130*(1-results[i])}px,calc(var(--entry-y) * ${1-results[i]})) scale(${.78+.22*results[i]}) rotate(${-5*(1-results[i])}deg)`,visibility:results[i]>0?"visible":"hidden"} as CSSProperties}>
-                {i===0?<><div className={h.resultEyebrow}><span>✓ GASTO ORGANIZADO</span><b>Pessoal</b></div><strong>R$ 85<span>,00</span></strong><div className={h.expenseDetail}><UiIcon name="cart"/><p>Supermercado<small>Débito · Conta pessoal</small></p><span>↗</span></div></>:i===1?<><div className={h.resultEyebrow}><span>✓ COMPROMISSO NA AGENDA</span><b>Empresa</b></div><div className={h.meetingResult}><div><span>AMANHÃ</span><strong>10<span>h</span></strong></div><p>Reunião com<br/>a equipe<small>O próximo passo está à vista.</small></p></div></>:<><div className={h.resultEyebrow}><span>✓ ARQUIVO GUARDADO</span><b>Drive</b></div><div className={h.documentResult}><span><UiIcon name="document"/>PDF</span><p>Contrato.pdf<small>Contratos / Documento de exemplo</small></p><UiIcon name="arrow"/></div><div className={h.fileHint}>Depois, peça: “Encontre meu contrato.”</div></>}
+                {i===0?<><div className={h.resultEyebrow}><span>✓ GASTO ORGANIZADO</span><b>Pessoal</b></div><strong>R$ 85<span>,00</span></strong><div className={h.expenseDetail}><UiIcon name="cart"/><p>Supermercado<small>Débito · Conta pessoal</small></p><span>↗</span></div></>:i===1?<><div className={h.resultEyebrow}><span>✓ COMPROMISSO NA AGENDA</span><b>Empresa</b></div><div className={h.meetingResult}><div><span>AMANHÃ</span><strong>10<span>h</span></strong></div><p>Reunião com<br/>a equipe<small>O próximo passo está à vista.</small></p></div><div className={h.meetingAgendaStrip}>{["SEG","TER","QUA","QUI","SEX"].map((day,j)=><span key={day} data-day={j===0}>{day}<i/></span>)}</div></>:<><div className={h.resultEyebrow}><span>✓ ARQUIVO GUARDADO</span><b>Drive</b></div><div className={h.documentResult}><span><UiIcon name="document"/>PDF</span><p>Contrato.pdf<small>Contratos / Documento de exemplo</small></p><UiIcon name="arrow"/></div><div className={h.fileHint}><UiIcon name="search"/>Depois, peça: “Encontre meu contrato.”</div></>}
               </div>
             </div>)}
           </div>

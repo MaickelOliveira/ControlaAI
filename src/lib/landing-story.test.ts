@@ -98,3 +98,11 @@ describe("pedidos que saem da conversa", () => {
     expect(routineJourney(2)).toEqual(routineJourney(1));
   });
 });
+
+
+it("entrega um resultado grande por vez no mobile e prepara a próxima conversa", () => {
+  for(const p of [.305,.638,.99]) expect(routineJourney(p).mobileReveal).toBe(1);
+  expect(routineJourney(.332).mobileReveal).toBeLessThan(.1);
+  expect(routineJourney(.334).mobileReveal).toBe(0);
+  expect(routineJourney(1).mobileReveal).toBe(1);
+});
