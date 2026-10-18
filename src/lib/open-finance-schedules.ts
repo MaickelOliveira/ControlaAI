@@ -105,9 +105,9 @@ export function groupBankAgenda(items:BankAgendaItem[]):BankAgendaGroup[] {
   return groups.filter(group=>group.items.length);
 }
 const safe=(text:string)=>text.replace(/[\r\n*`_~<>]/g," ").slice(0,180);
-export function collectBankAgenda(items:BankAgendaItem[],range:{from:string;to:string;includeUndated?:boolean;includeObservedInstallments?:boolean;forNotification?:boolean;now?:string}):BankAgendaItem[]{
+export function collectBankAgenda(items:BankAgendaItem[],range:{from:string;to:string;includeUndated?:boolean;includeObservedInstallments?:boolean;includeCompletedInstallments?:boolean;forNotification?:boolean;now?:string}):BankAgendaItem[]{
   return items.filter(item=>{
-    if(!activeSchedule(item,range.from))return false;
+    if(!(range.includeCompletedInstallments&&item.kind==="installment")&&!activeSchedule(item,range.from))return false;
     if(item.due_date?item.due_date<range.from||item.due_date>range.to:!range.includeUndated)return false;
     if(!range.includeObservedInstallments&&item.kind==="installment"&&(item.observed_installments??0)>=(item.total_installments??0))return false;
     if(range.forNotification){
