@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
-import s from "./landing.module.css";
+import { AGENT_SCENES } from "@/lib/landing-story";
+import AgentDetails from "./AgentDetails";
+import z from "./functions.module.css";
 import x from "./experience.module.css";
 import FeaturePreview from "./FeaturePreview";
 
@@ -28,20 +31,27 @@ const GROUPS=[
   {title:"Seus documentos",ids:["drive","pesquisas"]},
   {title:"Seu negócio",ids:["clientes","funcionarios","contatos"]},
 ];
+const OWNERS: Record<string,string>={fatura:"finance",recorrencias:"finance",tarefas:"task",lembretes:"reminder",drive:"drive",metas:"goal",clientes:"people",funcionarios:"employee",supermercado:"grocery",veiculos:"vehicle",contatos:"people",pesquisas:"support"};
 export default function FunctionsGuide() {
   const [selected,setSelected]=useState(0);
+  const [details,setDetails]=useState(false);
   const feature=FEATURES[selected];
   const group=GROUPS.find(g=>g.ids.includes(feature.id))!;
+  const groupIndex=GROUPS.indexOf(group);
+  const owner=AGENT_SCENES.find(agent=>agent.key===OWNERS[feature.id])!;
   useEffect(()=>{const sync=()=>{const index=FEATURES.findIndex(f=>f.id===window.location.hash.slice(1));if(index>=0)setSelected(index);};sync();window.addEventListener("hashchange",sync);return()=>window.removeEventListener("hashchange",sync);},[]);
-  return <div id="funcoes" className={x.functionsExperience}>
-    <div className={x.functionsHeading}><p className={s.eyebrow}>UMA CONVERSA QUE VIRA AÇÃO</p><h2>O alívio de pensar:<br /><em>“isso já está cuidado”.</em></h2><p>Escolha uma parte do seu dia. Faça um pedido de exemplo e veja o tipo de organização que ele pode ganhar.</p></div>
-    <nav className={x.functionGroups} aria-label="Áreas das funções">{GROUPS.map(g=><button key={g.title} type="button" aria-pressed={g===group} onClick={()=>setSelected(FEATURES.findIndex(f=>f.id===g.ids[0]))}>{g.title}<span>{String(g.ids.length).padStart(2,"0")}</span></button>)}</nav>
-    <div className={x.featureExplorer}>
-      <div className={x.featureNav} aria-label="Escolha uma função">{FEATURES.map((item,i)=><button key={item.id} id={item.id} type="button" hidden={!group.ids.includes(item.id)} aria-pressed={selected===i} aria-controls="detalhe-funcao" onClick={()=>setSelected(i)}><UiIcon name={item.icon}/><span>{item.title}</span><span>↗</span></button>)}</div>
-      <article id="detalhe-funcao" className={x.featureContent} aria-labelledby="funcao-selecionada">
-        <div className={x.featureStory}><span className={x.featureCounter}>{String(selected+1).padStart(2,"0")} / 12 FUNÇÕES</span><h3 id="funcao-selecionada">{feature.title}</h3><p className={x.featurePromise}>{feature.description}</p><div className={x.featureHow}><span>O QUE ACONTECE DEPOIS DO PEDIDO</span><p>{feature.how}</p></div><div className={x.featureWhere}><UiIcon name="arrow"/><div><b>Onde você acompanha</b><p>{feature.result}</p></div></div></div>
-        <div className={x.featureSimulation}><div className={x.requestMessage}><span>VOCÊ PEDE</span><blockquote>{feature.request}</blockquote><small>EXEMPLO DE CONVERSA</small></div><div className={x.resultBridge}><span>↓</span><p>O PEDIDO GANHA UM LUGAR</p></div><div className={x.featurePreview} data-preview={feature.id}><FeaturePreview key={feature.id} kind={feature.id}/></div><p className={x.previewDisclaimer}>Demonstração visual da função · Dados fictícios · Nenhuma ação na sua conta</p></div>
+  return <div id="funcoes" className={z.lab} data-group={groupIndex}>
+    <div className={z.labHeading}><div><p>12 FUNÇÕES. UM ZELO PARA CADA DETALHE.</p><h2>Um pedido simples.<br/><em>Um resultado que ajuda.</em></h2></div><p>Escolha o que você quer organizar. Veja um exemplo do pedido, o resultado e como acompanhar depois.</p></div>
+    <nav className={z.labGroups} aria-label="Áreas das funções">{GROUPS.map((g,i)=><button key={g.title} type="button" aria-pressed={g===group} onClick={()=>setSelected(FEATURES.findIndex(f=>f.id===g.ids[0]))}><UiIcon name={i===0?"wallet":i===1?"calendar":i===2?"folder":"business"}/>{g.title}<span>{String(g.ids.length).padStart(2,"0")}</span></button>)}</nav>
+    <div className={z.labLayout}>
+      <div className={z.labNav} aria-label="Escolha uma função">{FEATURES.map((item,i)=><button key={item.id} id={item.id} type="button" hidden={!group.ids.includes(item.id)} aria-pressed={selected===i} aria-controls="detalhe-funcao" onClick={()=>setSelected(i)}><UiIcon name={item.icon}/><span>{item.title}</span><span>↗</span></button>)}</div>
+      <article id="detalhe-funcao" className={z.labContent} aria-labelledby="funcao-selecionada">
+        <div className={z.labWorkbench}><div className={z.labRequest}><span className={z.labCounter}>{String(selected+1).padStart(2,"0")} / 12 · {group.title.toUpperCase()}</span><h3 id="funcao-selecionada">{feature.title}</h3><p>{feature.description}</p><div className={z.labMessage}><span>01 / VOCÊ PEDE NA CONVERSA</span><blockquote>{feature.request}</blockquote><small>EXEMPLO DE PEDIDO</small></div><button type="button" className={z.labOwner} onClick={()=>setDetails(true)}><Image src={owner.portrait} alt="" width={38} height={38}/><span><small>QUEM CUIDA DESSA ESPECIALIDADE</small><b>{owner.name} <span>· {owner.role}</span></b></span><span>↗</span></button></div>
+          <div className={z.labResultArea}><div className={z.labResultLabel}><span>02 / O PEDIDO GANHA UM LUGAR</span><b>↙</b></div><div className={`${x.featurePreview} ${z.labPreview}`} data-preview={feature.id}><FeaturePreview key={feature.id} kind={feature.id}/></div><p className={z.labDisclaimer}>Demonstração interativa · Dados fictícios · Nenhuma ação na sua conta</p></div>
+        </div>
+        <div className={z.labExplanation}><div><span>COMO FUNCIONA</span><h4>Do seu pedido à organização.</h4><p>{feature.how}</p></div><div><span>ONDE VOCÊ ACOMPANHA</span><h4>O resultado continua com você.</h4><p>{feature.result}</p></div></div>
       </article>
     </div>
+    {details&&<AgentDetails agent={owner} onClose={()=>setDetails(false)}/>}
   </div>;
 }

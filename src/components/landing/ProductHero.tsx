@@ -1,134 +1,71 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import UiIcon from "@/components/UiIcon";
-import { storyFrame, expenseJourney, EXPENSE_EXAMPLE_MESSAGE as MESSAGE } from "@/lib/landing-story";
-import ZeloCore from "./ZeloCore";
-import s from "./landing.module.css";
+import { routineJourney } from "@/lib/landing-story";
+import h from "./hero.module.css";
 
-const STEP_PROGRESS = [0.08, 0.57, 0.97];
-const STEPS = [
-  { title: "Digite o pedido", description: "Uma mensagem simples com o que você quer organizar. Sem precisar aprender um formulário novo." },
-  { title: "Siga o caminho", description: "Valor, categoria, conta e espaço ganham contexto. Se faltar algum detalhe, você completa pela conversa." },
-  { title: "Veja o registro", description: "Seu gasto ganha categoria e histórico. Consulte depois pelo WhatsApp ou acompanhe os detalhes no painel." },
+const TARGETS=[.32,.65,.99];
+const STEPS=[
+  {label:"Seu dinheiro",title:"Um gasto contado. Um detalhe cuidado.",description:"Conte o que gastou, informe a conta e o espaço. O pedido ganha categoria e um lugar no seu financeiro.",reply:"R$ 85 em supermercado, no débito e no Pessoal. Os detalhes do exemplo estão organizados."},
+  {label:"Seu tempo",title:"Tempo para estar presente.",description:"Assunto, data, horário e espaço reunidos em um compromisso. Você acompanha sua agenda e o que vem pela frente.",reply:"Reunião da empresa, amanhã às 10h. O exemplo ganhou lugar na agenda."},
+  {label:"Seus arquivos",title:"Guardado agora. Encontrado depois.",description:"Envie um documento, peça para guardar e encontre pelo assunto. Quando localizado, o próprio arquivo pode voltar na conversa.",reply:"Contrato guardado no exemplo do Drive. Depois, peça: encontre o contrato do fornecedor."},
 ];
-const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
-export default function ProductHero() {
-  const root = useRef<HTMLElement>(null);
-  const stage = useRef<HTMLDivElement>(null);
-  const [frame, setFrame] = useState(() => storyFrame(-1, { top: 0, height: 1, viewport: 1 }, 3));
-  const [enhanced, setEnhanced] = useState(false);
-  const [webgl, setWebgl] = useState(false);
+function ChatIcon({kind}:{kind:"call"|"video"|"mic"|"camera"}) {
+  const paths={call:"M5 3h4l2 5-3 2a15 15 0 0 0 6 6l2-3 5 2v4c0 3-6 3-11-2S2 3 5 3Z",video:"M3 6h12v12H3V6Zm12 4 6-3v10l-6-3",mic:"M9 4a3 3 0 0 1 6 0v8a3 3 0 0 1-6 0V4Zm-3 7a6 6 0 0 0 12 0m-6 6v5m-4 0h8",camera:"M3 6h5l2-3h4l2 3h5v15H3V6Zm13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"};
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[kind]}/></svg>;
+}
 
-  useEffect(() => {
-    const section = root.current;
-    if (!section) return;
-    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let request = 0;
-    const measure = () => {
-      request = 0;
-      setWebgl(!motion.matches);
-      const useScroll = !motion.matches && window.innerHeight >= 640 && !(window.innerWidth < 768 && window.innerHeight < 740);
-      setEnhanced(useScroll);
-      if (useScroll) {
-        const box = section.getBoundingClientRect();
-        const next = storyFrame(window.scrollY, { top: box.top + window.scrollY - 72, height: box.height, viewport: stage.current?.offsetHeight ?? window.innerHeight }, 3);
-        setFrame(previous => previous.position === next.position && previous.progress === next.progress ? previous : next);
-      }
-    };
-    const schedule = () => { if (!request) request = requestAnimationFrame(measure); };
-    const observer = new ResizeObserver(schedule);
-    observer.observe(section);
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule);
-    motion.addEventListener("change", schedule);
-    schedule();
-    return () => {
-      cancelAnimationFrame(request);
-      observer.disconnect();
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-      motion.removeEventListener("change", schedule);
-    };
-  }, []);
-
-  function goToStep(index: number) {
-    if (!root.current) return;
-    const box = root.current.getBoundingClientRect();
-    const geometry = { top: box.top + window.scrollY - 72, height: box.height, viewport: stage.current?.offsetHeight ?? window.innerHeight };
-    if (enhanced) window.scrollTo({ top: geometry.top + STEP_PROGRESS[index] * Math.max(1, geometry.height - geometry.viewport), behavior: "smooth" });
-    else setFrame(storyFrame(STEP_PROGRESS[index] * 100, { top: 0, height: 100, viewport: 0 }, 3));
-  }
-
-  const progress = enhanced ? frame.progress : [0, 0.58, 1][frame.active];
-  const journey = expenseJourney(progress);
-  const typing = enhanced ? journey.typing : 1;
-  const { zoom, travel, reveal } = journey;
-  const typed = enhanced ? journey.typed : MESSAGE;
-  const processing = progress >= 0.38;
-  const routeOpacity = clamp(travel * 5) * (1 - reveal);
-  const receiptVisible = reveal > 0;
-
-  return <section ref={root} id="inicio" className={s.productHero} data-enhanced={enhanced} data-product-step={frame.active} data-flight={travel.toFixed(3)} data-record={reveal.toFixed(3)} aria-label="Conheça o Zelo">
-    <span id="como-funciona" />
-    <div ref={stage} className={s.productStage}>
-      <div className={s.productTop}><span><i /> SUA VIDA. SEU NEGÓCIO. TUDO EM ORDEM.</span><span>GESTÃO INTELIGENTE PELO WHATSAPP</span></div>
-      <div className={s.productGrid}>
-        <div className={s.productCopy} inert={zoom > 0.55} aria-hidden={zoom > 0.55} style={{ opacity: 1 - clamp(zoom * 1.8), transform: `translateX(${-zoom * 35}px)`, visibility: processing ? "hidden" : "visible" }}>
-          <p className={s.eyebrow}>SUA ROTINA, EM OUTRA FREQUÊNCIA</p>
-          <h1>Seu mundo,<br /><em>em ordem<span>↗</span></em></h1>
-          <p className={s.productLead}>Tire as pendências da cabeça. Finanças, agenda, tarefas e documentos ganham lugar em uma conversa no WhatsApp — e ficam à mão no seu painel.</p>
-          <div className={s.heroActions}><a href="#planos" className={s.primaryButton}>Quero meu Zelo <UiIcon name="arrow" /></a><a href="#recursos" className={s.productExplore}>Explorar as funções <span>↓</span></a></div>
-          <div className={s.productAssurance}><span><UiIcon name="finance" /> Open Finance</span><span><UiIcon name="home" /> Pessoal + empresas</span></div>
-        </div>
-        <div className={s.processingCopy} aria-hidden={!processing} inert={!processing} style={{ opacity: clamp((progress - 0.38) / 0.12), visibility: processing ? "visible" : "hidden" }}>
-          <p className={s.eyebrow}>{receiptVisible ? "DA CONVERSA PARA O SEU FINANCEIRO" : "ACOMPANHE O CAMINHO DO SEU PEDIDO"}</p>
-          <h2>{receiptVisible ? <>Um gasto.<br /><em>Cada detalhe<br />no lugar.</em></> : <>Uma mensagem.<br /><em>A organização<br />acontece.</em></>}</h2>
-          <p>{receiptVisible ? "Valor, categoria, forma de pagamento e espaço reunidos em um registro. Depois, consulte pela conversa ou acompanhe os detalhes no painel." : "O valor é identificado. O contexto ganha forma. A informação segue para o lugar certo, sem você precisar procurar onde anotar."}</p>
-          <div className={s.processingFields}><span data-done={travel > .12}>R$ 85,00</span><span data-done={travel > .38}>Supermercado</span><span data-done={travel > .65}>Pessoal</span></div>
-          <a href={receiptVisible ? "#open-finance" : "#recursos"} className={s.productExplore}>{receiptVisible ? "Conhecer o Open Finance" : "Explorar as funções"} <span>↓</span></a>
-        </div>
-        <div className={s.productShowcase} role="img" aria-label={`Demonstração ilustrativa: ${STEPS[frame.active].title}. ${MESSAGE}. ${receiptVisible ? "Exemplo de gasto registrado em supermercado, no débito e no espaço Pessoal." : "A mensagem percorre o caminho até a organização do gasto."}`}>
-          <div className={s.productCanvas}>
-            <div className={s.productCore} aria-hidden="true" style={{ opacity: .20 * (1 - reveal * .7) }}><ZeloCore position={progress * 6} enabled={webgl} /></div>
-            <div className={s.productHalo} aria-hidden="true"><span>menos<br /><b>caos.</b></span></div><div className={s.floatingAgenda} aria-hidden="true" style={{ opacity: 1 - clamp(zoom * 2) }}><UiIcon name="calendar" /><div><small>SUA AGENDA EM DIA</small><b>Reunião com a equipe</b><span>Amanhã · 10:00</span></div><i>↗</i></div>
-            <div className={s.showcaseDevice} aria-hidden="true" style={{ opacity: 1 - clamp(travel * 3), transform: `perspective(1400px) translateX(calc(var(--phone-camera-x) * ${-zoom})) translateY(${-zoom * 25}px) scale(${1 + zoom * 1.7}) rotateY(0deg) rotateZ(0deg)` }}>
-              <div className={s.deviceStatus}><span>9:41</span><i /><span>● ▰</span></div>
-              <div className={s.deviceHeader}><Image src="/brand/zelo-icon.png" alt="" width={36} height={36} /><div><b>Zelo</b><small>Gestão inteligente</small></div><span>⋯</span></div>
-              <div className={s.deviceConversation}>
-                <span className={s.demoPill}>EXEMPLO ILUSTRATIVO</span>
-                <div className={s.deviceWelcome}>Bom dia! O que vamos tirar da sua cabeça hoje?</div>
-                <div className={s.deviceRequest}><span>{typed}</span>{typing < 1 && <i className={s.typingCaret} />}<small>09:41 {typing >= 1 ? "✓✓" : "· digitando"}</small></div>
-                <div className={s.deviceReply} style={{ opacity: clamp((typing - .72) / .28) }}><b>Zelo</b>R$ 85 em supermercado, no débito e no espaço Pessoal. Vamos organizar esse gasto.<small>09:41</small></div>
+export default function ProductHero(){
+  const root=useRef<HTMLElement>(null);
+  const stage=useRef<HTMLDivElement>(null);
+  const [enhanced,setEnhanced]=useState(false);
+  const [progress,setProgress]=useState(0);
+  const [manual,setManual]=useState(0);
+  useEffect(()=>{
+    const media=matchMedia("(prefers-reduced-motion: reduce)");let raf=0;
+    const measure=()=>{raf=0;const e=root.current;if(!e)return;const useScroll=!media.matches&&innerHeight>=740;setEnhanced(useScroll);if(useScroll){const top=e.getBoundingClientRect().top+scrollY-72;setProgress(Math.min(1,Math.max(0,(scrollY-top)/Math.max(1,e.offsetHeight-(stage.current?.offsetHeight??innerHeight)))));}};
+    const schedule=()=>{if(!raf)raf=requestAnimationFrame(measure);};const observer=new ResizeObserver(schedule);if(root.current)observer.observe(root.current);
+    addEventListener("scroll",schedule,{passive:true});addEventListener("resize",schedule);media.addEventListener("change",schedule);schedule();
+    return()=>{cancelAnimationFrame(raf);observer.disconnect();removeEventListener("scroll",schedule);removeEventListener("resize",schedule);media.removeEventListener("change",schedule);};
+  },[]);
+  const value=enhanced?progress:TARGETS[manual];
+  const journey=routineJourney(value);
+  const {active,typing,typed,results}=journey;
+  const current=STEPS[active];
+  function select(i:number){const e=root.current;if(enhanced&&e)scrollTo({top:e.getBoundingClientRect().top+scrollY-72+TARGETS[i]*(e.offsetHeight-(stage.current?.offsetHeight??innerHeight)),behavior:"smooth"});else setManual(i);}
+  return <section ref={root} id="inicio" className={h.heroStory} data-enhanced={enhanced} data-routine-step={active} data-results={results.map(n=>n.toFixed(3)).join(",")} aria-label="Conheça o Zelo">
+    <span id="como-funciona"/>
+    <div ref={stage} className={h.heroStage}>
+      <div className={h.heroTop}><span><i/> CADA COISA ENCONTRA SEU LUGAR.</span><span>WHATSAPP + PAINEL WEB</span></div>
+      <div className={h.heroGrid}>
+        <div className={h.heroCopy}><p className={h.kicker}>MAIS VIDA. MENOS COISAS NA CABEÇA.</p><h1>Seu dia{" "}<br/>acontece.{" "}<br/><em>O Zelo organiza.</em></h1><p className={h.heroLead}>Uma conversa cuida dos detalhes. Seu dinheiro, seus compromissos e seus documentos ganham lugar — no pessoal e na empresa.</p><div className={h.heroActions}><a href="#planos">Quero meu Zelo <UiIcon name="arrow"/></a><a href="#espacos">Pessoal e empresa <span>↓</span></a></div><p className={h.heroTrust}>Converse pelo WhatsApp. Acompanhe também no painel.</p></div>
+        <div className={h.heroArt} data-active={active} role="img" aria-label={`Conversa ilustrativa no WhatsApp com o Zelo: ${current.label}. ${current.description}`}>
+          <div className={h.artBackdrop} aria-hidden="true"><span>menos pendências.<br/><b>mais presença.</b></span><i/><i/><i/></div>
+          <div className={h.artHeading} aria-hidden="true"><span>DA CONVERSA PARA A SUA ROTINA</span><b>↗</b></div>
+          <div className={h.phoneShell} aria-hidden="true"><div className={h.phone}>
+            <div className={h.phoneStatus}><span>9:41</span><i/><span>● ▰</span></div>
+            <div className={h.whatsappLabel}>WhatsApp</div>
+            <div className={h.phoneHeader}><span>‹</span><Image src="/brand/zelo-icon.png" alt="" width={37} height={37}/><div><b>Zelo</b><small>Gestão inteligente</small></div><ChatIcon kind="video"/><ChatIcon kind="call"/></div>
+            <div className={h.phoneChat}><span className={h.chatDate}>HOJE</span><span className={h.chatPrivacy}>Conversa de demonstração · dados fictícios</span><div className={h.chatWelcome}>Olá! O que vamos tirar da sua cabeça hoje?<small>09:40</small></div><div className={h.phoneMessage} key={active}>{active===2&&<div className={h.phoneAttachment}><UiIcon name="document"/><span>Contrato.pdf<small>DOCUMENTO DE EXEMPLO</small></span></div>}<p>{typed}{typing<1&&<i/>}</p><small>09:41 <b>{typing<1?"· digitando":"✓✓"}</b></small></div><div className={h.phoneReply} style={{opacity:results[active]}}><b>Zelo</b>{current.reply}<small>09:41</small></div></div>
+            <div className={h.phoneInput}><span>+</span><p>{typing<1?"Digitando…":"Mensagem"}</p><ChatIcon kind="camera"/><i><ChatIcon kind="mic"/></i></div>
+            <div className={h.phoneKeyboard}>{["qwertyuiop","asdfghjkl","zxcvbnm"].map(row=><div key={row}>{row.split("").map(letter=><span key={letter} data-active={typing<1&&typed.at(-1)?.toLowerCase()===letter}>{letter}</span>)}</div>)}<div><span>123</span><b>espaço</b><span>↵</span></div></div>
+          </div></div>
+          <div className={h.resultStack} aria-hidden="true">
+            {[0,1,2].map(i=><div className={h.resultSlot} key={i} data-active={active===i}>
+              <div className={h.resultGuide} style={{opacity:1-results[i]}}><span>0{i+1}</span><UiIcon name={i===0?"wallet":i===1?"calendar":"folder"}/><b>{i===0?"O gasto ganha contexto.":i===1?"O compromisso ganha horário.":"O arquivo ganha lugar."}</b></div>
+              <div className={h.resultCard} data-result={i} data-complete={results[i]===1} style={{"--reveal":results[i],"--origin-y":`${162-i*191}px`,opacity:results[i],transform:`translate(${-130*(1-results[i])}px,calc(var(--entry-y) * ${1-results[i]})) scale(${.78+.22*results[i]}) rotate(${-5*(1-results[i])}deg)`,visibility:results[i]>0?"visible":"hidden"} as CSSProperties}>
+                {i===0?<><div className={h.resultEyebrow}><span>✓ GASTO ORGANIZADO</span><b>Pessoal</b></div><strong>R$ 85<span>,00</span></strong><div className={h.expenseDetail}><UiIcon name="cart"/><p>Supermercado<small>Débito · Conta pessoal</small></p><span>↗</span></div></>:i===1?<><div className={h.resultEyebrow}><span>✓ COMPROMISSO NA AGENDA</span><b>Empresa</b></div><div className={h.meetingResult}><div><span>AMANHÃ</span><strong>10<span>h</span></strong></div><p>Reunião com<br/>a equipe<small>O próximo passo está à vista.</small></p></div></>:<><div className={h.resultEyebrow}><span>✓ ARQUIVO GUARDADO</span><b>Drive</b></div><div className={h.documentResult}><span><UiIcon name="document"/>PDF</span><p>Contrato.pdf<small>Contratos / Documento de exemplo</small></p><UiIcon name="arrow"/></div><div className={h.fileHint}>Depois, peça: “Encontre meu contrato.”</div></>}
               </div>
-              <div className={s.deviceInput}><span>+</span><div>{typing < 1 ? "Digitando sua mensagem…" : "Mensagem enviada"}</div><UiIcon name="arrow" /></div>
-              <div className={s.deviceKeyboard}>{["qwertyuiop", "asdfghjkl", "zxcvbnm"].map(row => <div key={row}>{row.split("").map(letter => <span key={letter} data-active={typing < 1 && typed.at(-1)?.toLowerCase() === letter}>{letter}</span>)}</div>)}<div><span>123</span><b>espaço</b><span>↵</span></div></div>
-            </div>
-            <div className={s.expenseRoute} aria-hidden="true" style={{ opacity: routeOpacity }}><div className={s.routePortal}><i /><i /><i /></div>
-              <svg viewBox="0 0 620 600" fill="none"><path d="M365 247 C235 120 75 190 110 340 S340 550 455 375" stroke="#171a18" strokeOpacity=".15" strokeWidth="1" /><path d="M365 247 C235 120 75 190 110 340 S340 550 455 375" pathLength="1" stroke="#746400" strokeWidth="4" strokeDasharray="1" strokeDashoffset={1 - travel} /><circle cx="365" cy="247" r="5" fill="#171a18" /><circle cx="455" cy="375" r="5" fill="#171a18" /></svg>
-              <div className={s.expensePacket} style={{ offsetDistance: `${travel * 100}%` }}><UiIcon name="wallet" /><b>R$ 85</b></div>
-              <span className={s.routeValue} data-reached={travel > .12}>01 / VALOR IDENTIFICADO</span><span className={s.routeCategory} data-reached={travel > .38}>02 / CATEGORIA ORGANIZADA</span><span className={s.routeSpace} data-reached={travel > .65}>03 / ESPAÇO PESSOAL</span>
-            </div>
-            <div className={s.expenseReceipt} aria-hidden="true" style={{ opacity: reveal, visibility: receiptVisible ? "visible" : "hidden", transform: `translateY(${(1 - reveal) * 35}px) scale(${.9 + reveal * .1})` }}>
-              <div className={s.expenseReceiptHeader}><span>✓</span><div><small>SEU PEDIDO CHEGOU AO LUGAR CERTO</small><b>Gasto organizado</b></div><UiIcon name="document" /></div>
-              <strong>R$ 85<span>,00</span></strong><p>Supermercado</p>
-              <dl><div><dt>Categoria</dt><dd>Supermercado</dd></div><div><dt>Pagamento</dt><dd>Débito</dd></div><div><dt>Conta</dt><dd>Conta pessoal</dd></div><div><dt>Espaço</dt><dd>Pessoal</dd></div></dl>
-              <div className={s.receiptDestination}><UiIcon name="finance" /><span>No seu financeiro<small>Consulte no painel e na conversa</small></span><b>↗</b></div>
-              <small className={s.receiptIllustration}>EXEMPLO ILUSTRATIVO · DADOS FICTÍCIOS</small>
-            </div>
-            <div className={s.productConnection} aria-hidden="true" style={{ opacity: 1 - clamp(zoom * 2) }}><span /><p>R$ 85,00<b>Um gasto. Tudo no lugar.</b></p><UiIcon name="spark" /></div>
-            <span className={s.productSideLabel} aria-hidden="true">ZELO / ORGANIZAÇÃO EM MOVIMENTO</span>
+            </div>)}
           </div>
+          <span className={h.artDemo} aria-hidden="true">EXEMPLOS ILUSTRATIVOS · DADOS FICTÍCIOS</span>
         </div>
       </div>
-      <div className={s.productBottom}>
-        <nav className={s.productSteps} aria-label="Etapas da demonstração">{STEPS.map((item, i) => <button key={item.title} type="button" onClick={() => goToStep(i)} aria-current={frame.active === i ? "step" : undefined}><span>0{i + 1}</span><b>{item.title}</b><i /></button>)}</nav>
-        <p className={s.productStepDescription}>{STEPS[frame.active].description}</p>
-        <a href="#open-finance" className={s.productScroll}>Role para acompanhar <span>↓</span></a>
-      </div>
-      <div className={s.progress} aria-hidden="true"><span style={{ transform: `scaleX(${frame.progress})` }} /></div>
+      <div className={h.heroBottom}><nav aria-label="Etapas da demonstração">{STEPS.map((step,i)=><button type="button" key={step.label} onClick={()=>select(i)} aria-current={active===i?"step":undefined}><span>0{i+1}</span><b>{step.label}</b><i/></button>)}</nav><div className={h.stepNarrative}><b>{current.title}</b><p>{current.description}</p></div><a href="#espacos">{enhanced?"Role e veja acontecer":"Continue para conhecer"}<span>↓</span></a></div>
+      <div className={h.heroProgress} aria-hidden="true"><span style={{transform:`scaleX(${value})`}}/></div>
     </div>
   </section>;
 }

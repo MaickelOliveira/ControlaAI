@@ -37,6 +37,25 @@ const clamp = (value: number, max = 1) => Math.min(max, Math.max(0, value));
 
 export const EXPENSE_EXAMPLE_MESSAGE = "Gastei R$ 85 no mercado. Foi no débito, na conta pessoal.";
 
+export const ROUTINE_REQUESTS = [
+  "Gastei R$ 85 no mercado, no débito, na conta pessoal.",
+  "Marque uma reunião da empresa amanhã às 10h.",
+  "Guarde este contrato no Drive para eu encontrar depois.",
+] as const;
+
+/** Three results leave the conversation in order and rewind from one scroll value. */
+export function routineJourney(progress: number) {
+  const value = clamp(progress);
+  const active = Math.min(2, Math.floor(value * 3));
+  const typing = clamp(((value * 3 - active) + .08) / .45);
+  const message = ROUTINE_REQUESTS[active];
+  return {
+    active, typing,
+    typed: message.slice(0, Math.floor(8 + typing * (message.length - 8))),
+    results: [0, 1, 2].map(index => clamp((value - index / 3 - .12) / .18)),
+  };
+}
+
 /** Typing, camera, path and record all rewind from the same position. */
 export function expenseJourney(progress: number) {
   const typing = clamp(progress / 0.23);

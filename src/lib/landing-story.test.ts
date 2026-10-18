@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AGENT_SCENES, STORY_SCENES, storyFrame, storyScrollTarget, expenseJourney } from "./landing-story";
+import { AGENT_SCENES, STORY_SCENES, storyFrame, storyScrollTarget, expenseJourney, routineJourney, ROUTINE_REQUESTS } from "./landing-story";
 import { VIRTUAL_TEAM } from "./virtual-team";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -72,5 +72,29 @@ describe("apresentação da equipe controlada pela rolagem", () => {
     expect(storyFrame(100, { top: 0, height: 0, viewport: 0 }).position).toBe(12);
     const phone = { top: 0, height: 10500, viewport: 772 };
     expect(storyFrame(storyScrollTarget(8, phone), phone).active).toBe(8);
+  });
+});
+
+
+describe("pedidos que saem da conversa", () => {
+  it("organiza gasto, compromisso e documento nessa ordem", () => {
+    expect(routineJourney(0).results).toEqual([0,0,0]);
+    expect(routineJourney(.32).results).toEqual([1,0,0]);
+    expect(routineJourney(.65).results).toEqual([1,1,0]);
+    expect(routineJourney(1).results).toEqual([1,1,1]);
+  });
+  it("mantém pedido e resultado no mesmo assunto", () => {
+    for(const [i,p] of [.32,.65,.99].entries()) {
+      const frame=routineJourney(p);
+      expect(frame.active).toBe(i);
+      expect(frame.typing).toBe(1);
+      expect(frame.typed).toBe(ROUTINE_REQUESTS[i]);
+    }
+  });
+  it("volta aos mesmos resultados e à mesma digitação ao subir", () => {
+    const points=[0,.08,.2,.32,.4,.55,.65,.75,.88,1];
+    expect([...points].reverse().map(routineJourney).reverse()).toEqual(points.map(routineJourney));
+    expect(routineJourney(-1)).toEqual(routineJourney(0));
+    expect(routineJourney(2)).toEqual(routineJourney(1));
   });
 });
