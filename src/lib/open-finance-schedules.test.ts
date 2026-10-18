@@ -76,6 +76,7 @@ it("keeps a finished old installment in history but not in current schedules",()
  expect(visibleBankSchedules([old],"2026-10-15")).toEqual([]);
  expect(collectBankAgenda([old],{from:"2026-10-01",to:"2026-10-31",includeUndated:true})).toEqual([]);
  expect(collectBankAgenda([old],{from:"2025-12-01",to:"2025-12-31",includeUndated:true})).toEqual([old]);
+ expect(collectBankAgenda([old],{from:"2026-10-01",to:"2026-10-31",includeUndated:true,includeCompletedInstallments:true})).toEqual([old]);
 });
 
 it("shows one purchase when bank fragments cover complementary installments of the same purchase",()=>{

@@ -503,6 +503,20 @@ it("checks repeated installments on the same card without treating similar descr
   const sameId=await answerBankWhatsAppMessage(user as never,"personal","both","Existe parcelamento repetido na resposta de um cartão?","2026-10-15");
   expect(sameId).toContain("mesmo identificador");
 });
+it("answers a same-purchase question with proven fragments, including completed history",async()=>{
+  const base={kind:"installment",mode:"personal",institution_name:"Mercado Pago",resource_id:"card-a",resource_name:"Cartão",due_date:null,currency:null,synced_at:"2026-10-15",total_installments:12,observed_installments:12,last_observed_installment:12,last_observed_month:"2026-08",purchase_date:"2025-09-01"};
+  m.agenda.mockResolvedValue({items:[
+    {...base,id:"hostinger",description:"DM*HOSTINGER.COM.BR",amount:"43.61",source_ordinals:[1,2,3,4,5,6,7,8,9,10,11,12],merged_source_count:2,amount_varies:true},
+    {...base,id:"autodark",description:"KIWIFY *AutoDark",amount:"258.33",source_ordinals:[1,2,3,4,5,6,7,8,9,10,11,12],merged_source_count:2,amount_varies:true},
+    {...base,id:"other",description:"Loja sem relação",amount:"12.00",source_ordinals:[1],merged_source_count:1},
+  ],incomplete:false});
+  const reply=await answerBankWhatsAppMessage(user as never,"personal","both","No modo Pessoal, confira os parcelamentos de Hostinger e Kiwify AutoDark no cartão Mercado Pago. Quais registros são partes da mesma compra e quais são compras diferentes? Não some cobranças duplicadas sem prova.","2026-10-18");
+  expect(reply).toContain("Mesma compra, enviada pelo banco em partes (2 sequências identificadas)");
+  expect(reply).toContain("HOSTINGER.COM.BR");expect(reply).toContain("AutoDark");
+  expect(reply).toContain("valor varia entre parcelas");
+  expect(reply).not.toContain("Loja sem relação");expect(reply).not.toContain("Nenhum registro idêntico");
+  expect(m.agenda).toHaveBeenCalledWith(expect.anything(),"personal",expect.objectContaining({includeCompletedInstallments:true,includeObservedInstallments:true}));
+});
 it("reports only missing bank amounts and does not invent dates or zero",async()=>{
   m.read.mockResolvedValue({entries:[
     {id:"missing",mode:"personal",source:"bank",date:"2026-10-12",type:"expense",amount:0,description:"Sem valor",category:"Outros",included:false,bank:{resource_type:"account",institution_name:"Banco A",direction:"debit",amount:null,currency:"BRL"}},

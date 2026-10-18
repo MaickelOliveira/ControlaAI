@@ -11,7 +11,7 @@ import {expandMerchantAliases,getPendingFinances} from "./finances";
 import {getRecurringByUser} from "./recurring";
 import {collectUpcomingFinanceItems} from "./upcoming-finances";
 import {readBankAgenda,readFinancialAgenda} from "./financial-agenda";
-import {formatBankAgenda} from "./open-finance-schedules";
+import {bankInstallmentPosition,formatBankAgenda} from "./open-finance-schedules";
 import {BANK_STATUSES,bankAmountWithoutCurrency,bankDate,bankMoney,type BankOverview} from "./open-finance-display";
 import {openFinanceRpc} from "./open-finance-http";
 import {readBankLedger} from "./finance-ledger-storage";
@@ -51,11 +51,33 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   if(business&&personal&&scopedFinanceQuestion)return "Escolha um modo por consulta: Pessoal ou Empresa. No modo Empresa, uso somente a empresa selecionada no seu WhatsApp.";
   const requested=business?"business":personal?"personal":mode;
   if(phoneAccess!=="both"&&phoneAccess!==requested)return scopedFinanceQuestion?"Este número não tem acesso a esse modo da Zelo.":null;
+  const installmentSequenceQuestion=/\b(?:parcelamentos?|compras? parceladas?|parcelas?)\b/.test(text)
+    &&/\b(?:mesma compra|partes? da mesma compra|trechos?|sequencias?|agrupar|juntar|unificar)\b/.test(text);
+  if(installmentSequenceQuestion){
+    try{
+      // A comparison of purchase identities must include completed schedules;
+      // the current-month agenda intentionally hides those from upcoming bills.
+      const agenda=await readBankAgenda(user,requested,{from:shiftDay(today,-365),to:shiftDay(today,365),includeUndated:true,includeObservedInstallments:true,includeCompletedInstallments:true});
+      const compact=(value:string)=>normalize(value).replace(/[^a-z0-9]/g,"");
+      const merchantPhrase=text.match(/\b(?:parcelamentos?|compras? parceladas?|parcelas?)\s+(?:de|da|do)\s+(.+?)\s+(?:(?:no|na|do|da)\s+cartao)\b/)?.[1];
+      const requestedNames=merchantPhrase?.split(/,|\s+e\s+/).map(compact).filter(name=>name.length>=4)??[];
+      const installments=agenda.items.filter(item=>item.kind==="installment"&&(!requestedNames.length||requestedNames.some(name=>compact(item.description).includes(name))));
+      const merged=installments.filter(item=>(item.merged_source_count??0)>1);
+      const separate=installments.filter(item=>(item.merged_source_count??0)<=1);
+      const line=(item:typeof installments[number])=>{
+        const value=item.currency?bankMoney(item.amount,item.currency):`${bankAmountWithoutCurrency(item.amount)} (moeda não informada)`;
+        return `• ${safeSummary(item.description)} · ${safeSummary(item.institution_name)} · ${safeSummary(item.resource_name)} · ${bankInstallmentPosition(item)} · ${value} por parcela${item.amount_varies?"; o valor varia entre parcelas":""}`;
+      };
+      const mergedLines=merged.slice(0,5).map(line).join("\n");
+      const separateLines=separate.slice(0,5).map(line).join("\n");
+      return `Parcelamentos por compra · ${bankModeLabel(requested)}\n${merged.length?`Mesma compra, enviada pelo banco em partes (${merged.length} sequência${merged.length===1?"":"s"} identificada${merged.length===1?"":"s"}):\n${mergedLines}${merged.length>5?`\nMais ${merged.length-5} em Contas.`:""}`:"Não consegui comprovar sequências da mesma compra entre os registros disponíveis."}${separate.length?`\n\nCompras mantidas separadas (${separate.length}):\n${separateLines}${separate.length>5?`\nMais ${separate.length-5} em Contas.`:""}`:""}\n\nO agrupamento usa o mesmo cartão e data de compra, números de parcelas completos e sem sobreposição. Não alterei os registros bancários nem somei os trechos como compras extras. Número de parcela não confirma pagamento; sem vencimento enviado pelo banco, não informo uma data futura.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
+    }catch{return "Não consegui conferir os trechos de parcelas agora. Nenhum lançamento bancário foi alterado; confira o cartão e a fatura em Contas.";}
+  }
   if(/\b(?:parcelamentos?|compras? parceladas?|parcelas?)\b/.test(text)
     &&/\b(?:repetid[oa]s?|duplicad[oa]s?)\b/.test(text)
     &&/\b(?:cartao|resposta)\b/.test(text)){
     try{
-      const agenda=await readBankAgenda(user,requested,{from:today,to:shiftDay(today,365),includeUndated:true,includeObservedInstallments:true});
+      const agenda=await readBankAgenda(user,requested,{from:shiftDay(today,-365),to:shiftDay(today,365),includeUndated:true,includeObservedInstallments:true,includeCompletedInstallments:true});
       const installments=agenda.items.filter(item=>item.kind==="installment");
       if(!installments.length)return `Não recebi parcelamentos suficientes em ${bankModeLabel(requested)} para conferir repetições. Confira Contas e a fatura no banco.${agenda.incomplete?" A consulta bancária está incompleta.":""}`;
       const groups=new Map<string,typeof installments>();
