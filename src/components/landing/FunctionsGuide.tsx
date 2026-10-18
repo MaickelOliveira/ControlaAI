@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
 import s from "./landing.module.css";
+import x from "./experience.module.css";
+import FeaturePreview from "./FeaturePreview";
 
 type Feature = { icon: UiIconName; id: string; title: string; description: string; request: string; how: string; result: string };
 const FEATURES: Feature[] = [
@@ -10,7 +12,7 @@ const FEATURES: Feature[] = [
   { icon: "repeat", id: "recorrencias", title: "Parcelas e recorrências", description: "Veja os compromissos que continuam nos próximos meses, como uma compra parcelada ou uma assinatura.", request: "“Quais parcelas ainda tenho para pagar?”", how: "Consulte parcelas previstas e organize lançamentos que se repetem. Ao registrar uma recorrência, informe o valor, a frequência e o contexto do pagamento para manter a previsão organizada.", result: "Acompanhe os lançamentos recorrentes e as parcelas previstas pelo painel financeiro ou consulte pela conversa." },
   { icon: "task", id: "tarefas", title: "Tarefas", description: "Dê um lugar às pendências com prazo e prioridade, e acompanhe o que ainda falta concluir.", request: "“Crie a tarefa de enviar a proposta até sexta, com prioridade alta.”", how: "Conte o que precisa fazer. O Zelo organiza o título, o prazo e a prioridade que você informar. Depois, você pode consultar as tarefas, atualizar o andamento e marcar a conclusão.", result: "As tarefas ficam no painel e disponíveis pelo WhatsApp, no espaço pessoal ou na empresa selecionada." },
   { icon: "bell", id: "lembretes", title: "Lembretes", description: "Programe um aviso para a hora certa, uma única vez ou de forma recorrente.", request: "“Me lembre de pagar o seguro dia 20, às 9h.”", how: "Diga o assunto, a data e o horário. Para algo que se repete, informe a frequência. Se faltar uma informação necessária, complete pela conversa para que o lembrete seja programado.", result: "Receba o aviso no WhatsApp no momento programado. Consulte e ajuste os lembretes quando a sua rotina mudar." },
-  { icon: "folder", id: "drive", title: "Arquivos e documentos", description: "Guarde contratos, comprovantes e outros arquivos e encontre depois pelo assunto que você lembra.", request: "“Guarde este contrato na empresa. Depois, me ajude a encontrá-lo.”", how: "Envie o arquivo e informe o contexto. A organização no Drive reúne os documentos do espaço escolhido. Para buscar, descreva o documento, o assunto ou outra informação que ajude a localizá-lo.", result: "Acesse os arquivos no painel e peça buscas pela conversa. A conexão Google, quando usada, pertence ao espaço autorizado." },
+  { icon: "folder", id: "drive", title: "Arquivos e documentos", description: "Guarde contratos, comprovantes e outros arquivos e encontre depois pelo assunto que você lembra.", request: "“Guarde este contrato na empresa. Depois, me ajude a encontrá-lo.”", how: "Envie PDF, foto ou documento e peça para guardar. A Dora sugere nome, palavras-chave e uma pasta como Contratos ou Comprovantes. Você pode renomear o arquivo recente pela conversa e organizar as pastas no painel. Para encontrar, descreva o assunto ou algo que lembra do conteúdo.", result: "Encontre os arquivos no Drive do painel. Ao localizar um documento pela conversa, o Zelo devolve o próprio arquivo no WhatsApp. Se não encontrar, informa isso." },
   { icon: "target", id: "metas", title: "Metas", description: "Transforme um objetivo em algo que você pode acompanhar, com valor, prazo e progresso.", request: "“Quero juntar R$ 5 mil para uma viagem até dezembro.”", how: "Informe o objetivo, quanto quer alcançar e o prazo. O Zelo organiza a meta para você consultar e acompanhar o progresso conforme atualiza as informações.", result: "Tenha uma visão das metas pessoais ou da empresa e do caminho que ainda falta para cada conquista." },
   { icon: "client", id: "clientes", title: "Clientes", description: "Reúna os dados de cada cliente e as observações úteis para o próximo atendimento.", request: "“Cadastre a Ana como cliente e anote o contato dela.”", how: "Envie o nome e os dados que precisa guardar. Você pode complementar o cadastro com informações comerciais e observações, mantendo os registros no espaço da empresa.", result: "Consulte o cadastro no painel ou encontre as informações do cliente pelo WhatsApp quando precisar retomar o contato." },
   { icon: "users", id: "funcionarios", title: "Funcionários", description: "Organize quem faz parte da empresa, com cargo, salário e informações de cadastro.", request: "“Cadastre o João como assistente e registre o salário dele.”", how: "Informe os dados do funcionário, o cargo e o salário. Cada cadastro pertence à empresa selecionada, para você manter as informações da equipe no contexto correspondente.", result: "Encontre os dados da equipe no painel da empresa e consulte pela conversa. O cadastro ajuda na organização administrativa do negócio." },
@@ -20,15 +22,26 @@ const FEATURES: Feature[] = [
   { icon: "search", id: "pesquisas", title: "Pesquisas no WhatsApp", description: "Peça ajuda para buscar informações públicas, conhecer opções e fazer comparações na conversa.", request: "“Pesquise opções deste produto e compare os preços encontrados.”", how: "Diga o que procura e os critérios importantes, como produto, local ou faixa de preço. O Zelo pode pesquisar informações públicas e apresentar os resultados disponíveis para você avaliar.", result: "Receba a pesquisa no WhatsApp e confira os detalhes nas fontes encontradas. Preços e disponibilidade são os informados na consulta e podem mudar." },
 ];
 
+const GROUPS=[
+  {title:"Seu dinheiro",ids:["fatura","recorrencias"]},
+  {title:"Sua rotina",ids:["tarefas","lembretes","metas","supermercado","veiculos"]},
+  {title:"Seus documentos",ids:["drive","pesquisas"]},
+  {title:"Seu negócio",ids:["clientes","funcionarios","contatos"]},
+];
 export default function FunctionsGuide() {
-  const [selected, setSelected] = useState(0);
-  const feature = FEATURES[selected];
-  return <div className={s.functionsGuide}>
-    <div className={s.moduleHeader}><div><p className={s.eyebrow}>UM ZELO PARA CADA DETALHE</p><h3>Cabe muito mais<br />nessa conversa.</h3></div><p>Do contrato que você precisa encontrar à meta que quer realizar. Escolha uma função e veja o caminho completo.</p></div>
-    <div className={s.functionPicker} aria-label="Escolha uma função">{FEATURES.map((item, i) => <button key={item.id} id={item.id} type="button" aria-pressed={selected === i} aria-controls="detalhe-funcao" onClick={() => setSelected(i)}><UiIcon name={item.icon} /><span>{item.title}</span><span>↗</span></button>)}</div>
-    <article id="detalhe-funcao" className={s.functionStage} aria-labelledby="funcao-selecionada">
-      <div className={s.functionExplanation}><span className={s.functionIndex}>{String(selected + 1).padStart(2, "0")} / 12</span><h3 id="funcao-selecionada">{feature.title}</h3><p className={s.functionDescription}>{feature.description}</p><div><span className={s.smallLabel}>COMO FUNCIONA</span><p>{feature.how}</p></div></div>
-      <div className={s.functionDemo}><div className={s.demoHeading}><UiIcon name={feature.icon} /><span>DO PEDIDO AO RESULTADO</span><small>DEMONSTRAÇÃO</small></div><blockquote>{feature.request}<span>09:41 ✓✓</span></blockquote><div className={s.demoConnector}>↓</div><div className={s.functionResult}><UiIcon name={feature.icon} /><div><span>ONDE VOCÊ ACOMPANHA</span><p>{feature.result}</p></div></div><span className={s.demoFoot}>ZELO · CADA COISA NO SEU LUGAR</span></div>
-    </article>
+  const [selected,setSelected]=useState(0);
+  const feature=FEATURES[selected];
+  const group=GROUPS.find(g=>g.ids.includes(feature.id))!;
+  useEffect(()=>{const sync=()=>{const index=FEATURES.findIndex(f=>f.id===window.location.hash.slice(1));if(index>=0)setSelected(index);};sync();window.addEventListener("hashchange",sync);return()=>window.removeEventListener("hashchange",sync);},[]);
+  return <div id="funcoes" className={x.functionsExperience}>
+    <div className={x.functionsHeading}><p className={s.eyebrow}>UMA CONVERSA QUE VIRA AÇÃO</p><h2>O alívio de pensar:<br /><em>“isso já está cuidado”.</em></h2><p>Escolha uma parte do seu dia. Faça um pedido de exemplo e veja o tipo de organização que ele pode ganhar.</p></div>
+    <nav className={x.functionGroups} aria-label="Áreas das funções">{GROUPS.map(g=><button key={g.title} type="button" aria-pressed={g===group} onClick={()=>setSelected(FEATURES.findIndex(f=>f.id===g.ids[0]))}>{g.title}<span>{String(g.ids.length).padStart(2,"0")}</span></button>)}</nav>
+    <div className={x.featureExplorer}>
+      <div className={x.featureNav} aria-label="Escolha uma função">{FEATURES.map((item,i)=><button key={item.id} id={item.id} type="button" hidden={!group.ids.includes(item.id)} aria-pressed={selected===i} aria-controls="detalhe-funcao" onClick={()=>setSelected(i)}><UiIcon name={item.icon}/><span>{item.title}</span><span>↗</span></button>)}</div>
+      <article id="detalhe-funcao" className={x.featureContent} aria-labelledby="funcao-selecionada">
+        <div className={x.featureStory}><span className={x.featureCounter}>{String(selected+1).padStart(2,"0")} / 12 FUNÇÕES</span><h3 id="funcao-selecionada">{feature.title}</h3><p className={x.featurePromise}>{feature.description}</p><div className={x.featureHow}><span>O QUE ACONTECE DEPOIS DO PEDIDO</span><p>{feature.how}</p></div><div className={x.featureWhere}><UiIcon name="arrow"/><div><b>Onde você acompanha</b><p>{feature.result}</p></div></div></div>
+        <div className={x.featureSimulation}><div className={x.requestMessage}><span>VOCÊ PEDE</span><blockquote>{feature.request}</blockquote><small>EXEMPLO DE CONVERSA</small></div><div className={x.resultBridge}><span>↓</span><p>O PEDIDO GANHA UM LUGAR</p></div><div className={x.featurePreview} data-preview={feature.id}><FeaturePreview key={feature.id} kind={feature.id}/></div><p className={x.previewDisclaimer}>Demonstração visual da função · Dados fictícios · Nenhuma ação na sua conta</p></div>
+      </article>
+    </div>
   </div>;
 }

@@ -1,27 +1,24 @@
 import UiIcon from "@/components/UiIcon";
 import FunctionsGuide from "./FunctionsGuide";
+import ProductCapture from "./ProductCapture";
 import s from "./landing.module.css";
+import x from "./experience.module.css";
 
 export default function ResourcesSection() {
-  return <section id="recursos" className={s.resources}>
-    <div className={s.sectionInner}>
-      <div className={s.resourceIntro}><p className={s.eyebrow}>DA CONVERSA PARA A VIDA REAL</p><h2>Fale. Resolva.<br /><span>Siga o seu dia.</span></h2><p>O WhatsApp é o começo. No painel, cada informação ganha contexto, histórico e um lugar para você acompanhar.</p></div>
-      <article className={s.financeFeature} id="financas">
-        <div className={s.featureCopy}><span className={s.featureNumber}>01 / FINANÇAS</span><h3>Seu dinheiro,<br />sem pontos cegos.</h3><p>Registre receitas e despesas por texto, áudio ou documento. Informe a conta e o espaço, consulte por período e categoria e entenda o que entrou, o que saiu e o que vem pela frente.</p><a href="#open-finance">Conheça a conexão com seus bancos <span>↗</span></a><div className={s.featureQuestion}>“Quanto gastei no mercado este mês?”</div></div>
-        <div className={s.financeDashboard} role="img" aria-label="Painel financeiro ilustrativo: R$ 4.250 de receitas, R$ 1.730 de despesas, registros por categoria e período. Dados fictícios.">
-          <div className={s.dashboardBar}><b>zelo<span> / financeiro</span></b><span>Pessoal ⌄</span></div><div className={s.dashboardTitle}><div><small>SEU DINHEIRO, MAIS CLARO</small><h4>Visão geral</h4></div><span>Este mês ⌄</span></div>
-          <div className={s.dashboardMetrics}><div><span>↙ Receitas</span><b>R$ 4.250<small>,00</small></b></div><div><span>↗ Despesas</span><b>R$ 1.730<small>,00</small></b></div></div>
-          <div className={s.chartHeader}><b>Como seu mês está andando</b><span><i /> Entradas <i /> Saídas</span></div>
-          <div className={s.barChart}>{[40,65,47,85,55,75,95].map((n,i) => <div key={i}><div><i style={{height:`${n}%`}} /><i style={{height:`${n * .57}%`}} /></div><span>{String(i * 4 + 1).padStart(2,"0")}</span></div>)}</div>
-          <div className={s.dashboardTransaction}><span><UiIcon name="cart" /></span><div><b>Supermercado</b><small>Débito · Conta pessoal</small></div><strong>− R$ 85,00</strong></div><p className={s.illustration}>PAINEL ILUSTRATIVO · VALORES FICTÍCIOS</p>
-        </div>
-      </article>
-      <article className={s.agendaFeature} id="agenda">
-        <div className={s.agendaBoard} role="img" aria-label="Agenda ilustrativa: reunião às 10h com Google Meet, proposta às 14h e lembrete de seguro às 16h."><div className={s.agendaBoardTop}><span><UiIcon name="calendar" /> Sua agenda</span><b>Um dia com espaço.</b></div><div className={s.weekStrip}>{["SEG","TER","QUA","QUI","SEX"].map((day,i) => <div key={day} data-active={i===1}><small>{day}</small><b>{18+i}</b></div>)}</div><div className={s.calendarEvent}><span>10:00</span><div><b>Reunião com a equipe</b><p>Google Meet <i>↗</i></p></div></div><div className={s.calendarEvent}><span>14:00</span><div><b>Enviar proposta</b><p><UiIcon name="task" /> Tarefa · prioridade alta</p></div></div><div className={s.calendarEvent}><span>16:00</span><div><b>Pagar o seguro</b><p><UiIcon name="bell" /> Lembrete no WhatsApp</p></div></div><small className={s.illustration}>EXEMPLO ILUSTRATIVO</small></div>
-        <div className={s.featureCopy}><span className={s.featureNumber}>02 / TEMPO E ROTINA</span><h3>Mais presença.<br />Menos “esqueci”.</h3><p>Crie compromissos, defina tarefas e programe lembretes. Conecte o Google Agenda ao espaço certo e peça um link do Meet para a sua próxima reunião.</p><div className={s.agendaIntegrations}><span>Google Agenda</span><span>Google Meet ↗</span><span>WhatsApp</span></div><div className={s.featureQuestion}>“Marque uma reunião amanhã às 10h e crie o link do Meet.”</div><small>Conexão Google com sua autorização. Para atas e resumos, envie o conteúdo por texto ou áudio. Criar o link não grava a reunião automaticamente.</small></div>
-      </article>
-      <FunctionsGuide />
-      <aside className={s.fiscalNote}><UiIcon name="document" /><div><b>Preparação fiscal para empresas</b><p>Cadastre dados fiscais e serviços e prepare rascunhos de NFS-e para revisar. A emissão direta e o PDF oficial aguardam homologação e configuração do emissor. Rascunho não é nota emitida.</p></div><span>EM PREPARAÇÃO</span></aside>
-    </div>
+  return <section id="recursos" className={x.resourcesExperience}>
+    <div className={x.experienceIntro}><p className={s.eyebrow}>MENOS PENDÊNCIAS NA CABEÇA. MAIS PRESENÇA NO DIA.</p><h2>O cuidado aparece<br /><em>nos pequenos detalhes.</em></h2><p>Na compra que você anotou. No compromisso que não esqueceu. No arquivo que encontrou quando precisava. Veja o Zelo funcionando na sua rotina.</p></div>
+    <article className={x.realScene} id="financas">
+      <div className={x.sceneEditorial}><div><span className={x.sceneIndex}>01 / SEU DINHEIRO</span><h2>Você lembra do momento.<br /><em>O Zelo guarda o detalhe.</em></h2></div><div><p>O gasto aconteceu. Você conta no WhatsApp e ele ganha valor, categoria, conta e espaço. Depois, o painel reúne os registros para você entender o mês e planejar o próximo passo.</p><a href="#funcoes">Veja o que mais você pode organizar <span>↗</span></a></div></div>
+      <ProductCapture src="/brand/product/dashboard-demo.webp" title="Seu dia, sob controle" alt="Captura da dashboard real da Zelo com números fictícios: saldo R$ 18.450, entradas R$ 12.850, saídas R$ 8.250 e resultado R$ 4.600; gráfico do período e crédito disponível." />
+      <ol className={x.sceneSteps}><li><span>01</span><h3>Conte o que aconteceu</h3><p>“Gastei R$ 85 no mercado, no débito, na conta pessoal.” Texto, áudio ou documento entram na conversa.</p></li><li><span>02</span><h3>Complete o que faltar</h3><p>Informe a conta, o espaço e os detalhes solicitados. Faturas e planilhas podem ser revisadas antes de confirmar a importação.</p></li><li><span>03</span><h3>Entenda o seu mês</h3><p>Consulte por período, categoria e conta. No painel, veja os lançamentos e os gráficos que ajudam a explicar os valores.</p></li></ol>
+    </article>
+    <article className={`${x.realScene} ${x.agendaScene}`} id="agenda">
+      <div className={x.sceneEditorial}><div><span className={x.sceneIndex}>02 / SEU TEMPO</span><h2>Pode focar no agora.<br /><em>O próximo passo tem lugar.</em></h2></div><div><p>Uma reunião, uma entrega, algo que você não quer esquecer. Organize data e horário na conversa, conecte o Google Agenda ao espaço escolhido e peça um link do Meet quando precisar.</p><div className={x.integrationRow}><span>Google Agenda</span><span>Google Meet</span><span>WhatsApp</span></div></div></div>
+      <ProductCapture src="/brand/product/agenda-demo.webp" title="Agenda que acompanha o seu dia" width={1740} height={904} initialPan={350} alt="Captura da agenda real da Zelo, preenchida somente na imagem com seis compromissos fictícios em outubro, incluindo reunião com a equipe e revisão de proposta." />
+      <div className={x.agendaNarrative}><div><UiIcon name="calendar" /><h3>O compromisso fica visível</h3><p>“Marque uma reunião terça, às 10h.” Complete o assunto e o espaço e acompanhe no calendário.</p></div><div><UiIcon name="bell" /><h3>O aviso chega na hora</h3><p>Programe um lembrete com data e horário para receber a mensagem no WhatsApp quando precisar.</p></div><div><UiIcon name="document" /><h3>O que foi decidido continua</h3><p>Envie o conteúdo por áudio ou texto para organizar resumo e tarefas. Criar o link do Meet não grava a reunião.</p></div></div>
+      <p className={x.sceneFootnote}>Conexão Google com sua autorização. Os compromissos desta captura são de demonstração; nenhum evento real foi criado.</p>
+    </article>
+    <FunctionsGuide />
+    <aside className={s.fiscalNote}><UiIcon name="document" /><div><b>Preparação fiscal para empresas</b><p>Cadastre dados fiscais e serviços e prepare rascunhos de NFS-e para revisar. A emissão direta e o PDF oficial aguardam homologação e configuração do emissor. Rascunho não é nota emitida.</p></div><span>EM PREPARAÇÃO</span></aside>
   </section>;
 }

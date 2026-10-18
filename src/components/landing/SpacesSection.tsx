@@ -1,18 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import UiIcon, { type UiIconName } from "@/components/UiIcon";
+import UiIcon from "@/components/UiIcon";
 import s from "./landing.module.css";
-const SPACES: { title:string; label:string; icon:UiIconName; description:string; rows:string[] }[] = [
-  {title:"Sua vida pessoal",label:"Pessoal",icon:"home",description:"Finanças da casa, compras, contatos, metas e compromissos. Tudo no seu contexto, para você consultar sem misturar com os negócios.",rows:["Meta da viagem","Compras da semana","Contas da casa"]},
-  {title:"Cada empresa",label:"Minha empresa",icon:"business",description:"Selecione a empresa antes de registrar ou consultar. Clientes, equipe, financeiro e arquivos pertencem àquele espaço. As conexões Google também são configuradas por espaço.",rows:["Clientes e propostas","Financeiro da empresa","Documentos e equipe"]},
-  {title:"As pessoas com você",label:"Compartilhado",icon:"users",description:"Vincule família, sócios ou equipe para cada pessoa usar o próprio WhatsApp, conforme os acessos disponíveis. Os dados continuam no contexto pessoal ou empresarial correspondente.",rows:["Família e rotina","Sócios e decisões","Equipe e compromissos"]},
+import x from "./experience.module.css";
+const EXAMPLES=[
+  {label:"Pessoal",title:"A vida que é sua.",description:"Contas da casa, compras, documentos e a próxima conquista. Escolha o Pessoal para cuidar da sua rotina e consultar os registros desse espaço.",request:"Gastei R$ 85 no mercado, na conta pessoal.",value:"R$ 85,00",category:"Supermercado",rows:["Contas da casa","Compras da semana","Meta da viagem"]},
+  {label:"Empresa",title:"O que você está construindo.",description:"Clientes, equipe, compromissos e financeiro no contexto da empresa escolhida. Cada negócio tem seus registros e suas conexões Google configuradas no próprio espaço.",request:"Recebi R$ 2.400 de um serviço. Registre na minha empresa.",value:"R$ 2.400,00",category:"Receita de serviços",rows:["Clientes e atendimentos","Equipe e documentos","Financeiro do negócio"]},
 ];
-export default function SpacesSection() {
-  const [selected,setSelected] = useState(0);
-  const current=SPACES[selected];
-  return <section id="espacos" className={s.spaces}><span id="modo" /><div className={s.spacesInner}>
-    <div className={s.spacesCopy}><p className={s.eyebrow}>JUNTOS NA ROTINA. CADA UM NO SEU ESPAÇO.</p><h2>Uma vida.<br /><em>Vários mundos.</em></h2><p>Seu pessoal e seus negócios podem conviver.<br />A organização sabe o lugar de cada um.</p><div className={s.spaceChoices}>{SPACES.map((space,i)=><button type="button" key={space.label} aria-pressed={selected===i} onClick={()=>setSelected(i)}><UiIcon name={space.icon} /><span>{space.title}</span><b>{selected===i?"−":"+"}</b></button>)}</div><p className={s.spaceDescription}>{current.description}</p></div>
-    <div className={s.spaceArt} aria-label={`Exemplo de organização no espaço ${current.label}`}><div className={s.spaceBackOne} /><div className={s.spaceBackTwo} /><div className={s.spaceWindow}><div className={s.spaceWindowTop}><span>zelo<span> / espaços</span></span><i>● ● ●</i></div><div className={s.spaceSymbol}><UiIcon name={current.icon} /></div><small>VOCÊ ESTÁ EM</small><h3>{current.label}</h3><div className={s.spaceWindowRows}>{current.rows.map((row,i)=><div key={row}><span>0{i+1}</span><b>{row}</b><UiIcon name="arrow" /></div>)}</div><div className={s.spaceWindowFoot}><span><i /> Tudo no contexto certo</span><small>DEMONSTRAÇÃO</small></div></div><span className={s.spaceOrbit}>SUA VIDA, BEM CONECTADA ↗</span></div>
-  </div></section>;
+export default function SpacesSection(){
+  const [selected,setSelected]=useState(0);
+  const [organized,setOrganized]=useState(false);
+  const current=EXAMPLES[selected];
+  function select(index:number){setSelected(index);setOrganized(false);}
+  return <section id="espacos" className={x.spacesExperience}><span id="modo"/>
+    <div className={x.spacePriority}><span>01 / UM ZELO. DOIS CONTEXTOS.</span><span>PESSOAL + EMPRESAS</span></div><div className={x.spacesEditorial}><div><p className={s.eyebrow}>CABE TUDO NA SUA VIDA. NÃO NA MESMA CONTA.</p><h2>A vida é uma só.<br /><em>O controle é separado.</em></h2></div><p>O mercado da casa é pessoal. A receita de um serviço é da empresa. No Zelo, você escolhe o espaço de cada pedido — e acompanha cada contexto com clareza.</p></div>
+    <div className={x.contextExperience}>
+      <div className={x.contextGuide}><span>01 / ESCOLHA O DESTINO</span><nav aria-label="Escolher espaço de demonstração">{EXAMPLES.map((item,i)=><button key={item.label} type="button" aria-pressed={selected===i} onClick={()=>select(i)}><UiIcon name={i===0?"home":"business"}/>{item.label}</button>)}</nav><h3>{current.title}</h3><p>{current.description}</p><div className={x.contextRequest}><small>02 / UM PEDIDO DO DIA A DIA</small><p>“{current.request}”</p></div><button type="button" className={x.contextAction} onClick={()=>setOrganized(!organized)}>{organized?"Recomeçar exemplo":"Veja onde esse pedido fica"}<UiIcon name="arrow"/></button><p className={x.contextFeedback} aria-live="polite">{organized?`Demonstração: registro no ${current.label}. O outro espaço permanece separado.`:"Toque no botão e acompanhe o destino do exemplo. Simulação sem alterar sua conta."}</p></div>
+      <div className={x.contextWorlds} aria-label="Dois espaços separados">{EXAMPLES.map((item,i)=><div key={item.label} className={x.contextWorld} data-active={selected===i} data-organized={selected===i&&organized} data-tone={i===0?"personal":"business"}><div className={x.contextWorldTop}><span>zelo</span><b><UiIcon name={i===0?"home":"business"}/>{item.label}</b></div><div className={x.contextWorldSymbol}><UiIcon name={i===0?"home":"business"}/></div><span className={x.contextScope}>{i===0?"VIDA PESSOAL · CONTAS PF":"SEU NEGÓCIO · CONTAS PJ"}</span><h3>{i===0?"O que é seu.":"O que é da empresa."}</h3><div className={x.contextRecord}>{selected===i&&organized?<><span>✓ REGISTRO ORGANIZADO</span><strong>{item.value}</strong><b>{item.category}</b><p>{item.label} · Exemplo de demonstração</p></>:<><span>CADA COISA NO SEU LUGAR</span>{item.rows.map((row,j)=><p key={row}><small>0{j+1}</small>{row}<span>↗</span></p>)}</>}</div><p className={x.contextWorldFooter}>{selected===i?"DESTINO SELECIONADO":"CONTEXTO SEPARADO"}</p></div>)}</div>
+    </div>
+    <div className={x.spaceReasons}><div><span>01</span><h3>Contas no contexto certo</h3><p>Contas bancárias PF no Pessoal e PJ na empresa correspondente, conforme a conexão disponível.</p></div><div><span>02</span><h3>Mais de uma empresa?</h3><p>Cada negócio tem seu espaço. Escolha a empresa para consultar e organizar os registros dela.</p></div><div><span>03</span><h3>Uma rotina mais clara</h3><p>Finanças, compromissos, tarefas e documentos acompanham o contexto em que foram organizados.</p></div></div>
+    <div className={x.sharingStory}><div className={x.sharingPeople} aria-hidden="true"><span>F</span><span>S</span><span>E</span></div><div><h3>Com quem faz parte da sua vida.</h3><p>Família, sócios ou equipe podem usar o próprio número de WhatsApp, conforme os acessos disponíveis. As informações continuam no contexto pessoal ou empresarial correspondente.</p></div><span>FAMÍLIA · SÓCIOS · EQUIPE</span></div>
+  </section>;
 }

@@ -7,6 +7,7 @@ import localFont from "next/font/local";
 import UiIcon from "@/components/UiIcon";
 import ScrollStory from "@/components/landing/ScrollStory";
 import ProductHero from "@/components/landing/ProductHero";
+import DevicesSection from "@/components/landing/DevicesSection";
 import Resources from "@/components/landing/ResourcesSection";
 import Spaces from "@/components/landing/SpacesSection";
 import OpenFinanceSection from "@/components/landing/OpenFinanceSection";
@@ -14,7 +15,7 @@ import s from "@/components/landing/landing.module.css";
 import { BRAZIL_CHECKOUT, checkoutUrlWithLandingParams } from "@/lib/checkout-markets";
 
 const heading = localFont({ src: "./fonts/plus-jakarta-sans-latin.woff2", weight: "600 800", style: "normal", display: "swap", variable: "--font-heading", fallback: ["Arial", "sans-serif"] });
-const NAV = [["open-finance", "Open Finance"], ["recursos", "Funções"], ["espacos", "Pessoal e empresas"], ["apresentacao", "Agentes"], ["planos", "Planos"]] as const;
+const NAV = [["espacos", "Pessoal e empresas"], ["open-finance", "Open Finance"], ["recursos", "Funções"], ["apresentacao", "Agentes"], ["planos", "Planos"]] as const;
 const PLANS = [
   { id: "monthly", name: "Mensal", prefix: "", price: "47", cents: ",00", suffix: "/mês", total: "Pagamento mensal", value: 47, badge: "" },
   { id: "semiannual", name: "Semestral", prefix: "6x", price: "36", cents: ",96", suffix: "", total: "ou R$ 197,00 à vista", value: 197, badge: "Mais popular" },
@@ -55,7 +56,7 @@ export default function LandingPage() {
     {menuOpen && <nav id="menu-movel" className={s.mobileNav} aria-label="Navegação móvel">{NAV.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}<Link href="/login">Entrar na minha conta</Link></nav>}
     <main><ProductHero />
       <div className={s.trust}><span><UiIcon name="spark" />Converse pelo WhatsApp</span><span><UiIcon name="home" />Pessoal e empresas separados</span><span><UiIcon name="finance" />Painel web incluso</span></div>
-      <OpenFinanceSection /><Resources /><Spaces /><ScrollStory /><Plans />
+      <Spaces /><OpenFinanceSection /><DevicesSection /><Resources /><ScrollStory /><Plans />
       <section className={s.faq} id="duvidas"><div className={`${s.sectionInner} ${s.faqGrid}`}><div className={s.sectionIntro}><p className={s.eyebrow}>PODE PERGUNTAR</p><h2>Vamos deixar<br />tudo claro.</h2><p>Mais detalhes para você começar com segurança.</p></div><div>{FAQS.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></div></section>
       <section className={s.closing}><span className={s.closingMark} aria-hidden="true">↗</span><p className={s.eyebrow}>ABRA ESPAÇO PARA O QUE IMPORTA</p><h2>Seu dia pode<br />ser mais <em>leve.</em></h2><p>Conheça o Zelo e encontre mais clareza para cuidar do seu dia.</p><a href="#planos" className={s.primaryButton}>Quero meu Zelo <UiIcon name="arrow" /></a></section>
     </main>

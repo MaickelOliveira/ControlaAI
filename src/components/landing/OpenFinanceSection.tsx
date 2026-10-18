@@ -1,5 +1,8 @@
 import Image from "next/image";
 import UiIcon from "@/components/UiIcon";
+import ProductCapture from "./ProductCapture";
+import OpenFinanceJourney from "./OpenFinanceJourney";
+import x from "./experience.module.css";
 import s from "./landing.module.css";
 
 const BANKS = [["nubank", "Nubank"], ["inter", "Inter"], ["bradesco", "Bradesco"], ["banco-do-brasil", "Banco do Brasil"], ["santander", "Santander"], ["caixa", "Caixa"], ["sicredi", "Sicredi"]] as const;
@@ -14,24 +17,12 @@ const DATA = [
 export default function OpenFinanceSection() {
   return <section id="open-finance" className={s.openFinance}>
     <div className={s.sectionInner}>
-      <div className={s.openFinanceGrid}>
-        <div className={s.openFinanceCopy}>
-          <p className={s.eyebrow}>OPEN FINANCE / BANCOS CONECTADOS</p>
-          <h2>O seu dinheiro<br />tem um novo<br /><em>ponto de vista.</em></h2>
-          <p>Traga para o Zelo os dados que você autorizar compartilhar. Acompanhe contas, cartões, investimentos e operações de crédito no painel e consulte as informações pelo WhatsApp.</p>
-          <div className={s.openFinanceData}>{DATA.map(([title, description]) => <div key={title}><span>↗</span><h3>{title}</h3><p>{description}</p></div>)}</div>
-        </div>
-        <div className={s.bankArt}><div className={s.bankFloatingCard} aria-hidden="true"><UiIcon name="wallet" /><small>SEU CARTÃO, NA MESMA VISÃO</small><b>•••• 2048</b><span>zelo <i>↗</i></span></div><div className={s.bankShowcase} role="img" aria-label="Exemplo ilustrativo de visão bancária no Zelo: conta com saldo de R$ 8.450, cartão com fatura de R$ 1.280 e investimentos de R$ 12.400. Os números são fictícios.">
-          <div className={s.bankShowcaseTop}><span><UiIcon name="finance" />ZELO / OPEN FINANCE</span><small>EXEMPLO ILUSTRATIVO</small></div>
-          <div className={s.bankScope}><span>Pessoal</span><b>Visão dos seus bancos</b><small>Dados autorizados, no mesmo contexto.</small></div>
-          <div className={s.bankBalance}><small>SALDO RECEBIDO DA INSTITUIÇÃO</small><strong>R$ 8.450<span>,00</span></strong><p><i />Conta bancária · dados de exemplo</p></div>
-          <div className={s.bankTrend} aria-hidden="true"><svg viewBox="0 0 460 90" fill="none"><path d="M0 80L45 66L82 72L120 40L160 52L204 31L250 44L300 15L345 28L395 8L460 16V90H0Z" fill="#ffe500" fillOpacity=".25"/><path d="M0 80L45 66L82 72L120 40L160 52L204 31L250 44L300 15L345 28L395 8L460 16" stroke="#696300" strokeWidth="3"/></svg><span>Dados autorizados · Visão ilustrativa</span></div><div className={s.bankProductRow}><div><UiIcon name="wallet" /><span>Cartão de crédito<small>Fatura do período</small></span></div><b>R$ 1.280,00</b></div>
-          <div className={s.bankProductRow}><div><UiIcon name="finance" /><span>Investimentos<small>Posição recebida</small></span></div><b>R$ 12.400,00</b></div>
-          <div className={s.bankProductRow}><div><UiIcon name="document" /><span>Operação de crédito<small>Taxa não enviada no exemplo</small></span></div><b className={s.bankMissing}>Não informado</b></div>
-          <div className={s.bankQuestion}><UiIcon name="spark" /><div><small>VOCÊ TAMBÉM PODE PERGUNTAR</small><p>“Como estão meus saldos e faturas?”</p></div></div>
-          <p className={s.bankDemoNote}>Demonstração com dados fictícios. Os valores reais dependem das informações autorizadas e recebidas dos seus bancos.</p>
-        </div><div className={s.bankConnectionTag}><span>✓</span> Conectado com a sua autorização</div></div>
-      </div>
+      <div className={x.bankingIntro}><div><p className={s.eyebrow}>OPEN FINANCE / BANCOS CONECTADOS</p><h2>Seu dinheiro merece<br /><em>uma visão inteira.</em></h2></div><div><p>O saldo está em um banco. O cartão, em outro. Com a sua autorização, o Zelo reúne os dados recebidos para você consultar as informações no painel e pelo WhatsApp.</p><div className={x.bankConsent}><span>✓</span><p><b>A decisão de compartilhar é sua.</b><br />A autenticação acontece no banco. O Zelo não pede sua senha bancária.</p></div></div></div>
+      <OpenFinanceJourney />
+      <ProductCapture src="/brand/product/open-finance-demo.webp" title="Seus bancos, no mesmo lugar" initialPan={175} alt="Captura da área real de contas da Zelo com valores de demonstração: Banco Inter PJ, conta com R$ 18.450 de saldo e cartão com R$ 7.240 disponíveis de R$ 10 mil de limite, com R$ 2.760 utilizados. Nenhuma fatura recebida no exemplo." />
+      <div className={x.bankingExplainers}>{DATA.map(([title,description],i)=><div key={title}><span>0{i+1}</span><h3>{title}</h3><p>{description}</p></div>)}</div>
+      <div className={x.bankDistinction}><UiIcon name="wallet" /><p><b>Saldo e limite são coisas diferentes.</b> O saldo é o dinheiro da conta; o crédito disponível pertence à linha do cartão. Quando um banco não envia uma informação, ela aparece como “não informado”, sem virar zero.</p></div>
+      <div className={x.bankPrivacy}><div><span>✓</span><h3>Privacidade e seus direitos</h3><p>Conheça as finalidades do tratamento de dados e os canais para solicitar acesso, correção e exclusão, conforme a legislação aplicável, incluindo a LGPD.</p><a href="/privacidade">Leia a Política de Privacidade ↗</a></div><div><span>↗</span><h3>Você pode encerrar o compartilhamento</h3><p>Consulte os consentimentos e solicite a revogação pelo caminho disponível no painel. O controle do compartilhamento continua com você.</p><a href="https://www.bcb.gov.br/estabilidadefinanceira/cliente-open-finance" target="_blank" rel="noopener noreferrer">Entenda no site do Banco Central ↗</a></div></div>
       <div className={s.bankLogos}><div><strong className={s.bankCoverageNumber}>210<span>↗</span></strong><h3>opções de conexão<br />no Open Finance.</h3><p>Bancos e instituições, com acessos para contas pessoais e empresariais.</p></div><ul>{BANKS.map(([slug,name])=><li key={slug}><div><Image src={`/brand/banks/${slug}.svg`} alt={`Logo ${name}`} width={52} height={52} unoptimized /></div><span>{name}</span></li>)}</ul><p className={s.bankCoverageNote}>Catálogo Polp/Celcoin consultado em 18/10/2026. A contagem inclui acessos PF e PJ que podem pertencer à mesma instituição. A disponibilidade de cada conexão varia; confira as opções na sua conta. <a href="https://api.polp.com.br/api/v2/institutions" target="_blank" rel="noopener noreferrer">Ver fonte ↗</a></p></div>
       <div className={s.bankHowHeader}><h3>Como a conexão funciona</h3><p>O compartilhamento começa com a sua autorização.</p></div>
       <ol className={s.bankSteps}>

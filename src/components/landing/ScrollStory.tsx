@@ -5,8 +5,11 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AGENT_SCENES, STORY_SCENES, storyFrame, storyScrollTarget } from "@/lib/landing-story";
 import UiIcon from "@/components/UiIcon";
 import s from "./landing.module.css";
+import AgentDetails from "./AgentDetails";
+import x from "./experience.module.css";
 
 export default function ScrollStory() {
+  const [detail,setDetail]=useState<number|null>(null);
   const root = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLElement>(null);
@@ -74,7 +77,7 @@ export default function ScrollStory() {
               <h3>{agent.headline}</h3>
               <p className={s.agentDescription}>{agent.description}</p>
               <ul className={s.capabilities}>{agent.capabilities.map(capability => <li key={capability}><span>↗</span>{capability}</li>)}</ul>
-              <p className={s.agentDetail}>{agent.detail}</p>
+              <p className={s.agentDetail}>{agent.detail}</p><button type="button" className={x.agentMore} onClick={()=>setDetail(i)}>Explore as ações {agent.gender==="m"?"do":"da"} {agent.name}<span>↗</span></button>
             </div>
             <div className={s.agentArt} style={enhanced ? { opacity: frame.weights[index], transform: `perspective(1200px) rotateY(${offset * -9}deg) translateY(${offset * -35}px)` } : undefined}>
               <span className={s.agentNumber}>{String(index + 1).padStart(2, "0")}</span>
@@ -95,5 +98,5 @@ export default function ScrollStory() {
       </div>
       <div className={s.progress} aria-hidden="true"><span style={{ transform: `scaleX(${frame.progress})` }} /></div>
     </div>
-  </div></section>;
+  </div>{detail!==null&&<AgentDetails agent={AGENT_SCENES[detail]} onClose={()=>setDetail(null)}/>}</section>;
 }
