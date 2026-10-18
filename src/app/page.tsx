@@ -4,28 +4,17 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import localFont from "next/font/local";
-import UiIcon, { type UiIconName } from "@/components/UiIcon";
+import UiIcon from "@/components/UiIcon";
 import ScrollStory from "@/components/landing/ScrollStory";
+import ProductHero from "@/components/landing/ProductHero";
+import FunctionsGuide from "@/components/landing/FunctionsGuide";
+import OpenFinanceSection from "@/components/landing/OpenFinanceSection";
 import StoryVisual from "@/components/landing/StoryVisuals";
 import s from "@/components/landing/landing.module.css";
 import { BRAZIL_CHECKOUT, checkoutUrlWithLandingParams } from "@/lib/checkout-markets";
 
 const heading = localFont({ src: "./fonts/plus-jakarta-sans-latin.woff2", weight: "600 800", style: "normal", display: "swap", variable: "--font-heading", fallback: ["Arial", "sans-serif"] });
-const NAV = [["apresentacao", "A equipe Zelo"], ["recursos", "Recursos"], ["espacos", "Pessoal e empresas"], ["planos", "Planos"]] as const;
-const MODULES: { icon: UiIconName; title: string; description: string }[] = [
-  { icon: "document", title: "Faturas e planilhas", description: "Envie PDF, foto, CSV ou Excel. Confira os lançamentos identificados e revise antes de confirmar a importação." },
-  { icon: "repeat", title: "Parcelas e recorrências", description: "Consulte parcelas previstas, assinaturas e lançamentos recorrentes para se planejar melhor." },
-  { icon: "task", title: "Tarefas", description: "Transforme pendências em tarefas com prazo, prioridade e acompanhamento de conclusão." },
-  { icon: "bell", title: "Lembretes", description: "Organize avisos pontuais ou recorrentes e receba o lembrete no momento programado." },
-  { icon: "folder", title: "Drive inteligente", description: "Guarde arquivos, organize documentos e procure pelo que precisa descrevendo com suas palavras." },
-  { icon: "target", title: "Metas", description: "Defina o objetivo, o valor e o prazo. Acompanhe o progresso de cada conquista." },
-  { icon: "client", title: "Clientes", description: "Mantenha contatos, informações comerciais e observações do negócio sempre à mão." },
-  { icon: "users", title: "Funcionários", description: "Organize os dados da equipe, cargos e salários dentro do espaço da empresa." },
-  { icon: "cart", title: "Supermercado", description: "Monte listas, acompanhe itens e preços e consulte as compras registradas com suas despesas vinculadas." },
-  { icon: "car", title: "Veículos", description: "Reúna combustível, manutenção, seguro e quilometragem dos veículos pessoais ou da empresa." },
-  { icon: "person", title: "Contatos", description: "Encontre as pessoas e as informações que fazem parte da sua rotina, pelo painel e pela conversa." },
-  { icon: "search", title: "Pesquisas no WhatsApp", description: "Peça pesquisas de informações públicas, comparações de preços e buscas de produtos e locais pela conversa." },
-];
+const NAV = [["open-finance", "Open Finance"], ["recursos", "Funções"], ["espacos", "Pessoal e empresas"], ["apresentacao", "Agentes"], ["planos", "Planos"]] as const;
 const PLANS = [
   { id: "monthly", name: "Mensal", prefix: "", price: "47", cents: ",00", suffix: "/mês", total: "Pagamento mensal", value: 47, badge: "" },
   { id: "semiannual", name: "Semestral", prefix: "6x", price: "36", cents: ",96", suffix: "", total: "ou R$ 197,00 à vista", value: 197, badge: "Mais popular" },
@@ -33,7 +22,7 @@ const PLANS = [
 ] as const;
 const FAQS = [
   ["Preciso instalar outro aplicativo?", "O dia a dia acontece na conversa com o Zelo no WhatsApp. Você também conta com um painel web para visualizar, consultar e organizar suas informações pelo celular ou computador."],
-  ["Como funciona a conexão com bancos e cartões?", "Você autoriza a conexão disponível no painel. O Zelo organiza os dados recebidos das instituições para consulta de contas, movimentações, cartões e outros recursos disponíveis. As informações e a atualização dependem da instituição e da conexão; um campo ausente não é tratado como zero."],
+  ["Como funciona o Open Finance no Zelo?", "Quando o recurso estiver disponível na sua conta, abra Contas → Conectar banco no painel. Escolha a instituição e conclua a autorização no banco, com a conexão da Celcoin. O Zelo não pede sua senha bancária. Depois, consulte os dados recebidos de contas, cartões, investimentos e operações de crédito pelo painel e pelo WhatsApp. O recurso se aplica a contas bancárias do Brasil e depende do plano, do acesso ao espaço e das informações compartilhadas pela instituição."],
   ["Posso separar minha vida pessoal de mais de uma empresa?", "Sim. O Zelo possui o espaço Pessoal e espaços para suas empresas. Selecione o destino dos registros e configure as conexões Google de cada espaço, mantendo as informações no contexto correspondente."],
   ["O Zelo funciona com Google Agenda e Google Meet?", "Sim. Conecte a conta Google ao espaço escolhido para usar a integração de agenda e os recursos de reunião. Você pode pedir a criação de um link do Google Meet e organizar o compromisso. A conexão depende da sua autorização."],
   ["Ele grava reuniões ou gera atas sozinho?", "Para organizar um resumo, decisões e tarefas de uma reunião, envie ao Zelo o conteúdo por texto ou áudio. A criação do link do Google Meet não significa que o Zelo grava ou transcreve automaticamente a reunião."],
@@ -44,26 +33,25 @@ const FAQS = [
 
 function Resources() {
   return <section id="recursos" className={s.lightSection}><div className={s.sectionInner}>
-    <div className={s.sectionIntro}><p className={s.eyebrow}>ALÉM DA CONVERSA</p><h2>Uma equipe no WhatsApp.<br />Uma visão completa no painel.</h2><p>O que você pede na conversa encontra seu lugar. Depois, consulte os detalhes, acompanhe os números e veja o conjunto.</p></div>
+    <div className={s.sectionIntro}><p className={s.eyebrow}>ENTENDA O QUE O ZELO FAZ POR VOCÊ</p><h2>Peça do seu jeito.<br />Acompanhe cada detalhe.</h2><p>Uma despesa vira um registro financeiro. Um compromisso encontra lugar na agenda. Um arquivo fica disponível para consultar depois. Veja como cada parte funciona na prática.</p></div>
     <div className={s.featureRow} id="financas">
-      <div className={s.featureCopy}><p className={s.eyebrow}>FINANÇAS COM MAIS CLAREZA</p><h2>Entenda seu dinheiro.<br />Planeje o que vem.</h2><p>Registre receitas e despesas por mensagem e acompanhe contas, cartões e movimentações recebidas das suas conexões bancárias. Seu financeiro fica acessível no painel e na conversa.</p><ul>{["Saldos, movimentações e categorias", "Cartões, faturas e parcelas previstas", "Investimentos, empréstimos e financiamentos recebidos", "Filtros por período, conta e espaço"].map(item => <li key={item}>{item}</li>)}</ul></div>
+      <div className={s.featureCopy}><p className={s.eyebrow}>FINANÇAS COM MAIS CLAREZA</p><h2>Entenda seu dinheiro.<br />Planeje o que vem.</h2><p>Diga quanto recebeu ou gastou, a conta e o espaço do registro. Consulte por período e categoria para entender suas movimentações. Com uma conexão bancária autorizada, acompanhe também os dados disponibilizados pelas suas instituições.</p><ul>{["Registre receitas e despesas por texto, áudio ou documento", "Consulte contas, saldos, cartões, faturas e parcelas", "Acompanhe investimentos, empréstimos e financiamentos recebidos", "Filtre por período, conta, categoria e espaço"].map(item => <li key={item}>{item}</li>)}</ul><div className={s.featureExample}><span>NA PRÁTICA</span><p>“Quanto gastei no mercado este mês?”</p><small>O Zelo consulta os registros do contexto selecionado. No painel, você vê os lançamentos que compõem o período. Dados bancários e atualização dependem da instituição.</small></div></div>
       <div className={s.featureVisual} role="img" aria-label="Exemplo ilustrativo do painel financeiro"><div className={s.visualLayer} aria-hidden="true"><StoryVisual scene={2} /></div></div>
     </div>
     <div className={s.featureRow} id="agenda">
-      <div className={s.featureCopy}><p className={s.eyebrow}>AGENDA, TAREFAS E LEMBRETES</p><h2>Seu próximo compromisso<br />já tem lugar.</h2><p>Peça para organizar um compromisso, criar o link de uma reunião ou lembrar de uma tarefa. Conecte o Google Agenda no espaço pessoal ou na empresa escolhida.</p><ul>{["Integração com Google Agenda", "Criação de links do Google Meet", "Tarefas com prazo e prioridade", "Lembretes pontuais e recorrentes"].map(item => <li key={item}>{item}</li>)}</ul></div>
+      <div className={s.featureCopy}><p className={s.eyebrow}>AGENDA, TAREFAS E LEMBRETES</p><h2>Seu próximo compromisso<br />já tem lugar.</h2><p>Informe o compromisso, a data e o horário. Conecte o Google Agenda ao espaço pessoal ou à empresa para organizar a agenda daquele contexto e peça o link do Google Meet quando precisar de uma reunião.</p><ul>{["Crie e consulte compromissos pela conversa", "Conecte a conta Google ao espaço escolhido", "Peça um link do Meet para a reunião", "Organize tarefas e lembretes junto da sua rotina"].map(item => <li key={item}>{item}</li>)}</ul><div className={s.featureExample}><span>NA PRÁTICA</span><p>“Marque uma reunião amanhã às 10h e crie o link do Meet.”</p><small>Complete os dados solicitados e acompanhe o compromisso na agenda do espaço. Para organizar uma ata ou resumo, envie o conteúdo por áudio ou texto; criar o link não grava a reunião automaticamente.</small></div></div>
       <div className={s.featureVisual} role="img" aria-label="Exemplo ilustrativo de compromisso com lembrete"><div className={s.visualLayer} aria-hidden="true"><StoryVisual scene={4} /></div></div>
     </div>
-    <div className={s.moduleHeader}><h3>Os detalhes também ficam em ordem.</h3><p>Pelo WhatsApp e no seu painel.</p></div>
-    <div className={s.moduleGrid}>{MODULES.map(item => <article key={item.title} id={item.icon === "folder" ? "drive" : item.icon === "document" ? "fatura" : undefined} className={s.module}><UiIcon name={item.icon} /><h3>{item.title}</h3><p>{item.description}</p></article>)}</div>
-    <aside className={s.fiscalNote}><UiIcon name="document" /><div><b>Preparação fiscal para empresas · emissão em preparação</b><p>Cadastre os dados fiscais e serviços e prepare rascunhos de NFS-e. A emissão direta e o PDF oficial ainda aguardam homologação e configuração do emissor.</p></div></aside>
+    <FunctionsGuide />
+    <aside className={s.fiscalNote}><UiIcon name="document" /><div><b>Preparação fiscal para empresas · emissão em preparação</b><p>Cadastre os dados fiscais da empresa e os serviços, informe o tomador e prepare um rascunho de NFS-e para revisar. A emissão direta e o PDF oficial ainda aguardam homologação e configuração do emissor. O rascunho ajuda na preparação e não é uma nota fiscal emitida.</p></div></aside>
   </div></section>;
 }
 
 function Spaces() {
   return <section id="espacos" className={s.spaces}><span id="modo" /><div className={s.spacesInner}><div className={s.spacesCopy}><p className={s.eyebrow}>UMA CONTA. OS ESPAÇOS CERTOS.</p><h2>A vida tem várias partes.<br />A organização acompanha.</h2><p>Cuide de você, da casa e dos negócios com clareza sobre o que pertence a cada um. Escolha o espaço e convide as pessoas que fazem parte dele.</p></div><div className={s.spaceList}>
-    <div className={s.spaceItem}><UiIcon name="home" /><div><b>Seu espaço pessoal</b><p>Finanças da casa, compras de mercado, contatos, metas, documentos e compromissos.</p></div></div>
-    <div className={s.spaceItem}><UiIcon name="business" /><div><b>Cada empresa no seu espaço</b><p>Clientes, equipe, financeiro, arquivos e integrações organizados por empresa.</p></div></div>
-    <div className={s.spaceItem}><UiIcon name="users" /><div><b>Organização compartilhada</b><p>Família, sócios e equipe usam seus próprios números de WhatsApp para colaborar.</p></div></div>
+    <div className={s.spaceItem}><UiIcon name="home" /><div><b>Seu espaço pessoal</b><p>Escolha o Pessoal para organizar finanças da casa, mercado, contatos, metas, documentos e compromissos. Os registros ficam nesse contexto para você consultar depois.</p></div></div>
+    <div className={s.spaceItem}><UiIcon name="business" /><div><b>Cada empresa no seu espaço</b><p>Selecione a empresa antes de registrar ou consultar. Clientes, equipe, financeiro e arquivos pertencem àquele espaço; as conexões Google também são configuradas por espaço.</p></div></div>
+    <div className={s.spaceItem}><UiIcon name="users" /><div><b>Organização compartilhada</b><p>Vincule família, sócios ou equipe para que cada pessoa use o próprio número de WhatsApp, conforme os acessos disponíveis. As informações continuam no contexto pessoal ou empresarial correspondente.</p></div></div>
   </div></div></section>;
 }
 
@@ -84,14 +72,14 @@ export default function LandingPage() {
   return <div className={`${heading.variable} ${s.page}`}>
     <a className={s.skipLink} href="#recursos">Pular para os recursos</a>
     <header className={s.header}>
-      <a href="#apresentacao" aria-label="Zelo, início"><Image src="/brand/zelo-wordmark-light.png" alt="Zelo — Gestão inteligente" width={640} height={293} className={s.logo} priority /></a>
+      <a href="#inicio" aria-label="Zelo, início"><Image src="/brand/zelo-wordmark-light.png" alt="Zelo — Gestão inteligente" width={640} height={293} className={s.logo} priority /></a>
       <nav className={s.nav} aria-label="Navegação principal">{NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}</nav>
       <div className={s.headerActions}><Link className={s.login} href="/login">Entrar</Link><a className={s.navCta} href="#planos">Ver planos ↗</a><button className={s.menuButton} type="button" aria-expanded={menuOpen} aria-controls="menu-movel" aria-label={menuOpen ? "Fechar menu" : "Abrir menu"} onClick={() => setMenuOpen(open => !open)}>{menuOpen ? "×" : "≡"}</button></div>
     </header>
     {menuOpen && <nav id="menu-movel" className={s.mobileNav} aria-label="Navegação móvel">{NAV.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}<Link href="/login">Entrar na minha conta</Link></nav>}
-    <main><ScrollStory />
+    <main><ProductHero />
       <div className={s.trust}><span><UiIcon name="spark" />Converse pelo WhatsApp</span><span><UiIcon name="home" />Pessoal e empresas separados</span><span><UiIcon name="finance" />Painel web incluso</span></div>
-      <Resources /><Spaces /><Plans />
+      <OpenFinanceSection /><Resources /><Spaces /><ScrollStory /><Plans />
       <section className={s.faq} id="duvidas"><div className={`${s.sectionInner} ${s.faqGrid}`}><div className={s.sectionIntro}><p className={s.eyebrow}>PODE PERGUNTAR</p><h2>Vamos deixar<br />tudo claro.</h2><p>Mais detalhes para você começar com segurança.</p></div><div>{FAQS.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></div></section>
       <section className={s.closing}><h2>Organização começa<br />com uma conversa.</h2><p>Conheça o Zelo e encontre mais clareza para cuidar do seu dia.</p><a href="#planos" className={s.primaryButton}>Quero meu Zelo <UiIcon name="arrow" /></a></section>
     </main>

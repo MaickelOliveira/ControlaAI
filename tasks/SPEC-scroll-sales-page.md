@@ -1,25 +1,28 @@
-# Apresentação Zelo com equipe virtual e rolagem reversível
+# Página de vendas Zelo: produto, funções e equipe
 
-O titular autorizou refazer a página e pediu backup antes de qualquer alteração. Backup verificado em `../backups/zelo-pagina-2026-10-18-9367ec2/`: 1.063 arquivos da revisão 9367ec2, HTML público e manifesto de hashes. Depois de avaliar a primeira versão, pediu uma direção visual mais forte, 3D real e retratos individuais sem repetição, usando os nomes e funções já existentes na plataforma.
+O titular autorizou o redesenho com backup e depois pediu uma hero sem agentes, os agentes mais abaixo, explicações melhores de cada função e destaque explícito ao Open Finance. São revisões da direção visual anterior, mantida no histórico Git.
 
-## Contrato visual e de produto
+## Backups
 
-Superfície: página brasileira `/`. Público: pessoas que querem organizar a vida e o negócio pelo WhatsApp. Ação principal: conhecer a equipe, ver planos e comprar nas ofertas brasileiras existentes da Hotmart. Hierarquia: promessa e núcleo orbital 3D; apresentação individual dos agentes; recursos e demonstrações; espaços; planos; perguntas e compra.
+- Original publicado: `../backups/zelo-pagina-2026-10-18-9367ec2/`, 1.063 arquivos verificados da revisão 9367ec2, HTML, captura e manifesto de hashes.
+- Versão anterior da apresentação: `../backups/zelo-pre-hero-produto-2026-10-18-1187d85.zip`, incluindo página, componentes e os 12 retratos da revisão 1187d85.
 
-Direção: editorial tecnológica, preto profundo e dourado, retratos fotográficos fictícios com figurino e objetos por especialidade. Detalhe próprio: um núcleo orbital WebGL conectado a uma constelação de personagens reais do produto, seguido por cenas individuais. Referências locais: marca Zelo, `src/lib/virtual-team.ts`, funções implementadas e preços de `checkout-markets.ts`. Alvos visuais: 390x844 e 1440x900; verificar também 320px e paisagem.
+## Contrato visual
 
-## Critérios de aceitação
+Página brasileira `/`. Público: pessoas que querem organizar a vida e o negócio no WhatsApp. Ação: entender o produto, conhecer os recursos e escolher uma das ofertas brasileiras existentes.
 
-- 14 cenas: abertura, os 12 agentes canônicos e conjunto final. Nenhum nome ou função é inventado: Zoe, Rita, Lucas, Theo, Bia, Nina, Dora, Lia, Caio, Clara, Hugo e Otto.
-- 12 imagens geradas em solicitações individuais, com rostos, cabelos, roupas e objetos diferentes. Cada arquivo deve ter hash diferente; revisão visual do conjunto também é necessária. Prompts em `tasks/zelo-team-images.json`.
-- A posição da rolagem determina cena, transformação e núcleo 3D; ao subir, tudo volta ao mesmo estado. Sem reprodução automática nem interceptação de wheel/touch. Navegação direta por nomes e link para sair da apresentação.
-- Desktop com composição editorial e retrato amplo. Celular com retrato acima da explicação, controles acessíveis sem esconder o conteúdo. Sem overflow horizontal da página.
-- Redução de movimento e telas baixas apresentam todas as cenas estaticamente. Falha de WebGL usa núcleo CSS. Conteúdo e compra disponíveis antes da hidratação. Cenas inativas ficam ocultas e inertes.
-- Os personagens são identificados como virtuais. Exemplos fictícios de conversa; nenhuma consulta a dados privados nem chamada real aos agentes. Emissão direta e PDF de NFS-e aguardam homologação. Agenda não implica gravação automática de reuniões.
-- Preservar preços, ofertas, UTMs, fbclid e atributos de conversão. Não alterar aplicativo autenticado, traduções, banco, CI ou conexões dos usuários.
+Ordem: hero do produto → Open Finance → funções detalhadas → espaços pessoal/empresas → equipe virtual → planos → perguntas → compra. A hero não contém nomes nem imagens dos agentes. Ela usa um telefone em perspectiva, conversa de exemplo, visualizações financeiras e núcleo orbital WebGL. Três etapas reversíveis: mensagem digitada, aproximação da conversa e trajeto das informações, registro do gasto. A digitação, o zoom, o trajeto luminoso e a revelação do registro usam a mesma posição de rolagem; ao subir, todos recuam. O exemplo mostra R$ 85 em supermercado, no débito, no espaço Pessoal. A informação é ilustrativa e não cria um registro real. Preto profundo e dourado da marca; tipografia e exemplos legíveis em 1440x900 e 390x844.
 
-## Estados e verificação
+## Conteúdo e comportamento
 
-Carga do 3D: núcleo CSS estável até o canvas ficar pronto. Erro/perda de contexto: mesmo núcleo de reserva, navegação continua. Sucesso: objeto real com materiais metálicos e rotação determinada pelo scroll. Redução de movimento: cenas estáticas com fotos. Estados vazio/parcial/permissão remotos não se aplicam: conteúdo estático, sem APIs privadas.
+- Open Finance aparece na hero, menu, seção dedicada e FAQ. Explicar contas, saldos, transações, cartões/faturas/limites/parcelas, investimentos e operações de crédito. Mostrar o fluxo Contas → banco → permissões/autorização → dados no painel e WhatsApp. Fonte: OpenFinanceConnect, OpenFinanceEligibility, open-finance-access e open-finance-whatsapp. Contas brasileiras; PF/PJ por espaço; disponibilidade conforme conta, plano, liberação e instituição. Autenticação no banco, conexão Celcoin; não pedir senha. Não afirmar liberação universal sem verificar configuração. Campos não recebidos não são zero.
+- Explicar finanças e agenda com pedido de exemplo e resultado. Cada um dos 12 cartões complementares traz objetivo, pedido, funcionamento e onde acompanhar. Incluir importação de PDF/foto/CSV/Excel, recorrências/parcelas, tarefas, lembretes, arquivos/Drive, metas, clientes, funcionários, mercado, veículos, contatos e pesquisa pública.
+- Espaços: mostrar seleção do contexto e conexões Google por espaço; colaboração conforme acessos. Meet não implica gravação automática; resumos dependem do conteúdo enviado. NFS-e somente preparação de rascunhos até homologação.
+- Equipe mais abaixo, após recursos e espaços: 13 cenas (12 agentes canônicos + conjunto final). Zoe, Rita, Lucas, Theo, Bia, Nina, Dora, Lia, Caio, Clara, Hugo e Otto. Nomes e funções de virtual-team.ts. Os 12 retratos exclusivos já existentes permanecem; prompts em tasks/zelo-team-images.json.
+- Rolagem determina integralmente as duas apresentações, inclusive no retorno. Sem reprodução automática nem interceptação de wheel/touch. Atalhos por etapa/agente e acesso direto aos planos. Cenas inativas inertes. Explicações expansíveis usam details/summary nativos.
+- Movimento reduzido/telas baixas: leitura estática e controles manuais. WebGL indisponível: núcleo CSS. Sem JavaScript: conteúdo, exemplos, details e compra acessíveis.
+- Preservar ofertas, valores, UTMs/fbclid e atributos de conversão. Não mudar backend, traduções, banco, autenticação, autorizações bancárias ou CI. Não fazer compras, consultas financeiras privadas ou consentimentos reais na validação.
 
-Testes de comportamento para os 14 destinos, reversão, geometria e identidade dos agentes; hashes únicos das imagens. Verificar tipos, lint, testes, build de produção, segredos e dependências. Inspecionar computador, celular, teclado, links e movimento reduzido. Evidências renderizadas devem ser salvas antes de entregar. A página pública original fica preservada; entregar revisão na PR existente #200 e prévia local para avaliação.
+## Verificação
+
+8 testes da geometria: 13 destinos dos agentes, 3 etapas do produto, reversão, limites, equipe canônica e hashes únicos dos retratos. Lint, tipos, build, segredos e CI. Inspecionar renderização 1440x900 e 390x844, largura 320px e paisagem. Confirmar ausência de agentes na hero e ordem do conteúdo; explicações abrem; dados fictícios identificados; teclado, foco e contraste; retorno correto nas duas apresentações. Salvar evidências locais e executar o verificador do skill frontend-design-direction. Produção permanece preservada enquanto a PR #200 está em avaliação.

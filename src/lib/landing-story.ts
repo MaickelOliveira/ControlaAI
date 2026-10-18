@@ -7,7 +7,7 @@ type AgentBrief = {
 };
 const briefs: AgentBrief[] = [
   { key: "support", portrait: "zoe", headline: "O primeiro olá. O caminho certo.", description: "Conheça a Zoe. Ela recebe você, explica como usar o Zelo e ajuda a encontrar o que precisa na conversa.", capabilities: ["Recepção e orientação", "Ajuda com os recursos", "Pesquisas de informações públicas"], example: "Zoe, por onde eu começo?", exampleReply: "Me conte o que quer organizar. Posso te orientar pelos recursos do Zelo.", detail: "Uma equipe virtual da mesma Zelo. Fale naturalmente, em uma única conversa." },
-  { key: "finance", portrait: "rita", headline: "Seu dinheiro. Com mais clareza.", description: "A Rita organiza receitas e despesas e ajuda você a acompanhar contas, cartões, faturas e o que vem pela frente.", capabilities: ["Contas, cartões e movimentações", "Faturas, parcelas e recorrências", "Importação de PDF, foto, CSV e Excel"], example: "Rita, gastei R$ 85 no mercado hoje.", exampleReply: "Vamos registrar R$ 85 em supermercado. Em qual conta e espaço você quer lançar?", detail: "Conexões bancárias com sua autorização. Dados e atualização dependem da instituição." },
+  { key: "finance", portrait: "rita", headline: "Seu dinheiro. Com mais clareza.", description: "A Rita organiza receitas e despesas e ajuda você a acompanhar contas, cartões, faturas e o que vem pela frente.", capabilities: ["Open Finance, contas e cartões", "Faturas, parcelas e recorrências", "Importação de PDF, foto, CSV e Excel"], example: "Rita, gastei R$ 85 no mercado hoje.", exampleReply: "Vamos registrar R$ 85 em supermercado. Em qual conta e espaço você quer lançar?", detail: "Conexões bancárias com sua autorização. Dados e atualização dependem da instituição." },
   { key: "agenda", portrait: "lucas", headline: "Tempo para o que importa.", description: "O Lucas organiza seus compromissos e conecta a rotina ao Google Agenda. Precisa de uma reunião? Peça o link do Meet.", capabilities: ["Compromissos e horários", "Integração com Google Agenda", "Criação de links do Google Meet"], example: "Lucas, marque uma reunião amanhã às 10h.", exampleReply: "Qual é o assunto e em qual espaço vamos organizar esse compromisso?", detail: "A conta Google é conectada ao espaço escolhido, com sua autorização." },
   { key: "task", portrait: "theo", headline: "Do “preciso fazer” ao feito.", description: "O Theo transforma suas pendências em tarefas. Prazos, prioridades e andamento ficam à mão para você seguir em frente.", capabilities: ["Tarefas com prazo", "Prioridade e acompanhamento", "Consulta e conclusão pela conversa"], example: "Theo, preciso enviar a proposta até sexta.", exampleReply: "Vamos criar a tarefa “Enviar proposta” com prazo para sexta. Qual a prioridade?", detail: "Acompanhe suas tarefas no painel e retome o assunto no WhatsApp." },
   { key: "reminder", portrait: "bia", headline: "Você vive. Ela te lembra.", description: "A Bia cuida dos lembretes que você não quer guardar na cabeça. Um aviso para hoje ou algo que se repete na rotina.", capabilities: ["Lembretes pontuais", "Avisos recorrentes", "Horário definido na conversa"], example: "Bia, me lembre de pagar o seguro dia 20.", exampleReply: "Para qual horário do dia 20 você quer programar o lembrete?", detail: "Informe data e horário para receber o aviso no momento programado." },
@@ -28,7 +28,6 @@ export const AGENT_SCENES = briefs.map(brief => ({
 }));
 export type AgentScene = (typeof AGENT_SCENES)[number];
 export const STORY_SCENES = [
-  { id: "universo", label: "Início" },
   ...AGENT_SCENES.map(agent => ({ id: agent.id, label: agent.name })),
   { id: "equipe", label: "Sua equipe" },
 ];
@@ -36,12 +35,26 @@ export const STORY_SCENES = [
 type Geometry = { top: number; height: number; viewport: number };
 const clamp = (value: number, max = 1) => Math.min(max, Math.max(0, value));
 
-/** Every frame depends only on scroll geometry, including reverse and restored scroll. */
-export function storyFrame(scrollY: number, { top, height, viewport }: Geometry) {
-  const progress = clamp((scrollY - top) / Math.max(1, height - viewport));
-  const position = clamp(progress * STORY_SCENES.length - 0.35, STORY_SCENES.length - 1);
-  return { progress, position, active: Math.round(position), weights: STORY_SCENES.map((_, i) => clamp(1 - Math.abs(position - i))) };
+export const EXPENSE_EXAMPLE_MESSAGE = "Gastei R$ 85 no mercado. Foi no débito, na conta pessoal.";
+
+/** Typing, camera, path and record all rewind from the same position. */
+export function expenseJourney(progress: number) {
+  const typing = clamp(progress / 0.23);
+  return {
+    typing,
+    typed: EXPENSE_EXAMPLE_MESSAGE.slice(0, Math.floor(7 + typing * (EXPENSE_EXAMPLE_MESSAGE.length - 7))),
+    zoom: clamp((progress - 0.2) / 0.18),
+    travel: clamp((progress - 0.38) / 0.34),
+    reveal: clamp((progress - 0.72) / 0.2),
+  };
 }
-export function storyScrollTarget(scene: number, { top, height, viewport }: Geometry) {
-  return top + ((clamp(scene, STORY_SCENES.length - 1) + 0.35) / STORY_SCENES.length) * Math.max(1, height - viewport);
+
+/** Every frame depends only on scroll geometry, including reverse and restored scroll. */
+export function storyFrame(scrollY: number, { top, height, viewport }: Geometry, count = STORY_SCENES.length) {
+  const progress = clamp((scrollY - top) / Math.max(1, height - viewport));
+  const position = clamp(progress * count - 0.35, count - 1);
+  return { progress, position, active: Math.round(position), weights: Array.from({ length: count }, (_, i) => clamp(1 - Math.abs(position - i))) };
+}
+export function storyScrollTarget(scene: number, { top, height, viewport }: Geometry, count = STORY_SCENES.length) {
+  return top + ((clamp(scene, count - 1) + 0.35) / count) * Math.max(1, height - viewport);
 }
