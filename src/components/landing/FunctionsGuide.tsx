@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
 import s from "./landing.module.css";
 
@@ -18,13 +21,14 @@ const FEATURES: Feature[] = [
 ];
 
 export default function FunctionsGuide() {
+  const [selected, setSelected] = useState(0);
+  const feature = FEATURES[selected];
   return <div className={s.functionsGuide}>
-    <div className={s.moduleHeader}><h3>Conheça cada função.<br /><em>Veja como usar no seu dia.</em></h3><p>Exemplos de pedidos e o que acontece depois.</p></div>
-    <div className={s.functionGrid}>{FEATURES.map((feature, i) => <article key={feature.id} id={feature.id} className={s.functionCard}>
-      <div className={s.functionCardTop}><UiIcon name={feature.icon} /><span>{String(i + 1).padStart(2, "0")}</span></div>
-      <h3>{feature.title}</h3><p>{feature.description}</p>
-      <div className={s.functionExample}><span>EXPERIMENTE PEDIR</span><blockquote>{feature.request}</blockquote></div>
-      <details><summary>Como funciona <span>+</span></summary><div className={s.functionDetails}><p>{feature.how}</p><b>Onde você acompanha</b><p>{feature.result}</p></div></details>
-    </article>)}</div>
+    <div className={s.moduleHeader}><div><p className={s.eyebrow}>UM ZELO PARA CADA DETALHE</p><h3>Cabe muito mais<br />nessa conversa.</h3></div><p>Do contrato que você precisa encontrar à meta que quer realizar. Escolha uma função e veja o caminho completo.</p></div>
+    <div className={s.functionPicker} aria-label="Escolha uma função">{FEATURES.map((item, i) => <button key={item.id} id={item.id} type="button" aria-pressed={selected === i} aria-controls="detalhe-funcao" onClick={() => setSelected(i)}><UiIcon name={item.icon} /><span>{item.title}</span><span>↗</span></button>)}</div>
+    <article id="detalhe-funcao" className={s.functionStage} aria-labelledby="funcao-selecionada">
+      <div className={s.functionExplanation}><span className={s.functionIndex}>{String(selected + 1).padStart(2, "0")} / 12</span><h3 id="funcao-selecionada">{feature.title}</h3><p className={s.functionDescription}>{feature.description}</p><div><span className={s.smallLabel}>COMO FUNCIONA</span><p>{feature.how}</p></div></div>
+      <div className={s.functionDemo}><div className={s.demoHeading}><UiIcon name={feature.icon} /><span>DO PEDIDO AO RESULTADO</span><small>DEMONSTRAÇÃO</small></div><blockquote>{feature.request}<span>09:41 ✓✓</span></blockquote><div className={s.demoConnector}>↓</div><div className={s.functionResult}><UiIcon name={feature.icon} /><div><span>ONDE VOCÊ ACOMPANHA</span><p>{feature.result}</p></div></div><span className={s.demoFoot}>ZELO · CADA COISA NO SEU LUGAR</span></div>
+    </article>
   </div>;
 }

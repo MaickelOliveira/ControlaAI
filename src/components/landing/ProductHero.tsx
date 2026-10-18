@@ -77,11 +77,11 @@ export default function ProductHero() {
       <div className={s.productTop}><span><i /> SUA VIDA. SEU NEGÓCIO. TUDO EM ORDEM.</span><span>GESTÃO INTELIGENTE PELO WHATSAPP</span></div>
       <div className={s.productGrid}>
         <div className={s.productCopy} inert={zoom > 0.85} aria-hidden={zoom > 0.85} style={{ opacity: 1 - zoom, transform: `translateX(${-zoom * 35}px)`, visibility: processing ? "hidden" : "visible" }}>
-          <p className={s.eyebrow}>MENOS COISAS PARA GUARDAR NA CABEÇA</p>
-          <h1>Você vive.<br />O Zelo<br /><em>organiza.</em></h1>
-          <p className={s.productLead}>Finanças com Open Finance, compromissos e documentos na sua rotina. Peça pelo WhatsApp. Acompanhe tudo em um só lugar.</p>
+          <p className={s.eyebrow}>SUA ROTINA, EM OUTRA FREQUÊNCIA</p>
+          <h1>Seu mundo,<br /><em>em ordem<span>↗</span></em></h1>
+          <p className={s.productLead}>Finanças, agenda, tarefas e documentos. Uma conversa no WhatsApp conecta tudo — para você ter mais tempo de viver.</p>
           <div className={s.heroActions}><a href="#planos" className={s.primaryButton}>Quero meu Zelo <UiIcon name="arrow" /></a><a href="#recursos" className={s.productExplore}>Explorar as funções <span>↓</span></a></div>
-          <div className={s.productAssurance}><UiIcon name="home" /><span>Seu espaço pessoal e cada empresa.<br /><b>Organização com o contexto certo.</b></span></div>
+          <div className={s.productAssurance}><span><UiIcon name="finance" /> Open Finance</span><span><UiIcon name="home" /> Pessoal + empresas</span></div>
         </div>
         <div className={s.processingCopy} aria-hidden={!processing} inert={!processing} style={{ opacity: clamp((progress - 0.38) / 0.12), visibility: processing ? "visible" : "hidden" }}>
           <p className={s.eyebrow}>{receiptVisible ? "DA CONVERSA PARA O SEU FINANCEIRO" : "ACOMPANHE O CAMINHO DO SEU PEDIDO"}</p>
@@ -92,8 +92,8 @@ export default function ProductHero() {
         </div>
         <div className={s.productShowcase} role="img" aria-label={`Demonstração ilustrativa: ${STEPS[frame.active].title}. ${MESSAGE}. ${receiptVisible ? "Exemplo de gasto registrado em supermercado, no débito e no espaço Pessoal." : "A mensagem percorre o caminho até a organização do gasto."}`}>
           <div className={s.productCanvas}>
-            <div className={s.productCore} aria-hidden="true" style={{ opacity: .48 * (1 - reveal * .7) }}><ZeloCore position={progress * 6} enabled={webgl} /></div>
-            <div className={s.productHalo} aria-hidden="true" />
+            <div className={s.productCore} aria-hidden="true" style={{ opacity: .85 * (1 - reveal * .7) }}><ZeloCore position={progress * 6} enabled={webgl} /></div>
+            <div className={s.productHalo} aria-hidden="true"><span>menos<br /><b>caos.</b></span></div><div className={s.floatingAgenda} aria-hidden="true" style={{ opacity: 1 - zoom }}><UiIcon name="calendar" /><div><small>SUA AGENDA EM DIA</small><b>Reunião com a equipe</b><span>Amanhã · 10:00</span></div><i>↗</i></div>
             <div className={s.showcaseDevice} aria-hidden="true" style={{ opacity: 1 - clamp(travel * 1.8), transform: `perspective(1400px) translateX(${-zoom * 105}px) translateY(${-zoom * 42}px) scale(${1 + zoom * .65}) rotateY(${-12 + zoom * 12}deg) rotateZ(${-5 + zoom * 5}deg)` }}>
               <div className={s.deviceStatus}><span>9:41</span><i /><span>● ▰</span></div>
               <div className={s.deviceHeader}><Image src="/brand/zelo-icon.png" alt="" width={36} height={36} /><div><b>Zelo</b><small>Gestão inteligente</small></div><span>⋯</span></div>
@@ -107,7 +107,7 @@ export default function ProductHero() {
               <div className={s.deviceKeyboard}>{["qwertyuiop", "asdfghjkl", "zxcvbnm"].map(row => <div key={row}>{row.split("").map(letter => <span key={letter} data-active={typing < 1 && typed.at(-1)?.toLowerCase() === letter}>{letter}</span>)}</div>)}<div><span>123</span><b>espaço</b><span>↵</span></div></div>
             </div>
             <div className={s.expenseRoute} aria-hidden="true" style={{ opacity: routeOpacity }}>
-              <svg viewBox="0 0 620 600" fill="none"><path d="M365 247 C235 120 75 190 110 340 S340 550 455 375" stroke="#e3bd71" strokeOpacity=".15" strokeWidth="1" /><path d="M365 247 C235 120 75 190 110 340 S340 550 455 375" pathLength="1" stroke="#ebc780" strokeWidth="2" strokeDasharray="1" strokeDashoffset={1 - travel} /><circle cx="365" cy="247" r="5" fill="#ebc780" /><circle cx="455" cy="375" r="5" fill="#ebc780" /></svg>
+              <svg viewBox="0 0 620 600" fill="none"><path d="M365 247 C235 120 75 190 110 340 S340 550 455 375" stroke="#171a18" strokeOpacity=".15" strokeWidth="1" /><path d="M365 247 C235 120 75 190 110 340 S340 550 455 375" pathLength="1" stroke="#746400" strokeWidth="2" strokeDasharray="1" strokeDashoffset={1 - travel} /><circle cx="365" cy="247" r="5" fill="#171a18" /><circle cx="455" cy="375" r="5" fill="#171a18" /></svg>
               <div className={s.expensePacket} style={{ offsetDistance: `${travel * 100}%` }}><UiIcon name="wallet" /><b>R$ 85</b></div>
               <span className={s.routeValue} data-reached={travel > .12}>01 / VALOR IDENTIFICADO</span><span className={s.routeCategory} data-reached={travel > .38}>02 / CATEGORIA ORGANIZADA</span><span className={s.routeSpace} data-reached={travel > .65}>03 / ESPAÇO PESSOAL</span>
             </div>
@@ -118,7 +118,7 @@ export default function ProductHero() {
               <div className={s.receiptDestination}><UiIcon name="finance" /><span>No seu financeiro<small>Consulte no painel e na conversa</small></span><b>↗</b></div>
               <small className={s.receiptIllustration}>EXEMPLO ILUSTRATIVO · DADOS FICTÍCIOS</small>
             </div>
-            <div className={s.productConnection} aria-hidden="true" style={{ opacity: 1 - zoom }}><span /><p>UMA MENSAGEM.<b>O RESTO ENCONTRA SEU LUGAR.</b></p><UiIcon name="spark" /></div>
+            <div className={s.productConnection} aria-hidden="true" style={{ opacity: 1 - zoom }}><span /><p>R$ 85,00<b>Um gasto. Tudo no lugar.</b></p><UiIcon name="spark" /></div>
             <span className={s.productSideLabel} aria-hidden="true">ZELO / ORGANIZAÇÃO EM MOVIMENTO</span>
           </div>
         </div>

@@ -37,55 +37,26 @@ export default function ZeloCore({ position, enabled }: { position: number; enab
         scene.environment = environment.texture;
         room.dispose();
         pmrem.dispose();
-        const gold = new THREE.MeshPhysicalMaterial({ color: 0xc49b50, metalness: 1, roughness: 0.2, clearcoat: 1 });
-        const dark = new THREE.MeshPhysicalMaterial({ color: 0x14191e, metalness: 1, roughness: 0.17, clearcoat: 1 });
-        const glow = new THREE.MeshBasicMaterial({ color: 0xffd78b });
-        const wire = new THREE.LineBasicMaterial({ color: 0xd4ad68, transparent: true, opacity: 0.5 });
+        const chrome = new THREE.MeshPhysicalMaterial({ color: 0xdde0df, metalness: 1, roughness: 0.13, clearcoat: 1 });
+        const yellow = new THREE.MeshPhysicalMaterial({ color: 0xffdf00, metalness: 0.45, roughness: 0.24, clearcoat: 1 });
         const body = new THREE.Group();
         scene.add(body);
-        const nucleus = new THREE.Mesh(new THREE.IcosahedronGeometry(0.93, 2), dark);
-        body.add(nucleus);
-        const edgeGeometry = new THREE.IcosahedronGeometry(0.945, 1);
-        body.add(new THREE.LineSegments(new THREE.EdgesGeometry(edgeGeometry), wire));
-        edgeGeometry.dispose();
-        const center = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 16), glow);
-        center.position.set(0.23, 0.18, 0.87);
-        body.add(center);
-        const rings: import("three").Mesh[] = [];
-        for (let i = 0; i < 5; i++) {
-          const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35 + i * 0.21, i % 2 ? 0.013 : 0.035, 8, 128), i === 3 ? glow : gold);
-          ring.rotation.set(0.6 + i * 0.4, i * 0.6, i * 0.45);
-          body.add(ring);
-          rings.push(ring);
-        }
-        const satelliteGeometry = new THREE.SphereGeometry(0.07, 12, 8);
-        for (let i = 0; i < 12; i++) {
-          const satellite = new THREE.Mesh(satelliteGeometry, i % 3 ? gold : glow);
-          const angle = i * Math.PI * 2 / 12;
-          satellite.position.set(Math.cos(angle) * 2.2, Math.sin(angle) * 2.2, Math.sin(i * 2) * 0.45);
-          body.add(satellite);
-        }
-        const positions = new Float32Array(90 * 3);
-        for (let i = 0; i < 90; i++) {
-          const angle = i * 2.399963;
-          const radius = 2.4 + (i % 13) / 13 * 1.5;
-          positions.set([Math.cos(angle) * radius, Math.sin(angle) * radius, Math.sin(i * 1.7) - 1], i * 3);
-        }
-        const particles = new THREE.BufferGeometry();
-        particles.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-        const particleMaterial = new THREE.PointsMaterial({ color: 0xd8b571, size: 0.016, transparent: true, opacity: 0.6 });
-        scene.add(new THREE.Points(particles, particleMaterial));
-        scene.add(new THREE.AmbientLight(0xffe0aa, 1));
-        const key = new THREE.PointLight(0xffd9a0, 70, 20);
+        const ribbon = new THREE.Mesh(new THREE.TorusKnotGeometry(1.7, 0.23, 180, 20, 2, 3), chrome);
+        body.add(ribbon);
+        const accent = new THREE.Mesh(new THREE.TorusGeometry(2.65, 0.045, 12, 160), yellow);
+        accent.rotation.set(0.85, 0.4, 0.2);
+        body.add(accent);
+        scene.add(new THREE.AmbientLight(0xffffff, 2));
+        const key = new THREE.PointLight(0xffffff, 85, 20);
         key.position.set(3, 3, 4);
         scene.add(key);
-        const rim = new THREE.PointLight(0xe5efff, 45, 20);
+        const rim = new THREE.PointLight(0xffef88, 60, 20);
         rim.position.set(-3, 1, 2);
         scene.add(rim);
         function render() {
           const p = current.current;
           body.rotation.set(0.08 + p * 0.06, p * 0.18, -0.12 + p * 0.045);
-          rings.forEach((ring, i) => { ring.rotation.z = i * 0.45 + p * (i % 2 ? -0.16 : 0.12); });
+          accent.rotation.z = 0.2 + p * 0.1;
           renderer.render(scene, camera);
         }
         const resize = () => {
@@ -113,7 +84,7 @@ export default function ZeloCore({ position, enabled }: { position: number; enab
           const geometries = new Set<import("three").BufferGeometry>();
           scene.traverse(object => { if ("geometry" in object) geometries.add(object.geometry as import("three").BufferGeometry); });
           geometries.forEach(geometry => geometry.dispose());
-          [gold, dark, glow, wire, particleMaterial].forEach(material => material.dispose());
+          [chrome, yellow].forEach(material => material.dispose());
           environment.dispose();
           renderer.dispose();
           renderer.domElement.remove();
