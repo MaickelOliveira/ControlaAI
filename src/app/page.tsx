@@ -11,7 +11,7 @@ import s from "@/components/landing/landing.module.css";
 import { BRAZIL_CHECKOUT, checkoutUrlWithLandingParams } from "@/lib/checkout-markets";
 
 const heading = localFont({ src: "./fonts/plus-jakarta-sans-latin.woff2", weight: "600 800", style: "normal", display: "swap", variable: "--font-heading", fallback: ["Arial", "sans-serif"] });
-const NAV = [["apresentacao", "Como funciona"], ["recursos", "Recursos"], ["espacos", "Pessoal e empresas"], ["planos", "Planos"]] as const;
+const NAV = [["apresentacao", "A equipe Zelo"], ["recursos", "Recursos"], ["espacos", "Pessoal e empresas"], ["planos", "Planos"]] as const;
 const MODULES: { icon: UiIconName; title: string; description: string }[] = [
   { icon: "document", title: "Faturas e planilhas", description: "Envie PDF, foto, CSV ou Excel. Confira os lançamentos identificados e revise antes de confirmar a importação." },
   { icon: "repeat", title: "Parcelas e recorrências", description: "Consulte parcelas previstas, assinaturas e lançamentos recorrentes para se planejar melhor." },
@@ -44,14 +44,14 @@ const FAQS = [
 
 function Resources() {
   return <section id="recursos" className={s.lightSection}><div className={s.sectionInner}>
-    <div className={s.sectionIntro}><p className={s.eyebrow}>CONHEÇA O ZELO POR INTEIRO</p><h2>Uma conversa.<br />Muitos jeitos de simplificar.</h2><p>Da despesa que você acabou de fazer ao compromisso da próxima semana. Cada informação encontra seu lugar.</p></div>
+    <div className={s.sectionIntro}><p className={s.eyebrow}>ALÉM DA CONVERSA</p><h2>Uma equipe no WhatsApp.<br />Uma visão completa no painel.</h2><p>O que você pede na conversa encontra seu lugar. Depois, consulte os detalhes, acompanhe os números e veja o conjunto.</p></div>
     <div className={s.featureRow} id="financas">
       <div className={s.featureCopy}><p className={s.eyebrow}>FINANÇAS COM MAIS CLAREZA</p><h2>Entenda seu dinheiro.<br />Planeje o que vem.</h2><p>Registre receitas e despesas por mensagem e acompanhe contas, cartões e movimentações recebidas das suas conexões bancárias. Seu financeiro fica acessível no painel e na conversa.</p><ul>{["Saldos, movimentações e categorias", "Cartões, faturas e parcelas previstas", "Investimentos, empréstimos e financiamentos recebidos", "Filtros por período, conta e espaço"].map(item => <li key={item}>{item}</li>)}</ul></div>
-      <div className={s.featureVisual} aria-label="Exemplo ilustrativo do painel financeiro"><div className={s.visualLayer} aria-hidden="true"><StoryVisual scene={2} /></div></div>
+      <div className={s.featureVisual} role="img" aria-label="Exemplo ilustrativo do painel financeiro"><div className={s.visualLayer} aria-hidden="true"><StoryVisual scene={2} /></div></div>
     </div>
     <div className={s.featureRow} id="agenda">
       <div className={s.featureCopy}><p className={s.eyebrow}>AGENDA, TAREFAS E LEMBRETES</p><h2>Seu próximo compromisso<br />já tem lugar.</h2><p>Peça para organizar um compromisso, criar o link de uma reunião ou lembrar de uma tarefa. Conecte o Google Agenda no espaço pessoal ou na empresa escolhida.</p><ul>{["Integração com Google Agenda", "Criação de links do Google Meet", "Tarefas com prazo e prioridade", "Lembretes pontuais e recorrentes"].map(item => <li key={item}>{item}</li>)}</ul></div>
-      <div className={s.featureVisual} aria-label="Exemplo ilustrativo de compromisso com lembrete"><div className={s.visualLayer} aria-hidden="true"><StoryVisual scene={4} /></div></div>
+      <div className={s.featureVisual} role="img" aria-label="Exemplo ilustrativo de compromisso com lembrete"><div className={s.visualLayer} aria-hidden="true"><StoryVisual scene={4} /></div></div>
     </div>
     <div className={s.moduleHeader}><h3>Os detalhes também ficam em ordem.</h3><p>Pelo WhatsApp e no seu painel.</p></div>
     <div className={s.moduleGrid}>{MODULES.map(item => <article key={item.title} id={item.icon === "folder" ? "drive" : item.icon === "document" ? "fatura" : undefined} className={s.module}><UiIcon name={item.icon} /><h3>{item.title}</h3><p>{item.description}</p></article>)}</div>
@@ -73,8 +73,8 @@ function Plans() {
     <div className={s.planGrid}>{PLANS.map(plan => <article key={plan.id} className={`${s.plan} ${plan.id === "semiannual" ? s.planPopular : ""}`}>
       {plan.badge && <span className={s.planBadge}>{plan.badge}</span>}<h3>{plan.name}</h3>
       <div className={s.price}>{plan.prefix && <span>{plan.prefix}</span>}<small>R$</small><strong>{plan.price}</strong><span>{plan.cents}{plan.suffix}</span></div><p className={s.planTotal}>{plan.total}</p>
-      <ul>{["Zelo no WhatsApp e painel web", "Uso pessoal e empresarial", "Finanças, agenda, tarefas e documentos", "Gestão compartilhada", "Suporte prioritário"].map(item => <li key={item}>{item}</li>)}</ul>
-      <a href={BRAZIL_CHECKOUT.checkoutUrls[plan.id]} onClick={event => { event.currentTarget.href = checkoutUrlWithLandingParams(BRAZIL_CHECKOUT.checkoutUrls[plan.id], window.location.search); }} data-meta-plan={plan.id} data-meta-value={plan.value} className={s.primaryButton} aria-label={`Comprar plano ${plan.name} pela Hotmart`}>Escolher {plan.name.toLowerCase()} <UiIcon name="arrow" /></a>
+      <ul>{["Equipe virtual no WhatsApp e painel web", "Uso pessoal e empresarial", "Finanças, agenda, tarefas e documentos", "Gestão compartilhada", "Suporte prioritário"].map(item => <li key={item}>{item}</li>)}</ul>
+      <a href={BRAZIL_CHECKOUT.checkoutUrls[plan.id]} onClick={event => { event.currentTarget.href = checkoutUrlWithLandingParams(BRAZIL_CHECKOUT.checkoutUrls[plan.id], window.location.search); }} data-meta-plan={plan.id} data-meta-value={plan.value} className={s.primaryButton} aria-label={`Escolher ${plan.name.toLowerCase()} — comprar pela Hotmart`}>Escolher {plan.name.toLowerCase()} <UiIcon name="arrow" /></a>
     </article>)}</div><p className={s.planFine}>Confira as condições de pagamento e parcelamento no checkout. Recursos bancários dependem das instituições conectadas e dos dados disponibilizados. A emissão direta de NFS-e permanece em preparação.</p>
   </div></section>;
 }

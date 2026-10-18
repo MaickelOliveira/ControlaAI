@@ -1,27 +1,25 @@
-# Página de vendas Zelo com apresentação por rolagem
+# Apresentação Zelo com equipe virtual e rolagem reversível
 
-Proposta de seis cenas aprovada pelo titular em 18/10/2026. Backup anterior verificado em `../backups/zelo-pagina-2026-10-18-9367ec2/`: 1.063 arquivos, revisão 9367ec2, HTML público e manifesto de hashes.
+O titular autorizou refazer a página e pediu backup antes de qualquer alteração. Backup verificado em `../backups/zelo-pagina-2026-10-18-9367ec2/`: 1.063 arquivos da revisão 9367ec2, HTML público e manifesto de hashes. Depois de avaliar a primeira versão, pediu uma direção visual mais forte, 3D real e retratos individuais sem repetição, usando os nomes e funções já existentes na plataforma.
 
-## Objetivo e direção
+## Contrato visual e de produto
 
-Apresentar o produto brasileiro em seis cenas reversíveis: conversa, registro, finanças conectadas, espaços separados, rotina e visão completa. Preto/grafite, dourado e telas de produto claras; fontes e marca locais existentes. Ação principal: ver os planos e comprar no checkout brasileiro existente.
+Superfície: página brasileira `/`. Público: pessoas que querem organizar a vida e o negócio pelo WhatsApp. Ação principal: conhecer a equipe, ver planos e comprar nas ofertas brasileiras existentes da Hotmart. Hierarquia: promessa e núcleo orbital 3D; apresentação individual dos agentes; recursos e demonstrações; espaços; planos; perguntas e compra.
 
-## Critérios
+Direção: editorial tecnológica, preto profundo e dourado, retratos fotográficos fictícios com figurino e objetos por especialidade. Detalhe próprio: um núcleo orbital WebGL conectado a uma constelação de personagens reais do produto, seguido por cenas individuais. Referências locais: marca Zelo, `src/lib/virtual-team.ts`, funções implementadas e preços de `checkout-markets.ts`. Alvos visuais: 390x844 e 1440x900; verificar também 320px e paisagem.
 
-- Posição de rolagem determina integralmente o estado, inclusive ao subir, recarregar no meio, usar teclado ou redimensionar. Sem timers, reprodução automática ou bloqueio de wheel/touch.
-- Seis cenas em um palco fixado temporariamente, seguido de conteúdo normal, recursos, planos e FAQ. Navegação direta por cenas e acesso aos planos.
-- 390x844 e 1440x900 como alvos. Conteúdo sem overflow em 320px e paisagem. Redução de movimento usa apresentação estática legível; sem JavaScript, conteúdo e compra seguem acessíveis.
-- Demonstrações fictícias e identificadas. Sem acesso a dados privados, chamadas a APIs ou mensagens reais. Recursos financeiros dependem dos dados disponibilizados pelas instituições; emissão NFS-e continua em preparação.
-- Conteúdo inclui finanças/bancos/cartões/faturas/parcelas/recorrências; modos e empresas; clientes/equipe/contatos; Google Agenda/Meet; tarefas/lembretes/metas; Drive/documentos; supermercado e veículos; preparação fiscal.
-- Preservar preços, ofertas Hotmart, UTMs/fbclid e atributos de conversão. Escopo: somente página brasileira `/`; traduções e aplicativo autenticado não mudam.
+## Critérios de aceitação
 
-## Implementação e verificação
+- 14 cenas: abertura, os 12 agentes canônicos e conjunto final. Nenhum nome ou função é inventado: Zoe, Rita, Lucas, Theo, Bia, Nina, Dora, Lia, Caio, Clara, Hugo e Otto.
+- 12 imagens geradas em solicitações individuais, com rostos, cabelos, roupas e objetos diferentes. Cada arquivo deve ter hash diferente; revisão visual do conjunto também é necessária. Prompts em `tasks/zelo-team-images.json`.
+- A posição da rolagem determina cena, transformação e núcleo 3D; ao subir, tudo volta ao mesmo estado. Sem reprodução automática nem interceptação de wheel/touch. Navegação direta por nomes e link para sair da apresentação.
+- Desktop com composição editorial e retrato amplo. Celular com retrato acima da explicação, controles acessíveis sem esconder o conteúdo. Sem overflow horizontal da página.
+- Redução de movimento e telas baixas apresentam todas as cenas estaticamente. Falha de WebGL usa núcleo CSS. Conteúdo e compra disponíveis antes da hidratação. Cenas inativas ficam ocultas e inertes.
+- Os personagens são identificados como virtuais. Exemplos fictícios de conversa; nenhuma consulta a dados privados nem chamada real aos agentes. Emissão direta e PDF de NFS-e aguardam homologação. Agenda não implica gravação automática de reuniões.
+- Preservar preços, ofertas, UTMs, fbclid e atributos de conversão. Não alterar aplicativo autenticado, traduções, banco, CI ou conexões dos usuários.
 
-1. Testar modelo puro de progresso e reversibilidade (Vitest), implementar e verificar.
-2. Construir palco e demonstrações em componentes próprios, com CSS Module.
-3. Substituir página brasileira e atualizar catálogo/FAQ; reutilizar ícones, marca e helper de checkout.
-4. Verificar tipos, lint, testes, build e segredos; inspecionar computador/celular, movimento reduzido, teclado, anchors e compra sem concluir pagamento. Revisar diff antes de enviar PR.
+## Estados e verificação
 
-Comandos: `npm test`, `npx tsc --noEmit`, `npx eslint .`, `npm run security:secrets`, `npm run build`, `npm run dev -- --hostname 127.0.0.1 --port 3090`.
+Carga do 3D: núcleo CSS estável até o canvas ficar pronto. Erro/perda de contexto: mesmo núcleo de reserva, navegação continua. Sucesso: objeto real com materiais metálicos e rotação determinada pelo scroll. Redução de movimento: cenas estáticas com fotos. Estados vazio/parcial/permissão remotos não se aplicam: conteúdo estático, sem APIs privadas.
 
-Arquivos: `src/app/page.tsx`; `src/components/landing/`; `src/lib/landing-story.ts` e teste vizinho. Sem dependência nova, mudança de banco, autenticação ou CI. Estados de dados remotos (carga, vazio, erro, parcial, permissão) não se aplicam à demonstração local; sucesso é visual e fictício. O estado estático cobre JS desativado e movimento reduzido.
+Testes de comportamento para os 14 destinos, reversão, geometria e identidade dos agentes; hashes únicos das imagens. Verificar tipos, lint, testes, build de produção, segredos e dependências. Inspecionar computador, celular, teclado, links e movimento reduzido. Evidências renderizadas devem ser salvas antes de entregar. A página pública original fica preservada; entregar revisão na PR existente #200 e prévia local para avaliação.
