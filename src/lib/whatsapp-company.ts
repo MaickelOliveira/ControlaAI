@@ -7,9 +7,25 @@ import { addMessage, getAiPaused, phoneVariants } from "./conversations";
 import { clearPendingAction, getPendingAction, setPendingAction } from "./pending-actions";
 import { checkRateLimit } from "./rate-limit";
 import { sendText } from "./whatsapp";
+import { looksLikeNewCommand } from "./slot-filling";
 import type { IncomingMessage } from "./message-handler";
 
 const normalize = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+function asksForBusinessWorkspace(text: string): boolean {
+  const value = normalize(text);
+  return /\b(?:empresa|empresarial|negocio|pj|funcionarios?|colaboradores?|clientes?|fornecedores?|nota(?:s)? fiscal(?:is)?|folha de pagamento|pro labore)\b/.test(value);
+}
+function isModeSwitchToPersonal(text: string): boolean {
+  return /^(?:muda|mude|mudar|troca|troque|trocar|passa|passe|passar|ir|usar|usa|quero|voltar|cambia|cambie|cambiar|pasa|pase|pasar|quiero|volver)\s+(?:(?:para|pro|ao|a|el|o|no|en)\s+)?(?:(?:modo|espaco|area|conta)\s+)?(?:pessoal|personal)$/.test(normalize(text).replace(/[.!?]+$/, ""));
+}
+function isGeneralConversation(text: string): boolean {
+  const value = normalize(text);
+  return /^(?:oi|ola|bom dia|boa tarde|boa noite|buenos dias|buenas tardes|buenas noches)(?:\s+(?:zelo|tudo bem))?[.!? ]*$/.test(value)
+    || /^(?:obrigad[oa]|gracias|valeu|ajuda|ayuda|help|menu|comandos|o que voce faz)[.!? ]*$/.test(value);
+}
+function startsNewRequest(text: string): boolean {
+  return looksLikeNewCommand(text) || /^(?:crie|cadastre|registre|lance|adicione|inclua|edite|altere|atualize|apague|exclua|remova|mostre|liste|consulte|resuma|fa[cç]a|quiero|registr[eé]|agregue|edite|borre|elimine|muestre|liste|consulte|resuma)\b/.test(normalize(text));
+}
 export function companyChoice(text: string, companies: Pick<Company, "id" | "name">[]): Company["id"] | undefined {
   const normalized = normalize(text);
   if (/^\d+$/.test(normalized)) return companies[Number(normalized) - 1]?.id;
@@ -67,7 +83,7 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
         ...(resume ? { resume: { text: resume.text, channel:resume.channel,providerMessageId:resume.providerMessageId,receivedAt:resume.receivedAt,isFileMessage: resume.isFileMessage, fileMimeType: resume.fileMimeType,
           fileName: resume.fileName, contactName: resume.contactName, fileBase64: resume.fileBuffer?.toString("base64") } } : {}) });
       await addMessage(msg.from, { role: "user", content: msg.text || "[Arquivo]", ts:msg.receivedAt??Date.now(),channel:msg.channel });
-      await sendText(msg.from, `${es ? "¿Qué empresa quieres usar?" : "Qual empresa você quer usar?"}\n\n${companies.map((company, index) => `${index + 1}. ${company.name}`).join("\n")}\n\n${es ? "Responde con el nombre o número." : "Responda com o nome ou número."}`);
+      await sendText(msg.from, `${es ? "¿En qué empresa quieres hacer este pedido?" : "Em qual empresa você quer fazer este pedido?"}\n\n${companies.map((company, index) => `${index + 1}. ${company.name}`).join("\n")}\n\n${es ? "Responde con el nombre o número. Para desistir, escribe cancelar." : "Responda com o nome ou número. Para desistir, escreva cancelar."}`);
     }
     if (createCommand) {
       if (!await checkRateLimit(`company-create:${user.id}`, 10, 60_000)) { await sendText(msg.from, "Aguarde um pouco antes de cadastrar outra empresa."); return; }
@@ -99,6 +115,15 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
         await next({ from: msg.from, ...pending.resume, fileBuffer: pending.resume.fileBase64 ? Buffer.from(pending.resume.fileBase64, "base64") : undefined });
       } else await sendText(msg.from, es ? `Ahora estás en *${selected.name}*.` : `Agora você está em *${selected.name}*.`);
       return;
+    }
+    // A escolha guardada no telefone serve para continuar uma conversa, mas
+    // não autoriza um novo pedido em uma das várias empresas do titular.
+    // Perguntamos antes de chamar qualquer ação/consulta do agente.
+    const newRequest = !pending || startsNewRequest(text);
+    if (companies.length > 1 && link.access !== "personal" && newRequest
+      && !isModeSwitchToPersonal(text) && !isGeneralConversation(text)
+      && (mode === "business" || asksForBusinessWorkspace(text))) {
+      await ask(msg); return;
     }
     if (!selected && mode === "business" && companies.length > 0) { await ask(msg); return; }
     selected ??= companies.find(company => company.isDefault)??companies[0];
