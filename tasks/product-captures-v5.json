@@ -1,0 +1,27 @@
+{
+  "captured_from": "Interface real da Zelo em Chrome; dashboard, contas, agenda e versão responsiva.",
+  "processing": "Ferramenta image_gen integrada: substituição de nomes e números por dados fictícios, seis eventos adicionados apenas à imagem da agenda. Conversão WebP sem perdas.",
+  "privacy": "Somente imagens de demonstração; nenhuma credencial, identificador bancário ou registro privado incluído nos ativos públicos. Não houve alteração de dados na plataforma.",
+  "assets": [
+    {
+      "path": "/brand/product/dashboard-demo.webp",
+      "sha256": "577501fdb93a4fb474c401d0e9ed81a89ce2c5623dd7c2123c86c874fbf2c54a",
+      "bytes": 941520
+    },
+    {
+      "path": "/brand/product/agenda-demo.webp",
+      "sha256": "8d975c06c1cf6d7e3c161e79489c1acefbe3755ff199d809ca187ae872ce9c75",
+      "bytes": 884258
+    },
+    {
+      "path": "/brand/product/open-finance-demo.webp",
+      "sha256": "079aa0cc4da5f1a2f4060bcfb27c99a20447abc0c69a8cad29097f6bc8633872",
+      "bytes": 816780
+    },
+    {
+      "path": "/brand/product/mobile-demo.webp",
+      "sha256": "93732d3d38cca5df1e81e42ff85c6a910f86b387e1ec2c24773a697346dce866",
+      "bytes": 897968
+    }
+  ]
+}

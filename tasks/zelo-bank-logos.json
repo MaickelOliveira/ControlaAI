@@ -1,0 +1,48 @@
+[
+  {
+    "name": "Banco Santander Pessoa Física",
+    "path": "/brand/banks/santander.svg",
+    "source": "https://cms.santander.com.br/sites/WPS/imagem/santander_chama/23-10-31_194829_P_santander_chama.svg",
+    "bytes": 1652
+  },
+  {
+    "name": "Banco do Brasil",
+    "path": "/brand/banks/banco-do-brasil.svg",
+    "source": "https://www.bb.com.br/docs/pub/inst/img/LogoBB.svg",
+    "bytes": 695
+  },
+  {
+    "name": "Bradesco Pessoa Física",
+    "path": "/brand/banks/bradesco.svg",
+    "source": "https://banco.bradesco/open-finance/logo/icones_vetorial-pf.svg",
+    "bytes": 1632
+  },
+  {
+    "name": "CAIXA",
+    "path": "/brand/banks/caixa.svg",
+    "source": "https://consentimento.openbanking.caixa.gov.br/assets/images/logomarca_caixa.svg",
+    "bytes": 5020
+  },
+  {
+    "name": "Itaú",
+    "error": "HTTP Error 403: Forbidden"
+  },
+  {
+    "name": "Nubank",
+    "path": "/brand/banks/nubank.svg",
+    "source": "https://nuapp.nubank.com.br/open-banking/logo.svg",
+    "bytes": 1541
+  },
+  {
+    "name": "Sicredi",
+    "path": "/brand/banks/sicredi.svg",
+    "source": "https://www.sicredi.com.br/openbanking/app/assets/images/shared/logo/logo_sicredi_512.svg",
+    "bytes": 7873
+  },
+  {
+    "name": "Banco Inter PF",
+    "path": "/brand/banks/inter.svg",
+    "source": "https://marketing.bancointer.com.br/arquivos/images/app-icon.svg",
+    "bytes": 1620
+  }
+]

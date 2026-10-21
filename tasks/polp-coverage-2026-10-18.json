@@ -1,0 +1,1280 @@
+{
+  "source": "https://api.polp.com.br/api/v2/institutions",
+  "documentation": "https://polp.com.br/docs/celcoin/institutions",
+  "checked_at": "2026-10-18T21:26:03.269569+00:00",
+  "catalogue_entries": 210,
+  "unique_ids": 210,
+  "status": {
+    "OPERATIONAL": 193,
+    "MAJOR_OUTAGE": 16,
+    "DEGRADED_PERFORMANCE": 1
+  },
+  "customer_types": {
+    "PERSONAL": 110,
+    "BOTH": 78,
+    "BUSINESS": 22
+  },
+  "counting_note": "Entradas do catálogo, incluindo acessos PF/PJ distintos. Não representa 210 bancos ou grupos financeiros distintos. Não garante disponibilidade por conta, plano ou instituição.",
+  "institutions": [
+    {
+      "id": "b397dd9c-62b2-4632-bce7-85f56666c083",
+      "name": "BTG Banking",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8dd11bd5-165e-4662-9eaa-112ef0d499c0",
+      "name": "Banco XP S.A.",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "bfd95599-61c0-45ca-90cb-5d6e71d4cf9a",
+      "name": "Banco Safra",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "2caec6e4-9ee2-402d-ad73-465198bd9250",
+      "name": "BTG Investimentos",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "612da9a3-ee82-4f9e-9919-fa8ba88800f9",
+      "name": "Banco PAN",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "a0fe7f9c-91b4-4eab-a0fe-77eb55037d33",
+      "name": "Banco RCI - Brasil",
+      "type": "PERSONAL",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "aaacb9cf-e8c3-402b-93b8-cf4d3e2ec497",
+      "name": "Banco Santander Pessoa Física",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "d0056aca-6180-4ae4-95fa-2e30a08b4a9a",
+      "name": "Banco XP S.A. (XP Empresas)",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8d92e794-7e32-43d2-a80e-8e19c3931bf4",
+      "name": "Banco XP S.A. (Rico)",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "cc26199f-4949-4efd-9e1e-f21a34fd0239",
+      "name": "Banco Bmg S.A",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "401eed26-3e2c-49c4-b5a7-7cbb5d6bfc38",
+      "name": "BNDES",
+      "type": "BOTH",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "702595cb-d881-40b7-8ba7-17db7843f499",
+      "name": "BOCOM BBM",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "2cac58c2-f9e5-48a3-b981-7263a0641645",
+      "name": "Banco Sofisa S.A.",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "75db457a-612d-4d62-b557-ba9d32b05216",
+      "name": "Banco do Brasil",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6370a748-6bda-4a37-9e88-5e68cc4cf100",
+      "name": "Banco do Nordeste do Brasil S.A.",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "2d641a88-4441-44d9-b39a-a864d1ce8890",
+      "name": "BTG Empresas",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "770f6211-dbd4-4c84-b6b1-9104b4a99359",
+      "name": "Banco Santander Pessoa Jurídica",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "95793a20-8c97-4ee3-8685-a62b175bf4e9",
+      "name": "Bradescard",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "439a9b5c-2cfb-4e57-b60b-20eea83899ca",
+      "name": "Bradesco Pessoa Física",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "87f64a5a-474c-4189-80a0-d3cd55718223",
+      "name": "Clear Corretora - Nativo",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "165dda80-d894-4a0a-82c6-1b06d7485bf5",
+      "name": "Credicard",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "88dc57a4-1dab-4493-8b02-b8f0c15a2d89",
+      "name": "Banrisul",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "4461caea-0ec0-4f90-a3f6-016d17b62f55",
+      "name": "CIELO",
+      "type": "BUSINESS",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "66d1ea35-f2eb-4e76-a6b3-477369064045",
+      "name": "Credi Nissan",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "a23ae936-13c2-4220-b20b-bcd8753b2619",
+      "name": "CITI",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "0e3b4087-7b5e-4d27-ad8f-06acab7b0b73",
+      "name": "Empréstimo Sim",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "1085e482-4aad-4761-9515-35f364f8f5f3",
+      "name": "Bradesco Financiamentos",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "221601a9-6e70-4698-9ea3-1bb28ceb4269",
+      "name": "CAIXA",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "f569b097-e5a5-4996-b20d-7ff524287da2",
+      "name": "GERU SCD",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "242885d5-30a1-4e0c-aac4-627d4a1af77b",
+      "name": "Bradesco Cartões PJ",
+      "type": "BUSINESS",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "c6b15844-e748-4408-abb6-e71fd59d71c5",
+      "name": "Bradesco Pessoa Jurídica",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "1daa59f5-920c-4a51-a6ec-3dffdc9682a9",
+      "name": "Citibank Distribuidora De TVM",
+      "type": "BUSINESS",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "f78a4da9-7060-43da-a774-9613103415f7",
+      "name": "Citibank N.A.",
+      "type": "BUSINESS",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "d3d5e2a1-5448-4d04-ad40-a63003f07e62",
+      "name": "Citigroup Global Markets Brasil CCTVM",
+      "type": "BUSINESS",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "d2194006-7f15-4356-a689-9b66009fee1a",
+      "name": "Investimentos BB",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "68308291-ec0d-4398-83ce-68b6b1087e49",
+      "name": "Itaú",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6b3e8b90-8c15-49d4-90c4-bb3e87de2f90",
+      "name": "Losango",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "d28dfafa-41d6-426d-a8d7-5df28db17139",
+      "name": "Ourocard",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "756b9782-d9d4-4f9b-9756-997eba0e2cbd",
+      "name": "PicPay",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "4095c8fe-55d9-4596-a62a-c3bcc04a85db",
+      "name": "Méliuz",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "06c19499-3412-4125-84b7-d0fbc98b5019",
+      "name": "Nubank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "7c85a529-958f-4065-bf0d-edf00800b675",
+      "name": "Olé Consignado",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "be927760-d679-4c60-b5af-de2db2fa7bd6",
+      "name": "PicPay Negócios",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "ba49bb87-33cb-4f97-b819-b7b8fac06166",
+      "name": "Getnet",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "cd82fa8e-a62c-4873-abb1-a6b3be9bae26",
+      "name": "Hipercard",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8cdad2fd-c8d5-42c0-9a00-f0f6826470d2",
+      "name": "InfinitePay",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "a9a63c7c-8a64-41f6-b419-0cfe3579343b",
+      "name": "Iniciador",
+      "type": "BOTH",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "8197a3c9-11ad-4cfd-9bbf-4d6ad5d51f83",
+      "name": "Iti",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8b11c686-57bf-4000-94c8-e950ae4d7410",
+      "name": "Klavi",
+      "type": "BOTH",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "9326f9b2-ae57-42c4-a0d9-acc4ba434696",
+      "name": "Mercado Pago",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "f90732bc-7eb7-4d8f-8e4e-913583d95b6c",
+      "name": "Mobilize Financial Services",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "e4b221b8-f418-480f-9f07-538b2793b612",
+      "name": "Player’s Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "7c6748a1-2be0-4593-a769-77feb406b3a0",
+      "name": "Itaú Empresas",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "53870d50-ca83-406b-bf09-bf16d75bf632",
+      "name": "Santander Financiamentos",
+      "type": "BOTH",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "319b8d3c-ab1d-4c6a-bd6f-4b94faf4beed",
+      "name": "Uber Conta by Digio",
+      "type": "PERSONAL",
+      "status": "DEGRADED_PERFORMANCE"
+    },
+    {
+      "id": "8eac3daa-0648-45bd-9147-955aa31e8aa8",
+      "name": "BBC Digital",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "19c5b000-f36d-4dee-ab65-6de9527fbf3b",
+      "name": "Santander Corretora Institucional",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "f8338227-7036-41b6-a2ef-3dcacdda609a",
+      "name": "Santander Corretora PessoaFísica(Legado)",
+      "type": "PERSONAL",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "b124508c-8b6f-4b4e-a10e-42920ae18a05",
+      "name": "Santander Crédito Imobiliário Pessoas",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "d0a262b8-e097-4e53-b5c1-7c26d064afbd",
+      "name": "Crefisa",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "158dfa02-fa59-4177-9bfb-b614220dd721",
+      "name": "RecargaPay",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "168b09d3-54b2-440e-aae0-5548279ee516",
+      "name": "Rede",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fde63db6-f775-44d3-ad88-406a1fb0a48d",
+      "name": "Safra Empresas",
+      "type": "BOTH",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "98a03835-414b-45fb-af81-ca27f080ee62",
+      "name": "Safra Financeira Veículos",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "75d4f12d-56ff-4059-9608-b403bc0ccd4b",
+      "name": "Santander Corretora",
+      "type": "BOTH",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "c2d48e71-07af-4442-8c7d-c82d0eb45e5f",
+      "name": "Sicoob",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6c8b9aed-8e24-4ad6-985f-213623a23be3",
+      "name": "Sicredi",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "646b2dc7-3a9e-4d2e-9ded-665e7150d529",
+      "name": "Unicred",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "95b355de-fd37-4004-b726-0624ea736056",
+      "name": "Volvo Car Financial Services",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "49179827-aab5-42db-9ecb-9991faa32595",
+      "name": "Santander Cartões Pessoa Jurídica",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "c0523b75-d0f2-4811-a0e9-5d89ef80beba",
+      "name": "Santander Crédito Imobiliário Empresas",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "10987c3d-7f6a-4a54-a25d-9eb3e2ab30bf",
+      "name": "modalmais Trader",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "965a0520-a103-495b-86c1-7e6b4cc4e1f2",
+      "name": "banco BV",
+      "type": "PERSONAL",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "ba185564-2e26-420e-b6bb-af5bc7102480",
+      "name": "next",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "f9cabb03-876d-4eea-974c-0d8ce4bd4860",
+      "name": "banco Digio",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "22edf759-2e70-4ed3-a720-6baf7e5dafd4",
+      "name": "99Pay",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "9f4d9ea6-5e08-4bc8-9544-421b6f04e441",
+      "name": "Atlanta",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "acc11cea-cd64-47e8-9af0-f9d40368cf2a",
+      "name": "Azimut Brasil",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "74f9cbfb-1016-4558-a78c-5a55814ce52a",
+      "name": "Woop",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "0334b3ad-d466-4a5d-bb88-fa12caff07bb",
+      "name": "Clear Corretora",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "80a8f94c-6c7b-4731-9611-952f3bdfd00c",
+      "name": "Íon",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "73d83598-24e2-47f2-98c6-ab17ef051eb0",
+      "name": "6P Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "54ced90c-2b25-4364-8cf3-28f286559235",
+      "name": "ASA Sociedade Credito Fina Invest. S.A.",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "a970eb6c-ad58-4ca8-b0aa-2dc5fc7f5a5d",
+      "name": "Apex",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "b7d12369-40cc-4aa1-af18-e963ca2f0585",
+      "name": "Axiis Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "2379d0f6-f238-4855-b914-a82265922691",
+      "name": "Itaú BBA",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "283ed41d-7844-4151-8036-1b5ce76eb6fc",
+      "name": "Ágora Investimentos",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "4831632d-07f1-472a-a402-ecc4f37b5727",
+      "name": "banco BV - Corporate",
+      "type": "BUSINESS",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "534cb72a-c838-4a05-ba1b-92b9d961f9a4",
+      "name": "Belvo",
+      "type": "PERSONAL",
+      "status": "MAJOR_OUTAGE"
+    },
+    {
+      "id": "e69c25b5-c63a-4c25-8564-81f57436481c",
+      "name": "CAIXA Tem",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "eff8c8e5-f8f2-43ab-8b15-2b1bcc517e5e",
+      "name": "CEAPE BANK",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "17a729fb-97f2-450f-90f6-b4d918e47e4a",
+      "name": "CRB Money",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "3eebd1f2-b00c-4824-b2c0-b84850c22861",
+      "name": "Cartão Atacadão",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "d1d16ab0-8353-4d9a-be25-d2d03412cd18",
+      "name": "Cartão Carrefour",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "5681c2ff-fcca-475e-a925-95d5cb4f16e0",
+      "name": "Cartão Luiza",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "9453be3f-6269-4639-9459-eee8583a6ac0",
+      "name": "Cartão Sam´s Club",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "11579ff9-89cd-4f71-ac13-2885c36b6977",
+      "name": "Concept",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "f2d8fb8a-9fa7-4810-8acb-f9e1cfe5319d",
+      "name": "Conta Universal",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8ae59467-fb86-4565-933b-47baf22c4b36",
+      "name": "Credicard",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6ec597a9-facd-4513-b168-7b8358314c06",
+      "name": "Banco BRB",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "10efab32-f7f1-41de-84b3-6c7607041474",
+      "name": "Banco Guanabara",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "d58911b5-9c4c-4570-ba32-d0bd0dbc2816",
+      "name": "Banco Mercantil",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6a0ec228-70b7-4292-9e64-8fa731b2a730",
+      "name": "C6 Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "a9395de2-1a63-46d8-b68e-90843cac23ae",
+      "name": "Casas Bahia Pay",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "15cacddd-d0f2-4f1e-8baf-85d20eb42b44",
+      "name": "Contabilizei",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fcef8e3a-1a48-4a43-9946-0737b029c0c5",
+      "name": "Banco Inter PF",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "efcd384a-81ed-4ac4-baab-e2236132ed59",
+      "name": "Banco Inter PJ",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "d04956a5-368a-4c23-bb5d-e7f0c3c8976d",
+      "name": "Conta Bemol",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "4fcc30cb-9c9f-4786-9be1-ae9dd7b32db0",
+      "name": "DMX",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "21233a1d-ba8a-4916-a519-05848ddb5f72",
+      "name": "Dezbrazil",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8dafea3a-1df0-4f26-b04d-1d63ba56d5e4",
+      "name": "ESBank",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "b2b5e5f0-c2c1-4dc8-a564-f80d33e824cb",
+      "name": "Ease Bankly",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fa0a5316-4ff5-40ca-87ad-3854edc47895",
+      "name": "Exclusive",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "e8a21bb7-fa64-496f-b4ad-1ecde2bc5d15",
+      "name": "Facio via Cumbuca",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "536b7629-4378-4dcb-a745-555b86000a72",
+      "name": "Genius",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "ae18b422-c1d1-4de9-be9a-88b1d9b1089a",
+      "name": "Get Conta by Getnet",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "002d6d88-6c13-48c5-9f70-3a936efd5ffe",
+      "name": "Giffty",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "415e92b1-28f2-4a2c-95bc-bcf98118e636",
+      "name": "Gift Premium",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "029eb00e-dc50-4aae-8fda-52a0ff598c71",
+      "name": "Glorya",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fccabf9f-2f96-4689-89f5-4bd26e8ee01d",
+      "name": "GoalBox",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "afdf21b0-924d-4a96-86b5-66c5eacaa621",
+      "name": "Gold Pass",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8fb01b71-262b-49e6-b608-6c7062e1f317",
+      "name": "H+ plus",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fa0e1a2f-d89d-4e68-ad96-570de59702a3",
+      "name": "HausBank",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "2239bcff-58db-4b43-a47d-0d91201bcf62",
+      "name": "Hipercard",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "b4ddedea-9fec-4b5a-9655-4f5326930327",
+      "name": "Hyak Bank",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "1371af86-f46a-4a28-a954-1ee7c8d6f965",
+      "name": "Hyperlocal",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "c77302e3-36f7-489c-ba6a-eaf88107fdea",
+      "name": "Ibanx",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "ba2b0ca3-d5c6-4c42-91a1-eb31f5fe01ac",
+      "name": "IlevaCard",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "c002faf0-e6ba-439a-8079-3299c0026e05",
+      "name": "EQI",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "895826af-c01b-4805-8a90-e0aea0f6f909",
+      "name": "Ella Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "0563afc4-967f-4ca1-bc03-8b541ea4ab6b",
+      "name": "GS3",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "9c6d71aa-1106-4e25-a2ac-9203898117b8",
+      "name": "Health Cash",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "bb544a2d-1bcc-4c51-8003-a9f99f7f81aa",
+      "name": "Hiperbanco",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "048d5f5c-21ac-4626-9ffc-758bc4b22614",
+      "name": "Shopee Vendedor",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "ca530b71-0e3c-41d0-ae45-7f8836a08a97",
+      "name": "Finnet",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "786ee549-f23a-4ac1-90da-1eecae2d873d",
+      "name": "Impact Bank",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "9f4b8b36-e7ab-49ae-81bc-091571c385be",
+      "name": "Incentivale",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "83e6c237-d043-4268-9f7f-3604ef37a9ca",
+      "name": "Inova",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "497accee-16a6-4daa-84a1-83eb8f46fed0",
+      "name": "Iti",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6a17fb3f-72de-4666-ace3-62ca5ad48276",
+      "name": "JoyCard",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "91690835-55cc-4f6a-8141-6c7cabd385cf",
+      "name": "KINVO",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "e2ab6f1b-68a5-465c-96b6-e5de924ff199",
+      "name": "Lemon",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "3633d3ba-449e-4682-ac61-33dec307f40f",
+      "name": "Lemon",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "82214028-091f-4016-9551-aba0c6fc2d23",
+      "name": "MOTTU",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "97c8e8f3-cd4b-4d8d-95a4-da25cfe36cb4",
+      "name": "Mark Up",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "62d9d43b-d323-45db-a6e6-7c19ad5265fd",
+      "name": "Meu Premio",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "de61a3b4-77fa-4ba3-b683-b93f969e7ba2",
+      "name": "Meu Premio 360",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "7a7a9a8d-f086-44b6-b81e-215d516c27c1",
+      "name": "Midway",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "778319f3-7593-45ec-a029-8eadbf8ceef7",
+      "name": "Monte Bravo",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8513070c-4575-4883-a929-243f08883a91",
+      "name": "Moovi",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "99103542-8524-4301-b52b-e2f91e513e32",
+      "name": "Multipremium",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6be5ae3a-d6fb-42a7-b2be-383e6a34c0b5",
+      "name": "Nação BRB FLA",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "6043c568-5ecb-4ee1-a01a-92ad3baf3d05",
+      "name": "Necton",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "3f15766b-4fc1-4d22-b6ee-5eb05d6cec8f",
+      "name": "Neon",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "b99e96e6-4092-42d0-babc-0a1da68b3668",
+      "name": "Infinia",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "969e8463-c8e5-4074-b467-0b7f1fbe6a28",
+      "name": "Itaucard",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "c2429506-312c-43ab-87b6-6d6e70dac915",
+      "name": "LINA Open X",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "1c3689a6-6a01-4cea-922f-e555b79dc5a9",
+      "name": "Lothus",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "d7d9ad8d-468c-48a6-ae89-ff7cdcb8a7d7",
+      "name": "Meirelles",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "be5d6358-cdbb-47c5-93ff-cb999d992a9a",
+      "name": "Itaú Emps",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "e988e664-e042-43dd-a9d4-3a109da46881",
+      "name": "MaisTODOS",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "3152143f-b681-4453-8d99-929de29e24c4",
+      "name": "Omnion",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "61d4f3a6-1c6a-4a9b-9928-712d645cabeb",
+      "name": "Onn Marketing",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "bf91adbc-18aa-4098-a0b7-a4141120d28c",
+      "name": "P2x",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "538b3860-b8fc-4ec2-97ad-c0c9f89208f5",
+      "name": "POWPAY",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "246a04bb-7c5d-494c-9386-116d1bdb2330",
+      "name": "PayCard",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "c7db52ec-88c7-4b75-9f6d-58f105ecd611",
+      "name": "Pocket",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "3e7b5a81-ecbd-444e-8495-50ea7b954e0e",
+      "name": "Porto Bank",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "5c18edb3-6b99-487a-a2fd-17b7c9d8d7a4",
+      "name": "Prix",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "1480e9bd-0273-4cfb-9504-4bc54f3eb602",
+      "name": "Pulse",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fa0b8ff7-f06a-43e8-bb62-5997772a6287",
+      "name": "Realize",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "34bbd098-abe2-48f0-aef4-d6e62dea186b",
+      "name": "RelacionaMais",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "3e3d765a-9ddc-48ba-96b4-120eca8bc047",
+      "name": "Santander Cartões Pessoa Física",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "b35f5047-eaae-47ee-9e66-4ceab834b2fe",
+      "name": "Shopee",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fde44b90-953c-458c-90b2-3230cd101a0e",
+      "name": "Ovni",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "649ffe9a-503d-4635-a0fd-41f4b5135b6c",
+      "name": "PagBank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "88d1cadd-caf0-4769-affe-b34e6abd8b7e",
+      "name": "PagueVeloz (Serasa)",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "10b4f3da-e04e-4904-9988-e93c8f141ab1",
+      "name": "QI SCD",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "cf9e5ee8-c035-4c88-b0d2-70ad026342d7",
+      "name": "QI SCD S.A.",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "22abeef9-e5a9-42c3-a9de-80bfa5727522",
+      "name": "Rede",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8c0a010e-91f9-449a-8d98-afe14ab8e388",
+      "name": "Resolve Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "bfa9bfae-6d24-4884-b6c2-44fc3455945d",
+      "name": "Rhiza Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "8715351a-6fa9-460f-89fe-1ab5e47c2397",
+      "name": "Pluggy",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fe293821-e59f-4136-a541-bafea1915612",
+      "name": "Porto Bank PJ",
+      "type": "BUSINESS",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "4ea37e4f-3dbf-4dba-b29d-280b52305e25",
+      "name": "Smart",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "3bf239d5-a15b-4db4-9e58-a8b01efa9173",
+      "name": "Spin",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "28a4be57-98da-45c5-9626-21f94a5db0ab",
+      "name": "Suppero",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "fd5d855f-f915-435e-8f9a-c9a8e0005ce7",
+      "name": "Tokpay",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "801f69dd-4410-4133-81a1-a7de3171eeb2",
+      "name": "Unique",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "45dc7a2e-a2f5-46d8-9eb4-6afac3c0d9c2",
+      "name": "WHG",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "5b7db62e-2206-4a9b-98b1-44939f4f742f",
+      "name": "iHold",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "95243f9f-cb24-4613-9cc1-d5b3f46e0647",
+      "name": "BANCO DE LA NACION ARGENTINA",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "95cb95df-b43b-4efa-b3ec-77ab3b92f683",
+      "name": "BPO Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "68a85005-2ffa-44ac-97df-3838b5545add",
+      "name": "CAIXA - clientes sem conta",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "ecc27af0-7bed-4172-9bce-6ccaa9016b95",
+      "name": "Cumbuca",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "77f28126-03fa-48fa-9ae6-0f3d2995b99c",
+      "name": "EMCASH",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "759feeba-2c5e-41b9-81dc-f68d65f69087",
+      "name": "Hyundai Financiamentos",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "70f015c6-3b82-4130-960b-2dd713c30978",
+      "name": "Imobi Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "37c33803-d50b-4308-a5d9-4abc540b9813",
+      "name": "Nitybank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "1ddc397d-26ef-4afe-b93a-f62502c3789f",
+      "name": "Rapidium Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "f3f557bd-6465-4c36-9acc-a27f721236d4",
+      "name": "Simpbank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "b909f992-301e-455d-a694-e4e806663350",
+      "name": "Snob Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "5fa770ea-0c96-4e25-b65c-67030e5d1ce5",
+      "name": "Uze",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "639427b7-dd89-48f2-ba8f-f41078c9f628",
+      "name": "Won Bank",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "0ff2d23d-792c-4398-a404-005313b556c1",
+      "name": "Agibank",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "def470e9-791a-4dfc-adfd-b4da58e01180",
+      "name": "Celcoin Baas",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "9e9b21d0-4ba4-4450-97c0-f68ed588a3a2",
+      "name": "B3 Instituição de Pagamento",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "39ee59cc-07fd-48d0-b795-e582895908c4",
+      "name": "Fixxbank",
+      "type": "PERSONAL",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "e1e1e985-1d74-42fb-8dc5-f4377f0f460e",
+      "name": "SEMEC BANK",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": "a56e9c89-012a-4197-b0e3-ff37a1b07031",
+      "name": "Stone e Ton",
+      "type": "BOTH",
+      "status": "OPERATIONAL"
+    }
+  ]
+}
