@@ -24,7 +24,7 @@ function isGeneralConversation(text: string): boolean {
     || /^(?:obrigad[oa]|gracias|valeu|ajuda|ayuda|help|menu|comandos|o que voce faz)[.!? ]*$/.test(value);
 }
 function startsNewRequest(text: string): boolean {
-  return looksLikeNewCommand(text) || /^(?:crie|cadastre|registre|lance|adicione|inclua|edite|altere|atualize|apague|exclua|remova|mostre|liste|consulte|resuma|fa[cç]a|quiero|registr[eé]|agregue|edite|borre|elimine|muestre|liste|consulte|resuma)\b/.test(normalize(text));
+  return looksLikeNewCommand(text) || /^(?:crie|cadastre|registre|lance|adicione|inclua|edite|altere|atualize|apague|exclua|remova|mostre|liste|consulte|resuma|faca|pode|poderia|quero|preciso|gostaria|me ajude|me diga|me mostre|quiero|necesito|podrias|puedes|registre|agregue|borre|elimine|muestre)\b/.test(normalize(text));
 }
 export function companyChoice(text: string, companies: Pick<Company, "id" | "name">[]): Company["id"] | undefined {
   const normalized = normalize(text);
@@ -111,7 +111,7 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
       selected = await requireCompany(user.id, choice);
       await setPhoneWorkspace(user.id, link.phone, selected.id, "business"); await clearPendingAction(msg.from);
       activate(user.id, selected, "business", link.access,archivedCompanyIds);
-      if (pending?.type === "company_selection" && pending.resume && !switchCommand) {
+      if (pending?.type === "company_selection" && pending.resume) {
         await next({ from: msg.from, ...pending.resume, fileBuffer: pending.resume.fileBase64 ? Buffer.from(pending.resume.fileBase64, "base64") : undefined });
       } else await sendText(msg.from, es ? `Ahora estás en *${selected.name}*.` : `Agora você está em *${selected.name}*.`);
       return;

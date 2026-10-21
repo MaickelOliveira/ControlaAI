@@ -41,6 +41,16 @@ it("asks again for each new business request even when the phone remembers anoth
   expect(next).toHaveBeenCalledTimes(1);
   expect(m.savePending).toHaveBeenCalledTimes(2);
 });
+it("resumes the held request when the company answer uses the switch-command wording", async () => {
+  m.links.mockResolvedValue([{ phone: "5511", access: "both", activeCompanyId: "a", activeWorkspaceMode: "business" }]);
+  const next = vi.fn();
+  await withWhatsAppCompany({ from: "5511", text: "registre uma despesa de 50", providerMessageId: "original" }, next);
+  const held = m.savePending.mock.calls.at(-1)![1];
+  m.pending.mockResolvedValue({ ...held, userId: "owner" });
+  await withWhatsAppCompany({ from: "5511", text: "usar empresa Empresa B" }, next);
+  expect(next).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "registre uma despesa de 50", providerMessageId: "original" }));
+  expect(m.workspace).toHaveBeenCalledWith("owner", "5511", "b", "business");
+});
 it("asks for a company when a personal conversation requests a business action, but leaves personal requests alone", async () => {
   m.links.mockResolvedValue([{ phone: "5511", access: "both", activeCompanyId: "a", activeWorkspaceMode: "personal" }]);
   const next = vi.fn();
@@ -69,6 +79,9 @@ it("asks again when a new business command replaces an unfinished action", async
   await withWhatsAppCompany({ from: "5511", text: "crie uma nova tarefa para amanhã" }, next);
   expect(next).not.toHaveBeenCalled();
   expect(m.savePending).toHaveBeenCalledWith("5511", expect.objectContaining({ type: "company_selection", resume: expect.objectContaining({ text: "crie uma nova tarefa para amanhã" }) }));
+  await withWhatsAppCompany({ from: "5511", text: "pode criar uma nova tarefa?" }, next);
+  expect(next).not.toHaveBeenCalled();
+  expect(m.savePending).toHaveBeenCalledWith("5511", expect.objectContaining({ type: "company_selection", resume: expect.objectContaining({ text: "pode criar uma nova tarefa?" }) }));
 });
 it("preserves original authenticated provider identity through company questions rather than adopting reply/model metadata",async()=>{
  const next=vi.fn(),original={from:"5511",text:"agende uma reunião",channel:"waba" as const,providerMessageId:"wamid.original",receivedAt:123456};
