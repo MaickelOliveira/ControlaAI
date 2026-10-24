@@ -57,6 +57,10 @@ const BENEFITS = [
     detail: "Peça por mensagem de texto ou áudio.",
   },
   {
+    title: "Open Finance na conversa",
+    detail: "Conexão bancária conforme acesso contratado.",
+  },
+  {
     title: "Finanças organizadas",
     detail: "Receitas, despesas, categorias e resumos.",
   },
