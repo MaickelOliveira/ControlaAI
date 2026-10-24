@@ -1,0 +1,344 @@
+.connection {
+  margin-top: 55px;
+}
+.network {
+  height: 510px;
+  max-width: 1040px;
+  margin: 0 auto;
+  position: relative;
+  isolation: isolate;
+  background: radial-gradient(ellipse at center, #76613225, transparent 61%);
+}
+.orbit,
+.orbitInner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 1px solid #d8c88c12;
+  width: 68%;
+  height: 65%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.orbitInner {
+  width: 43%;
+  height: 40%;
+  border-style: dashed;
+  border-color: #c2ccad16;
+}
+.lines {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: visible;
+}
+.lines path {
+  fill: none;
+  stroke: url(#zelo-flow-gold);
+  stroke-width: 1.3;
+  stroke-dasharray: 180;
+  stroke-dashoffset: 0;
+}
+.bank {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+.bank > div {
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #faf9f0, #dbddcf);
+  border: 6px solid #233020;
+  outline: 1px solid #a9b58337;
+  border-radius: 22px;
+  position: relative;
+  box-shadow: 0 18px 50px #0006;
+  transition:
+    transform 0.3s,
+    box-shadow 0.3s;
+}
+.bank:hover > div {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 55px #e2c47e15;
+}
+.bank img {
+  width: 39px;
+  height: 39px;
+  object-fit: contain;
+}
+.bank > div > span {
+  position: absolute;
+  bottom: -8px;
+  right: -7px;
+  color: #c3dfa9;
+  background: #29412a;
+  border: 3px solid #111c13;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  border-radius: 50%;
+}
+.bank > strong {
+  font-size: 11px;
+  font-weight: 400;
+  color: #b6bfa8;
+}
+.hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 218px;
+  height: 175px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  background: radial-gradient(ellipse at 50% 0%, #4a4222, #1a2418 75%);
+  border: 1px solid #d8bf7e60;
+  border-radius: 28px;
+  box-shadow:
+    0 0 70px #e5c67b15,
+    0 25px 60px #0007;
+}
+.hub img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  margin-bottom: 12px;
+}
+.hub strong {
+  color: #ecddb4;
+  font-size: 16px;
+  font-weight: 500;
+}
+.hub > span {
+  font-size: 6px;
+  letter-spacing: 1px;
+  color: #acb595;
+  margin-top: 9px;
+}
+.networkLabel {
+  position: absolute;
+  top: 45%;
+  right: 0;
+  max-width: 140px;
+  font-size: 7px;
+  letter-spacing: 1.4px;
+  color: #978c66;
+  line-height: 1.8;
+}
+.networkLabel > strong {
+  display: block;
+  margin-top: 7px;
+  color: #b7c1aa;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.ask {
+  border: 1px solid #e0d39c27;
+  border-radius: 8px;
+  margin-top: 28px;
+  overflow: hidden;
+  background: #10180f;
+}
+.questionButtons {
+  display: flex;
+  border-bottom: 1px solid #e0d39c20;
+}
+.questionButtons button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-height: 54px;
+  padding: 15px 23px;
+  border: 0;
+  border-right: 1px solid #e0d39c20;
+  background: transparent;
+  color: #a8b69a;
+  font-size: 12px;
+}
+.questionButtons button:last-child {
+  border-right: 0;
+}
+.questionButtons button[aria-pressed="true"] {
+  background: #d9c38a14;
+  color: #e7d4a0;
+}
+.questionButtons button > span {
+  color: #d7c18b;
+  font-size: 19px;
+}
+.answer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  padding: 28px 32px;
+  min-height: 132px;
+}
+.answer span {
+  display: block;
+  font-size: 7px;
+  letter-spacing: 1.2px;
+  color: #9aaa88;
+  margin-bottom: 12px;
+}
+.answer > div:first-child p {
+  font-size: 21px;
+  line-height: 1.6;
+  letter-spacing: -0.4px;
+  color: #ece4ce;
+}
+.answer > div:last-child p {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #b5c2a8;
+}
+.note {
+  text-align: center;
+  font-size: 10px;
+  color: #99a48c;
+  margin: 16px auto 0 !important;
+  max-width: 740px;
+  line-height: 1.8;
+}
+@supports (animation-timeline: view()) {
+  .lines path {
+    animation: connect linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 40%;
+  }
+}
+@keyframes connect {
+  from {
+    stroke-dashoffset: 180;
+    opacity: 0.1;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+@media (max-width: 900px) {
+  .networkLabel {
+    display: none;
+  }
+  .network {
+    height: 470px;
+  }
+  .answer {
+    gap: 35px;
+  }
+  .bank > div {
+    width: 74px;
+    height: 74px;
+  }
+  .hub {
+    width: 185px;
+    height: 155px;
+  }
+}
+@media (max-width: 650px) {
+  .connection {
+    margin-top: 35px;
+  }
+  .network {
+    height: 400px;
+    margin-inline: -8px;
+  }
+  .bank > div {
+    width: 57px;
+    height: 57px;
+    border-width: 4px;
+    border-radius: 17px;
+  }
+  .bank img {
+    width: 29px;
+    height: 29px;
+  }
+  .bank > strong {
+    font-size: 9px;
+    white-space: nowrap;
+  }
+  .bank {
+    gap: 10px;
+  }
+  .bank > div > span {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+    bottom: -6px;
+    font-size: 9px;
+  }
+  .hub {
+    width: 145px;
+    height: 133px;
+    border-radius: 22px;
+  }
+  .hub img {
+    width: 43px;
+    height: 43px;
+    margin-bottom: 10px;
+  }
+  .hub strong {
+    font-size: 12px;
+  }
+  .hub > span {
+    font-size: 5px;
+    letter-spacing: 0.5px;
+    margin-top: 6px;
+  }
+  .orbit {
+    width: 92%;
+    height: 69%;
+  }
+  .orbitInner {
+    width: 69%;
+    height: 41%;
+  }
+  .questionButtons button {
+    padding: 13px 11px;
+    font-size: 10px;
+    line-height: 1.5;
+    gap: 8px;
+  }
+  .questionButtons button > span {
+    font-size: 16px;
+  }
+  .answer {
+    grid-template-columns: 1fr;
+    gap: 22px;
+    padding: 24px;
+    min-height: 242px;
+  }
+  .answer > div:first-child p {
+    font-size: 20px;
+  }
+  .answer > div:last-child p {
+    font-size: 13px;
+  }
+  .answer span {
+    font-size: 7px;
+  }
+  .note {
+    font-size: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lines path {
+    animation: none;
+  }
+  .bank > div {
+    transition: none;
+  }
+}

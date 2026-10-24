@@ -1,0 +1,963 @@
+.story {
+  position: relative;
+  height: 310svh;
+  background: #080a0a;
+  color: #f6f5ee;
+}
+.sticky {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  min-height: 650px;
+  overflow: hidden;
+}
+.film,
+.shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.film img,
+.film video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.film video {
+  position: absolute;
+  inset: 0;
+}
+.film {
+  transition: opacity 0.7s;
+}
+.shade {
+  background:
+    linear-gradient(90deg, #060808e8 0%, #060808ad 33%, #06080816 66%),
+    linear-gradient(
+      0deg,
+      #080a0a 0%,
+      transparent 25%,
+      transparent 85%,
+      #080a0a80
+    );
+}
+.frame {
+  position: relative;
+  max-width: 1440px;
+  height: 100%;
+  margin: auto;
+  padding: 0 6.2%;
+}
+.intro {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-48%);
+  max-width: 750px;
+  transition:
+    opacity 0.6s,
+    transform 0.7s;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #c5b78d;
+  font-size: 10px;
+  letter-spacing: 2px;
+  font-weight: 500;
+}
+.eyebrow > span {
+  width: 6px;
+  height: 6px;
+  background: #e9c97a;
+  border-radius: 50%;
+  box-shadow: 0 0 16px #ffcb70;
+}
+.intro h1 {
+  font-size: clamp(64px, 7.4vw, 112px);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -6px;
+  margin: 28px 0 !important;
+}
+.intro h1 em,
+.chapterCopy h2 em {
+  font-style: normal;
+  color: #e7c574;
+  font-weight: 500;
+}
+.lead {
+  font-size: 17px;
+  line-height: 1.85;
+  color: #c2c7c3;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  margin-top: 30px;
+}
+.primary {
+  min-height: 52px;
+  padding: 15px 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 26px;
+  background: #eac778;
+  color: #14150f !important;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 0 35px #c9a44e10;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.primary:hover {
+  background: #f8dfa4;
+  transform: translateY(-2px);
+}
+.primary svg {
+  width: 17px !important;
+  height: 17px !important;
+}
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  font-size: 12px;
+  color: #e3e6dd;
+  gap: 16px;
+}
+.secondary:hover {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+.secondary > span {
+  font-size: 20px;
+  color: #e7c574;
+}
+.micro {
+  font-size: 10px;
+  margin-top: 24px !important;
+  color: #8b938b;
+}
+.floatingMessage {
+  position: absolute;
+  right: 6%;
+  bottom: 22%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  border: 1px solid #d1b97640;
+  background: #161c18d9;
+  backdrop-filter: blur(20px);
+  border-radius: 9px;
+  box-shadow: 0 15px 55px #0007;
+  transition:
+    opacity 0.6s,
+    transform 0.6s;
+}
+.waMark {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  border: 1px solid #7ea58e60;
+  display: grid;
+  place-items: center;
+  color: #a6d6b7;
+  font-size: 20px;
+}
+.floatingMessage small {
+  color: #aabfae;
+  font-size: 7px;
+  letter-spacing: 1px;
+}
+.floatingMessage p {
+  font-size: 12px;
+  margin-top: 5px !important;
+}
+.floatingMessage > span:last-child {
+  color: #7bc8bb;
+  font-size: 11px;
+  margin-left: 8px;
+}
+.chapter {
+  position: absolute;
+  inset: 0;
+  padding: 140px 6.2% 130px;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: 80px;
+  opacity: 0;
+  transform: translateY(45px);
+  pointer-events: none;
+  transition:
+    opacity 0.6s,
+    transform 0.7s;
+}
+.chapter[data-visible="true"] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.intro[data-visible="false"] {
+  opacity: 0;
+  transform: translateY(-65%);
+  pointer-events: none;
+}
+.floatingMessage[data-visible="false"] {
+  opacity: 0;
+  transform: translateY(30px);
+  pointer-events: none;
+}
+.sticky:not([data-stage="0"]) .film {
+  opacity: 0.25;
+}
+.chapterCopy h2 {
+  font-size: clamp(48px, 5.7vw, 82px) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -4px !important;
+  margin: 24px 0 !important;
+}
+.chapterCopy > p:not(.eyebrow) {
+  font-size: 15px;
+  color: #aeb8af;
+  line-height: 1.9;
+}
+.chapterCopy > a {
+  margin-top: 25px;
+}
+.chat {
+  border: 1px solid #8eac9d40;
+  border-radius: 16px;
+  background: #0e1814e8;
+  box-shadow: 0 40px 100px #0006;
+  transform: perspective(1200px) rotateY(-7deg) rotateZ(1deg);
+  max-width: 440px;
+  width: 100%;
+  margin-left: auto;
+}
+.chatHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #ffffff12;
+  padding: 23px;
+}
+.chatHeader strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.chatHeader small {
+  display: block;
+  color: #93afa0;
+  font-size: 9px;
+  margin-top: 2px;
+}
+.chatHeader > span {
+  margin-left: auto;
+  font-size: 23px;
+  color: #93afa0;
+}
+.bubbles {
+  padding: 20px 25px 28px;
+}
+.demoTag {
+  display: block;
+  text-align: center;
+  color: #6d8476;
+  font-size: 8px;
+  letter-spacing: 1px;
+  margin-bottom: 25px;
+}
+.sent {
+  margin-left: 40px !important;
+  padding: 17px 18px 10px;
+  background: #284b3a;
+  border-radius: 12px 1px 12px 12px;
+  color: #e3eee6;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.sent small {
+  display: block;
+  font-size: 8px;
+  text-align: right;
+  color: #98c9b1;
+  margin-top: 8px;
+}
+.reply {
+  margin: 20px 25px 0 0;
+  background: #19281f;
+  padding: 19px;
+  border-radius: 1px 12px 12px 12px;
+  font-size: 12px;
+}
+.reply > strong {
+  display: block;
+  color: #c7d7a9;
+  font-size: 10px;
+  margin-bottom: 8px;
+}
+.reply > p {
+  color: #d1ddce;
+}
+.reply dl {
+  margin: 15px 0;
+  padding: 0;
+}
+.reply dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 6px 0;
+}
+.reply dt {
+  color: #a2b29f;
+  font-size: 11px;
+}
+.reply dd {
+  margin: 0;
+  font-size: 11px;
+  color: #e5eddf;
+}
+.reply dl > div:first-child {
+  border-bottom: 1px solid #d4d6aa28;
+  margin-bottom: 5px;
+  padding-bottom: 11px;
+}
+.reply dl > div:first-child dd {
+  color: #e8d294;
+  font-size: 18px;
+}
+.reply > span {
+  display: block;
+  color: #98b58a;
+  font-size: 9px;
+  border-top: 1px solid #ffffff10;
+  padding-top: 12px;
+}
+.chatFoot {
+  border-top: 1px solid #ffffff12;
+  padding: 16px;
+  color: #9caf9e;
+  font-size: 10px;
+  text-align: center;
+}
+.financeCard {
+  background: linear-gradient(145deg, #22251ccc, #0f1411f5);
+  border: 1px solid #d8c68c30;
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 470px;
+  margin-left: auto;
+  box-shadow: 0 30px 90px #0007;
+}
+.bankLogos {
+  display: flex;
+  gap: 12px;
+}
+.bankLogos > span {
+  background: #f2f3ed;
+  padding: 11px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.bankLogos img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+.financeQuestion {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 31px;
+  line-height: 1.45;
+  letter-spacing: -1px;
+  margin: 30px 0 !important;
+}
+.financeAnswer {
+  border-top: 1px solid #e3cf952b;
+  padding-top: 24px;
+}
+.financeAnswer > span {
+  font-size: 8px;
+  color: #bbaf8d;
+  letter-spacing: 1px;
+}
+.financeAnswer > strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 500;
+  margin: 12px 0;
+  color: #e7c574;
+}
+.financeAnswer > p {
+  color: #b8bfb0;
+  font-size: 12px;
+  line-height: 1.9;
+}
+.bankNote {
+  font-size: 10px;
+  color: #9ca38f;
+  margin-top: 25px !important;
+  line-height: 1.8;
+}
+.scrollBar {
+  position: absolute;
+  left: 6.2%;
+  right: 6.2%;
+  bottom: 30px;
+  padding-top: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+}
+.scrollLine {
+  height: 1px;
+  background: #ffffff25;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+.scrollLine::after {
+  content: "";
+  display: block;
+  background: #e7c574;
+  height: 100%;
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left;
+}
+.scrollHint {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  font-size: 8px;
+  color: #bec0b2;
+  letter-spacing: 1.2px;
+}
+.scrollHint > span {
+  font-size: 22px;
+  color: #e7c574;
+}
+.scrollBar nav {
+  display: flex;
+  gap: 28px;
+}
+.scrollBar nav button {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: #858d83;
+  font-size: 11px;
+}
+.scrollBar nav button > span {
+  font-size: 8px;
+}
+.scrollBar nav button[aria-current] {
+  color: #efdaa8;
+}
+.motionToggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: none;
+  color: #a6aa9f;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 17px;
+}
+.motionToggle > span {
+  font-size: 9px;
+}
+.motionToggle:disabled {
+  opacity: 0.4;
+}
+.reduced {
+  height: auto;
+}
+.reduced .sticky {
+  position: relative;
+  height: auto;
+  min-height: 0;
+}
+.reduced .frame {
+  height: auto;
+  padding-top: 135px;
+  padding-bottom: 50px;
+}
+.reduced .film {
+  height: 800px;
+  opacity: 0.25 !important;
+}
+.reduced .intro,
+.reduced .chapter {
+  position: relative;
+  inset: auto;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto;
+}
+.reduced .intro {
+  padding-bottom: 65px;
+}
+.reduced .chapter {
+  padding: 70px 0;
+}
+.reduced .floatingMessage,
+.reduced .scrollBar {
+  display: none;
+}
+@media (min-width: 1800px) {
+  .frame {
+    max-width: 1640px;
+  }
+  .intro h1 {
+    font-size: 128px;
+  }
+  .chapter {
+    gap: 120px;
+  }
+}
+@media (max-width: 1100px) {
+  .frame {
+    padding-inline: 5%;
+  }
+  .intro h1 {
+    font-size: 83px;
+    letter-spacing: -4px;
+  }
+  .lead {
+    font-size: 15px;
+  }
+  .actions {
+    gap: 18px;
+  }
+  .primary {
+    font-size: 11px;
+    padding: 15px 18px;
+  }
+  .secondary {
+    font-size: 11px;
+  }
+  .floatingMessage {
+    right: 5%;
+    bottom: 19%;
+  }
+  .chapter {
+    padding-inline: 5%;
+    gap: 35px;
+  }
+  .chapterCopy h2 {
+    font-size: 62px !important;
+  }
+  .financeCard {
+    padding: 28px;
+  }
+  .financeQuestion {
+    font-size: 26px;
+  }
+  .chat {
+    transform: none;
+  }
+  .scrollBar {
+    left: 5%;
+    right: 5%;
+  }
+  .scrollBar nav {
+    gap: 20px;
+  }
+}
+@media (max-width: 750px) {
+  .story {
+    height: 340svh;
+  }
+  .sticky {
+    min-height: 720px;
+  }
+  .film img,
+  .film video {
+    object-position: 67% center;
+  }
+  .film {
+    opacity: 0.72;
+  }
+  .shade {
+    background:
+      linear-gradient(0deg, #080a0a 4%, #080a0a10 52%, #080a0a70 100%),
+      linear-gradient(90deg, #080a0ad9, #080a0a22);
+  }
+  .frame {
+    padding: 0 24px;
+  }
+  .intro {
+    top: 18%;
+    transform: none;
+    max-width: 90%;
+  }
+  .intro h1 {
+    font-size: clamp(49px, 10.6vw, 78px);
+    letter-spacing: -3px;
+    margin: 22px 0 !important;
+  }
+  .eyebrow {
+    font-size: 8px;
+    letter-spacing: 1.2px;
+  }
+  .lead {
+    font-size: 14px;
+    max-width: 320px;
+    line-height: 1.85;
+  }
+  .desktopBreak {
+    display: none;
+  }
+  .actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 24px;
+  }
+  .primary {
+    min-height: 50px;
+    font-size: 12px;
+  }
+  .secondary {
+    font-size: 11px;
+  }
+  .micro {
+    font-size: 9px;
+    margin-top: 12px !important;
+  }
+  .floatingMessage {
+    bottom: 15%;
+    left: 24px;
+    right: auto;
+    max-width: calc(100% - 48px);
+    padding: 13px 15px;
+    gap: 12px;
+  }
+  .floatingMessage small {
+    font-size: 6px;
+  }
+  .floatingMessage p {
+    font-size: 10px;
+  }
+  .waMark {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+  .scrollBar {
+    left: 24px;
+    right: 24px;
+    bottom: 20px;
+    padding-top: 12px;
+    gap: 10px;
+  }
+  .scrollHint {
+    display: none;
+  }
+  .scrollBar nav {
+    flex: 1;
+    justify-content: space-between;
+    gap: 9px;
+  }
+  .scrollBar nav button {
+    gap: 5px;
+    font-size: 10px;
+  }
+  .motionToggle {
+    justify-content: flex-end;
+  }
+  .motionToggle > span {
+    display: none;
+  }
+  .chapter {
+    padding: 105px 24px 95px;
+    grid-template-columns: 1fr;
+    align-content: center;
+    gap: 28px;
+  }
+  .chapterCopy h2 {
+    font-size: 47px !important;
+    letter-spacing: -2px !important;
+    margin: 14px 0 !important;
+  }
+  .chapterCopy > p:not(.eyebrow) {
+    font-size: 13px;
+    max-width: 380px;
+  }
+  .chapterCopy > a {
+    margin-top: 12px;
+  }
+  .chat {
+    max-width: 420px;
+    margin: 0 auto;
+    border-radius: 11px;
+  }
+  .chatHeader {
+    padding: 14px 17px;
+  }
+  .chatHeader img {
+    width: 30px;
+    height: 30px;
+  }
+  .chatHeader strong {
+    font-size: 13px;
+  }
+  .chatHeader small {
+    font-size: 8px;
+  }
+  .bubbles {
+    padding: 15px 17px;
+  }
+  .demoTag {
+    margin-bottom: 14px;
+    font-size: 7px;
+  }
+  .sent {
+    font-size: 12px;
+    margin-left: 25px !important;
+    padding: 12px 14px 8px;
+  }
+  .reply {
+    margin: 12px 15px 0 0;
+    padding: 13px 15px;
+  }
+  .reply > strong {
+    font-size: 9px;
+  }
+  .reply > p {
+    font-size: 11px;
+  }
+  .reply dl {
+    margin: 10px 0;
+  }
+  .reply dt,
+  .reply dd {
+    font-size: 10px;
+  }
+  .reply dl > div {
+    padding: 4px 0;
+  }
+  .reply dl > div:first-child dd {
+    font-size: 16px;
+  }
+  .reply > span {
+    font-size: 8px;
+  }
+  .chatFoot {
+    padding: 12px;
+    font-size: 9px;
+  }
+  .financeCard {
+    max-width: 420px;
+    width: 100%;
+    margin: auto;
+    padding: 24px;
+  }
+  .bankLogos {
+    gap: 10px;
+  }
+  .bankLogos > span {
+    padding: 9px;
+  }
+  .bankLogos img {
+    width: 25px;
+    height: 25px;
+  }
+  .financeQuestion {
+    font-size: 25px;
+    margin: 20px 0 !important;
+  }
+  .financeAnswer {
+    padding-top: 18px;
+  }
+  .financeAnswer > strong {
+    font-size: 16px;
+  }
+  .financeAnswer > p {
+    font-size: 11px;
+  }
+  .bankNote {
+    font-size: 9px;
+    margin-top: 18px !important;
+  }
+  .reduced .frame {
+    padding-top: 125px;
+  }
+  .reduced .chapter {
+    padding-block: 35px;
+  }
+  .reduced .intro {
+    top: auto;
+  }
+  .reduced .intro h1 {
+    font-size: 54px;
+  }
+}
+@media (max-width: 750px) and (max-height: 850px) {
+  .chapter {
+    gap: 18px;
+    padding-top: 85px;
+    padding-bottom: 75px;
+  }
+  .chapterCopy h2 {
+    font-size: 39px !important;
+    margin: 10px 0 !important;
+  }
+  .chapterCopy h2 br {
+    display: none;
+  }
+  .chapterCopy h2 em {
+    margin-left: 0.2em;
+  }
+  .chapterCopy > p:not(.eyebrow) {
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .chapterCopy > a {
+    min-height: 42px;
+    margin-top: 8px;
+  }
+  .chatFoot {
+    display: none;
+  }
+  .chatHeader {
+    padding: 12px 16px;
+  }
+  .reply {
+    margin-top: 10px;
+  }
+  .demoTag {
+    margin-bottom: 10px;
+  }
+  .financeCard {
+    padding: 21px;
+  }
+  .financeQuestion {
+    margin: 15px 0 !important;
+    font-size: 24px;
+  }
+  .financeAnswer {
+    padding-top: 14px;
+  }
+}
+@media (max-width: 360px) {
+  .frame {
+    padding-inline: 18px;
+  }
+  .intro {
+    top: 16%;
+  }
+  .intro h1 {
+    font-size: 45px;
+    letter-spacing: -2.7px;
+  }
+  .lead {
+    font-size: 13px;
+  }
+  .chapter {
+    padding-inline: 18px;
+  }
+  .chapterCopy h2 {
+    font-size: 34px !important;
+  }
+  .eyebrow {
+    font-size: 7px;
+  }
+  .floatingMessage {
+    left: 18px;
+    max-width: calc(100% - 36px);
+  }
+  .floatingMessage > span:last-child {
+    display: none;
+  }
+  .scrollBar {
+    left: 18px;
+    right: 18px;
+  }
+  .sent {
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story *,
+  .story *::before,
+  .story *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+.story.reduced {
+  height: auto;
+}
+@media (max-width: 750px) and (max-height: 740px) {
+  .story {
+    height: auto;
+  }
+  .sticky {
+    position: relative;
+    height: auto;
+    min-height: 0;
+  }
+  .frame {
+    height: auto;
+    padding-top: 115px;
+    padding-bottom: 40px;
+  }
+  .film {
+    height: 780px;
+    opacity: 0.3 !important;
+  }
+  .intro,
+  .chapter {
+    position: relative;
+    inset: auto;
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto;
+  }
+  .intro {
+    padding-bottom: 60px;
+  }
+  .chapter {
+    padding: 45px 0;
+  }
+  .intro h1 {
+    font-size: 45px;
+  }
+  .floatingMessage,
+  .scrollBar {
+    display: none;
+  }
+}
+.lead strong {
+  color: #f0e7ce;
+  font-weight: 600;
+}
+@media (min-width: 751px) and (max-width: 1000px) {
+  .shade {
+    background:
+      linear-gradient(90deg, #060808ed, #060808a6 58%, #06080820),
+      linear-gradient(0deg, #080a0a, transparent 35%);
+  }
+}
+@media (max-width: 360px) {
+  .reduced .intro h1 {
+    font-size: 42px;
+    letter-spacing: -2.5px;
+  }
+}
