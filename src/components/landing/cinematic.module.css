@@ -3342,6 +3342,89 @@
 .bankIntro .textLink {
   color: #fec307;
 }
+.bankCoverage {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  align-items: center;
+  gap: 44px;
+  margin-top: 52px;
+  padding-block: 32px;
+  border-block: 1px solid #fec30745;
+}
+.bankCoverageMetric {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.bankCoverageMetric strong {
+  color: #fec307;
+  font-family: var(--font-heading), Arial, sans-serif;
+  font-size: clamp(90px, 9.5vw, 136px);
+  font-weight: 650;
+  line-height: 0.95;
+  letter-spacing: -7px;
+}
+.bankCoverageMetric > span {
+  color: #f6f7f0;
+  font-size: clamp(18px, 1.9vw, 25px);
+  font-weight: 550;
+  line-height: 1.25;
+}
+.bankCoverageDetails h3 {
+  color: #f6f7f0;
+  font-size: 21px;
+  line-height: 1.3;
+}
+.bankCoverageDetails > p {
+  margin-top: 12px;
+  color: #c4cebd;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.bankCoverageDetails > .bankCoverageNote {
+  margin-top: 16px;
+  color: #aebba5;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.bankCoverageNote a {
+  color: #fec307;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 900px) {
+  .bankCoverage {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .bankCoverageMetric > span {
+    font-size: 24px;
+  }
+}
+@media (max-width: 600px) {
+  .bankCoverage {
+    margin-top: 34px;
+    padding-block: 26px;
+  }
+  .bankCoverageMetric {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .bankCoverageMetric strong {
+    font-size: 108px;
+    letter-spacing: -5px;
+  }
+  .bankCoverageDetails h3 {
+    font-size: 20px;
+  }
+  .bankCoverageDetails > p {
+    font-size: 14px;
+  }
+  .bankCoverageDetails > .bankCoverageNote {
+    font-size: 12px;
+  }
+}
 .bankGrid {
   border-color: #ffffff20;
   margin-top: 60px;

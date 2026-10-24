@@ -295,6 +295,34 @@ function LandingContent({ fontClass }: { fontClass: string }) {
                 </a>
               </div>
             </div>
+            <div className={s.bankCoverage}>
+              <p className={s.bankCoverageMetric}>
+                <strong>210</strong>
+                <span>
+                  opções de conexão
+                  <br />
+                  bancária no catálogo
+                </span>
+              </p>
+              <div className={s.bankCoverageDetails}>
+                <h3>Para você. Para sua empresa.</h3>
+                <p>
+                  Bancos e instituições com conexões para contas pessoais (PF)
+                  e empresariais (PJ).
+                </p>
+                <p className={s.bankCoverageNote}>
+                  Catálogo Polp/Celcoin consultado em 24/10/2026. Inclui opções
+                  PF e PJ da mesma instituição. A disponibilidade pode variar.{" "}
+                  <a
+                    href="https://api.polp.com.br/api/v2/institutions"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Conferir catálogo <span aria-hidden="true">↗</span>
+                  </a>
+                </p>
+              </div>
+            </div>
             <BankConnections />
             <div className={s.bankGrid} id="dados-bancarios">
               {BANK_DATA.map((item) => (
