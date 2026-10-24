@@ -3502,7 +3502,7 @@
 /* Explicit contrast for the alternating light sections and dark pricing panels. */
 .overview .sectionHead > p,
 .plansIntro > p:last-child,
-.spacesGrid > div:first-child > p,
+.spacesGrid > div:first-child > p:not(.sectionLabel),
 .spaces .spaceRule,
 .plans .guarantee p,
 .plans .planFine {
