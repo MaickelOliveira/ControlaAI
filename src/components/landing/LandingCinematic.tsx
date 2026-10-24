@@ -11,6 +11,7 @@ import { usePageScrollMotion } from "./PageScrollMotion";
 import AgentShowcase from "./AgentShowcase";
 import PricingSection from "./PricingSection";
 import WorkspaceJourney from "./WorkspaceJourney";
+import SharedLife from "./SharedLife";
 import {
   PresentationMotion,
   usePresentationMotion,
@@ -66,8 +67,8 @@ const FAQS = [
     "Com o recurso disponível na sua conta, abra Contas → Conectar banco, escolha a instituição e conclua a autorização no banco. A conexão utiliza a Celcoin. Você não fornece sua senha bancária à Zelo. O Open Finance atende contas brasileiras e depende do plano, do acesso ao espaço e dos dados disponibilizados pela instituição.",
   ],
   [
-    "Posso usar com minha família ou equipe?",
-    "Sim. Vincule as pessoas à conta para que usem seus próprios números de WhatsApp, conforme os acessos disponíveis. Os registros ficam no contexto pessoal ou empresarial correspondente.",
+    "Posso incluir minha família, sócios ou equipe?",
+    "Sim. Vincule as pessoas à conta para que cada uma converse individualmente com a Zelo pelo próprio WhatsApp. Nas configurações, você pode ajustar o acesso ao Pessoal, ao Empresarial ou aos dois modos, além de remover um número vinculado. Os lançamentos enviados pelo WhatsApp podem mostrar o nome cadastrado de quem os registrou.",
   ],
   [
     "A integração Google grava minhas reuniões?",
@@ -320,6 +321,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
           </div>
         </section>
         <WorkspaceJourney />
+        <SharedLife />
         <AgentShowcase />
         <PricingSection />
         <section className={`${s.section} ${s.faq}`} id="duvidas">
