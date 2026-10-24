@@ -4,15 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
-import {
-  BRAZIL_CHECKOUT,
-  checkoutUrlWithLandingParams,
-} from "@/lib/checkout-markets";
 import s from "./cinematic.module.css";
 import CinematicHero from "./CinematicHero";
 import BankConnections from "./BankConnections";
 import { usePageScrollMotion } from "./PageScrollMotion";
 import AgentShowcase from "./AgentShowcase";
+import PricingSection from "./PricingSection";
 import {
   PresentationMotion,
   usePresentationMotion,
@@ -50,41 +47,6 @@ const BANK_DATA: { icon: UiIconName; title: string; copy: string }[] = [
     copy: "Contratos e saldos devedores recebidos.",
   },
 ];
-const PLANS = [
-  {
-    id: "monthly",
-    name: "Mensal",
-    prefix: "",
-    price: "47",
-    cents: ",00",
-    suffix: "/mês",
-    total: "Pagamento mensal",
-    value: 47,
-    label: "Um passo de cada vez",
-  },
-  {
-    id: "semiannual",
-    name: "Semestral",
-    prefix: "6x",
-    price: "36",
-    cents: ",96",
-    suffix: "",
-    total: "ou R$ 197,00 à vista",
-    value: 197,
-    label: "Para criar uma nova rotina",
-  },
-  {
-    id: "annual",
-    name: "Anual",
-    prefix: "12x",
-    price: "30",
-    cents: ",72",
-    suffix: "",
-    total: "ou R$ 297,00 à vista",
-    value: 297,
-    label: "Seu ano mais organizado",
-  },
-] as const;
 const FAQS = [
   [
     "Preciso instalar mais um aplicativo?",
@@ -230,100 +192,6 @@ function Spaces() {
             </ul>
           </div>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function Plans() {
-  return (
-    <section className={`${s.section} ${s.plans}`} id="planos">
-      <div className={s.wrap}>
-        <div className={s.plansIntro} data-scroll-scene="title">
-          <SectionLabel number="05">SEU PRÓXIMO PASSO</SectionLabel>
-          <h2>
-            Escolha seu ritmo.
-            <br />
-            <em>Comece a se organizar.</em>
-          </h2>
-          <p>
-            Os mesmos recursos disponíveis em todos os períodos.
-            <br />
-            Escolha como prefere pagar.
-          </p>
-        </div>
-        <div className={s.planGrid} data-scroll-scene="plans">
-          {PLANS.map((plan) => (
-            <article
-              key={plan.id}
-              className={`${s.plan} ${plan.id === "annual" ? s.featuredPlan : ""}`}
-            >
-              {plan.id === "annual" && (
-                <span className={s.planBadge}>MENOR VALOR POR MÊS</span>
-              )}
-              <p className={s.planName}>{plan.name}</p>
-              <p className={s.planTagline}>{plan.label}</p>
-              <div className={s.price}>
-                {plan.prefix && (
-                  <span className={s.installments}>{plan.prefix}</span>
-                )}
-                <span>R$</span>
-                <strong>{plan.price}</strong>
-                <span>
-                  {plan.cents}
-                  <small>{plan.suffix}</small>
-                </span>
-              </div>
-              <p className={s.planTotal}>{plan.total}</p>
-              <a
-                href={BRAZIL_CHECKOUT.checkoutUrls[plan.id]}
-                onClick={(event) => {
-                  event.currentTarget.href = checkoutUrlWithLandingParams(
-                    BRAZIL_CHECKOUT.checkoutUrls[plan.id],
-                    window.location.search,
-                  );
-                }}
-                data-meta-plan={plan.id}
-                data-meta-value={plan.value}
-                className={s.planButton}
-                aria-label={`Escolher plano ${plan.name.toLowerCase()} — comprar na Hotmart`}
-              >
-                Escolher {plan.name.toLowerCase()}
-                <Arrow />
-              </a>
-              <ul>
-                {[
-                  "Equipe virtual no WhatsApp",
-                  "Painel web no celular e computador",
-                  "Organização pessoal e empresarial",
-                  "Finanças, agenda, tarefas e arquivos",
-                  "Uso compartilhado conforme os acessos",
-                ].map((item) => (
-                  <li key={item}>
-                    <span aria-hidden="true">✓</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
-        <div className={s.guarantee}>
-          <span className={s.guaranteeSeal}>
-            7<small>DIAS</small>
-          </span>
-          <div>
-            <strong>Tempo para conhecer a Zelo.</strong>
-            <p>
-              7 dias de garantia na primeira compra. Pagamento pela Hotmart.
-            </p>
-          </div>
-        </div>
-        <p className={s.planFine}>
-          Confira as condições de pagamento e parcelamento no checkout. Recursos
-          bancários dependem do plano, das instituições conectadas e dos dados
-          compartilhados. Emissão direta de NFS-e em preparação.
-        </p>
       </div>
     </section>
   );
@@ -550,7 +418,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
         </section>
         <Spaces />
         <AgentShowcase />
-        <Plans />
+        <PricingSection />
         <section className={`${s.section} ${s.faq}`} id="duvidas">
           <div className={`${s.wrap} ${s.faqGrid}`} data-scroll-scene="faq">
             <div>
