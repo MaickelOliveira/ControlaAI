@@ -144,15 +144,16 @@ export default function AgentShowcase() {
       >
         <span id="recursos" className={s.anchor} />
         <div className={s.heading}>
-          <p className={s.label}>04 / TODAS AS FUNÇÕES. UM TIME AO SEU LADO.</p>
+          <p className={s.label}>04 / CONHEÇA SEUS 12 AGENTES DE IA</p>
           <h2>
-            Você não precisa
+            Um agente para cada
             <br />
-            dar conta de <em>tudo sozinho.</em>
+            <em>parte da sua rotina.</em>
           </h2>
           <p>
-            Conheça os 12 agentes virtuais da Zelo. Cada um apresenta uma área
-            da plataforma — todos na mesma conversa do WhatsApp.
+            Finanças, agenda, tarefas, arquivos e muito mais. Escolha um agente
+            e descubra o que você pode pedir à Zelo, na mesma conversa do
+            WhatsApp.
           </p>
         </div>
         <div

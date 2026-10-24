@@ -2387,6 +2387,24 @@
 }
 .mobileNav {
   background: #0d120f;
+  color: #fff;
+  border-top-color: #ffffff24;
+}
+.mobileNav a {
+  color: #fff;
+  border-bottom-color: #ffffff24;
+  font-weight: 600;
+}
+.mobileNav svg {
+  color: var(--yellow);
+}
+.mobileNav a:hover,
+.mobileNav a:focus-visible {
+  color: var(--yellow);
+  background: #ffffff0a;
+}
+.page .mobileNav a:focus-visible {
+  outline-color: var(--yellow);
 }
 .section {
   padding-block: 120px;

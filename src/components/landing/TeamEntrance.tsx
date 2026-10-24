@@ -57,15 +57,13 @@ export default function TeamEntrance({
       className={`${s.entrance} ${reduced ? s.reduced : ""}`}
     >
       <div className={s.sticky}>
-        <p className={s.eyebrow}>
-          INTELIGÊNCIA ARTIFICIAL. COM CADA FUNÇÃO NO SEU LUGAR.
-        </p>
+        <p className={s.eyebrow}>SEU TIME DE AGENTES DE IA NO WHATSAPP</p>
         <h2>
-          Você tem muito
+          Veja tudo o que
           <br />
-          para viver.
+          a Zelo pode fazer
           <br />
-          <em>Ganhe um time.</em>
+          <em>por você.</em>
         </h2>
         <span className={s.number} aria-hidden="true">
           12
@@ -104,9 +102,9 @@ export default function TeamEntrance({
         <div className={s.foot}>
           <span>12 AGENTES VIRTUAIS ZELO</span>
           <p>
-            Conheça abaixo todas as funções
+            Um time de agentes de IA,
             <br />
-            que seu time pode organizar.
+            cada um cuidando de uma parte da sua rotina.
           </p>
           <span>ROLE E CONHEÇA ↓</span>
         </div>
