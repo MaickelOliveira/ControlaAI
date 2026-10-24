@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import Image from "next/image";
 import { VIRTUAL_TEAM } from "@/lib/virtual-team";
 import { AGENT_ACTIONS } from "@/lib/landing-agent-actions";
@@ -97,6 +97,12 @@ const TEAM = [
 
 export default function AgentShowcase() {
   const section = useRef<HTMLElement>(null);
+  const swipe = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    axis: "pending" | "horizontal" | "vertical";
+  } | null>(null);
   const visible = useVisible(section);
   const { running } = usePresentationMotion();
   const [selected, setSelected] = useState(0);
@@ -111,6 +117,61 @@ export default function AgentShowcase() {
     setSelected((index + TEAM.length) % TEAM.length);
     setAction(0);
     setManual(true);
+  };
+  const cancelSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    if (swipe.current?.id !== event.pointerId) return;
+    swipe.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+  const startSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    const previous = swipe.current;
+    swipe.current = null;
+    if (previous && event.currentTarget.hasPointerCapture(previous.id)) {
+      event.currentTarget.releasePointerCapture(previous.id);
+    }
+    if (
+      !matchMedia("(max-width: 760px)").matches ||
+      !event.isPrimary ||
+      event.button !== 0 ||
+      !(event.target instanceof Element) ||
+      event.target.closest(
+        'a, button, input, textarea, select, summary, [role="button"], [contenteditable="true"]',
+      )
+    )
+      return;
+    swipe.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      axis: "pending",
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    // Avoid native text/image dragging for mouse users testing the mobile view.
+    if (event.pointerType === "mouse") event.preventDefault();
+  };
+  const moveSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    const gesture = swipe.current;
+    if (!gesture || event.pointerId !== gesture.id) return;
+    const x = Math.abs(event.clientX - gesture.x);
+    const y = Math.abs(event.clientY - gesture.y);
+    if (gesture.axis === "pending" && Math.max(x, y) >= 10) {
+      // Lock vertical intent so scrolling the page cannot later switch agents.
+      gesture.axis = x > y * 1.3 ? "horizontal" : "vertical";
+      if (gesture.axis === "horizontal") setManual(true);
+    }
+  };
+  const endSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    const gesture = swipe.current;
+    if (!gesture || event.pointerId !== gesture.id) return;
+    cancelSwipe(event);
+    if (gesture.axis !== "horizontal") return;
+    const x = event.clientX - gesture.x;
+    const y = event.clientY - gesture.y;
+    if (Math.abs(x) >= 48 && Math.abs(x) > Math.abs(y) * 1.3) {
+      pick(selected + (x < 0 ? 1 : -1));
+    }
   };
   useEffect(() => {
     if (!running || !visible || manual || hovered) return;
@@ -184,11 +245,22 @@ export default function AgentShowcase() {
             );
           })}
         </div>
-        <div className={s.stage}>
+        <p className={s.swipeHint}>
+          Arraste para os lados ou use as setas para trocar de agente.
+        </p>
+        <div
+          className={s.stage}
+          onPointerDown={startSwipe}
+          onPointerMove={moveSwipe}
+          onPointerUp={endSwipe}
+          onPointerCancel={cancelSwipe}
+          onLostPointerCapture={cancelSwipe}
+        >
           <div className={s.portrait} key={agent.key}>
             <Image
               src={`/brand/team/${identity.name.toLowerCase()}.png`}
               alt={`${identity.name}, personagem virtual de ${identity.role} da Zelo`}
+              draggable={false}
               fill
               sizes="(max-width:760px) 100vw, 45vw"
             />

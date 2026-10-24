@@ -68,21 +68,30 @@ const BANKS = [
   { id: "santander", name: "Santander", value: "R$ 3.000,00" },
 ];
 
+function scrollGeometry(section: HTMLElement, frame: HTMLElement) {
+  const top = Number.parseFloat(getComputedStyle(frame).top) || 0;
+  return {
+    start: section.getBoundingClientRect().top + scrollY - top,
+    travel: Math.max(1, section.offsetHeight - frame.offsetHeight),
+  };
+}
+
 export default function CinematicHero() {
   const section = useRef<HTMLElement>(null);
+  const sticky = useRef<HTMLDivElement>(null);
   const visible = useVisible(section);
   const { running, reduced } = usePresentationMotion();
   const [scene, setScene] = useState(0);
   const [beat, setBeat] = useState(0);
-  const [compact, setCompact] = useState(false);
-  const staticMode = reduced || compact;
+  const [shortWideViewport, setShortWideViewport] = useState(false);
+  const staticMode = reduced || shortWideViewport;
   const current = SCENES[scene];
 
   useEffect(() => {
     const query = matchMedia(
-      "(max-height: 620px), (max-width: 700px) and (max-height: 750px)",
+      "(min-width: 701px) and (max-height: 620px), (orientation: landscape) and (max-height: 620px)",
     );
-    const sync = () => setCompact(query.matches);
+    const sync = () => setShortWideViewport(query.matches);
     sync();
     query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
@@ -94,11 +103,12 @@ export default function CinematicHero() {
     const update = () => {
       frame = 0;
       const node = section.current;
-      if (!node) return;
-      const box = node.getBoundingClientRect();
-      const top = innerWidth <= 700 ? 72 : 82;
-      const travel = Math.max(1, box.height - innerHeight + top);
-      const progress = Math.min(1, Math.max(0, (top - box.top) / travel));
+      const pinned = sticky.current;
+      if (!node || !pinned) return;
+      // Use the rendered sticky frame: mobile browser bars can make innerHeight
+      // differ from the stable viewport used by the layout.
+      const { start, travel } = scrollGeometry(node, pinned);
+      const progress = Math.min(1, Math.max(0, (scrollY - start) / travel));
       node.style.setProperty("--scroll", String(progress));
       node.style.setProperty("--travel", `${progress * -150}px`);
       node.style.setProperty("--rotation", `${-15 + progress * 35}deg`);
@@ -110,10 +120,16 @@ export default function CinematicHero() {
     schedule();
     addEventListener("scroll", schedule, { passive: true });
     addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("resize", schedule);
+    const observer = new ResizeObserver(schedule);
+    if (section.current) observer.observe(section.current);
+    if (sticky.current) observer.observe(sticky.current);
     return () => {
       cancelAnimationFrame(frame);
       removeEventListener("scroll", schedule);
       removeEventListener("resize", schedule);
+      window.visualViewport?.removeEventListener("resize", schedule);
+      observer.disconnect();
     };
   }, [staticMode]);
 
@@ -136,15 +152,11 @@ export default function CinematicHero() {
       return;
     }
     const node = section.current;
-    if (!node) return;
-    const top = innerWidth <= 700 ? 72 : 82;
-    const travel = node.offsetHeight - innerHeight + top;
+    const pinned = sticky.current;
+    if (!node || !pinned) return;
+    const { start, travel } = scrollGeometry(node, pinned);
     scrollTo({
-      top:
-        node.getBoundingClientRect().top +
-        scrollY -
-        top +
-        travel * [0, 0.33, 0.59, 0.86][index],
+      top: start + travel * [0, 0.33, 0.59, 0.86][index],
       behavior: running ? "smooth" : "instant",
     });
   };
@@ -159,7 +171,7 @@ export default function CinematicHero() {
       aria-label="Veja a Zelo funcionando no WhatsApp"
     >
       <span id="como-funciona" className={s.anchor} />
-      <div className={s.sticky}>
+      <div ref={sticky} className={s.sticky}>
         <div className={s.backdrop} aria-hidden="true">
           <span className={s.giantWord}>ZELO</span>
           <div className={s.yellowDisc} />

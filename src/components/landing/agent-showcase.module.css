@@ -95,6 +95,9 @@
   min-height: 870px;
   animation: stageIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.swipeHint {
+  display: none;
+}
 .portrait {
   position: relative;
   overflow: hidden;
@@ -464,8 +467,16 @@
   }
   .stage {
     grid-template-columns: 1fr;
-    margin-top: 30px;
+    margin-top: 12px;
     min-height: 0;
+    touch-action: pan-y pinch-zoom;
+  }
+  .swipeHint {
+    display: block;
+    margin: 26px 24px 0 !important;
+    color: #c6d2bb;
+    font-size: 11px;
+    line-height: 1.7;
   }
   .portrait {
     min-height: 490px;
