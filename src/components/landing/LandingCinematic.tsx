@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
-import { VIRTUAL_TEAM } from "@/lib/virtual-team";
-import { AGENT_ACTIONS } from "@/lib/landing-agent-actions";
 import {
   BRAZIL_CHECKOUT,
   checkoutUrlWithLandingParams,
@@ -13,120 +11,12 @@ import {
 import s from "./cinematic.module.css";
 import CinematicHero from "./CinematicHero";
 import BankConnections from "./BankConnections";
-
-const AREAS: {
-  name: string;
-  description: string;
-  items: { icon: UiIconName; name: string; copy: string; example: string }[];
-}[] = [
-  {
-    name: "Seu dinheiro",
-    description: "Entenda o que entrou, o que saiu e o que vem pela frente.",
-    items: [
-      {
-        icon: "wallet",
-        name: "Receitas e despesas",
-        copy: "Registre valores, categorias e contas. Consulte o mês ou um gasto específico na conversa.",
-        example: "Quanto gastei com alimentação neste mês?",
-      },
-      {
-        icon: "repeat",
-        name: "Parcelas e recorrências",
-        copy: "Acompanhe os próximos pagamentos e organize o que se repete ao longo dos meses.",
-        example: "Quais parcelas ainda tenho para pagar?",
-      },
-      {
-        icon: "document",
-        name: "Faturas e planilhas",
-        copy: "Envie PDF, foto, CSV ou Excel. Revise os lançamentos identificados antes de confirmar a importação.",
-        example: "Quero importar esta fatura para o cartão da empresa.",
-      },
-      {
-        icon: "target",
-        name: "Metas financeiras",
-        copy: "Defina um objetivo, registre o progresso e acompanhe quanto falta para chegar lá.",
-        example: "Quero guardar R$ 5 mil para viajar até dezembro.",
-      },
-    ],
-  },
-  {
-    name: "Sua rotina",
-    description: "Tire as pendências da cabeça e encontre o que precisa.",
-    items: [
-      {
-        icon: "calendar",
-        name: "Agenda e Google Meet",
-        copy: "Marque, consulte e altere compromissos. Conecte a conta Google do espaço para usar a integração.",
-        example: "Marque uma reunião amanhã às 14h e crie um Meet.",
-      },
-      {
-        icon: "task",
-        name: "Tarefas e lembretes",
-        copy: "Organize prazos e prioridades. Programe avisos para receber no WhatsApp.",
-        example: "Me lembre de conferir o seguro sexta às 9h.",
-      },
-      {
-        icon: "folder",
-        name: "Arquivos e documentos",
-        copy: "Guarde anexos, organize por pastas e peça o arquivo de volta quando precisar.",
-        example: "Me mande o comprovante do mecânico.",
-      },
-      {
-        icon: "cart",
-        name: "Compras e veículos",
-        copy: "Atualize a lista de mercado e mantenha gastos, abastecimentos e manutenções do carro organizados.",
-        example: "Adicione dois pacotes de café à minha lista.",
-      },
-    ],
-  },
-  {
-    name: "Seu negócio",
-    description:
-      "Uma visão organizada de cada empresa e de quem trabalha com você.",
-    items: [
-      {
-        icon: "business",
-        name: "Mais de uma empresa",
-        copy: "Mantenha cada negócio em seu próprio espaço. Escolha em qual empresa fazer o pedido.",
-        example: "Quero registrar uma despesa na minha empresa.",
-      },
-      {
-        icon: "client",
-        name: "Clientes e contatos",
-        copy: "Cadastre informações, encontre contatos e atualize os dados da sua rotina comercial.",
-        example: "Cadastre a Ana como cliente do Estúdio Aurora.",
-      },
-      {
-        icon: "users",
-        name: "Equipe e acessos",
-        copy: "Organize cadastros de funcionários e compartilhe o uso conforme as permissões de cada pessoa.",
-        example: "Quais funcionários estão cadastrados nesta empresa?",
-      },
-      {
-        icon: "document",
-        name: "Preparação de NFS-e",
-        copy: "Organize dados fiscais, serviços e rascunhos. A emissão direta e o PDF oficial aguardam homologação.",
-        example: "Prepare um rascunho da nota deste serviço.",
-      },
-    ],
-  },
-];
-const AGENTS = (
-  [
-    "support",
-    "finance",
-    "agenda",
-    "task",
-    "reminder",
-    "drive",
-    "goal",
-    "grocery",
-    "people",
-    "employee",
-    "vehicle",
-    "nfse",
-  ] as const
-).map((key) => ({ key, ...VIRTUAL_TEAM[key] }));
+import AgentShowcase from "./AgentShowcase";
+import ConversationJourney from "./ConversationJourney";
+import {
+  PresentationMotion,
+  usePresentationMotion,
+} from "./PresentationMotion";
 
 const BANK_DATA: { icon: UiIconName; title: string; copy: string }[] = [
   {
@@ -281,7 +171,7 @@ function Spaces() {
     <section className={s.spaces} id="espacos">
       <div className={`${s.wrap} ${s.spacesGrid}`}>
         <div>
-          <SectionLabel number="03">CADA COISA NO SEU LUGAR</SectionLabel>
+          <SectionLabel number="04">CADA COISA NO SEU LUGAR</SectionLabel>
           <h2>
             Você pode ter
             <br />
@@ -345,149 +235,12 @@ function Spaces() {
   );
 }
 
-function Resources() {
-  const [selected, setSelected] = useState(0);
-  const area = AREAS[selected];
-  return (
-    <section id="recursos" className={`${s.section} ${s.resources}`}>
-      <div className={s.wrap}>
-        <div className={s.sectionHead}>
-          <div>
-            <SectionLabel number="04">
-              UM ASSISTENTE, MUITAS POSSIBILIDADES
-            </SectionLabel>
-            <h2>
-              O que você precisa.
-              <br />
-              Do jeito que você fala.
-            </h2>
-          </div>
-          <p>
-            Comece por uma necessidade do seu dia. A Zelo ajuda a transformar o
-            pedido em organização.
-          </p>
-        </div>
-        <div
-          className={s.areaTabs}
-          role="group"
-          aria-label="Áreas de organização"
-        >
-          {AREAS.map((item, index) => (
-            <button
-              key={item.name}
-              type="button"
-              onClick={() => setSelected(index)}
-              aria-pressed={selected === index}
-            >
-              {item.name}
-              <span aria-hidden="true">↗</span>
-            </button>
-          ))}
-        </div>
-        <div className={s.areaContent} aria-live="polite">
-          <p className={s.areaDescription}>{area.description}</p>
-          <div className={s.resourceGrid}>
-            {area.items.map((item) => (
-              <article className={s.resourceItem} key={item.name}>
-                <UiIcon name={item.icon} />
-                <h3>{item.name}</h3>
-                <p>{item.copy}</p>
-                <details>
-                  <summary>
-                    Veja um pedido de exemplo <span aria-hidden="true">+</span>
-                  </summary>
-                  <blockquote>“{item.example}”</blockquote>
-                </details>
-              </article>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Team() {
-  const [selected, setSelected] = useState<(typeof AGENTS)[number]>(AGENTS[1]);
-  const actions = AGENT_ACTIONS[selected.key];
-  return (
-    <section id="equipe" className={`${s.section} ${s.team}`}>
-      <div className={s.wrap}>
-        <div className={s.sectionHead}>
-          <div>
-            <SectionLabel number="05">CONHEÇA SUA EQUIPE VIRTUAL</SectionLabel>
-            <h2>
-              Uma IA que entende.
-              <br />
-              Uma equipe que resolve.
-            </h2>
-          </div>
-          <p>
-            São 12 personagens virtuais da mesma Zelo. Escolha um deles para
-            conhecer o que pode fazer.
-          </p>
-        </div>
-        <div
-          className={s.teamRoster}
-          role="group"
-          aria-label="Escolha um agente virtual"
-        >
-          {AGENTS.map((agent) => (
-            <button
-              type="button"
-              key={agent.key}
-              aria-pressed={selected.key === agent.key}
-              onClick={() => setSelected(agent)}
-            >
-              <Image
-                src={`/brand/team/${agent.name.toLowerCase()}.png`}
-                alt=""
-                width={120}
-                height={140}
-                sizes="(max-width:600px) 27vw, 170px"
-              />
-              <span>
-                {agent.name}
-                <small>{agent.role}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className={s.agentDetail} aria-live="polite">
-          <div>
-            <span className={s.agentLabel}>
-              COM A {selected.gender === "m" ? "AJUDA DO" : "AJUDA DA"}
-            </span>
-            <h3>
-              {selected.name}
-              <span>{selected.role}</span>
-            </h3>
-            <blockquote>“{actions[0].request}”</blockquote>
-          </div>
-          <div className={s.agentActions}>
-            {actions.map((action) => (
-              <details key={action.title}>
-                <summary>
-                  {action.title}
-                  <span aria-hidden="true">+</span>
-                </summary>
-                <p>{action.how}</p>
-                <p className={s.agentResult}>{action.result}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function Plans() {
   return (
     <section className={`${s.section} ${s.plans}`} id="planos">
       <div className={s.wrap}>
         <div className={s.plansIntro}>
-          <SectionLabel number="06">SEU PRÓXIMO PASSO</SectionLabel>
+          <SectionLabel number="05">SEU PRÓXIMO PASSO</SectionLabel>
           <h2>
             Escolha seu ritmo.
             <br />
@@ -577,6 +330,15 @@ function Plans() {
 }
 
 export default function LandingCinematic({ fontClass }: { fontClass: string }) {
+  return (
+    <PresentationMotion>
+      <LandingContent fontClass={fontClass} />
+    </PresentationMotion>
+  );
+}
+
+function LandingContent({ fontClass }: { fontClass: string }) {
+  const { running, reduced, toggle } = usePresentationMotion();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -593,11 +355,14 @@ export default function LandingCinematic({ fontClass }: { fontClass: string }) {
   const nav = [
     ["como-funciona", "Como funciona"],
     ["open-finance", "Open Finance"],
-    ["recursos", "Recursos"],
+    ["equipe", "Seu time"],
     ["planos", "Planos"],
   ];
   return (
-    <div className={`${fontClass} ${s.page}`}>
+    <div
+      className={`${fontClass} ${s.page}`}
+      data-motion={running ? "running" : "paused"}
+    >
       <a className={s.skip} href="#conteudo">
         Pular para o conteúdo
       </a>
@@ -621,6 +386,23 @@ export default function LandingCinematic({ fontClass }: { fontClass: string }) {
             ))}
           </nav>
           <div className={s.headerActions}>
+            <button
+              type="button"
+              className={s.motionButton}
+              onClick={toggle}
+              disabled={reduced}
+              aria-pressed={!running}
+              aria-label={running ? "Pausar animações" : "Ativar animações"}
+              title={
+                reduced
+                  ? "Movimento reduzido ativado no dispositivo"
+                  : running
+                    ? "Pausar animações"
+                    : "Ativar animações"
+              }
+            >
+              {running ? "Ⅱ" : "▷"}
+            </button>
             <Link href="/login" className={s.login}>
               Entrar
               <Arrow />
@@ -658,46 +440,33 @@ export default function LandingCinematic({ fontClass }: { fontClass: string }) {
       </header>
       <main id="conteudo">
         <CinematicHero />
-        <section className={`${s.section} ${s.overview}`} id="como-funciona">
+        <div className={s.marquee} aria-hidden="true">
+          <div>
+            {Array.from({ length: 4 }, (_, i) => (
+              <span key={i}>
+                VOCÊ VIVE. <em>A ZELO ORGANIZA.</em> ✦{" "}
+              </span>
+            ))}
+          </div>
+        </div>
+        <ConversationJourney />
+        <section className={`${s.section} ${s.overview}`} id="painel">
           <div className={s.wrap}>
             <div className={s.sectionHead}>
               <div>
-                <SectionLabel number="01">DA CONVERSA À CLAREZA</SectionLabel>
+                <SectionLabel number="01">
+                  O WHATSAPP É O COMEÇO. O PAINEL É A VISÃO COMPLETA.
+                </SectionLabel>
                 <h2>
-                  Você pede.
-                  <br />A Zelo faz acontecer.
+                  Sua vida organizada.
+                  <br />À vista, de verdade.
                 </h2>
               </div>
               <p>
-                Escreva, mande um áudio ou envie um arquivo. A IA entende seu
-                pedido, pede os detalhes que faltam e executa as ações
-                disponíveis na sua conta. Tudo acompanha você no painel.
+                O que você organiza na conversa ganha espaço na plataforma. Veja
+                suas finanças, filtre os lançamentos, acompanhe compromissos e
+                encontre documentos. No computador ou no celular.
               </p>
-            </div>
-            <div className={s.steps}>
-              {[
-                {
-                  n: "01",
-                  title: "Conte o que precisa",
-                  copy: "Envie sua mensagem com os detalhes que você tem.",
-                },
-                {
-                  n: "02",
-                  title: "A Zelo organiza com você",
-                  copy: "Complete o que faltar e confira as confirmações.",
-                },
-                {
-                  n: "03",
-                  title: "Acompanhe do seu jeito",
-                  copy: "Consulte na conversa ou visualize no painel.",
-                },
-              ].map((step) => (
-                <div key={step.n}>
-                  <span>{step.n}</span>
-                  <h3>{step.title}</h3>
-                  <p>{step.copy}</p>
-                </div>
-              ))}
             </div>
             <figure className={s.productFigure}>
               <div className={s.browserBar}>
@@ -778,13 +547,12 @@ export default function LandingCinematic({ fontClass }: { fontClass: string }) {
           </div>
         </section>
         <Spaces />
-        <Resources />
-        <Team />
+        <AgentShowcase />
         <Plans />
         <section className={`${s.section} ${s.faq}`} id="duvidas">
           <div className={`${s.wrap} ${s.faqGrid}`}>
             <div>
-              <SectionLabel number="07">ANTES DE COMEÇAR</SectionLabel>
+              <SectionLabel number="06">ANTES DE COMEÇAR</SectionLabel>
               <h2>
                 Alguma dúvida
                 <br />

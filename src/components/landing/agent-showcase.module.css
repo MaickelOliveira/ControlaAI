@@ -1,0 +1,587 @@
+.team {
+  position: relative;
+  background: #0b0e0c;
+  color: #f0f1e8;
+  padding: 100px 0 60px;
+  --agent-color: #eed38a;
+}
+.anchor {
+  position: absolute;
+  top: 0;
+}
+.heading {
+  max-width: 1280px;
+  margin: auto;
+  padding: 0 48px;
+}
+.label {
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  color: #d7c594;
+  margin-bottom: 28px !important;
+}
+.heading h2 {
+  font-size: clamp(42px, 5.1vw, 74px) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -3.5px !important;
+}
+.heading h2 em {
+  color: #e4c77d;
+}
+.heading > p:last-child {
+  color: #aab7a8;
+  font-size: 15px;
+  line-height: 1.9;
+  max-width: 610px;
+  margin-top: 25px !important;
+}
+.roster {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  max-width: 1280px;
+  margin: 50px auto 0;
+  padding: 0 48px;
+  gap: 1px;
+}
+.roster button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: #171e18;
+  border: 1px solid #d1dccb13;
+  min-height: 82px;
+  padding: 14px 12px;
+  transition:
+    background 0.3s,
+    border-color 0.3s;
+  color: #d5ddce;
+}
+.roster button:hover,
+.roster button[aria-pressed="true"] {
+  background: #2b3021;
+  border-color: #c5bd705f;
+}
+.roster button[aria-pressed="true"] {
+  box-shadow: inset 0 -2px var(--agent-color);
+}
+.roster img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #e3d59633;
+  transition: transform 0.3s;
+}
+.roster button:hover img {
+  transform: scale(1.12);
+}
+.roster button > span {
+  font-size: 12px;
+  font-weight: 500;
+}
+.roster small {
+  font-size: 8px;
+  display: block;
+  color: #a3b198;
+  line-height: 1.5;
+  margin-top: 3px;
+}
+.stage {
+  display: grid;
+  grid-template-columns: 1fr 1.12fr;
+  max-width: 1440px;
+  margin: 55px auto 0;
+  min-height: 870px;
+  animation: stageIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.portrait {
+  position: relative;
+  overflow: hidden;
+  min-height: 870px;
+  background: #060806;
+}
+.portrait > img {
+  object-fit: cover;
+  object-position: 50% 25%;
+  animation: portraitDrift 18s ease-in-out infinite alternate;
+  opacity: 0.94;
+}
+.portraitShade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, #0b0e0c 0%, #0b0e0c15 65%, #0b0e0c88),
+    linear-gradient(90deg, transparent 75%, #0b0e0c);
+}
+.orbit {
+  position: absolute;
+  width: 85%;
+  height: 45%;
+  border: 1px solid #d9c17f30;
+  top: 28%;
+  left: 8%;
+  border-radius: 50%;
+  transform: rotate(-25deg);
+  animation: orbitBreath 9s ease-in-out infinite;
+  box-shadow: 0 0 90px #f3d78b0a;
+}
+.index {
+  position: absolute;
+  top: 30px;
+  left: 48px;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: #cebe8e;
+}
+.agentName {
+  position: absolute;
+  bottom: 120px;
+  left: 48px;
+}
+.agentName > span {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--agent-color);
+}
+.agentName h3 {
+  font-size: clamp(90px, 12vw, 180px) !important;
+  line-height: 1 !important;
+  font-weight: 500 !important;
+  letter-spacing: -9px;
+  margin: 14px 0 10px !important;
+  color: var(--agent-color);
+}
+.agentName p {
+  font-size: 14px;
+  color: #d3dbca;
+}
+.portraitFoot {
+  position: absolute;
+  bottom: 45px;
+  left: 48px;
+  right: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #a5b297;
+  font-size: 7px;
+  letter-spacing: 1px;
+}
+.portraitFoot > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.portraitFoot i {
+  width: 5px;
+  height: 5px;
+  background: #a9d8ab;
+  border-radius: 50%;
+  box-shadow: 0 0 15px #a9d8ab;
+  animation: signal 2s infinite;
+}
+.detail {
+  padding: 0 48px 24px 50px;
+}
+.detailTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 30px;
+}
+.detailTop > span {
+  font-size: 10px;
+  color: #9da98e;
+  letter-spacing: 2px;
+}
+.detailTop > div {
+  display: flex;
+  gap: 10px;
+}
+.detailTop button {
+  width: 42px;
+  height: 42px;
+  background: none;
+  border: 1px solid #a6b19444;
+  border-radius: 50%;
+  font-size: 19px;
+  color: #cdd6b9;
+  transition: background 0.2s;
+}
+.detailTop button:hover {
+  background: #d4c280;
+  color: #12190d;
+}
+.detail > h3 {
+  font-size: clamp(28px, 3.1vw, 44px) !important;
+  letter-spacing: -1.6px;
+  line-height: 1.22;
+  font-weight: 550 !important;
+}
+.detail > h3 > span {
+  display: block;
+}
+.detail h3 em {
+  font-style: normal;
+  color: var(--agent-color);
+  font-weight: 450;
+}
+.intro {
+  font-size: 13px;
+  color: #aebba5;
+  line-height: 1.9;
+  margin-top: 23px !important;
+  max-width: 530px;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 22px;
+}
+.tags > span {
+  border: 1px solid #c9d1b52b;
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 8px;
+  color: #c1ceaf;
+}
+.actionLabel {
+  font-size: 8px;
+  letter-spacing: 1.6px;
+  color: #afbc98;
+  margin: 35px 0 13px !important;
+}
+.actionTabs {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #d6debd25;
+}
+.actionTabs button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-bottom: 1px solid #d6debd25;
+  background: none;
+  color: #c2cdb4;
+  font-size: 11px;
+  padding: 10px 8px;
+  transition:
+    background 0.25s,
+    color 0.25s;
+}
+.actionTabs button > span {
+  color: #738366;
+  font-size: 8px;
+}
+.actionTabs button > b {
+  margin-left: auto;
+  font-size: 17px;
+  font-weight: 300;
+}
+.actionTabs button[aria-pressed="true"] {
+  background: #e9d18d0d;
+  color: var(--agent-color);
+}
+.actionDemo {
+  animation: stageIn 0.45s both;
+}
+.how {
+  color: #aebb9f;
+  font-size: 11px;
+  line-height: 1.85;
+  margin: 20px 0 !important;
+}
+.request {
+  padding: 17px 20px;
+  background: #254a35;
+  border-radius: 15px 2px 15px 15px;
+  margin-left: 30px;
+  position: relative;
+}
+.request > span,
+.result > span {
+  font-size: 6px;
+  letter-spacing: 1.5px;
+  color: #abd0ae;
+}
+.request p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #e8f0dc;
+  margin-top: 7px !important;
+  padding-bottom: 3px;
+}
+.request small {
+  position: absolute;
+  bottom: 6px;
+  right: 12px;
+  color: #8fd2c9;
+  font-size: 8px;
+}
+.result {
+  border-left: 1px solid var(--agent-color);
+  padding: 0 0 0 19px;
+  margin: 20px 0 0 10px;
+}
+.result > span {
+  color: var(--agent-color);
+}
+.result p {
+  font-size: 11px;
+  color: #c0ceaf;
+  line-height: 1.8;
+  margin-top: 6px !important;
+}
+.teamFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  max-width: 1280px;
+  margin: 25px auto 0;
+  padding: 20px 48px;
+  border-top: 1px solid #b8c29e20;
+  color: #929f80;
+  font-size: 9px;
+}
+.teamFoot button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid #b8c29e36;
+  border-radius: 25px;
+  background: transparent;
+  color: #b9c8a5;
+  font-size: 9px;
+  white-space: nowrap;
+}
+@keyframes stageIn {
+  from {
+    opacity: 0.4;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes portraitDrift {
+  from {
+    transform: scale(1.01);
+  }
+  to {
+    transform: scale(1.09) translateY(-8px);
+  }
+}
+@keyframes orbitBreath {
+  0%,
+  100% {
+    transform: rotate(-25deg) scale(0.97);
+    opacity: 0.3;
+  }
+  50% {
+    transform: rotate(-18deg) scale(1.02);
+    opacity: 0.85;
+  }
+}
+@keyframes signal {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (max-width: 1050px) {
+  .roster {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .stage {
+    grid-template-columns: 0.85fr 1.15fr;
+  }
+  .detail {
+    padding-left: 25px;
+    padding-right: 30px;
+  }
+  .portrait > img {
+    object-position: 48% 25%;
+  }
+  .agentName {
+    left: 30px;
+  }
+  .agentName h3 {
+    font-size: 120px !important;
+  }
+  .portraitFoot {
+    left: 30px;
+    right: 25px;
+    font-size: 6px;
+  }
+  .index {
+    left: 30px;
+  }
+}
+@media (max-width: 760px) {
+  .team {
+    padding-top: 75px;
+  }
+  .heading {
+    padding: 0 24px;
+  }
+  .heading h2 {
+    font-size: 39px !important;
+    letter-spacing: -1.8px !important;
+  }
+  .heading > p:last-child {
+    font-size: 13px;
+  }
+  .roster {
+    grid-template-columns: repeat(3, 1fr);
+    padding: 0 22px;
+    margin-top: 30px;
+  }
+  .roster button {
+    padding: 10px 7px;
+    gap: 7px;
+    min-height: 76px;
+  }
+  .roster img {
+    width: 31px;
+    height: 31px;
+  }
+  .roster button > span {
+    font-size: 10px;
+  }
+  .roster small {
+    font-size: 6px;
+    line-height: 1.4;
+  }
+  .stage {
+    grid-template-columns: 1fr;
+    margin-top: 30px;
+    min-height: 0;
+  }
+  .portrait {
+    min-height: 490px;
+    height: 490px;
+  }
+  .portrait > img {
+    object-position: center 30%;
+    object-fit: cover;
+  }
+  .portraitShade {
+    background: linear-gradient(0deg, #0b0e0c 2%, #0b0e0c00 80%);
+  }
+  .agentName {
+    left: 24px;
+    bottom: 65px;
+  }
+  .agentName h3 {
+    font-size: 110px !important;
+    letter-spacing: -6px;
+  }
+  .agentName > span {
+    font-size: 7px;
+  }
+  .agentName p {
+    font-size: 12px;
+  }
+  .index {
+    left: 24px;
+    top: 20px;
+    font-size: 7px;
+  }
+  .portraitFoot {
+    bottom: 22px;
+    left: 24px;
+    right: 24px;
+  }
+  .detail {
+    padding: 15px 24px 20px;
+  }
+  .detailTop {
+    padding-bottom: 24px;
+  }
+  .detail > h3 {
+    font-size: 31px !important;
+    letter-spacing: -1px;
+  }
+  .intro {
+    font-size: 13px;
+  }
+  .actionTabs button {
+    font-size: 11px;
+    min-height: 49px;
+  }
+  .how {
+    font-size: 12px;
+  }
+  .request p {
+    font-size: 12px;
+  }
+  .result p {
+    font-size: 12px;
+  }
+  .teamFoot {
+    padding: 15px 24px;
+    flex-direction: column;
+    align-items: flex-start;
+    font-size: 9px;
+  }
+  .tags > span {
+    font-size: 8px;
+  }
+  .actionLabel {
+    margin-top: 28px !important;
+  }
+}
+@media (max-width: 360px) {
+  .roster img {
+    width: 25px;
+    height: 25px;
+  }
+  .roster button {
+    padding: 8px 5px;
+    gap: 5px;
+  }
+  .roster button > span {
+    font-size: 9px;
+  }
+  .roster small {
+    font-size: 5.5px;
+  }
+  .heading h2 {
+    font-size: 34px !important;
+  }
+  .detail > h3 {
+    font-size: 27px !important;
+  }
+  .portrait {
+    height: 430px;
+    min-height: 430px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .team * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .portrait > img {
+    transform: none;
+  }
+  .stage,
+  .actionDemo {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.team[data-visible="false"] * {
+  animation-play-state: paused !important;
+}

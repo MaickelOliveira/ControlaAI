@@ -342,3 +342,99 @@
     transition: none;
   }
 }
+.lines path.pulse {
+  stroke: #edcf78;
+  stroke-width: 2.5;
+  stroke-dasharray: 3 97;
+  stroke-dashoffset: 100;
+  animation: bankFlow 3.8s linear infinite;
+  animation-timeline: auto;
+  animation-range: normal;
+  filter: drop-shadow(0 0 4px #edcf78);
+}
+.bank > div {
+  animation: bankFloat 5s ease-in-out infinite;
+}
+.bank:nth-of-type(2n) > div {
+  animation-delay: -2.5s;
+}
+.hub::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border: 1px solid #dac37b4f;
+  border-radius: 35px;
+  pointer-events: none;
+  animation: hubPulse 3s ease-out infinite;
+}
+.orbitInner {
+  animation: orbitSpin 40s linear infinite;
+}
+.answer {
+  animation: answerReveal 0.5s both;
+}
+.connection[data-visible="false"] *,
+.connection[data-visible="false"] *::after {
+  animation-play-state: paused !important;
+}
+@keyframes bankFlow {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes bankFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes hubPulse {
+  from {
+    transform: scale(0.97);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+@keyframes orbitSpin {
+  from {
+    transform: translate(-50%, -50%) rotate(0);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+@keyframes answerReveal {
+  from {
+    opacity: 0.4;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection *,
+  .connection *::after {
+    animation: none !important;
+  }
+  .lines path.pulse {
+    display: none;
+  }
+  .bank > div {
+    transform: none;
+  }
+  .answer {
+    opacity: 1;
+    transform: none;
+  }
+}

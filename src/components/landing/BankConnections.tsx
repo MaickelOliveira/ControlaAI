@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
+import { useVisible } from "./PresentationMotion";
 import s from "./bank-connections.module.css";
 
 const BANKS = [
@@ -35,8 +36,10 @@ const QUESTIONS = [
 
 export default function BankConnections() {
   const [selected, setSelected] = useState(0);
+  const network = useRef<HTMLDivElement>(null);
+  const visible = useVisible(network);
   return (
-    <div className={s.connection}>
+    <div ref={network} className={s.connection} data-visible={visible}>
       <div
         className={s.network}
         aria-label="Ilustração: bancos conectados à IA da Zelo no WhatsApp"
@@ -61,6 +64,16 @@ export default function BankConnections() {
               key={bank.id}
               d={`M${bank.x},${bank.y} Q50,${bank.y} 50,50`}
               vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          {BANKS.map((bank, index) => (
+            <path
+              key={`pulse-${bank.id}`}
+              className={s.pulse}
+              d={`M${bank.x},${bank.y} Q50,${bank.y} 50,50`}
+              pathLength="100"
+              vectorEffect="non-scaling-stroke"
+              style={{ animationDelay: `${index * -0.7}s` }}
             />
           ))}
         </svg>
@@ -111,7 +124,7 @@ export default function BankConnections() {
             </button>
           ))}
         </div>
-        <div className={s.answer} aria-live="polite">
+        <div className={s.answer} aria-live="polite" key={selected}>
           <div>
             <span>VOCÊ PERGUNTA NO WHATSAPP</span>
             <p>“{QUESTIONS[selected].request}”</p>
