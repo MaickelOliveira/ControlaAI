@@ -88,22 +88,22 @@ export default function WorkspaceJourney() {
               <span>03</span> PESSOAL. EMPRESAS. CADA UM NO SEU ESPAÇO.
             </p>
             <h2>
-              Sua vida tem
+              Sua vida pessoal
               <br />
-              mais de um lado.
+              e sua empresa.
               <br />
-              <em>A Zelo acompanha.</em>
+              <em>Cada uma no seu espaço.</em>
             </h2>
           </div>
           <div className={s.introduction}>
             <p>
-              A casa, a empresa, o próximo negócio.
+              Organize o pessoal e o empresarial separadamente.
               <br />
-              <strong>Uma conversa para organizar cada parte.</strong>
+              <strong>Com a mesma IA no WhatsApp.</strong>
             </p>
             <p>
-              Suas finanças, compromissos e arquivos ficam no espaço escolhido.
-              Você muda de assunto. A Zelo mantém cada registro no lugar.
+              Cada espaço mantém suas finanças, compromissos, arquivos e
+              permissões, inclusive entre empresas diferentes.
             </p>
             <div className={s.rule}>
               <UiIcon name="business" />
