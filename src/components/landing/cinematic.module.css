@@ -1267,8 +1267,23 @@
   line-height: 1.9;
 }
 .faq {
-  background: #fff;
+  --muted: #dce4de;
+  --line: #fec30780;
+  background: #0c100e;
+  color: #fff;
   border-top: 1px solid var(--line);
+}
+.faq h2 {
+  color: #fff;
+}
+.faq .sectionLabel {
+  color: #fec307;
+  font-size: 12px;
+}
+.faq .sectionLabel > span {
+  color: #0c100e;
+  background: #fec307;
+  border-color: #fec307;
 }
 .faqGrid {
   display: grid;
@@ -1278,7 +1293,8 @@
 .faqGrid > div > p:last-child {
   margin-top: 22px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 17px;
+  line-height: 1.7;
 }
 .faq details {
   border-bottom: 1px solid var(--line);
@@ -1287,23 +1303,36 @@
   border-top: 1px solid var(--line);
 }
 .faq summary {
-  padding: 22px 0;
+  padding: 25px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 30px;
-  font-size: 13px;
-  font-weight: 500;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.faq summary:hover {
+  color: #fec307;
+}
+.faq summary:focus-visible {
+  outline: 3px solid #fec307;
+  outline-offset: 6px;
+  border-radius: 2px;
 }
 .faq summary > span {
-  font-size: 23px;
+  color: #fec307;
+  font-size: 28px;
   font-weight: 400;
+  line-height: 1;
+  flex-shrink: 0;
 }
 .faq details > p {
-  font-size: 12px;
+  font-size: 16px;
   color: var(--muted);
-  padding: 0 30px 24px 0;
-  line-height: 1.9;
+  padding: 0 30px 27px 0;
+  line-height: 1.8;
 }
 .closing {
   background: var(--yellow);
@@ -2132,16 +2161,16 @@
     gap: 30px;
   }
   .faqGrid > div > p:last-child {
-    font-size: 13px;
+    font-size: 15px;
     margin-top: 17px;
   }
   .faq summary {
-    font-size: 12px;
+    font-size: 17px;
     gap: 20px;
-    padding: 19px 0;
+    padding: 22px 0;
   }
   .faq details > p {
-    font-size: 11px;
+    font-size: 15px;
     padding-right: 15px;
   }
   .closing {
@@ -2262,13 +2291,11 @@
   .steps p,
   .resourceItem > p,
   .bankConsent p,
-  .agentActions p,
-  .faq details > p {
+  .agentActions p {
     font-size: 13px;
   }
   .bankGrid h3,
   .resourceItem summary,
-  .faq summary,
   .areaDescription {
     font-size: 13px;
   }
@@ -2679,15 +2706,6 @@
 .planFine {
   color: #a3ae99;
 }
-.faq {
-  background: #0b0f0c;
-}
-.faq summary {
-  font-size: 14px;
-}
-.faq details > p {
-  font-size: 13px;
-}
 .closing {
   position: relative;
   background:
@@ -2908,12 +2926,6 @@
   }
   .planFine {
     font-size: 10px;
-  }
-  .faq summary {
-    font-size: 14px;
-  }
-  .faq details > p {
-    font-size: 13px;
   }
   .closing {
     padding-block: 75px;
@@ -3484,7 +3496,7 @@
 .page[data-motion="running"] .faqGrid[data-scroll-scene] {
   animation: none;
   transform: translateY(var(--entry-y));
-  opacity: calc(0.3 + var(--entry) * 0.7);
+  opacity: 1;
 }
 .page[data-motion="running"] .closingInner[data-scroll-scene] h2 {
   transform: translateY(var(--entry-y)) scale(var(--entry-scale));

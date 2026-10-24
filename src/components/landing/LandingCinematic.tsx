@@ -10,6 +10,7 @@ import BankConnections from "./BankConnections";
 import { usePageScrollMotion } from "./PageScrollMotion";
 import AgentShowcase from "./AgentShowcase";
 import PricingSection from "./PricingSection";
+import WorkspaceJourney from "./WorkspaceJourney";
 import {
   PresentationMotion,
   usePresentationMotion,
@@ -96,104 +97,6 @@ function SectionLabel({
       <span>{number}</span>
       {children}
     </p>
-  );
-}
-
-function Spaces() {
-  const [active, setActive] = useState(0);
-  const spaces = [
-    {
-      name: "Pessoal",
-      icon: "person",
-      detail: "Sua vida, suas prioridades.",
-      request: "Quanto gastei com supermercado este mês?",
-      items: ["Finanças pessoais", "Agenda e metas", "Arquivos e lembretes"],
-    },
-    {
-      name: "Estúdio Aurora",
-      icon: "business",
-      detail: "O dia a dia do seu negócio.",
-      request: "Marque a reunião do Estúdio Aurora para amanhã às 10h.",
-      items: ["Financeiro da empresa", "Clientes e equipe", "Google do espaço"],
-    },
-    {
-      name: "Loja Central",
-      icon: "business",
-      detail: "Outro negócio. Outro espaço.",
-      request: "Registre uma despesa de R$ 120 na Loja Central.",
-      items: [
-        "Contas da Loja Central",
-        "Acessos da empresa",
-        "Registros separados",
-      ],
-    },
-  ] as const;
-  const chosen = spaces[active];
-  return (
-    <section className={s.spaces} id="espacos">
-      <div className={`${s.wrap} ${s.spacesGrid}`} data-scroll-scene="spaces">
-        <div>
-          <SectionLabel number="03">CADA COISA NO SEU LUGAR</SectionLabel>
-          <h2>
-            Você pode ter
-            <br />
-            muitos papéis.
-            <br />
-            <em>E um só Zelo.</em>
-          </h2>
-          <p>
-            A vida pessoal, a primeira empresa, o próximo negócio. Cada espaço
-            tem seus registros, suas conexões e seus acessos.
-          </p>
-          <div className={s.spaceRule}>
-            <UiIcon name="business" />
-            <span>
-              Mais de uma empresa?
-              <br />
-              <strong>A Zelo pergunta em qual delas agir.</strong>
-            </span>
-          </div>
-        </div>
-        <div className={s.spaceDemo}>
-          <p className={s.spaceDemoLabel}>
-            EXPLORE OS ESPAÇOS <span>Exemplo ilustrativo</span>
-          </p>
-          <div
-            className={s.spaceButtons}
-            role="group"
-            aria-label="Exemplo de espaço"
-          >
-            {spaces.map((space, index) => (
-              <button
-                type="button"
-                key={space.name}
-                aria-pressed={active === index}
-                onClick={() => setActive(index)}
-              >
-                <UiIcon name={space.icon} />
-                {space.name}
-                <span aria-hidden="true">{active === index ? "✓" : "↗"}</span>
-              </button>
-            ))}
-          </div>
-          <div className={s.spaceContent} aria-live="polite" key={active}>
-            <span className={s.spaceIcon}>
-              <UiIcon name={chosen.icon} />
-            </span>
-            <h3>{chosen.detail}</h3>
-            <p>“{chosen.request}”</p>
-            <ul>
-              {chosen.items.map((item) => (
-                <li key={item}>
-                  <span aria-hidden="true">✓</span>
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -416,7 +319,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             </div>
           </div>
         </section>
-        <Spaces />
+        <WorkspaceJourney />
         <AgentShowcase />
         <PricingSection />
         <section className={`${s.section} ${s.faq}`} id="duvidas">
