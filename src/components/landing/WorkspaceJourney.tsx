@@ -5,66 +5,86 @@ import UiIcon, { type UiIconName } from "@/components/UiIcon";
 import { usePresentationMotion, useVisible } from "./PresentationMotion";
 import s from "./workspace-journey.module.css";
 
-const SPACES: {
+type Space = {
   name: string;
   kind: string;
   icon: UiIconName;
-  preview: string;
-  items: string[];
+  records: { icon: UiIconName; label: string; example: string }[];
+  explanation: string;
   request: string;
-  clarification?: string;
   answer: string;
-  resultIcon: UiIconName;
-  resultLabel: string;
-  resultValue: string;
-  resultTitle: string;
-  resultDetail: string;
-}[] = [
+};
+
+const SPACES: Space[] = [
   {
-    name: "Pessoal",
-    kind: "SUA VIDA",
+    name: "Meu espaço pessoal",
+    kind: "MINHA VIDA",
     icon: "person",
-    preview: "Mais clareza para o seu dia.",
-    items: ["Seu dinheiro", "Sua agenda", "Seus planos"],
-    request: "Rita, quanto gastei com supermercado este mês?",
-    answer: "No Pessoal, você registrou R$ 480,00 em supermercado neste mês.",
-    resultIcon: "finance",
-    resultLabel: "RESUMO DO MÊS",
-    resultValue: "R$ 480,00",
-    resultTitle: "Supermercado",
-    resultDetail: "Despesas do espaço Pessoal.",
+    records: [
+      { icon: "wallet", label: "Minhas finanças", example: "Despesas da casa" },
+      {
+        icon: "calendar",
+        label: "Minha agenda",
+        example: "Consulta no dentista",
+      },
+      { icon: "folder", label: "Meus arquivos", example: "Apólice do seguro" },
+    ],
+    explanation:
+      "Aqui ficam os registros da sua vida pessoal. Cada empresa tem seu próprio espaço.",
+    request: "Registre R$ 90 de farmácia no Pessoal.",
+    answer: "Despesa registrada somente no Pessoal.",
   },
   {
     name: "Estúdio Aurora",
-    kind: "SEU NEGÓCIO",
+    kind: "EMPRESA 01",
     icon: "business",
-    preview: "Mais espaço para fazer acontecer.",
-    items: ["Financeiro", "Clientes", "Compromissos"],
-    request: "Rita, marque uma reunião amanhã às 10h na empresa.",
-    clarification:
-      "Você tem duas empresas. Em qual delas: Estúdio Aurora ou Loja Central?",
-    answer: "Reunião criada para amanhã, às 10h, no Estúdio Aurora.",
-    resultIcon: "calendar",
-    resultLabel: "NA AGENDA DA EMPRESA",
-    resultValue: "10:00",
-    resultTitle: "Reunião · amanhã",
-    resultDetail: "Compromisso do Estúdio Aurora.",
+    records: [
+      {
+        icon: "wallet",
+        label: "Finanças do estúdio",
+        example: "Custos dos projetos",
+      },
+      {
+        icon: "calendar",
+        label: "Agenda do estúdio",
+        example: "Reunião com cliente",
+      },
+      {
+        icon: "folder",
+        label: "Arquivos do estúdio",
+        example: "Contrato do projeto",
+      },
+    ],
+    explanation:
+      "Aqui ficam apenas os registros do Estúdio Aurora. O Pessoal e a Loja Central têm seus próprios espaços.",
+    request: "Registre R$ 120 de materiais na empresa.",
+    answer: "Despesa registrada somente no Estúdio Aurora.",
   },
   {
     name: "Loja Central",
-    kind: "OUTRA EMPRESA",
+    kind: "EMPRESA 02",
     icon: "business",
-    preview: "Um novo negócio. Tudo no lugar.",
-    items: ["Contas", "Registros", "Acessos"],
-    request: "Rita, registre R$ 120 de estoque na empresa.",
-    clarification:
-      "Você tem duas empresas. Em qual delas: Estúdio Aurora ou Loja Central?",
-    answer: "Despesa de R$ 120,00 registrada na Loja Central.",
-    resultIcon: "wallet",
-    resultLabel: "NO FINANCEIRO DA EMPRESA",
-    resultValue: "−R$ 120,00",
-    resultTitle: "Compra de estoque",
-    resultDetail: "Lançamento da Loja Central.",
+    records: [
+      {
+        icon: "wallet",
+        label: "Finanças da loja",
+        example: "Compras de mercadorias",
+      },
+      {
+        icon: "calendar",
+        label: "Agenda da loja",
+        example: "Visita do fornecedor",
+      },
+      {
+        icon: "folder",
+        label: "Arquivos da loja",
+        example: "Catálogo do fornecedor",
+      },
+    ],
+    explanation:
+      "Aqui ficam apenas os registros da Loja Central. O Pessoal e o Estúdio Aurora têm seus próprios espaços.",
+    request: "Registre R$ 120 de materiais na empresa.",
+    answer: "Despesa registrada somente na Loja Central.",
   },
 ];
 
@@ -74,6 +94,44 @@ export default function WorkspaceJourney() {
   const { running } = usePresentationMotion();
   const visible = useVisible(root);
   const chosen = SPACES[active];
+
+  function spaceButton(space: Space, index: number) {
+    return (
+      <button
+        key={space.name}
+        type="button"
+        className={s.space}
+        data-active={active === index}
+        aria-pressed={active === index}
+        aria-label={`Explorar ${space.name}`}
+        aria-controls="workspace-demonstration"
+        onClick={() => setActive(index)}
+      >
+        <div className={s.spaceTop}>
+          <span>{space.kind}</span>
+          <b aria-hidden="true">{active === index ? "✓" : "↗"}</b>
+        </div>
+        <h4>{space.name}</h4>
+        <ul className={s.previewRows}>
+          {space.records.map((record) => (
+            <li key={record.label}>
+              <UiIcon name={record.icon} />
+              <div>
+                <small>{record.label}</small>
+                <strong>{record.example}</strong>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <span className={s.spaceCaption}>
+          {index === 0
+            ? "Só os seus registros pessoais."
+            : "Só os registros desta empresa."}
+        </span>
+      </button>
+    );
+  }
+
   return (
     <section
       id="espacos"
@@ -89,8 +147,7 @@ export default function WorkspaceJourney() {
             </p>
             <h2>
               Sua vida pessoal
-              <br />
-              e sua empresa.
+              <br />e sua empresa.
               <br />
               <em>Cada uma no seu espaço.</em>
             </h2>
@@ -102,8 +159,8 @@ export default function WorkspaceJourney() {
               <strong>Com a mesma IA no WhatsApp.</strong>
             </p>
             <p>
-              Cada espaço mantém suas finanças, compromissos, arquivos e
-              permissões, inclusive entre empresas diferentes.
+              Um espaço para você. Um espaço para cada empresa. Cada um com suas
+              finanças, agenda, arquivos e permissões.
             </p>
             <div className={s.rule}>
               <UiIcon name="business" />
@@ -118,132 +175,91 @@ export default function WorkspaceJourney() {
 
         <div className={s.experience} data-scroll-scene="workspace-journey">
           <div className={s.experienceHeader}>
-            <span>
-              <b>01</b> ESCOLHA UM ESPAÇO PARA EXPLORAR
-            </span>
+            <span>VEJA COMO FICA SEPARADO</span>
             <small>Demonstração · dados fictícios</small>
           </div>
-          <div className={s.spaces} role="group" aria-label="Exemplo de espaço">
-            {SPACES.map((space, index) => (
-              <button
-                key={space.name}
-                type="button"
-                aria-pressed={active === index}
-                aria-controls="workspace-demonstration"
-                onClick={() => setActive(index)}
-                className={s.space}
-                data-active={active === index}
-              >
-                <div className={s.spaceTop}>
-                  <UiIcon name={space.icon} />
-                  <span>{space.kind}</span>
-                  <b aria-hidden="true">{active === index ? "✓" : "↗"}</b>
-                </div>
-                <h3>{space.name}</h3>
-                <p>{space.preview}</p>
-                <div className={s.spaceItems}>
-                  {space.items.map((item) => (
-                    <span key={item}>{item}</span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className={s.route} aria-hidden="true">
-            <span />
-            <i />
-            <b>Zelo</b>
-            <i />
-            <span />
-          </div>
-
-          <div id="workspace-demonstration" className={s.stage}>
-            <div className={s.conversation}>
-              <div className={s.chatTop}>
-                <div className={s.zeloAvatar}>Z</div>
+          <div
+            className={s.spaceMap}
+            role="group"
+            aria-label="Exemplo de espaço"
+          >
+            <div className={s.personalGroup}>
+              <div className={s.groupHeading}>
+                <UiIcon name="person" />
                 <div>
-                  <strong>Rita · Zelo</strong>
-                  <span>Sua IA no WhatsApp</span>
+                  <h3>Pessoal</h3>
+                  <p>Sua vida, no seu espaço.</p>
                 </div>
-                <small>02 / A CONVERSA</small>
               </div>
-              <div className={s.messages} key={`conversation-${active}`}>
-                <p className={s.sent}>
-                  {chosen.request}
-                  <small>
-                    Você <span aria-hidden="true">✓✓</span>
-                  </small>
-                </p>
-                {chosen.clarification && (
-                  <>
-                    <p className={s.received}>{chosen.clarification}</p>
-                    <p className={s.sent}>
-                      {chosen.name}
-                      <small>
-                        Você <span aria-hidden="true">✓✓</span>
-                      </small>
-                    </p>
-                  </>
-                )}
-                <p className={s.received}>
-                  {chosen.answer}
-                  <span className={s.confirmation}>
-                    ✓ Espaço: {chosen.name}
-                  </span>
-                </p>
-              </div>
-              <div className={s.chatBottom}>
-                <span>Peça com suas palavras.</span>
-                <UiIcon name="spark" />
-              </div>
+              {spaceButton(SPACES[0], 0)}
             </div>
-            <div className={s.result} aria-live="polite" aria-atomic="true">
-              <p className={s.resultStep}>03 / NO LUGAR CERTO</p>
-              <div key={`result-${active}`} className={s.resultInner}>
-                <div className={s.resultSpace}>
-                  <UiIcon name={chosen.icon} />
-                  <strong>{chosen.name}</strong>
-                  <span>ESPAÇO ESCOLHIDO</span>
+            <div className={s.businessGroup}>
+              <div className={s.groupHeading}>
+                <UiIcon name="business" />
+                <div>
+                  <h3>Empresarial</h3>
+                  <p>Um espaço para cada empresa.</p>
                 </div>
-                <div className={s.resultData}>
-                  <UiIcon name={chosen.resultIcon} />
-                  <p>{chosen.resultLabel}</p>
-                  <strong>{chosen.resultValue}</strong>
-                  <h3>{chosen.resultTitle}</h3>
-                  <span>{chosen.resultDetail}</span>
-                </div>
-                <p className={s.resultNote}>
-                  <span aria-hidden="true">✓</span> Pessoal e outras empresas
-                  continuam com seus próprios registros.
-                </p>
+              </div>
+              <div className={s.businessSpaces}>
+                {SPACES.slice(1).map((space, index) =>
+                  spaceButton(space, index + 1),
+                )}
               </div>
             </div>
           </div>
-          <div className={s.foundation}>
-            <div>
-              <UiIcon name="wallet" />
-              <span>
-                <strong>Contas e registros</strong>Cada espaço com suas
-                finanças.
-              </span>
+          <div
+            className={s.selectionNote}
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <UiIcon name={chosen.icon} />
+            <p>
+              <strong>Espaço {chosen.name} selecionado.</strong>
+              <span>{chosen.explanation}</span>
+            </p>
+          </div>
+
+          <div id="workspace-demonstration" className={s.whatsappExample}>
+            <div className={s.exampleIntro}>
+              <span>NA MESMA CONVERSA DO WHATSAPP</span>
+              <h3>
+                Você pede.
+                <br />A Zelo separa.
+              </h3>
+              <p>
+                Se o pedido não indicar qual empresa, a IA pergunta antes de
+                agir.
+              </p>
             </div>
-            <div>
-              <UiIcon name="calendar" />
-              <span>
-                <strong>Agenda e arquivos</strong>Conexões do espaço escolhido.
-              </span>
-            </div>
-            <div>
-              <UiIcon name="users" />
-              <span>
-                <strong>Pessoas e acessos</strong>Quem participa de cada espaço.
-              </span>
+            <div className={s.exampleMessages} key={active}>
+              <p className={s.sent}>
+                <small>VOCÊ</small>
+                {chosen.request}
+              </p>
+              {active !== 0 && (
+                <>
+                  <p className={s.received}>
+                    <small>ZELO</small>Em qual empresa: Estúdio Aurora ou Loja
+                    Central?
+                  </p>
+                  <p className={s.companyAnswer}>
+                    <span aria-hidden="true">✓</span>
+                    {chosen.name}
+                    <small>VOCÊ ESCOLHE</small>
+                  </p>
+                </>
+              )}
+              <p className={s.confirmation}>
+                <span aria-hidden="true">✓</span>
+                {chosen.answer}
+              </p>
             </div>
           </div>
           <p className={s.note}>
-            Exemplos ilustrativos. Recursos empresariais conforme o acesso
-            contratado; integrações exigem autorização.
+            Selecione um espaço para ver o exemplo. Dados fictícios. Recursos
+            empresariais conforme o acesso contratado; integrações exigem
+            autorização.
           </p>
         </div>
       </div>
