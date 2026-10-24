@@ -1,8 +1,8 @@
 .page {
   --ink: #20241f;
   --muted: #5e6259;
-  --paper: #f7f7f2;
-  --yellow: #f7cc46;
+  --paper: #fff3b5;
+  --yellow: #fec307;
   --line: #20241f26;
   color: var(--ink);
   background: var(--paper);
@@ -84,7 +84,7 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  background: #f7f7f2f5;
+  background: #fff3b5f5;
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(12px);
 }
@@ -273,7 +273,7 @@
   font-size: 11px;
   line-height: 1.7;
   margin-top: 24px !important;
-  color: #49452e;
+  color: #282711;
 }
 .demo {
   width: 100%;
@@ -320,11 +320,11 @@
   position: relative;
   width: calc(100% - 60px);
   max-width: 410px;
-  background: #f1eee7;
+  background: #fff3b5;
   border: 5px solid #fff;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 16px 40px #4c3c1824;
+  box-shadow: 0 16px 40px #28271124;
   transform: rotate(-2deg);
 }
 .chatHeader {
@@ -439,7 +439,7 @@
   border: 1px solid #3e4538;
   color: #fff;
   border-radius: 10px;
-  box-shadow: 0 15px 35px #41311c30;
+  box-shadow: 0 15px 35px #28271130;
   animation: appear 0.3s ease-out;
 }
 .resultTop {
@@ -516,7 +516,7 @@
 .demoDisclaimer {
   font-size: 9px;
   line-height: 1.5;
-  color: #574b2a;
+  color: #282711;
   text-align: right;
   max-width: 370px;
   margin: 14px 0 0 auto !important;
@@ -1141,7 +1141,7 @@
   margin-top: 8px !important;
 }
 .featuredPlan .planTagline {
-  color: #53492c;
+  color: #282711;
 }
 .price {
   display: flex;
@@ -1174,7 +1174,7 @@
   margin-top: 12px !important;
 }
 .featuredPlan .planTotal {
-  color: #53492c;
+  color: #282711;
 }
 .planButton {
   display: flex;
@@ -2302,10 +2302,10 @@
 
 /* Cinematic direction: graphite, champagne gold, generous typography. */
 .page {
-  --ink: #f0f1e9;
+  --ink: #fff3b5;
   --muted: #a7ada3;
   --paper: #0c100e;
-  --yellow: #e8c779;
+  --yellow: #fec307;
   --line: #e0e4d221;
   background: var(--paper);
 }
@@ -2313,10 +2313,10 @@
   font-weight: 550;
 }
 .page :is(a, button, summary):focus-visible {
-  outline-color: #e9cc89;
+  outline-color: #fec307;
 }
 .skip {
-  background: #e8c779;
+  background: #fec307;
   color: #111 !important;
 }
 .header {
@@ -2324,7 +2324,7 @@
   width: 100%;
   left: 0;
   background: #080c0bd9;
-  border-bottom: 1px solid #e8debb15;
+  border-bottom: 1px solid #fec30715;
   backdrop-filter: blur(18px);
 }
 .headerInner {
@@ -2342,21 +2342,21 @@
   color: #c4cabf;
 }
 .nav a:nth-child(2) {
-  color: #ead299;
+  color: #fec307;
 }
 .login {
   color: #c4cabf !important;
 }
 .headerCta {
-  border: 1px solid #bdab754f;
-  color: #ead7a8 !important;
-  background: #e8c7790a;
+  border: 1px solid #fec3074f;
+  color: #fec307 !important;
+  background: #fec3070a;
 }
 .headerCta:hover {
-  background: #e8c77920;
+  background: #fec30720;
 }
 .menuToggle {
-  border-color: #e8debb30;
+  border-color: #fec30730;
 }
 .mobileNav {
   background: #0d120f;
@@ -2365,12 +2365,12 @@
   padding-block: 120px;
 }
 .sectionLabel {
-  color: #c3b991;
+  color: #fec307;
   font-size: 9px;
   letter-spacing: 1.6px;
 }
 .sectionLabel > span {
-  border-color: #c3b99150;
+  border-color: #fec30750;
   opacity: 1;
 }
 .overview {
@@ -2385,7 +2385,7 @@
   font-size: 15px;
 }
 .steps > div > span {
-  color: #a79b70;
+  color: #fec307;
 }
 .steps h3 {
   font-size: 16px;
@@ -2394,7 +2394,7 @@
   font-size: 13px;
 }
 .productFigure {
-  border: 1px solid #e2ce8830;
+  border: 1px solid #fec30730;
   padding: 12px 12px 0;
   border-radius: 15px;
   box-shadow: 0 40px 120px #0009;
@@ -2406,7 +2406,7 @@
 .openFinance {
   position: relative;
   background:
-    radial-gradient(ellipse at 95% 0%, #40362155, transparent 60%), #101611;
+    radial-gradient(ellipse at 95% 0%, #28271155, transparent 60%), #101611;
   border-block: 1px solid var(--line);
 }
 .bankIntro {
@@ -2418,13 +2418,13 @@
   line-height: 1.2;
 }
 .bankIntro h2 em {
-  color: #d8bf83;
+  color: #fec307;
 }
 .bankIntro .textLink {
-  color: #e3cc93;
+  color: #fec307;
 }
 .bankRail {
-  border-color: #d3c38c21;
+  border-color: #fec30721;
   padding: 30px 0;
 }
 .bankRail > div {
@@ -2432,7 +2432,7 @@
   font-size: 12px;
 }
 .bankRail img {
-  background: #f4f4ec;
+  background: #fff3b5;
   padding: 7px;
   width: 42px;
   height: 42px;
@@ -2452,7 +2452,7 @@
   padding: 30px 24px;
   border-bottom: 1px solid var(--line);
   border-right: 1px solid var(--line);
-  background: #d5d6ac03;
+  background: #fec30703;
 }
 .bankGrid article:nth-child(3n) {
   border-right: 0;
@@ -2461,7 +2461,7 @@
   border-bottom: 0;
 }
 .bankGrid article > svg {
-  color: #c4b786;
+  color: #fec307;
 }
 .bankGrid h3 {
   font-size: 16px;
@@ -2474,10 +2474,10 @@
   padding-top: 0;
 }
 .consentIcon {
-  color: #ccbc88;
+  color: #fec307;
 }
 .bankConsent strong {
-  color: #e2dfcd;
+  color: #fec307;
 }
 .spaces {
   background:
@@ -2485,7 +2485,7 @@
   padding-block: 115px;
 }
 .spaces h2 em {
-  color: #d8bf83;
+  color: #fec307;
 }
 .spacesGrid > div:first-child > p:not(.sectionLabel) {
   color: #9da897;
@@ -2506,8 +2506,8 @@
 }
 .spaceButtons button[aria-pressed="true"] {
   color: #20241b;
-  background: #d6c38e;
-  border-color: #d6c38e;
+  background: #fec307;
+  border-color: #fec307;
 }
 .spaceContent > p {
   color: #aeb8a3;
@@ -2520,17 +2520,17 @@
   color: #bdd69f;
 }
 .resources {
-  background: #edece3;
+  background: #fff3b5;
   color: #20261f;
   --ink: #20261f;
   --muted: #5b6455;
   --line: #20261f25;
 }
 .resources .sectionLabel {
-  color: #6a6447;
+  color: #65530a;
 }
 .resources .sectionLabel > span {
-  border-color: #93856370;
+  border-color: #fec30770;
 }
 .resources :is(button, summary):focus-visible {
   outline-color: #275fc1;
@@ -2542,7 +2542,7 @@
 }
 .areaTabs button[aria-pressed="true"] {
   background: #232e25;
-  color: #f2ecd8;
+  color: #fff3b5;
 }
 .areaTabs button {
   padding: 23px 26px;
@@ -2552,7 +2552,7 @@
   margin-block: 36px !important;
 }
 .resourceItem > svg {
-  color: #7e7453;
+  color: #fec307;
 }
 .resourceItem > p {
   font-size: 14px;
@@ -2565,7 +2565,7 @@
   font-size: 11px;
 }
 .resourceItem blockquote {
-  background: #dfe1d2;
+  background: #fec307;
   font-size: 12px;
 }
 .team {
@@ -2588,7 +2588,7 @@
   padding: 14px 13px 15px;
 }
 .teamRoster button[aria-pressed="true"] {
-  border-color: #dec58b;
+  border-color: #fec307;
   background: #21281c;
 }
 .teamRoster small {
@@ -2596,10 +2596,10 @@
   font-size: 10px;
 }
 .agentDetail {
-  border-color: #d8c99535;
+  border-color: #fec30735;
 }
 .agentDetail h3 {
-  color: #e4cd95;
+  color: #fec307;
 }
 .agentDetail h3 > span {
   color: #abb6a0;
@@ -2609,15 +2609,15 @@
 }
 .agentActions .agentResult {
   color: #d1dbc3;
-  border-color: #c4ab6a;
+  border-color: #fec307;
 }
 .plans {
   background:
-    radial-gradient(ellipse at 50% 40%, #3f382046, transparent 65%), #0e130f;
+    radial-gradient(ellipse at 50% 40%, #28271146, transparent 65%), #0e130f;
   border-top: 1px solid var(--line);
 }
 .plansIntro h2 em {
-  color: #cbb67e;
+  color: #fec307;
 }
 .plan {
   background: #161d17;
@@ -2629,8 +2629,8 @@
   color: #aeb8a4;
 }
 .planButton {
-  color: #e6dbc0 !important;
-  border-color: #d1c79f55;
+  color: #fec307 !important;
+  border-color: #fec30755;
 }
 .planButton:hover {
   background: #b6c78b16;
@@ -2646,14 +2646,14 @@
   color: #c2c996;
 }
 .featuredPlan {
-  background: linear-gradient(145deg, #e7d097, #c6a768);
+  background: linear-gradient(145deg, #fec307, #fec307);
   color: #22261a;
-  border-color: #dbc18a;
-  box-shadow: 0 15px 80px #e3c67a10;
+  border-color: #fec307;
+  box-shadow: 0 15px 80px #fec30710;
 }
 .featuredPlan .planButton {
   background: #20271c;
-  color: #f4e9ca !important;
+  color: #fff3b5 !important;
   border-color: #20271c;
 }
 .featuredPlan ul {
@@ -2666,14 +2666,14 @@
   color: #4b5c37;
 }
 .planBadge {
-  background: #ede5c8;
+  background: #fec307;
   color: #242b20;
   font-size: 9px;
   letter-spacing: 1px;
 }
 .guaranteeSeal {
-  color: #d4bf8e;
-  border-color: #cbb67e65;
+  color: #fec307;
+  border-color: #fec30765;
 }
 .guarantee p,
 .planFine {
@@ -2692,23 +2692,23 @@
   position: relative;
   background:
     linear-gradient(90deg, #080d0be8, #080d0b70),
-    url("/brand/cinematic/zelo-gold-poster.webp") right center/cover;
+    none right center/cover;
   padding-block: 115px;
-  border-block: 1px solid #caba8830;
+  border-block: 1px solid #fec30730;
 }
 .closingInner > p {
-  color: #c4b583;
+  color: #fec307;
 }
 .closing h2 {
   font-size: 62px;
-  color: #f2f0df;
+  color: #fff3b5;
 }
 .darkButton {
-  background: #e4c77f;
+  background: #fec307;
   color: #1d2118 !important;
 }
 .darkButton:hover {
-  background: #f2db9c;
+  background: #fec307;
 }
 .footer {
   background: #080c09;
@@ -2992,14 +2992,14 @@
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border: 1px solid #d4c28c44;
+  border: 1px solid #fec30744;
   border-radius: 50%;
   background: transparent;
-  color: #d8c796;
+  color: #fec307;
   font-size: 14px !important;
 }
 .motionButton:hover {
-  background: #e8c77920;
+  background: #fec30720;
 }
 .motionButton:disabled {
   opacity: 0.55;
@@ -3007,10 +3007,10 @@
 }
 .marquee {
   overflow: hidden;
-  background: #e4c677;
+  background: #fec307;
   color: #182015;
   padding: 25px 0;
-  border-block: 1px solid #d1b26c;
+  border-block: 1px solid #fec307;
   position: relative;
 }
 .marquee > div {
@@ -3067,7 +3067,7 @@
     transform 0.3s;
 }
 .bankGrid article:hover {
-  background: #cfc77e10;
+  background: #fec30710;
   transform: translateY(-4px);
 }
 .spaceContent {
@@ -3236,4 +3236,265 @@
     width: auto;
     padding: 0 22px;
   }
+}
+
+/* V10 — brand yellow, neutral surfaces and product-led demonstrations. */
+.page {
+  --yellow: #fec307;
+  --paper: #fafaf7;
+  --ink: #171a18;
+  background: #fafaf7;
+}
+.header {
+  background: #101110ed;
+  border-bottom-color: #ffffff17;
+}
+.headerCta {
+  background: #fec307 !important;
+  color: #151712 !important;
+  border-color: #fec307 !important;
+  font-weight: 650;
+}
+.nav a:nth-child(2) {
+  color: #fec307;
+}
+.nav a:hover {
+  color: #fec307;
+}
+.motionButton {
+  color: #fec307;
+  border-color: #fec30750;
+}
+.marquee {
+  background: #fec307;
+  border-color: #fec307;
+  color: #141712;
+  transform: none;
+  padding-block: 22px;
+}
+.marquee em {
+  -webkit-text-stroke-color: #141712;
+}
+.sectionLabel {
+  color: #667062;
+}
+.sectionLabel > span {
+  background: #fec307;
+  color: #20231c;
+  border-color: #fec307;
+}
+.openFinance {
+  background: #101110;
+  color: #f6f7f0;
+  padding-top: 120px;
+  padding-bottom: 100px;
+}
+.openFinance .sectionLabel {
+  color: #b8c0b2;
+}
+.openFinance .sectionLabel > span {
+  color: #fec307;
+  background: transparent;
+  border-color: #fec30766;
+}
+.bankIntro h2 {
+  font-size: clamp(42px, 5.8vw, 80px);
+  line-height: 1.04;
+  letter-spacing: -3.8px;
+}
+.bankIntro h2 em {
+  color: #fec307;
+  font-weight: 600;
+}
+.bankIntro > div > p {
+  color: #aeb7a8;
+}
+.bankIntro .textLink {
+  color: #fec307;
+}
+.bankGrid {
+  border-color: #ffffff20;
+  margin-top: 60px;
+}
+.bankGrid article {
+  border-color: #ffffff20;
+  background: transparent;
+}
+.bankGrid article > svg {
+  color: #fec307;
+}
+.bankGrid article h3 {
+  color: #f3f6ed;
+}
+.bankGrid article p {
+  color: #9ea997;
+}
+.bankConsent {
+  border-color: #ffffff20;
+  background: #ffffff05;
+  color: #9daa95;
+}
+.bankConsent strong {
+  color: #e2e8da;
+}
+.consentIcon {
+  background: #fec307;
+  color: #111;
+}
+.spaces {
+  background: #f5f5ee;
+}
+.spaceTabs button[aria-selected="true"] {
+  background: #fec307;
+  color: #151b13;
+  border-color: #fec307;
+}
+.overview {
+  background: #fafaf7;
+}
+.overview .productFigure {
+  border-color: #20291d25;
+  box-shadow: 0 35px 80px #26351c12;
+}
+.overview .sectionHead h2 {
+  color: #181d16;
+}
+.plans {
+  background: #f7f7f0;
+}
+.planFeatured {
+  border-color: #fec307 !important;
+}
+.planFeatured .planCta {
+  background: #fec307;
+  color: #171a13;
+}
+.closing {
+  background: #fec307 !important;
+  color: #121711;
+  min-height: 500px;
+  position: relative;
+}
+.closing:before {
+  content: "zelo";
+  font-size: clamp(220px, 35vw, 550px);
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.1em;
+  line-height: 1;
+  width: auto;
+  height: auto;
+  right: 3%;
+  top: 0;
+  color: #1217110c;
+  border: 0;
+  border-radius: 0;
+  animation: none;
+}
+.closing:after {
+  display: none;
+}
+.closing h2 {
+  color: #11180e;
+  font-size: clamp(48px, 6.6vw, 92px);
+  line-height: 1.03;
+  letter-spacing: -4px;
+}
+.closing p {
+  color: #34381f;
+}
+.closing .darkButton {
+  background: #121711;
+  color: #fff !important;
+  border-color: #121711;
+}
+.footer {
+  background: #101110;
+}
+@media (max-width: 700px) {
+  .bankIntro h2 {
+    font-size: 43px;
+    letter-spacing: -2px;
+  }
+  .openFinance {
+    padding-block: 75px;
+  }
+  .closing h2 {
+    font-size: 49px;
+    letter-spacing: -2.4px;
+  }
+  .closing {
+    min-height: 380px;
+  }
+  .closing:before {
+    top: 40%;
+    right: -5%;
+    font-size: 230px;
+  }
+}
+
+/* Distinct scroll treatments across the complete page; content remains readable. */
+.page [data-scroll-scene] {
+  --entry: 1;
+  --entry-y: 0px;
+  --entry-x: 0px;
+  --entry-angle: 0deg;
+  --entry-scale: 1;
+}
+.page[data-motion="running"] .sectionHead[data-scroll-scene],
+.page[data-motion="running"] .bankIntro[data-scroll-scene],
+.page[data-motion="running"] .plansIntro[data-scroll-scene] {
+  animation: none;
+  opacity: calc(0.25 + var(--entry) * 0.75);
+  transform: translateY(var(--entry-y));
+  will-change: transform, opacity;
+}
+.page[data-motion="running"] .productFigure[data-scroll-scene] {
+  animation: none;
+  transform-origin: center 80%;
+  transform: perspective(1600px) translateY(var(--entry-y))
+    rotateX(var(--entry-angle)) scale(var(--entry-scale));
+  opacity: 1;
+  will-change: transform;
+  border-radius: calc(32px - var(--entry) * 20px);
+  transition: none;
+}
+.page[data-motion="running"] .spacesGrid[data-scroll-scene] > div:first-child {
+  transform: translateX(calc(var(--entry-x) * -1));
+  opacity: calc(0.25 + var(--entry) * 0.75);
+}
+.page[data-motion="running"] .spacesGrid[data-scroll-scene] > div:last-child {
+  transform: translateX(var(--entry-x)) rotate(calc(var(--entry-angle) * 0.4));
+  opacity: calc(0.3 + var(--entry) * 0.7);
+}
+.page[data-motion="running"] .planGrid[data-scroll-scene] > article {
+  transform: translateY(calc(var(--entry-y) * 1.2));
+  opacity: calc(0.2 + var(--entry) * 0.8);
+}
+.page[data-motion="running"]
+  .planGrid[data-scroll-scene]
+  > article:nth-child(2) {
+  transform: translateY(calc(var(--entry-y) * 0.5));
+}
+.page[data-motion="running"]
+  .planGrid[data-scroll-scene]
+  > article:nth-child(3) {
+  transform: translateY(calc(var(--entry-y) * 1.8));
+}
+.page[data-motion="running"] .faqGrid[data-scroll-scene] {
+  animation: none;
+  transform: translateY(var(--entry-y));
+  opacity: calc(0.3 + var(--entry) * 0.7);
+}
+.page[data-motion="running"] .closingInner[data-scroll-scene] h2 {
+  transform: translateY(var(--entry-y)) scale(var(--entry-scale));
+  transform-origin: left;
+  opacity: calc(0.2 + var(--entry) * 0.8);
+}
+.page [data-inview="false"] {
+  will-change: auto !important;
+}
+.motionButton,
+.menuToggle {
+  color: #fec307 !important;
 }

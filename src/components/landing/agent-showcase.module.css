@@ -1,9 +1,9 @@
 .team {
   position: relative;
   background: #0b0e0c;
-  color: #f0f1e8;
+  color: #fff3b5;
   padding: 100px 0 60px;
-  --agent-color: #eed38a;
+  --agent-color: #fec307;
 }
 .anchor {
   position: absolute;
@@ -17,7 +17,7 @@
 .label {
   font-size: 9px;
   letter-spacing: 1.8px;
-  color: #d7c594;
+  color: #fec307;
   margin-bottom: 28px !important;
 }
 .heading h2 {
@@ -26,7 +26,7 @@
   letter-spacing: -3.5px !important;
 }
 .heading h2 em {
-  color: #e4c77d;
+  color: #fec307;
 }
 .heading > p:last-child {
   color: #aab7a8;
@@ -60,7 +60,7 @@
 .roster button:hover,
 .roster button[aria-pressed="true"] {
   background: #2b3021;
-  border-color: #c5bd705f;
+  border-color: #fec3075f;
 }
 .roster button[aria-pressed="true"] {
   box-shadow: inset 0 -2px var(--agent-color);
@@ -70,7 +70,7 @@
   height: 42px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid #e3d59633;
+  border: 1px solid #fec30733;
   transition: transform 0.3s;
 }
 .roster button:hover img {
@@ -118,13 +118,13 @@
   position: absolute;
   width: 85%;
   height: 45%;
-  border: 1px solid #d9c17f30;
+  border: 1px solid #fec30730;
   top: 28%;
   left: 8%;
   border-radius: 50%;
   transform: rotate(-25deg);
   animation: orbitBreath 9s ease-in-out infinite;
-  box-shadow: 0 0 90px #f3d78b0a;
+  box-shadow: 0 0 90px #fec3070a;
 }
 .index {
   position: absolute;
@@ -132,7 +132,7 @@
   left: 48px;
   font-size: 8px;
   letter-spacing: 2px;
-  color: #cebe8e;
+  color: #fec307;
 }
 .agentName {
   position: absolute;
@@ -210,7 +210,7 @@
   transition: background 0.2s;
 }
 .detailTop button:hover {
-  background: #d4c280;
+  background: #fec307;
   color: #12190d;
 }
 .detail > h3 {
@@ -285,7 +285,7 @@
   font-weight: 300;
 }
 .actionTabs button[aria-pressed="true"] {
-  background: #e9d18d0d;
+  background: #fec3070d;
   color: var(--agent-color);
 }
 .actionDemo {

@@ -6,6 +6,7 @@ import { VIRTUAL_TEAM } from "@/lib/virtual-team";
 import { AGENT_ACTIONS } from "@/lib/landing-agent-actions";
 import { usePresentationMotion, useVisible } from "./PresentationMotion";
 import s from "./agent-showcase.module.css";
+import TeamEntrance from "./TeamEntrance";
 
 const TEAM = [
   {
@@ -13,7 +14,7 @@ const TEAM = [
     title: "Seu dinheiro.\nUma visão inteira.",
     text: "Do cafezinho aos dados dos seus bancos. A Rita reúne os registros para você entender o presente e acompanhar os próximos compromissos.",
     tags: ["Open Finance", "Receitas e despesas", "Faturas e parcelas"],
-    color: "#eed38a",
+    color: "#fec307",
   },
   {
     key: "agenda",
@@ -83,7 +84,7 @@ const TEAM = [
     title: "Sua preparação fiscal.\nCom tudo no lugar.",
     text: "O Otto organiza dados fiscais, serviços e rascunhos de NFS-e. Emissão direta e PDF oficial ainda aguardam homologação.",
     tags: ["Dados fiscais", "Serviços", "Rascunhos de NFS-e"],
-    color: "#dbcfaf",
+    color: "#fec307",
   },
   {
     key: "support",
@@ -122,166 +123,176 @@ export default function AgentShowcase() {
     return () => clearInterval(timer);
   }, [running, visible, manual, hovered]);
   return (
-    <section
-      id="equipe"
-      ref={section}
-      data-visible={visible}
-      className={s.team}
-      style={{ "--agent-color": agent.color } as React.CSSProperties}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocusCapture={() => setManual(true)}
-    >
-      <span id="recursos" className={s.anchor} />
-      <div className={s.heading}>
-        <p className={s.label}>03 / TODAS AS FUNÇÕES. UM TIME AO SEU LADO.</p>
-        <h2>
-          Você não precisa
-          <br />
-          dar conta de <em>tudo sozinho.</em>
-        </h2>
-        <p>
-          Conheça os 12 agentes virtuais da Zelo. Cada um apresenta uma área da
-          plataforma — todos na mesma conversa do WhatsApp.
-        </p>
-      </div>
-      <div
-        className={s.roster}
-        role="group"
-        aria-label="Conheça os 12 agentes e suas funções"
+    <>
+      <TeamEntrance
+        onChoose={(index) => {
+          pick(index);
+          document
+            .getElementById("funcoes-dos-agentes")
+            ?.scrollIntoView({ behavior: running ? "smooth" : "instant" });
+        }}
+      />
+      <section
+        id="funcoes-dos-agentes"
+        ref={section}
+        data-visible={visible}
+        className={s.team}
+        style={{ "--agent-color": agent.color } as React.CSSProperties}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocusCapture={() => setManual(true)}
       >
-        {TEAM.map((item, index) => {
-          const person = VIRTUAL_TEAM[item.key];
-          return (
-            <button
-              key={item.key}
-              type="button"
-              aria-pressed={selected === index}
-              onClick={() => pick(index)}
-            >
-              <Image
-                src={`/brand/team/${person.name.toLowerCase()}.png`}
-                width={72}
-                height={72}
-                alt=""
-              />
-              <span>
-                {person.name}
-                <small>{person.role}</small>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <div className={s.stage}>
-        <div className={s.portrait} key={agent.key}>
-          <Image
-            src={`/brand/team/${identity.name.toLowerCase()}.png`}
-            alt={`${identity.name}, personagem virtual de ${identity.role} da Zelo`}
-            fill
-            sizes="(max-width:760px) 100vw, 45vw"
-          />
-          <div className={s.orbit} />
-          <div className={s.portraitShade} />
-          <span className={s.index}>
-            ZELO INTELLIGENCE / {String(selected + 1).padStart(2, "0")}
-          </span>
-          <div className={s.agentName}>
-            <span>CONHEÇA {identity.gender === "f" ? "A" : "O"}</span>
-            <h3>{identity.name}</h3>
-            <p>Seu agente de {identity.role}</p>
-          </div>
-          <div className={s.portraitFoot}>
-            <span>
-              <i /> IA NO WHATSAPP
-            </span>
-            <span>PERSONAGEM VIRTUAL</span>
-          </div>
+        <span id="recursos" className={s.anchor} />
+        <div className={s.heading}>
+          <p className={s.label}>04 / TODAS AS FUNÇÕES. UM TIME AO SEU LADO.</p>
+          <h2>
+            Você não precisa
+            <br />
+            dar conta de <em>tudo sozinho.</em>
+          </h2>
+          <p>
+            Conheça os 12 agentes virtuais da Zelo. Cada um apresenta uma área
+            da plataforma — todos na mesma conversa do WhatsApp.
+          </p>
         </div>
-        <div className={s.detail}>
-          <div className={s.detailTop}>
-            <span>{String(selected + 1).padStart(2, "0")} / 12</span>
-            <div>
-              <button
-                type="button"
-                aria-label="Agente anterior"
-                onClick={() => pick(selected - 1)}
-              >
-                ←
-              </button>
-              <button
-                type="button"
-                aria-label="Próximo agente"
-                onClick={() => pick(selected + 1)}
-              >
-                →
-              </button>
-            </div>
-          </div>
-          <h3>
-            {agent.title.split("\n").map((line, index) => (
-              <span key={line}>{index === 1 ? <em>{line}</em> : line}</span>
-            ))}
-          </h3>
-          <p className={s.intro}>{agent.text}</p>
-          <div className={s.tags}>
-            {agent.tags.map((tag) => (
-              <span key={tag}>{tag}</span>
-            ))}
-          </div>
-          <p className={s.actionLabel}>ESCOLHA O QUE QUER FAZER</p>
-          <div
-            className={s.actionTabs}
-            role="group"
-            aria-label={`Funções de ${identity.name}`}
-          >
-            {actions.map((item, index) => (
-              <button
-                key={item.title}
-                type="button"
-                aria-pressed={action === index}
-                onClick={() => {
-                  setAction(index);
-                  setManual(true);
-                }}
-              >
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                {item.title}
-                <b>{index === action ? "−" : "+"}</b>
-              </button>
-            ))}
-          </div>
-          <div
-            className={s.actionDemo}
-            key={action}
-            aria-live={manual ? "polite" : "off"}
-          >
-            <p className={s.how}>{chosen.how}</p>
-            <div className={s.request}>
-              <span>VOCÊ PEDE</span>
-              <p>“{chosen.request}”</p>
-              <small>✓✓</small>
-            </div>
-            <div className={s.result}>
-              <span>O QUE VOCÊ RECEBE</span>
-              <p>{chosen.result}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className={s.teamFoot}>
-        <span>
-          Escolha qualquer agente para explorar suas funções. Exemplos
-          ilustrativos.
-        </span>
-        <button
-          type="button"
-          onClick={() => setManual((value) => !value)}
-          aria-pressed={!manual}
+        <div
+          className={s.roster}
+          role="group"
+          aria-label="Conheça os 12 agentes e suas funções"
         >
-          {manual ? "▷ Apresentação automática" : "Ⅱ Parar troca automática"}
-        </button>
-      </div>
-    </section>
+          {TEAM.map((item, index) => {
+            const person = VIRTUAL_TEAM[item.key];
+            return (
+              <button
+                key={item.key}
+                type="button"
+                aria-pressed={selected === index}
+                onClick={() => pick(index)}
+              >
+                <Image
+                  src={`/brand/team/${person.name.toLowerCase()}.png`}
+                  width={72}
+                  height={72}
+                  alt=""
+                />
+                <span>
+                  {person.name}
+                  <small>{person.role}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className={s.stage}>
+          <div className={s.portrait} key={agent.key}>
+            <Image
+              src={`/brand/team/${identity.name.toLowerCase()}.png`}
+              alt={`${identity.name}, personagem virtual de ${identity.role} da Zelo`}
+              fill
+              sizes="(max-width:760px) 100vw, 45vw"
+            />
+            <div className={s.orbit} />
+            <div className={s.portraitShade} />
+            <span className={s.index}>
+              ZELO INTELLIGENCE / {String(selected + 1).padStart(2, "0")}
+            </span>
+            <div className={s.agentName}>
+              <span>CONHEÇA {identity.gender === "f" ? "A" : "O"}</span>
+              <h3>{identity.name}</h3>
+              <p>Seu agente de {identity.role}</p>
+            </div>
+            <div className={s.portraitFoot}>
+              <span>
+                <i /> IA NO WHATSAPP
+              </span>
+              <span>PERSONAGEM VIRTUAL</span>
+            </div>
+          </div>
+          <div className={s.detail}>
+            <div className={s.detailTop}>
+              <span>{String(selected + 1).padStart(2, "0")} / 12</span>
+              <div>
+                <button
+                  type="button"
+                  aria-label="Agente anterior"
+                  onClick={() => pick(selected - 1)}
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  aria-label="Próximo agente"
+                  onClick={() => pick(selected + 1)}
+                >
+                  →
+                </button>
+              </div>
+            </div>
+            <h3>
+              {agent.title.split("\n").map((line, index) => (
+                <span key={line}>{index === 1 ? <em>{line}</em> : line}</span>
+              ))}
+            </h3>
+            <p className={s.intro}>{agent.text}</p>
+            <div className={s.tags}>
+              {agent.tags.map((tag) => (
+                <span key={tag}>{tag}</span>
+              ))}
+            </div>
+            <p className={s.actionLabel}>ESCOLHA O QUE QUER FAZER</p>
+            <div
+              className={s.actionTabs}
+              role="group"
+              aria-label={`Funções de ${identity.name}`}
+            >
+              {actions.map((item, index) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  aria-pressed={action === index}
+                  onClick={() => {
+                    setAction(index);
+                    setManual(true);
+                  }}
+                >
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  {item.title}
+                  <b>{index === action ? "−" : "+"}</b>
+                </button>
+              ))}
+            </div>
+            <div
+              className={s.actionDemo}
+              key={action}
+              aria-live={manual ? "polite" : "off"}
+            >
+              <p className={s.how}>{chosen.how}</p>
+              <div className={s.request}>
+                <span>VOCÊ PEDE</span>
+                <p>“{chosen.request}”</p>
+                <small>✓✓</small>
+              </div>
+              <div className={s.result}>
+                <span>O QUE VOCÊ RECEBE</span>
+                <p>{chosen.result}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className={s.teamFoot}>
+          <span>
+            Escolha qualquer agente para explorar suas funções. Exemplos
+            ilustrativos.
+          </span>
+          <button
+            type="button"
+            onClick={() => setManual((value) => !value)}
+            aria-pressed={!manual}
+          >
+            {manual ? "▷ Apresentação automática" : "Ⅱ Parar troca automática"}
+          </button>
+        </div>
+      </section>
+    </>
   );
 }

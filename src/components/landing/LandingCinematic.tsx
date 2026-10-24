@@ -11,8 +11,8 @@ import {
 import s from "./cinematic.module.css";
 import CinematicHero from "./CinematicHero";
 import BankConnections from "./BankConnections";
+import { usePageScrollMotion } from "./PageScrollMotion";
 import AgentShowcase from "./AgentShowcase";
-import ConversationJourney from "./ConversationJourney";
 import {
   PresentationMotion,
   usePresentationMotion,
@@ -169,9 +169,9 @@ function Spaces() {
   const chosen = spaces[active];
   return (
     <section className={s.spaces} id="espacos">
-      <div className={`${s.wrap} ${s.spacesGrid}`}>
+      <div className={`${s.wrap} ${s.spacesGrid}`} data-scroll-scene="spaces">
         <div>
-          <SectionLabel number="04">CADA COISA NO SEU LUGAR</SectionLabel>
+          <SectionLabel number="03">CADA COISA NO SEU LUGAR</SectionLabel>
           <h2>
             Você pode ter
             <br />
@@ -239,7 +239,7 @@ function Plans() {
   return (
     <section className={`${s.section} ${s.plans}`} id="planos">
       <div className={s.wrap}>
-        <div className={s.plansIntro}>
+        <div className={s.plansIntro} data-scroll-scene="title">
           <SectionLabel number="05">SEU PRÓXIMO PASSO</SectionLabel>
           <h2>
             Escolha seu ritmo.
@@ -252,7 +252,7 @@ function Plans() {
             Escolha como prefere pagar.
           </p>
         </div>
-        <div className={s.planGrid}>
+        <div className={s.planGrid} data-scroll-scene="plans">
           {PLANS.map((plan) => (
             <article
               key={plan.id}
@@ -340,6 +340,8 @@ export default function LandingCinematic({ fontClass }: { fontClass: string }) {
 function LandingContent({ fontClass }: { fontClass: string }) {
   const { running, reduced, toggle } = usePresentationMotion();
   const [menuOpen, setMenuOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  usePageScrollMotion(root);
   const menuButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!menuOpen) return;
@@ -360,6 +362,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
   ];
   return (
     <div
+      ref={root}
       className={`${fontClass} ${s.page}`}
       data-motion={running ? "running" : "paused"}
     >
@@ -449,10 +452,9 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             ))}
           </div>
         </div>
-        <ConversationJourney />
         <section className={`${s.section} ${s.overview}`} id="painel">
           <div className={s.wrap}>
-            <div className={s.sectionHead}>
+            <div className={s.sectionHead} data-scroll-scene="title">
               <div>
                 <SectionLabel number="01">
                   O WHATSAPP É O COMEÇO. O PAINEL É A VISÃO COMPLETA.
@@ -468,7 +470,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
                 encontre documentos. No computador ou no celular.
               </p>
             </div>
-            <figure className={s.productFigure}>
+            <figure className={s.productFigure} data-scroll-scene="panel">
               <div className={s.browserBar}>
                 <span aria-hidden="true">● ● ●</span>
                 <span>SEU PAINEL ZELO</span>
@@ -503,7 +505,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             <SectionLabel number="02">
               OPEN FINANCE + IA NO WHATSAPP
             </SectionLabel>
-            <div className={s.bankIntro}>
+            <div className={s.bankIntro} data-scroll-scene="title">
               <h2>
                 Seu dinheiro conectado.
                 <br />
@@ -550,7 +552,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
         <AgentShowcase />
         <Plans />
         <section className={`${s.section} ${s.faq}`} id="duvidas">
-          <div className={`${s.wrap} ${s.faqGrid}`}>
+          <div className={`${s.wrap} ${s.faqGrid}`} data-scroll-scene="faq">
             <div>
               <SectionLabel number="06">ANTES DE COMEÇAR</SectionLabel>
               <h2>
@@ -574,7 +576,10 @@ function LandingContent({ fontClass }: { fontClass: string }) {
           </div>
         </section>
         <section className={s.closing}>
-          <div className={`${s.wrap} ${s.closingInner}`}>
+          <div
+            className={`${s.wrap} ${s.closingInner}`}
+            data-scroll-scene="closing"
+          >
             <p>
               UM POUCO MAIS DE ORDEM.
               <br />

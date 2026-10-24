@@ -1,0 +1,284 @@
+.entrance {
+  --spread: 0.15;
+  --rise: 100px;
+  --reveal: 0;
+  height: 175svh;
+  position: relative;
+  background: #fec307;
+  color: #121610;
+  overflow: clip;
+}
+.sticky {
+  position: sticky;
+  top: 82px;
+  height: calc(100svh - 82px);
+  min-height: 650px;
+  isolation: isolate;
+  padding: 45px 5%;
+  overflow: hidden;
+}
+.eyebrow {
+  font-size: 8px;
+  letter-spacing: 1.7px;
+  text-align: center;
+  color: #5d510d;
+  position: relative;
+  z-index: 3;
+}
+.sticky h2 {
+  text-align: center;
+  font-size: clamp(50px, 6.1vw, 88px) !important;
+  line-height: 0.99 !important;
+  letter-spacing: -4px !important;
+  position: relative;
+  margin-top: 34px !important;
+  z-index: 3;
+  color: #10150e;
+  font-weight: 600 !important;
+}
+.sticky h2 em {
+  font-style: normal;
+  font-weight: 600;
+  color: #10150e;
+}
+.number {
+  position: absolute;
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 75vh;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.12em;
+  color: #1317110a;
+  z-index: -1;
+}
+.fan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 46%;
+  height: 340px;
+  perspective: 1800px;
+}
+.person {
+  width: clamp(140px, 15.5vw, 225px);
+  height: clamp(220px, 21vw, 305px);
+  position: absolute;
+  left: 50%;
+  top: 0;
+  border: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #151912;
+  color: #fff !important;
+  padding: 0;
+  transform: translateX(calc(-50% + var(--offset) * var(--spread) * 15.7vw))
+    translateY(calc(var(--lift) * var(--spread) * 26px + var(--rise)))
+    rotate(calc(var(--offset) * var(--spread) * 5deg));
+  box-shadow: 0 15px 35px #171b1240;
+  transition: box-shadow 0.3s;
+  z-index: calc(6 - var(--order));
+  will-change: transform;
+}
+.person:hover,
+.person:focus-visible {
+  box-shadow: 0 20px 60px #171b1270;
+  z-index: 9;
+}
+.person:hover img {
+  transform: scale(1.08);
+}
+.person img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s;
+}
+.person:after {
+  content: "";
+  position: absolute;
+  inset: 30% 0 0;
+  background: linear-gradient(transparent, #0d1409e8);
+  pointer-events: none;
+}
+.person > span {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 2;
+}
+.person strong {
+  font-size: 24px;
+  letter-spacing: -1px;
+  font-weight: 550;
+  display: block;
+  line-height: 1.2;
+}
+.person small {
+  font-size: 9px;
+  color: #b7c1a9;
+}
+.person > b {
+  position: absolute;
+  bottom: 22px;
+  right: 19px;
+  z-index: 2;
+  color: #fec307;
+  font-size: 20px;
+  font-weight: 400;
+}
+.foot {
+  position: absolute;
+  bottom: 28px;
+  left: 5%;
+  right: 5%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #141a142a;
+  padding-top: 18px;
+  gap: 20px;
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+.foot p {
+  font-size: 10px;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-align: center;
+  color: #5c5217;
+}
+.reduced {
+  height: 950px;
+}
+.reduced .sticky {
+  position: relative;
+  top: 0;
+  height: 950px;
+}
+.reduced .person {
+  will-change: auto;
+}
+@media (max-height: 850px) and (min-width: 701px) {
+  .sticky {
+    min-height: 600px;
+    padding-top: 25px;
+  }
+  .sticky h2 {
+    font-size: clamp(46px, 5vw, 74px) !important;
+    margin-top: 22px !important;
+  }
+  .fan {
+    top: 43%;
+  }
+  .person {
+    height: 240px;
+    width: 175px;
+  }
+  .foot {
+    bottom: 18px;
+  }
+  .foot p {
+    font-size: 9px;
+  }
+}
+@media (max-width: 700px) {
+  .entrance {
+    height: 145svh;
+  }
+  .sticky {
+    top: 72px;
+    height: calc(100svh - 72px);
+    min-height: 570px;
+    padding: 30px 20px;
+  }
+  .eyebrow {
+    font-size: 6px;
+    letter-spacing: 1px;
+  }
+  .sticky h2 {
+    font-size: 43px !important;
+    letter-spacing: -2.2px !important;
+    margin-top: 36px !important;
+  }
+  .number {
+    font-size: 60vh;
+    top: 10%;
+  }
+  .fan {
+    top: 47%;
+    height: 240px;
+  }
+  .person {
+    width: 128px;
+    height: 200px;
+    transform: translateX(calc(-50% + var(--offset) * var(--spread) * 25vw))
+      translateY(calc(var(--lift) * var(--spread) * 17px + var(--rise)))
+      rotate(calc(var(--offset) * var(--spread) * 7deg));
+    border-radius: 10px;
+  }
+  .person > span {
+    bottom: 14px;
+    left: auto;
+    right: 13px;
+    transform: none;
+    text-align: right;
+  }
+  .person strong {
+    font-size: 20px;
+  }
+  .person small {
+    font-size: 8px;
+  }
+  .person > b {
+    font-size: 15px;
+    bottom: 16px;
+    right: 12px;
+  }
+  .foot {
+    bottom: 24px;
+    left: 20px;
+    right: 20px;
+    font-size: 6px;
+    letter-spacing: 0.5px;
+    gap: 9px;
+    padding-top: 13px;
+  }
+  .foot p {
+    font-size: 8px;
+  }
+  .foot > span:first-child {
+    max-width: 70px;
+  }
+  .reduced {
+    height: 730px;
+  }
+  .reduced .sticky {
+    height: 730px;
+    top: 0;
+  }
+  .reduced .person {
+    --spread: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .person,
+  .person img {
+    transition: none;
+    will-change: auto;
+  }
+}
+@media (max-width: 700px) {
+  .person:first-child,
+  .person:last-child {
+    display: none;
+  }
+  .person {
+    transform: translateX(calc(-50% + var(--offset) * var(--spread) * 22vw))
+      translateY(calc(var(--lift) * var(--spread) * 17px + var(--rise)))
+      rotate(calc(var(--offset) * var(--spread) * 7deg));
+  }
+}
