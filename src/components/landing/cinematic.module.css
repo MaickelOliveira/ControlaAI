@@ -3498,3 +3498,45 @@
 .menuToggle {
   color: #fec307 !important;
 }
+
+/* Explicit contrast for the alternating light sections and dark pricing panels. */
+.overview .sectionHead > p,
+.plansIntro > p:last-child,
+.spacesGrid > div:first-child > p,
+.spaces .spaceRule,
+.plans .guarantee p,
+.plans .planFine {
+  color: #50584c;
+}
+.spaces h2,
+.spaces h2 em,
+.spaces .spaceRule strong,
+.plansIntro h2 em {
+  color: #171b15;
+}
+.spaces h2 em,
+.plansIntro h2 em {
+  text-decoration: underline;
+  text-decoration-color: #fec307;
+  text-decoration-thickness: 0.11em;
+  text-underline-offset: 0.13em;
+  text-decoration-skip-ink: none;
+}
+.spaces .sectionLabel {
+  color: #50584c;
+}
+.plans .plan:not(.featuredPlan) .planName,
+.plans .plan:not(.featuredPlan) .price {
+  color: #fafaf6;
+}
+.plans .guaranteeSeal {
+  color: #303b25;
+  border-color: #fec307;
+  background: #fec307;
+}
+.page[data-motion="running"] .sectionHead[data-scroll-scene],
+.page[data-motion="running"] .plansIntro[data-scroll-scene],
+.page[data-motion="running"] .spacesGrid[data-scroll-scene] > div,
+.page[data-motion="running"] .planGrid[data-scroll-scene] > article {
+  opacity: 1;
+}
