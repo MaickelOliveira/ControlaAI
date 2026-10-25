@@ -1,11 +1,12 @@
 import {spawnSync} from 'node:child_process';
-// Rechecked 2026-10-18: braces is reached through ESLint tooling only;
-// node-forge is used to parse PKCS#12, while certificate validation uses Node;
+// Rechecked 2026-10-25 UTC (2026-10-24 in Sao Paulo), with evidence in
+// tasks/dependency-audit-followup.md. The current audit no longer flags braces.
+// node-forge is used to parse PKCS#12, while certificate checks use Node;
 // ExcelJS calls uuid v4, outside the vulnerable v3/v5/v6 buffer paths.
 // The published advisories have no compatible patched releases for these paths.
 // Keep the exceptions short-lived; do not suppress new or critical advisories.
-const reviewedUntil='2026-10-24';
-const accepted=new Set(['GHSA-vfj7-8cjw-p6xm','GHSA-86w9-cpqp-85rv','GHSA-w5hq-g745-h8pq']);
+const reviewedUntil='2026-10-31';
+const accepted=new Set(['GHSA-86w9-cpqp-85rv','GHSA-w5hq-g745-h8pq']);
 const result=spawnSync('npm',['audit','--json'],{encoding:'utf8',maxBuffer:8*1024*1024});
 let audit;try{audit=JSON.parse(result.stdout);}catch{console.error('Dependency audit unavailable; release check blocked.');process.exit(1);}
 if(audit.error||result.error){console.error('Dependency audit unavailable; release check blocked.');process.exit(1);}

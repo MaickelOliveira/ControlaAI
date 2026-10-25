@@ -482,6 +482,12 @@
   color: #839086;
   margin-top: 4px !important;
 }
+.hero[data-conversation-complete="true"] .outgoing,
+.hero[data-conversation-complete="true"] .incoming,
+.hero[data-conversation-complete="true"] .receipt {
+  animation: none;
+}
+
 .typing {
   margin-top: 12px;
   display: flex;

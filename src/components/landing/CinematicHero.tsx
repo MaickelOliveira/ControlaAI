@@ -82,10 +82,14 @@ export default function CinematicHero() {
   const visible = useVisible(section);
   const { running, reduced } = usePresentationMotion();
   const [scene, setScene] = useState(0);
-  const [beat, setBeat] = useState(0);
+  const [timedBeat, setTimedBeat] = useState({ scene: 0, value: 0 });
+  const [conversationComplete, setConversationComplete] = useState(false);
   const [shortWideViewport, setShortWideViewport] = useState(false);
   const staticMode = reduced || shortWideViewport;
   const current = SCENES[scene];
+  const beat = !running || conversationComplete
+    ? 3
+    : timedBeat.scene === scene ? timedBeat.value : 0;
 
   useEffect(() => {
     const query = matchMedia(
@@ -112,6 +116,9 @@ export default function CinematicHero() {
       node.style.setProperty("--scroll", String(progress));
       node.style.setProperty("--travel", `${progress * -150}px`);
       node.style.setProperty("--rotation", `${-15 + progress * 35}deg`);
+      // Scrolling chooses a complete example. A fast gesture must never leave
+      // the confirmation waiting on a timer after its scene has passed.
+      if (progress > 0) setConversationComplete(true);
       setScene(Math.min(3, Math.floor(progress * 4)));
     };
     const schedule = () => {
@@ -135,18 +142,17 @@ export default function CinematicHero() {
 
   useEffect(() => {
     // Reveal the exact same demonstration text, rather than generating financial claims.
-    const start = setTimeout(() => setBeat(running ? 0 : 3), 0);
-    if (!running || !visible) return () => clearTimeout(start);
-    const timers = [800, 1700, 2900].map((ms, index) =>
-      setTimeout(() => setBeat(index + 1), ms),
+    if (!running || !visible || conversationComplete) return;
+    const timers = [0, 800, 1700, 2900].map((ms, index) =>
+      setTimeout(() => setTimedBeat({ scene, value: index }), ms),
     );
     return () => {
-      clearTimeout(start);
       timers.forEach(clearTimeout);
     };
-  }, [scene, running, visible]);
+  }, [scene, running, visible, conversationComplete]);
 
   const choose = (index: number) => {
+    setConversationComplete(true);
     if (staticMode) {
       setScene(index);
       return;
@@ -168,6 +174,7 @@ export default function CinematicHero() {
       className={`${s.hero} ${staticMode ? s.static : ""}`}
       data-scene={scene}
       data-beat={beat}
+      data-conversation-complete={conversationComplete || !running}
       aria-label="Veja a Zelo funcionando no WhatsApp"
     >
       <span id="como-funciona" className={s.anchor} />
