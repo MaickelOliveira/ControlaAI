@@ -436,7 +436,7 @@ function FinancasContent() {
 
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
-  const loanInstallments=ledger?.bank?financeLoanInstallments(ledger.bank.overview,postedFinances,filters,today):[];
+  const loanInstallments=ledger?.bank?financeLoanInstallments(ledger.bank.overview,finances,filters,today):[];
   const expenseGroups=categoriesWithLoanInstallments(postedFinances,loanInstallments),incomeGroups=ledgerCategoryGroups(postedFinances,"income");
 
   // Recs sorted: overdue first, then by nextDueDate

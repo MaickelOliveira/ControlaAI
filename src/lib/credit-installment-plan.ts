@@ -26,3 +26,10 @@ export function creditPlanDates(plan:CreditInstallmentPlan,from:string,to:string
  }
  return dates;
 }
+
+/** Accept Brazilian grouping/comma decimals and ungrouped dot decimals. */
+export function creditPlanAmount(value:string):string{
+ const text=value.trim();
+ if(/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(text))return text.replace(/\./g,"").replace(",",".");
+ return /^\d+(?:[,.]\d{1,2})?$/.test(text)?text.replace(",","."):"";
+}

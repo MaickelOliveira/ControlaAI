@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from "react";
 import BankLogo from "./BankLogo";
 import {bankDate,bankMoney} from "@/lib/open-finance-display";
 import type {LoanInstallment} from "@/lib/finance-loan-installments";
-import {creditPlanDates,validCreditPlan} from "@/lib/credit-installment-plan";
+import {creditPlanAmount,creditPlanDates,validCreditPlan} from "@/lib/credit-installment-plan";
 
 export default function FinanceLoanRows({items,mode,canEdit=false,onSaved}:{items:readonly LoanInstallment[];mode?:string;canEdit?:boolean;onSaved?:()=>Promise<void>}){
  const [target,setTarget]=useState<LoanInstallment|null>(null),[amount,setAmount]=useState(""),[currency,setCurrency]=useState(""),[first,setFirst]=useState(""),[last,setLast]=useState("");
@@ -15,7 +15,7 @@ export default function FinanceLoanRows({items,mode,canEdit=false,onSaved}:{item
   setTarget(item);setAmount(item.manualPlan?.amount??"");setCurrency(item.manualPlan?.currency??item.currency??"");
   setFirst(item.manualPlan?.first_due_date??"");setLast(item.manualPlan?.last_due_date??item.finalDueDate??"");setError("");
  }
- const plan={resource_id:target?.resourceId??target?.id??"",amount:amount.replace(",","."),currency,first_due_date:first,last_due_date:last};
+ const plan={resource_id:target?.resourceId??target?.id??"",amount:creditPlanAmount(amount),currency,first_due_date:first,last_due_date:last};
  const dates=validCreditPlan(plan)?creditPlanDates(plan,first,last):[];
  async function save(event:React.FormEvent){
   event.preventDefault();if(!validCreditPlan(plan)){setError("Confira o valor e os vencimentos.");return;}
@@ -29,7 +29,7 @@ export default function FinanceLoanRows({items,mode,canEdit=false,onSaved}:{item
  }
  return <>
  {items.filter(item=>!item.recordedId).map(item=><div key={item.id} className="flex items-start justify-between gap-3 rounded-xl px-3 py-3 hover:bg-surface-muted">
-  <div className="flex min-w-0 items-start gap-3"><BankLogo institutionId={item.institutionId} size={32}/><div className="min-w-0"><p className="break-words text-sm font-medium text-ink">{item.category} · {item.bank}</p><p className="mt-1 text-[11px] text-muted">{item.name} · {item.month.slice(5)}/{item.month.slice(0,4)}</p><span className="mt-1 inline-block text-[10px] font-medium text-amber-ink">{item.manualPlan?`Informada por você · vence em ${bankDate(item.dueDate)}`:"Parcela prevista · vencimento não informado"}</span></div></div>
+  <div className="flex min-w-0 items-start gap-3"><BankLogo institutionId={item.institutionId} size={32}/><div className="min-w-0"><p className="break-words text-sm font-medium text-ink">{item.category} · {item.bank}</p><p className="mt-1 text-[11px] text-muted">{item.name} · {item.month.slice(5)}/{item.month.slice(0,4)}</p><span className="mt-1 inline-block text-[10px] font-medium text-amber-ink">{item.manualPlan?`Parcela prevista · informada por você · vence em ${bankDate(item.dueDate)}`:"Parcela prevista · vencimento não informado"}</span></div></div>
   <div className="shrink-0 max-w-[45%] text-right"><p className="text-sm font-bold text-amber-ink">{item.amount===null?"Valor não informado":bankMoney(item.amount,item.currency)}</p>
    {canEdit&&mode&&(item.amount===null||item.manualPlan)&&<button type="button" onClick={()=>open(item)} className="mt-2 rounded-lg border border-line px-2 py-1.5 text-xs font-semibold text-amber-ink hover:bg-surface-muted">{item.manualPlan?"Editar parcela":"Informar parcela"}</button>}
   </div>

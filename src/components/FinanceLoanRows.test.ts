@@ -13,5 +13,5 @@ it("offers manual entry only when enabled and missing, and allows editing an exi
  expect(html).toContain("Informar parcela");
  const manualPlan={resource_id:"car",amount:"890.10",currency:"BRL",first_due_date:"2026-09-10",last_due_date:"2027-05-10"};
  const manual=renderToStaticMarkup(React.createElement(FinanceLoanRows,{items:[{...base,amount:890.1,dueDate:"2026-11-10",manualPlan}],mode:"personal",canEdit:true}));
- expect(manual).toContain("Editar parcela");expect(manual).toContain("Informada por você");expect(manual).toContain("10/11/2026");
+ expect(manual).toContain("Editar parcela");expect(manual).toContain("informada por você");expect(manual).toContain("10/11/2026");
 });
