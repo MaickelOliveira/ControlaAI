@@ -5,7 +5,7 @@ import type {BankAgendaItem} from "./open-finance-schedules";
 import {bankForecastCategory} from "./finance-bank-schedules";
 
 type RecurringExpense={id:string;type:string;amount:number;category:string;status:string};
-type Inputs={posted:readonly LedgerEntry[];pending:readonly LedgerEntry[];recurring:readonly RecurringExpense[];loans:readonly LoanInstallment[];installments:readonly BankInstallmentProjection[];schedules:readonly BankAgendaItem[];from:string;to:string};
+type Inputs={categoryHistory?:readonly LedgerEntry[];posted:readonly LedgerEntry[];pending:readonly LedgerEntry[];recurring:readonly RecurringExpense[];loans:readonly LoanInstallment[];installments:readonly BankInstallmentProjection[];schedules:readonly BankAgendaItem[];from:string;to:string};
 /** The caller supplies the same filtered, reconciled rows shown in the statement.
  * Forecasts never become ledger entries or change the realized cash balance. */
 export function financeExpensePlan(input:Inputs){
@@ -25,7 +25,7 @@ export function financeExpensePlan(input:Inputs){
  for(const row of input.pending)if(row.type==="expense")add(`pending:${row.id}`,row.category,row.amount);
  for(const row of input.recurring)if(row.type==="expense"&&row.status==="active")add(`recurring:${row.id}`,row.category,row.amount);
  for(const row of input.loans)if(!row.recordedId)add(`loan:${row.id}`,row.category,row.amount,row.currency);
- for(const row of input.installments)add(`installment:${row.id}:${row.month}`,bankForecastCategory(row),ledgerAmount(row.amount),row.currency);
+ for(const row of input.installments)add(`installment:${row.id}:${row.month}`,bankForecastCategory(row,input.categoryHistory??input.posted),ledgerAmount(row.amount),row.currency);
  for(const row of input.schedules){
   if(row.kind==="bill"||row.payment_evidence)continue;
   // An observation with no month cannot be charged to every selected month.
@@ -36,7 +36,7 @@ export function financeExpensePlan(input:Inputs){
   const wholeMonth=input.from.endsWith("-01")&&input.to===monthEnd;
   const inPeriod=row.due_date?row.due_date>=input.from&&row.due_date<=input.to:row.kind==="installment"&&wholeMonth&&position!==null&&position>=1&&position<=(row.total_installments??0);
   if(!inPeriod){unquantified++;continue;}
-  add(`schedule:${row.kind}:${row.id}`,bankForecastCategory(row),ledgerAmount(row.amount),row.currency);
+  add(`schedule:${row.kind}:${row.id}`,bankForecastCategory(row,input.categoryHistory??input.posted),ledgerAmount(row.amount),row.currency);
  }
  const forecast=forecastCents/100;
  return {recorded,forecast,total:(Math.round(recorded*100)+forecastCents)/100,unquantified,groups:[...groups.values()].sort((a,b)=>b.value-a.value)};

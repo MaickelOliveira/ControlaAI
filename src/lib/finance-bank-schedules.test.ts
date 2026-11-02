@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {financeBankSchedules,unrepresentedBankSchedules} from "./finance-bank-schedules";
+import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} from "./finance-bank-schedules";
 import {bankFilterValue} from "./finance-bank-filter";
 import type {LedgerEntry} from "./finance-ledger";
 import type {BankAgendaItem} from "./open-finance-schedules";
@@ -56,4 +56,18 @@ it("uses only the currency of the same linked bank resource when the schedule om
 it("keeps forecasts in their displayed budget category when that category is selected",()=>{
  expect(financeBankSchedules([item],{...filters,categories:["Assinaturas"]})).toHaveLength(1);
  expect(financeBankSchedules([item],{...filters,categories:["Compras parceladas"]})).toEqual([]);
+});
+
+it("classifies by expense purpose rather than recurring or installment billing type",()=>{
+ expect(bankForecastCategory({...item,description:"Netflix"})).toBe("Assinaturas");
+ expect(bankForecastCategory({...item,kind:"installment",description:"Netflix"})).toBe("Assinaturas");
+ for(const kind of ["recurring","installment"])expect(bankForecastCategory({...item,kind,description:"Loja desconhecida"})).toBe("Outros");
+});
+it("keeps an unambiguous recorded category only from the same card and purchase",()=>{
+ const history=[{id:"old",included:true,type:"expense",description:item.description,category:"Minha categoria",amount:29.9,bank:{resource_id:"card-a",currency:"BRL"}}] as LedgerEntry[];
+ expect(bankForecastCategory(item,history)).toBe("Minha categoria");
+ expect(bankForecastCategory({...item,resource_id:"other"},history)).toBe("Assinaturas");
+ expect(financeBankSchedules([item],{...filters,categories:["Minha categoria"]},[],history)).toHaveLength(1);
+ expect(bankForecastCategory({...item,currency:"USD"},history)).toBe("Assinaturas");
+ expect(bankForecastCategory(item,[...history,{...history[0],category:"Outra categoria"}])).toBe("Assinaturas");
 });
