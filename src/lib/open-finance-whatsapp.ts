@@ -528,23 +528,26 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
     const {entries,bank}=await readUnifiedFinances(user,requested,from,to);
     if(!bank?.overview.connections.length)return null;
     if(ai.account)return "Para consultar uma conta específica, use o filtro em Finanças. Posso informar aqui o total de todos os bancos conectados neste modo ou o gasto por categoria e estabelecimento.";
+    const categoryBreakdown=/\bpor categorias?\b|\bem cada categoria\b|\bsepar(?:e|ado|ados|adas)\b[^.!?]*\bcategorias?\b/.test(text);
+    const categoryDetails=categoryBreakdown&&!/\b(?:so|somente|apenas) (?:os )?totais\b/.test(text);
+    const plainSpendingSummary=!categoryBreakdown&&/\bquanto (?:eu )?(?:gastei|gastamos)\b/.test(text)&&!ai.category&&!ai.keyword&&!/\b(?:descrev\w*|detalh\w*|cada gasto|lancamentos?)\b/.test(text);
     const topMatch=text.match(/\b(?:cinco|5)\s+(?:maiores|mais (?:altas|altos))\s+(despesas?|gastos?|saidas?|receitas?|entradas?)\b/);
-    if(topMatch&&!ai.category&&!ai.keyword){
+    if(topMatch&&!categoryBreakdown&&!ai.category&&!ai.keyword){
       const type: "income"|"expense"=/^(?:receita|entrada)/.test(topMatch[1])?"income":"expense";
       const selected=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.type===type&&entry.amount>0&&entry.date>=from&&entry.date<=to&&(!source||entry.bank?.resource_type===source))
         .sort((a,b)=>b.amount-a.amount||b.date.localeCompare(a.date)||a.id.localeCompare(b.id)).slice(0,5);
       const lines=selected.map((entry,index)=>`${index+1}. ${safeSummary(entry.description)} · ${bankMoney(entry.amount,"BRL")} · ${bankDate(entry.date)} · ${safeSummary(entry.source==="bank"?entry.bank?.institution_name?.trim()||"Banco não informado":financeOrigin(entry))}`);
       return `Cinco maiores ${type==="income"?"receitas":"despesas"} realizadas · ${requested==="personal"?"Pessoal":"Empresa"} · ${bankDate(from)} a ${bankDate(to)}\n${lines.join("\n")||"Nenhum lançamento correspondente nos dados recebidos."}\nValores futuros e movimentos fora dos totais não entram nesta lista.${financeCoverageNotice(bank,entries)}`;
     }
-    if(/\b(?:maior gasto|compra mais cara)\b/.test(text)){
+    if(!categoryBreakdown&&/\b(?:maior gasto|compra mais cara)\b/.test(text)){
       const largest=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.type==="expense"&&entry.amount>0&&entry.date>=from&&entry.date<=to&&(!source||entry.bank?.resource_type===source))
         .sort((a,b)=>b.amount-a.amount)[0];
       return `${largest?`Maior gasto realizado · ${requested==="personal"?"Pessoal":"Empresa"}\n${safeSummary(largest.description)} · ${bankMoney(largest.amount,"BRL")}\nData: ${bankDate(largest.date)} · Categoria: ${safeSummary(largest.category)}`:`Não encontrei gasto realizado de ${bankDate(from)} a ${bankDate(to)} nesse modo.`}${financeCoverageNotice(bank,entries)}`;
     }
     if(/\b(?:recebi|receitas?|entradas?)\b/.test(text)&&/\bpor categoria\b|\bsepare\b[^.!?]*\bcategoria\b/.test(text)&&!/\b(?:despesas?|gastos?)\b/.test(text)){
-      return summarizeFinanceQuery(entries,{from,to,type:"income",source,analysis:true,detail:false},requested)+financeCoverageNotice(bank,entries);
+      return summarizeFinanceQuery(entries,{from,to,type:"income",source,analysis:true,detail:false,groupDetails:categoryDetails},requested)+financeCoverageNotice(bank,entries);
     }
-    const monthlyOverview=/\bresumo\b/.test(text)&&/\b(mes|mensal|periodo)\b/.test(text)&&!ai.category&&!ai.keyword&&!source;
+    const monthlyOverview=!categoryBreakdown&&/\bresumo\b/.test(text)&&/\b(mes|mensal|periodo)\b/.test(text)&&!ai.category&&!ai.keyword&&!source;
     if(monthlyOverview){
       const realized=entries.filter(entry=>entry.mode===requested&&entry.included&&entry.status!=="pending"&&entry.date>=from&&entry.date<=to);
       const categories=ledgerExpenseGroups(realized,"category").filter(group=>group.value>0).sort((a,b)=>b.value-a.value).slice(0,5);
@@ -567,15 +570,15 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
       return `${summary}\n\n*Principais categorias de despesas*\n${categories.map(group=>`• ${safeSummary(group.name)}: ${bankMoney(group.value,"BRL")}`).join("\n")||"Nenhuma despesa realizada no período."}\n\n*Maiores gastos realizados*\n${largest.map(item=>`• ${safeSummary(item.description)}: ${bankMoney(item.amount,"BRL")} (${bankDate(item.date)})`).join("\n")||"Nenhum gasto realizado no período."}\n\n*Próximos vencimentos com data informada*\n${upcoming}\n\nVencimentos previstos não entram no resultado já realizado. Valores do banco podem repetir obrigações cadastradas; confira se foram pagos.${financeCoverageNotice(bank,entries)}`;
     }
     const generalResult=(/\bresultado financeiro\b/.test(text)||/\bresumo (?:de|do) (?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|mes passado)\b/.test(text))&&!source&&!ai.category&&!ai.keyword;
-    const query:FinanceQuery={from,to,type:ai.intent==="balance_query"||generalResult?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:ai.intent==="finance_analysis",detail:ai.intent==="finance_detail",byBank:/\bpor banco\b|\bsepare\b[^.!?]*\bbancos?\b/.test(text)};
+    const query:FinanceQuery={from,to,type:ai.intent==="balance_query"||generalResult?"result":ai.financeType==="income"?"income":"expense",source,category:ai.category,keywords:ai.keyword?expandMerchantAliases(ai.keyword):undefined,analysis:categoryBreakdown||plainSpendingSummary||ai.intent==="finance_analysis",detail:ai.intent==="finance_detail"&&!categoryBreakdown&&!plainSpendingSummary,groupDetails:categoryDetails,byBank:/\bpor banco\b|\bsepare\b[^.!?]*\bbancos?\b/.test(text)};
     let answer=summarizeFinanceQuery(entries,query,requested)+financeCoverageNotice(bank,entries);
-    if(ai.intent==="finance_detail"&&!query.source){
+    if(ai.intent==="finance_detail"&&!categoryBreakdown&&!plainSpendingSummary&&!query.source){
       const [pending,recurring]=await Promise.all([getPendingFinances(user.id,requested),getRecurringByUser(user.id,requested,"active")]);
       const categoryMatches=(e:{category:string})=>!query.category||normalize(e.category)===normalize(query.category);
       const upcoming=collectUpcomingFinanceItems(pending.filter(categoryMatches),recurring.filter(categoryMatches),{from,to,mode:requested,includeUndated:true}).filter(e=>e.type===query.type&&(!query.keywords?.length||query.keywords.some(k=>normalize(e.description).includes(normalize(k)))));
       if(upcoming.length)answer+=`\n\nValores ainda a ${query.type==="income"?"receber":"pagar"} (fora do total realizado):\n${upcoming.slice(0,20).map(e=>`${bankDate(e.dueDate)} · ${e.description.replace(/[\r\n*`_~<>]/g," ").slice(0,160)} · ${bankMoney(e.amount,"BRL")}`).join("\n")}${upcoming.length>20?"\nConsulte as demais pendências em Finanças.":""}`;
     }
-    if(ai.intent==="finance_detail"&&query.type==="expense"&&!query.category&&query.source!=="account"){
+    if(ai.intent==="finance_detail"&&!categoryBreakdown&&!plainSpendingSummary&&query.type==="expense"&&!query.category&&query.source!=="account"){
       const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:true});
       const items=agenda.items.filter(item=>!query.keywords?.length||query.keywords.some(k=>normalize(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(normalize(k))));
       answer+=formatBankAgenda(items,agenda.incomplete);

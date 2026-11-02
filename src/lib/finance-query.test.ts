@@ -54,3 +54,11 @@ it("answers category ranking before the separate source breakdown",()=>{
  const reply=summarizeFinanceQuery(entries,{from:"2026-09-01",to:"2026-09-30",type:"expense",analysis:true},"personal");
  expect(reply).toMatch(/^🏆 \*Maior categoria/);expect(reply.indexOf("Gastos por categoria")).toBeLessThan(reply.indexOf("Por origem"));
 });
+it("describes all named purchases inside each category, from largest category to smallest, without the old 40-row truncation",()=>{
+ const records=Array.from({length:45},(_,i)=>({id:`fixture-${i}`,amount:2,type:"expense",date:"2026-09-10",description:`Compra fictícia ${String(i).padStart(2,"0")}`,category:"Categoria maior",source:"web" as const,mode:"personal"}));
+ records.push({id:"small",amount:1,type:"expense",date:"2026-09-10",description:"Despesa menor fictícia",category:"Categoria menor",source:"web",mode:"personal"});
+ const reply=summarizeFinanceQuery(createFinanceLedger(records,[],"personal"),{from:"2026-09-01",to:"2026-09-30",type:"expense",analysis:true,groupDetails:true},"personal");
+ expect(reply.indexOf("*1. Categoria maior:")).toBeLessThan(reply.indexOf("*2. Categoria menor:"));
+ for(let i=0;i<45;i++)expect(reply).toContain(`Compra fictícia ${String(i).padStart(2,"0")}`);
+ expect(reply).toContain("Despesa menor fictícia");expect(reply).not.toContain("Mostrando 40");expect(reply).not.toContain("Movimentações encontradas");
+});

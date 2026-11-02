@@ -180,7 +180,7 @@
 .z-wallet-content>div,.z-wallet-content>section {width:100%;}
 .z-dashboard-wallet .z-credit-deck-viewport {max-height:220px;}
 .z-dashboard-wallet .z-credit-face[aria-pressed=true] {order:-1;margin-bottom:10px;}
-.z-dashboard-wallet .z-credit-card-picker {flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px;scrollbar-width:thin;}
+.z-dashboard-wallet .z-credit-card-picker {flex-wrap:wrap;padding-bottom:5px;}
 .z-dashboard-wallet .z-credit-card-picker button {flex-shrink:0;}
 .z-dashboard-wallet .z-credit-selected {border-top:1px solid var(--z-line);padding:14px 0 0;max-height:230px;overflow-y:auto;scrollbar-width:thin;}
 .z-eclipse-secondary {grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:stretch;}
@@ -314,3 +314,45 @@
 .z-bank-tile>summary {height:214px;align-content:start;grid-template-rows:minmax(42px,auto) 1fr;}
 @media(prefers-reduced-motion:reduce) {.z-credit-face {transition:none;}}
 @media(max-width:640px) {.z-credit-deck-viewport {max-height:370px;}.z-bank-tile>summary {height:206px;}}
+
+/* Let content reflow instead of making the workspace scroll sideways. */
+.z-main {min-width:0;overflow-wrap:anywhere;}
+.zelo-app :is(input,select,textarea) {min-width:0;max-width:100%;}
+.zelo-app .grid>* {min-width:0;}
+.z-eclipse-grid>*,.z-eclipse-secondary>*,.z-dashboard-planning>* {min-width:0;}
+.z-card-heading {flex-wrap:wrap;}
+.z-statement-card {display:flex;flex-direction:column;min-width:0;height:min(48rem,75dvh);}
+.z-statement-card>div:first-child {flex-shrink:0;}
+.z-statement-list {flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;padding-right:4px;}
+.z-responsive-table {min-width:0;}
+.z-responsive-table :is(th,td) {overflow-wrap:anywhere;}
+@media(min-width:1024px) {
+  /* The left column determines the row height; the statement fills that row. */
+  .z-statement-card {height:0;min-height:100%;}
+}
+@media(max-width:1023px) {
+  .z-responsive-table {display:block;}
+  .z-responsive-table thead {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+  .z-responsive-table tbody {display:block;}
+  .z-responsive-table tr {display:block;padding:16px;}
+  .z-responsive-table td {display:grid;grid-template-columns:minmax(0,7rem) minmax(0,1fr);align-items:start;gap:12px;min-width:0;padding:7px 0;}
+  .z-responsive-table td::before {content:attr(data-label);font-size:11px;font-weight:600;color:var(--z-subtle);}
+  .z-responsive-table td:first-child {display:block;padding-bottom:12px;}
+  .z-responsive-table td:first-child::before {display:none;}
+  .z-responsive-table td>* {min-width:0;}
+}
+@media(max-width:639px) {
+  .z-eclipse-dashboard .z-eclipse-grid,.z-eclipse-secondary,.z-dashboard-planning {grid-template-columns:minmax(0,1fr);}
+  .z-credit-card-picker {flex-wrap:wrap;}
+  .z-credit-card-picker button {max-width:100%;white-space:normal;overflow-wrap:anywhere;}
+  .z-pending-row {flex-wrap:wrap;}
+  .z-pending-row>div:first-child {width:100%;}
+  .z-pending-row>div:last-child {margin-left:0;max-width:100%;flex-wrap:wrap;justify-content:flex-end;flex:1;}
+  .zelo-app .fixed.inset-0:is(.grid,.flex)>:is(form,div) {min-width:0;max-width:100%;}
+}
+@media(max-width:379px) {
+  .z-bank-connection-layout {flex-direction:column;align-items:stretch;}
+  .z-bank-connection-layout>div:first-child {align-self:center;}
+  .z-bank-connection-layout>div:first-child::after {display:none;}
+  .z-bank-connection-layout>ul::before,.z-bank-connection-layout>ul>li>span:first-child {display:none;}
+}

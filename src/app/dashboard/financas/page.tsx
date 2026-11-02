@@ -15,8 +15,10 @@ import {useBankUpdates} from "@/components/useBankUpdates";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
 import FinanceBankSchedules from "@/components/FinanceBankSchedules";
 import FinanceLoanRows from "@/components/FinanceLoanRows";
-import {financeBankSchedules,unrepresentedBankSchedules} from "@/lib/finance-bank-schedules";
-import {categoriesWithLoanInstallments,financeLoanInstallments} from "@/lib/finance-loan-installments";
+import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} from "@/lib/finance-bank-schedules";
+import {financeLoanInstallments} from "@/lib/finance-loan-installments";
+import {recurringInstallmentEnd} from "@/lib/installment-progress";
+import {financeExpensePlan} from "@/lib/finance-expense-plan";
 import {matchesBankFilter} from "@/lib/finance-bank-filter";
 import {projectBankInstallments} from "@/lib/bank-installment-projections";
 import {normalizeBankText} from "@/lib/bank-question-parser";
@@ -399,7 +401,7 @@ function FinancasContent() {
   const cats = form.type === "income" ? catsIncome : catsExpense;
   const editCats = editTarget?.type === "income" ? catsIncome : catsExpense;
   const editRecCats = editRec?.type === "income" ? catsIncome : catsExpense;
-  const allCategories = useMemo(() => [...new Set([...catsExpense, ...catsIncome,...finances.map(f=>f.category)])], [catsExpense, catsIncome,finances]);
+  const allCategories = useMemo(() => [...new Set([...catsExpense, ...catsIncome,"Compras parceladas","Contas recorrentes",...finances.map(f=>f.category)])], [catsExpense, catsIncome,finances]);
 
   // Categoria/tipo/busca filtram client-side sobre o que já foi buscado
   // (período já veio filtrado do servidor) — cards, gráfico e extrato usam
@@ -437,17 +439,19 @@ function FinancasContent() {
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
   const loanInstallments=ledger?.bank?financeLoanInstallments(ledger.bank.overview,finances,filters,today):[];
-  const expenseGroups=categoriesWithLoanInstallments(postedFinances,loanInstallments),incomeGroups=ledgerCategoryGroups(postedFinances,"income");
+  const incomeGroups=ledgerCategoryGroups(postedFinances,"income");
 
   // Recs sorted: overdue first, then by nextDueDate
   const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
   const projectedInstallments=(()=>{
-    if(!ledger?.bank||filters.type==="income"||filters.categories.length||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:"))return [];
+    if(!ledger?.bank||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:"))return [];
     const search=normalizeBankText(filters.search);
-    return projectBankInstallments(ledger.installmentAnchors?.items??[],ledger.bank.report.movements,{from:filters.from,to:filters.to,today})
-      .filter(item=>matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
+    return projectBankInstallments((ledger.installmentAnchors?.items??[]).map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today})
+      .filter(item=>(!filters.categories.length||filters.categories.includes(bankForecastCategory(item)))&&matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
   })();
-  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters),postedFinances,projectedInstallments);
+  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources),postedFinances,projectedInstallments);
+  const expensePlan=financeExpensePlan({posted:postedFinances,pending:pendingFinances,recurring:sortedRecs,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,from:filters.from,to:filters.to});
+  const expenseGroups=expensePlan.groups;
 
   function recStatus(r: Recurring): { label: string; color: string } {
     if (r.nextDueDate < today) return { label: "Vencido", color: "bg-red-soft text-red-ink" };
@@ -497,8 +501,10 @@ function FinancasContent() {
           <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(periodBalance.income):"—"}</p>
         </div>
         <div className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
-          <p className="text-xs text-red-ink font-medium uppercase tracking-wide">Despesas</p>
-          <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(periodBalance.expense):"—"}</p>
+          <p className="text-xs text-red-ink font-medium uppercase tracking-wide">Despesas do período</p>
+          <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(expensePlan.total):"—"}</p>
+          {ledger&&<p className="mt-2 text-xs leading-5 text-muted">Registradas: {fmt(expensePlan.recorded)} · A pagar (previsto): {fmt(expensePlan.forecast)}</p>}
+          {!!expensePlan.unquantified&&<p className="mt-1 text-[11px] text-amber-ink">{expensePlan.unquantified} previsão(ões) fora do total em reais: valor, moeda ou período a conferir.</p>}
         </div>
         <div className={clsx("rounded-2xl p-5 shadow-sm", totalBalance.balance >= 0 ? "bg-amber-soft border border-line" : "bg-red-soft border border-line")}>
           <p className="text-xs text-amber-ink font-medium uppercase tracking-wide">Saldo registrado na Zelo</p>
@@ -509,7 +515,6 @@ function FinancasContent() {
 
       {ledger?.bank?.overview.agenda?.incomplete&&<p role="status" className="text-xs text-amber-ink">As recorrências bancárias podem estar incompletas: há dados em atualização ou indisponíveis.</p>}
       {ledger?.installmentAnchors?.incomplete&&<p role="status" className="text-xs text-amber-ink">Há mais parcelas bancárias do que este extrato consegue mostrar de uma vez. Ajuste o período ou confira no banco.</p>}
-      {!!filters.categories.length&&!!ledger?.bank?.overview.agenda?.items.some(item=>item.kind!=="bill")&&<p className="text-xs text-subtle">As previsões bancárias não informam categoria e ficam fora deste filtro.</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         <div className="space-y-5 lg:col-span-2">
@@ -518,7 +523,7 @@ function FinancasContent() {
         </div>
 
         {/* Extrato unificado */}
-        <div className="lg:col-span-3 bg-surface rounded-2xl border border-line shadow-sm p-5">
+        <div className="z-statement-card lg:col-span-3 bg-surface rounded-2xl border border-line shadow-sm p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4 gap-2">
             <h3 className="font-semibold text-ink text-sm">📋 Extrato</h3>
             {selectableFinances.length > 0 && (
@@ -551,7 +556,7 @@ function FinancasContent() {
                 <p className="text-xs mt-1">Envie uma mensagem para o bot ou clique em + Adicionar!</p>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="z-statement-list space-y-1">
                 {!ledger&&<p className="px-3 py-3 text-xs text-amber-ink">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
                 <FinanceLoanRows key={mode} items={loanInstallments} mode={mode} canEdit={ledger?.bank?.overview.manual_installments_available} onSaved={async()=>{await loadAll(mode);}}/>
                 {ledger?.bank&&<FinanceBankSchedules compact items={bankSchedules} overview={ledger.bank.overview}/>}
@@ -563,7 +568,7 @@ function FinancasContent() {
                     ? ` (${r.paidInstallments + 1}/${r.totalInstallments})`
                     : ` · ${UNIT_LABEL[r.repeatUnit]}`;
                   return (
-                    <div key={r.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-surface-muted transition border border-dashed border-line">
+                    <div key={r.id} className="z-pending-row group flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl hover:bg-surface-muted transition border border-dashed border-line">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0", r.type === "income" ? "bg-emerald-soft text-emerald-ink" : "bg-red-soft text-red-500")}>
                           {r.type === "income" ? "↑" : "↓"}
@@ -574,6 +579,7 @@ function FinancasContent() {
                             <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0", st.color)}>{st.label}</span>
                           </div>
                           <p className="text-xs text-subtle">{r.category}{purchaseDateFromDescription(r.description) ? ` · compra em ${fmtDate(purchaseDateFromDescription(r.description)!)}` : ""}</p>
+                          {r.recurrenceType==="installment"&&<p className="mt-1 text-[11px] text-muted">Pagas: {r.paidInstallments} · Faltam: {Math.max(0,(r.totalInstallments??0)-r.paidInstallments)} · Última: {recurringInstallmentEnd(r)?fmtDate(recurringInstallmentEnd(r)!):"não informada"}</p>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
@@ -604,7 +610,7 @@ function FinancasContent() {
                   const badgeColor = isOverdue ? "bg-red-soft text-red-ink" : "bg-surface-muted text-muted";
                   const badgeLabel = isOverdue ? `Vencido ${dueFmt}` : `A vencer ${dueFmt}`;
                   return (
-                    <div key={f.id} className="group flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-surface-muted transition border border-dashed border-line">
+                    <div key={f.id} className="z-pending-row group flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl hover:bg-surface-muted transition border border-dashed border-line">
                       <div className="flex items-center gap-3 min-w-0">
                         {selectMode && (
                           <input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => toggleSelected(f.id)}
@@ -652,7 +658,7 @@ function FinancasContent() {
                 )}
 
                 {/* Lançamentos confirmados de todas as origens, em ordem de data */}
-                <FinanceLedgerRows entries={postedFinances.slice(0,visibleCount)} accounts={ledger?.accounts??[]} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} onCategory={setBankCategoryTarget} onCreditPix={entry=>setBankCreditPixId(entry.id)} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
+                <FinanceLedgerRows creditOverview={ledger?.bank?.overview} loans={loanInstallments} entries={postedFinances.slice(0,visibleCount)} accounts={ledger?.accounts??[]} selectMode={selectMode} selectedIds={selectedIds} onToggle={toggleSelected} onEdit={openEdit} onDelete={setDeleteTarget} onCategory={setBankCategoryTarget} onCreditPix={entry=>setBankCreditPixId(entry.id)} displayDescription={visibleFinanceDescription} displayDate={visibleFinanceDate}/>
                 {postedFinances.length>visibleCount&&<button onClick={()=>setVisibleCount(n=>n+50)} className="w-full rounded-xl border border-line py-3 text-xs font-semibold text-muted">Ver mais lançamentos ({postedFinances.length-visibleCount})</button>}
                 {ledger?.bank&&<p className="px-3 pt-3 text-[11px] leading-5 text-subtle">Resumo em reais. Pagamentos de fatura, transferências identificadas e investimentos aparecem no extrato sem alterar receitas/gastos. O histórico enviado pelo banco pode estar incompleto.</p>}
               </div>

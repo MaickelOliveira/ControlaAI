@@ -261,7 +261,7 @@ export default function SupermercadoPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-surface-muted p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
+      <div className="flex flex-wrap gap-1 bg-surface-muted p-1 rounded-xl w-full sm:w-fit">
         {[
           { key: "lista", label: "📋 Lista" },
           { key: "whatsapp", label: "💬 Lista WhatsApp" },
@@ -284,7 +284,7 @@ export default function SupermercadoPage() {
           {/* Filtros de categoria */}
           <div>
             <p className="text-xs font-semibold text-muted mb-2">Filtrar os itens que já estão na sua lista</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex flex-wrap gap-2 pb-1">
               {LIST_FILTER_CATS.map(f => (
                 <button key={f.value} onClick={() => setListFilter(f.value)}
                   className={clsx("px-3 py-1.5 rounded-xl text-xs font-semibold transition border shrink-0",

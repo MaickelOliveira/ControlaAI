@@ -1,4 +1,5 @@
 "use client";
+import {recurringInstallmentEnd} from "@/lib/installment-progress";
 import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
@@ -184,7 +185,7 @@ export default function RecorrentesPage() {
                           <p className={clsx("text-lg font-bold mt-0.5", typeColor)}>{fmt(item.amount)}<span className="text-sm font-normal text-subtle">/parcela</span></p>
                           {item.totalAmount && <p className="text-xs text-subtle">Total: {fmt(item.totalAmount)}</p>}
                           <p className="text-xs text-subtle mt-0.5">
-                            Parcela {item.paidInstallments}/{item.totalInstallments} · Próx: <span className={clsx(isPast && "text-red-500 font-medium")}>{fmtDate(item.nextDueDate)}</span>
+                            Pagas: {item.paidInstallments} · Faltam: {Math.max(0,(item.totalInstallments??0)-item.paidInstallments)} · Última: {recurringInstallmentEnd(item)?fmtDate(recurringInstallmentEnd(item)!):"não informada"} · Próx: <span className={clsx(isPast && "text-red-500 font-medium")}>{fmtDate(item.nextDueDate)}</span>
                           </p>
                           <div className="mt-2 flex items-center gap-2">
                             <div className="flex-1 bg-surface-muted rounded-full h-1.5">

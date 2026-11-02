@@ -2,7 +2,7 @@ import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "
 import {bankDate,bankMoney} from "./open-finance-display";
 import type {BankFinancialData} from "./open-finance-report";
 import {merchantDescriptionMatchesTerms} from "./merchant-text";
-export type FinanceQuery={from:string;to:string;type:"expense"|"income"|"result";source?:"card"|"account";category?:string;keywords?:string[];analysis?:boolean;detail?:boolean;byBank?:boolean};
+export type FinanceQuery={from:string;to:string;type:"expense"|"income"|"result";source?:"card"|"account";category?:string;keywords?:string[];analysis?:boolean;detail?:boolean;groupDetails?:boolean;byBank?:boolean};
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
 const safe=(s:string)=>s.replace(/[\r\n*`_~<>]/g," ").slice(0,180);
 const money=(value:number)=>bankMoney(value,"BRL");
@@ -25,7 +25,11 @@ export function summarizeFinanceQuery(entries:readonly LedgerEntry[],query:Finan
     if(query.type==="income")for(const e of selected)incomeGroups.set(e.category,(incomeGroups.get(e.category)??0)+Math.round(e.amount*100));
     const groups=(query.type==="income"?[...incomeGroups].map(([name,cents])=>({name,value:cents/100})):ledgerExpenseGroups(selected,"category")).sort((a,b)=>b.value-a.value);
     if(groups.length)answer=`🏆 *Maior categoria de ${query.type==="income"?"receitas":"gastos"}: ${safe(groups[0].name)}*\n*${money(groups[0].value)}*\n\n${answer}`;
-    answer+=`\n\n*${query.type==="income"?"Receitas":"Gastos"} por categoria*\n${groups.slice(0,20).map(g=>`• ${safe(g.name)}: ${money(g.value)}`).join("\n")||`Nenhuma ${query.type==="income"?"receita":"despesa"} realizada no período.`}`;
+    const categoryLines=query.groupDetails?groups.map((group,index)=>{
+      const items=selected.filter(entry=>entry.category===group.name).sort((a,b)=>b.amount-a.amount||b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
+      return `*${index+1}. ${safe(group.name)}: ${money(group.value)}*\n${items.map(entry=>`• ${safe(entry.description)} — ${money(entry.amount)} · ${bankDate(entry.date)}`).join("\n")}`;
+    }).join("\n\n"):groups.map(group=>`• ${safe(group.name)}: ${money(group.value)}`).join("\n");
+    answer+=`\n\n*${query.type==="income"?"Receitas":"Gastos"} por categoria${query.groupDetails?" · maior para menor":""}*\n${categoryLines||`Nenhuma ${query.type==="income"?"receita":"despesa"} realizada no período.`}`;
   }
   if(query.type!=="result"&&query.byBank){
     const byBank=new Map<string,number>();
@@ -35,7 +39,7 @@ export function summarizeFinanceQuery(entries:readonly LedgerEntry[],query:Finan
     }
     answer+=`\n\n*Por banco*\n${[...byBank].sort((a,b)=>b[1]-a[1]).map(([name,cents])=>`• ${safe(name)}: ${money(cents/100)}`).join("\n")||"Nenhum valor realizado recebido no período."}`;
   }else if(query.type!=="result"&&byOrigin.size)answer+=`\n\n*Por origem*\n${[...byOrigin].map(([name,cents])=>`• ${name}: ${money(cents/100)}`).join("\n")}`;
-  if(query.detail||query.keywords?.length){
+  if(!query.groupDetails&&(query.detail||query.keywords?.length)){
     const lines=scoped.slice(0,40).map((e,index)=>`*${index+1}. ${safe(e.description)}*\n💰 ${e.bank&&!e.included?bankMoney(e.bank.amount,e.bank.currency):money(e.amount)}\n📅 ${bankDate(e.date)} · ${safe(financeOrigin(e))}\n🏷️ ${safe(e.category)}${e.source!=="bank"&&e.registeredByName?`\n👤 Registrado por ${safe(e.registeredByName)}`:""}${!e.included?"\n⚠️ Fora do total (transferência/pagamento, moeda diferente ou valor não informado)":""}`);
     answer+=`\n\n*Movimentações encontradas (${scoped.length})*\n\n${lines.join("\n\n")||"Nenhum movimento recebido no período."}`;
     if(scoped.length>40)answer+=`\n\nMostrando 40 de ${scoped.length}; consulte o extrato completo em Finanças.`;

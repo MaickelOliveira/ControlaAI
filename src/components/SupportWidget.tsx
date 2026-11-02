@@ -126,7 +126,7 @@ export default function SupportWidget() {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm h-[28rem] bg-surface rounded-2xl shadow-2xl border border-line flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm h-[28rem] max-h-[calc(100dvh-7rem)] bg-surface rounded-2xl shadow-2xl border border-line flex flex-col overflow-hidden">
           <div className="bg-[#128C7E] text-white px-4 py-3 flex items-center justify-between shrink-0">
             <div>
               <p className="font-semibold text-sm">Suporte Zelo</p>

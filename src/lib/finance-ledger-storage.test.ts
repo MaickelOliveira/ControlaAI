@@ -83,3 +83,13 @@ it("keeps backward compatibility only for a missing credit function, never for r
  rpc.mockRejectedValue(Error("OFFLINE"));await expect(readCreditData(scope,{from:"2026-11-01",to:"2026-11-30"})).rejects.toThrow("OFFLINE");
  rpc.mockResolvedValue({payments:[],plans:[{amount:"-1"}]});await expect(readCreditData(scope,{from:"2026-11-01",to:"2026-11-30"})).rejects.toThrow("OF_CREDIT_DATA_INVALID");
 });
+it("accepts explicitly scoped credit counts and rejects impossible counts without treating missing counts as zero",async()=>{
+ const {readCreditData}=await import("./finance-ledger-storage");
+ const period={from:"2026-11-01",to:"2026-11-30"};
+ rpc.mockResolvedValue({payments:[],plans:[],progress:[{resource_id:"fictional-contract",paid_installments:8,remaining_installments:7}]});
+ expect((await readCreditData(scope,period))?.progress?.[0]).toMatchObject({paid_installments:8,remaining_installments:7});
+ rpc.mockResolvedValue({payments:[],plans:[],progress:[{resource_id:"fictional-contract",paid_installments:null,remaining_installments:null}]});
+ expect((await readCreditData(scope,period))?.progress?.[0].paid_installments).toBeNull();
+ rpc.mockResolvedValue({payments:[],plans:[],progress:[{resource_id:"fictional-contract",paid_installments:-1,remaining_installments:7}]});
+ await expect(readCreditData(scope,period)).rejects.toThrow("OF_CREDIT_DATA_INVALID");
+});

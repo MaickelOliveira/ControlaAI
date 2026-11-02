@@ -47,3 +47,13 @@ it("excludes false delivery subscriptions and installments finished before the s
  expect(financeBankSchedules(rows,filters).map(row=>row.id)).toEqual(["current"]);
  expect(financeBankSchedules(rows,{...filters,from:"2026-08-01",to:"2026-08-31"}).map(row=>row.id)).toContain("expired");
 });
+it("uses only the currency of the same linked bank resource when the schedule omits it",()=>{
+ const missing={...item,currency:null};
+ expect(financeBankSchedules([missing],filters,[{id:"card-a",currency:"BRL"}])[0].currency).toBe("BRL");
+ expect(financeBankSchedules([missing],filters,[{id:"other",currency:"BRL"}])[0].currency).toBeNull();
+ expect(financeBankSchedules([{...item,currency:"USD"}],filters,[{id:"card-a",currency:"BRL"}])[0].currency).toBe("USD");
+});
+it("keeps forecasts in their displayed budget category when that category is selected",()=>{
+ expect(financeBankSchedules([item],{...filters,categories:["Assinaturas"]})).toHaveLength(1);
+ expect(financeBankSchedules([item],{...filters,categories:["Compras parceladas"]})).toEqual([]);
+});

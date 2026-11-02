@@ -26,3 +26,9 @@ it("shows the manual account that received a WhatsApp expense",()=>{
  expect(text).toContain("WhatsApp");
  expect(text).toContain("Conta: Dinheiro");
 });
+it("shows the current contract counts and final due date even on a historical loan payment",()=>{
+ const movement:BankMovement={id:"old-loan-payment",resource_id:"loan",resource_name:"Crédito fictício",institution_name:"Banco fictício",resource_type:"loan",date:"2026-10-15",description:"Crédito fictício",amount:"30.00",currency:"BRL",direction:"debit",classification:"loan_repayment",kind:"account_debits",bill_month:null,installment_number:null,installment_count:null};
+ const creditOverview={connections:[],resources:[],limits:[],bills:[],sync:[],credit:[{resource_id:"loan",currency:"BRL",contract_amount:"300",outstanding_amount:"150",next_installment_amount:"30",paid_installments:5,remaining_installments:5,due_date:"2027-03-15"}]};
+ const text=renderToStaticMarkup(createElement(FinanceLedgerRows,{entries:createFinanceLedger([],[movement],"personal"),creditOverview,selectMode:false,selectedIds:new Set<string>(),onToggle:()=>{},onEdit:()=>{},onDelete:()=>{},displayDescription:value=>value,displayDate:item=>item.date}));
+ expect(text).toMatch(/Pagas:.*5/);expect(text).toMatch(/Faltam:.*5/);expect(text).toContain("15/03/2027");
+});

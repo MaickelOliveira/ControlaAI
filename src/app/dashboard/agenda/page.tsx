@@ -240,14 +240,14 @@ export default function AgendaPage() {
       {view === "month" ? (
         <div className="bg-surface rounded-2xl border border-line shadow-sm overflow-hidden">
           {/* Navegação */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-4 border-b border-line">
             <div className="flex items-center gap-3">
               <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-surface-muted transition text-muted">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <h2 className="text-base font-bold text-ink w-44 text-center">
+              <h2 className="min-w-0 text-sm sm:text-base font-bold text-ink w-32 sm:w-44 text-center">
                 {MONTH_NAMES[curMonth - 1]} {curYear}
               </h2>
               <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-surface-muted transition text-muted">

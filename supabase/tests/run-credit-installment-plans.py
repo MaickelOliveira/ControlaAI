@@ -58,12 +58,19 @@ try:
     before=read(metadata)
     migration=repo/'supabase/migrations/20261102163000_credit_installment_plans.sql';sql(migration.read_text())
     assert before==read(metadata),'Commit access gates/owner metadata changed'
+    progress_metadata=metadata.replace('public.zelo_of_commit_page(uuid,text,uuid,uuid,jsonb,text,jsonb)','public.zelo_of_credit_data(uuid,text,date,date)')
+    progress_before=read(progress_metadata)
+    sql((repo/'supabase/migrations/20261102190000_credit_installment_progress.sql').read_text())
+    assert progress_before==read(progress_metadata),'Credit reader access metadata changed'
+    sql("update open_finance.credit_details set paid_installments=8,remaining_installments=7 where resource_id='"+resource+"';")
     plan={'amount':'890.10','currency':'BRL','first_due_date':'2026-09-30','last_due_date':'2027-05-30'}
     args=','+quote(resource)+','+quote(json.dumps(plan))+'::jsonb'
     assert invoke(owner,companies[owner],'business','zelo_of_set_credit_plan',args)=='t'
     def credit_data(user=owner,company=None,mode='business'):
         return json.loads(invoke(user,company or companies[user],mode,'zelo_of_credit_data',",'2026-09-01','2026-11-30'"))
     assert credit_data()['plans']==[dict(plan,resource_id=resource)]
+    assert credit_data()['progress']==[{'resource_id':resource,'paid_installments':8,'remaining_installments':7,'due_date':'2027-05-31'}]
+    assert all(row['resource_id']!=resource for row in credit_data(company=alternate)['progress'])
     assert credit_data(company=alternate)['plans']==[]
     assert credit_data(user=other)['plans']==[]
     assert credit_data(mode='personal')['plans']==[]
