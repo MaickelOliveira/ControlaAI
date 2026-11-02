@@ -112,10 +112,48 @@ try:
         assert m['owner']=='zelo_of_workspace' and m['definer'] and 'row_security=on' in m['config']
     assert sql("select has_schema_privilege('zelo_of_workspace','public','CREATE') or has_schema_privilege('zelo_of_workspace','open_finance','CREATE');")=='f'
     assert sql("select count(*) from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=(select oid from pg_roles where rolname=current_user);")=='0'
+    # Editable series categories: persisted forecasts and positively linked ledger rows.
+    for migration_name in ['20261012090000_bank_ledger_batch','20261015200000_bank_installment_anchors','20261017210000_bank_schedule_purchase_evidence']:
+        sql((repo/('supabase/migrations/'+migration_name+'.sql')).read_text())
+    protected=['public.zelo_of_report(uuid,text,date,date,uuid)','open_finance.report_page(uuid,text,date,date,uuid,integer)','public.zelo_of_installment_anchors(uuid,text)']
+    def access_meta(signature):return read("select json_build_object('owner',pg_get_userbyid(proowner),'acl',proacl::text,'config',proconfig,'definer',prosecdef) from pg_proc where oid="+quote(signature)+'::regprocedure;')
+    before_categories={signature:access_meta(signature) for signature in protected}
+    sql((repo/'supabase/migrations/20261102210000_forecast_categories.sql').read_text())
+    assert before_categories=={signature:access_meta(signature) for signature in protected},'Category migration changed existing access gates'
+    consent={'id':str(uuid.uuid4()),'cliente_user_id':owner,'institution_id':'20000000-0000-4000-8000-000000000002','institution_name':'Fixture Card Bank','status':'AUTHORISED','products':['CREDIT_CARD_ACCOUNT']}
+    card_connection=json.loads(invoke(owner,companies[owner],'business','zelo_of_save_consent',','+quote(json.dumps(consent))+'::jsonb'))['id']
+    card=sql("insert into open_finance.resources(connection_id,user_id,environment,mode,resource_type,external_id,name,subtype) values("+','.join(map(quote,[card_connection,owner,'production','business','card','fixture-card','Fixture card','credit-cards']))+") returning id;")
+    def schedule_commit(ids,key):
+        lease=str(uuid.uuid4())
+        job=sql("insert into open_finance.sync_jobs(connection_id,user_id,environment,mode,kind,family,external_resource_id,status,lease_token,lease_until) values("+','.join(map(quote,[card_connection,owner,'production','business','recurrings','credit-cards','fixture-card','running',lease]))+",now()+interval '1 minute') returning id;")
+        rows={'schedules':[{'source_key':key*64,'kind':'recurring','description':'Fixture subscription','amount':'12','currency':'BRL','period_months':1,'expected_day':10,'due_date':'2026-11-10','regularity_score':1,'observed_transactions':ids}]}
+        invoke(owner,companies[owner],'business','zelo_of_commit_page',','+quote(job)+','+quote(lease)+','+quote(json.dumps(rows))+"::jsonb,null,'[]'::jsonb")
+    schedule_commit(['tx-1','tx-2','tx-3'],'a')
+    series=sql('select id from open_finance.card_schedules where resource_id='+quote(card)+';')
+    def set_category(user=owner,company=None,mode='business',category='Assinaturas',role='service_role'):
+        return invoke(user,company or companies[user],mode,'zelo_of_set_schedule_category',','+quote(series)+','+('null' if category is None else quote(category)),role)
+    assert set_category()=='t'
+    for kwargs in [dict(user=other),dict(company=alternate),dict(mode='personal')]:assert set_category(**kwargs)=='f'
+    for role in ['anon','authenticated']:rejected(lambda:set_category(role=role))
+    for category in ['', ' ' ,'x'*101]:rejected(lambda:set_category(category=category))
+    schedule_commit(['tx-2','tx-3','tx-4'],'b')
+    assert sql('select id from open_finance.card_schedules where resource_id='+quote(card)+';')==series,'Refresh changed series identity'
+    assert sql('select user_category from open_finance.card_schedules where id='+quote(series)+';')=='Assinaturas','Refresh erased chosen category'
+    agenda=json.loads(invoke(owner,companies[owner],'business','zelo_of_agenda',",'2026-11-01','2026-11-30',true"))
+    assert next(row for row in agenda['items'] if row['id']==series)['user_category']=='Assinaturas'
+    movement_id=sql("insert into open_finance.movements(resource_id,user_id,environment,mode,resource_type,external_id,description,transaction_date,amount,currency,direction,classification) values("+','.join(map(quote,[card,owner,'production','business','card','tx-2','Fixture subscription','2026-10-10','12','BRL','debit','purchase']))+") returning id;")
+    def category_report():return value(owner,companies[owner],'zelo_of_ledger_report')['movements'][0]['user_category']
+    assert category_report()=='Assinaturas','Linked bank charge lost the series category'
+    invoke(owner,companies[owner],'business','zelo_of_set_movement_category',','+quote(movement_id)+",'Educação'")
+    assert category_report()=='Educação','Series overrode a movement-specific choice'
+    assert set_category(category=None)=='t'
+    assert category_report()=='Educação','Reset erased the movement-specific choice'
+    assert sql("select relforcerowsecurity from pg_class where oid='open_finance.card_schedules'::regclass;")=='t'
+    assert sql("select has_schema_privilege('zelo_of_workspace','public','CREATE') or has_schema_privilege('zelo_of_workspace','open_finance','CREATE');")=='f'
     sql((repo/'supabase/rollback/20261102163000_credit_installment_plans.sql').read_text())
     assert sql("select manual_installment_plan->>'amount' from open_finance.credit_details where resource_id="+quote(resource)+';')=='890.10'
     assert sql("select jsonb_array_length(payment_history) from open_finance.credit_details where resource_id="+quote(resource)+';')=='1'
     assert sql("select to_regprocedure('public.zelo_of_credit_data(uuid,text,date,date)') is null;")=='t'
-    print('PASS PostgreSQL: persisted plan; owner/company/mode isolation; no automatic posting; history/plan survive refresh; paid dates and closed contracts; stale/invalid lease rejected; ACL/RLS unchanged',flush=True)
+    print('PASS PostgreSQL: persisted plan; owner/company/mode isolation; no automatic posting; history/plan survive refresh; paid dates and closed contracts; stale/invalid lease rejected; ACL/RLS unchanged; editable series categories preserve isolation and survive refresh',flush=True)
 finally:
     if started:subprocess.run([str(binary/'pg_ctl'),'-D',str(data),'-m','immediate','-w','stop'],capture_output=True,text=True)

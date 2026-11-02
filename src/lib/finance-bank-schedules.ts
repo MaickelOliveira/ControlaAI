@@ -6,8 +6,10 @@ import type {BankResource} from "./open-finance-display";
 import type {LedgerEntry} from "./finance-ledger";
 import type {BankInstallmentProjection} from "./bank-installment-projections";
 type Filters={from:string;to:string;type:string;search:string;categories:readonly string[];account?:string};
-export function bankForecastCategory(item:{description:string;kind?:string;resource_id?:string;amount?:string|null;currency?:string|null},history:readonly LedgerEntry[]=[]){
+export function bankForecastCategory(item:{user_category?:string|null;description:string;kind?:string;resource_id?:string;amount?:string|null;currency?:string|null},history:readonly LedgerEntry[]=[]){
+ if(item.user_category?.trim())return item.user_category.trim();
  const name=normalizeBankText(item.description);
+ if(item.kind==="recurring"&&name==="google")return "Assinaturas";
  const known=new Set(history.filter(row=>row.included&&row.type==="expense"&&row.bank&&item.resource_id&&row.bank.resource_id===item.resource_id&&(!item.currency||row.bank.currency===item.currency)&&normalizeBankText(row.description)===name&&(item.amount==null||row.amount===Number(item.amount))).map(row=>row.category));
  return known.size===1?[...known][0]:descriptionExpenseCategory(item.description)??"Outros";
 }

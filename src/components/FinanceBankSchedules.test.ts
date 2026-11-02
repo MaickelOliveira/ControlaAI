@@ -12,3 +12,7 @@ it("uses a short statement row in compact mode without the separate schedules pa
  const html=renderToStaticMarkup(React.createElement(FinanceBankSchedules,{compact:true,overview,items:[{id:"fixture",kind:"installment",description:"Loja fictícia",institution_name:"Banco fictício",resource_name:"Gold",due_date:null,amount:"25",currency:"BRL",synced_at:"2026-11-01",observed_installments:2,total_installments:5}]}));
  expect(html).toContain("Loja fictícia");expect(html).toContain("identificada 2/5");expect(html).toContain("Pagamento não confirmado");expect(html).not.toContain("Recorrências e parcelas dos bancos");expect(html).not.toContain("<section");
 });
+it("offers category editing for a bank forecast without adding payment controls",()=>{
+ const html=renderToStaticMarkup(React.createElement(FinanceBankSchedules,{compact:true,overview,onCategory:()=>{},items:[{id:"fixture",kind:"recurring",description:"Google",institution_name:"Banco fictício",resource_name:"Gold",due_date:"2026-11-12",amount:"10",currency:"BRL",synced_at:"2026-11-01"}]}));
+ expect(html).toContain("Alterar categoria");expect(html).not.toContain("Marcar como pago");
+});
