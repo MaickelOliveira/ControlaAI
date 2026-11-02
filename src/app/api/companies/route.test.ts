@@ -85,3 +85,10 @@ it("rejects foreign companies, blank names and cross-site rename requests", asyn
   expect((await PUT(request("PUT", { companyId: id, name: "Nome" }, "https://attacker.test"))).status).toBe(403);
   expect(mocks.rename).toHaveBeenCalledTimes(1);
 });
+
+it("selects a company and business mode together on the very first switch",async()=>{
+ mocks.auth.mockResolvedValue({session:{role:"client"},user:{id:owner,activeMode:"personal"}});
+ expect((await PATCH(request("PATCH",{companyId:id}))).status).toBe(200);
+ expect(mocks.cookieSet).toHaveBeenCalledWith("zelo_company",`${owner}:${id}`,expect.objectContaining({httpOnly:true,path:"/"}));
+ expect(mocks.cookieSet).toHaveBeenCalledWith("zelo_workspace_mode",`${owner}:business`,expect.objectContaining({httpOnly:true,path:"/"}));
+});

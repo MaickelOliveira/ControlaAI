@@ -1,4 +1,5 @@
 "use client";
+import FinanceCategorySelect from "@/components/FinanceCategorySelect";
 import {recurringInstallmentEnd} from "@/lib/installment-progress";
 import PageTitle from "@/components/PageTitle";
 import { useEffect, useState } from "react";
@@ -332,10 +333,7 @@ export default function RecorrentesPage() {
                   className="border border-line rounded-xl px-3 py-2.5 text-sm outline-none" />
               </div>
 
-              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                className="w-full border border-line rounded-xl px-3 py-2.5 text-sm outline-none bg-surface">
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <FinanceCategorySelect value={form.category} onChange={name=>setForm(f=>({...f,category:name}))} categories={categories} type={form.type}/>
 
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowForm(false)}

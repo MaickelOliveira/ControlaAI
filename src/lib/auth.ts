@@ -1,3 +1,4 @@
+import {WORKSPACE_MODE_COOKIE,browserWorkspaceMode} from "./workspace-mode";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { timingSafeEqual } from "node:crypto";
@@ -111,7 +112,8 @@ export async function getSessionWithUser(): Promise<{ session: SessionPayload; u
   if (!user || !hasAccess(user)) return null;
   if (user.passwordChangedAt && (!payload.iat || payload.iat * 1000 < new Date(user.passwordChangedAt).getTime())) return null;
 
-  return { session: payload, user };
+  const mode=browserWorkspaceMode(payload.sub,jar.get(WORKSPACE_MODE_COOKIE)?.value);
+  return { session: payload, user: mode?{...user,activeMode:mode}:user };
 }
 
 export async function getSession(): Promise<SessionPayload | null> {

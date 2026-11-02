@@ -1,3 +1,4 @@
+import {WORKSPACE_MODE_COOKIE,workspaceModeCookieValue} from "@/lib/workspace-mode";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getSessionWithUser,invalidateUserAuthCache } from "@/lib/auth";
@@ -15,7 +16,9 @@ function validOrigin(request: Request): boolean {
   return isSameOrigin(request,process.env.OPEN_FINANCE_APP_ORIGIN||process.env.NEXT_PUBLIC_APP_URL);
 }
 async function selectCompany(userId: string, companyId: string) {
-  (await cookies()).set(COMPANY_COOKIE, companyCookieValue(userId, companyId), {
+  const jar=await cookies();
+  jar.set(WORKSPACE_MODE_COOKIE,workspaceModeCookieValue(userId,"business"),{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:60*60*24*7});
+  jar.set(COMPANY_COOKIE, companyCookieValue(userId, companyId), {
     httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
     path: "/", maxAge: 60 * 60 * 24 * 7,
   });
@@ -50,7 +53,7 @@ async function mutate(request: Request, operation: "create" | "select" | "rename
       const result=await archiveCompany(auth.user.id,body.companyId as string,body.confirmation);
       invalidateUserAuthCache(auth.user.id);
       const selected=selectedCompanyId(auth.user.id,(await cookies()).get(COMPANY_COOKIE)?.value);
-      if(!selected||selected===body.companyId){if(result.activeCompanyId)await selectCompany(auth.user.id,result.activeCompanyId);else (await cookies()).set(COMPANY_COOKIE,"",{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:0});}
+      if(!selected||selected===body.companyId){if(result.mode==="personal")(await cookies()).set(WORKSPACE_MODE_COOKIE,workspaceModeCookieValue(auth.user.id,"personal"),{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:60*60*24*7});if(result.activeCompanyId)await selectCompany(auth.user.id,result.activeCompanyId);else (await cookies()).set(COMPANY_COOKIE,"",{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:0});}
       return NextResponse.json({ok:true,...result},{headers});
     }
     if(operation==="restore"){

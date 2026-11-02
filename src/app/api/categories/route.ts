@@ -1,6 +1,6 @@
 import {saveWorkspaceCategories,workspaceCategoryUser} from "@/lib/workspace-categories";
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, invalidateUserAuthCache } from "@/lib/auth";
 import { getUserById } from "@/lib/users";
 import { CATEGORIES_EXPENSE as DEFAULT_EXPENSE, CATEGORIES_INCOME as DEFAULT_INCOME } from "@/lib/finances";
 
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.role !== "client") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { type, name } = await req.json();
-  if (!type || !name || !name.trim()) return NextResponse.json({ error: "type e name obrigatórios" }, { status: 400 });
+  if (typeof name!=="string"||!name.trim()||name.trim().length>100||/[\r\n\x00-\x1f]/.test(name)) return NextResponse.json({ error: "Informe um nome de categoria de até 100 caracteres." }, { status: 400 });
   if (type !== "expense" && type !== "income") return NextResponse.json({ error: "type inválido" }, { status: 400 });
 
   const owner = await getUserById(session.sub);
@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     await saveWorkspaceCategories(session.sub, { customCategoriesIncome: updated });
   }
 
+  invalidateUserAuthCache(session.sub);
   return NextResponse.json({ ok: true, name: trimmed });
 }
 
