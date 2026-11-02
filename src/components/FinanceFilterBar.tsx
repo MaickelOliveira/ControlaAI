@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { clsx } from "clsx";
 import type {FinanceAccountOption} from "@/lib/finance-account-filter";
 import { last3MonthsRange, monthRange, selectedMonthRange } from "@/lib/calendar-range";
+import { CategoryCreator } from "./FinanceCategorySelect";
 
 export type FinanceFilters = {
   from: string;   // YYYY-MM-DD
@@ -37,15 +38,17 @@ export function defaultFilters(): FinanceFilters {
 }
 
 export default function FinanceFilterBar({
-  categories, value, onChange, accounts,
+  categories, value, onChange, accounts, onCategoryCreated,
 }: {
   categories: string[];
   accounts?: FinanceAccountOption[];
+  onCategoryCreated?: (name: string) => void;
   value: FinanceFilters;
   onChange: (f: FinanceFilters) => void;
 }) {
   const [preset, setPreset] = useState<Preset>(() => { const current = monthRange(0); return value.from === current.from && value.to === current.to ? "this_month" : "custom"; });
   const [showCats, setShowCats] = useState(false);
+  const [addedCategories, setAddedCategories] = useState<string[]>([]);
   const [searchInput, setSearchInput] = useState(value.search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const valueRef = useRef(value);
@@ -133,19 +136,20 @@ export default function FinanceFilterBar({
         {showCats && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setShowCats(false)} />
-            <div className="absolute z-20 mt-1 bg-surface border border-line rounded-xl shadow-lg p-2 max-h-64 overflow-y-auto w-48">
+            <div className="fixed left-4 right-4 sm:absolute sm:left-0 sm:right-auto z-20 mt-1 bg-surface border border-line rounded-xl shadow-lg p-2 max-h-80 overflow-y-auto w-auto sm:w-60 max-w-[calc(100vw-2rem)]">
               {value.categories.length > 0 && (
                 <button type="button" onClick={() => onChange({ ...value, categories: [] })}
                   className="w-full text-left text-xs text-amber-ink hover:bg-amber-soft rounded-lg px-2 py-1.5 mb-1 font-medium">
                   Limpar seleção
                 </button>
               )}
-              {categories.map(c => (
+              {[...new Set([...categories,...addedCategories])].map(c => (
                 <label key={c} className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted hover:bg-surface-muted rounded-lg cursor-pointer">
                   <input type="checkbox" checked={value.categories.includes(c)} onChange={() => toggleCategory(c)} className="accent-amber-600" />
                   {c}
                 </label>
               ))}
+              <div className="border-t border-line mt-2 pt-1"><CategoryCreator type={value.type==="income"?"income":"expense"} onCreated={name=>{onCategoryCreated?.(name);setAddedCategories(old=>[...old,name]);onChange({...value,categories:[...new Set([...value.categories,name])]});}}/></div>
             </div>
           </>
         )}

@@ -5,7 +5,7 @@ vi.mock("./company-context",()=>({companyScopeFor:m.scope}));
 vi.mock("./companies",()=>({updateCompanyCategories:m.company}));
 vi.mock("./users",()=>({updateUser:m.user}));
 import {saveWorkspaceCategories,workspaceCategoryUser} from "./workspace-categories";
-beforeEach(()=>{vi.clearAllMocks();});
+beforeEach(()=>{vi.resetAllMocks();m.user.mockResolvedValue({id:"owner"});});
 it("reads and writes only selected-company categories in business mode",async()=>{
  m.scope.mockResolvedValue({mode:"business",companyId:"second",customCategoriesExpense:["Consultoria"],customCategoriesIncome:[]});
  const user={id:"owner",customCategoriesExpense:["Pessoal"],customCategoriesIncome:[]};

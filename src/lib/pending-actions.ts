@@ -151,6 +151,7 @@ export type PendingGoogleAgendaCommit={
   expiresAt:string;
 };
 
+export type PendingCategoryName = {type:"category_name";phone:string;userId:string;mode:string;entryType?:"expense"|"income";candidates?:PendingFinanceSelect["candidates"];expiresAt:string};
 export type PendingFinanceSelect = {
   type: "finance_select";
   phone: string;
@@ -441,7 +442,7 @@ export type PendingFiscalDraft = {
  recipientName?: string; recipientDocument?: string; amount?: number;
 };
 
-export type PendingAction = (PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft | PendingGoogleAgendaCommit) & {companyId?:string;workspaceMode?:"personal"|"business"};
+export type PendingAction = (PendingCategoryName | PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft | PendingGoogleAgendaCommit) & {companyId?:string;workspaceMode?:"personal"|"business"};
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -454,6 +455,7 @@ const TTL_SLOT_FILL_MS = 10 * 60 * 1000;
 const TTL_SLOT_CORRECTION_MS = 30 * 60 * 1000;
 
 type PendingActionInput = (
+  | Omit<PendingCategoryName,"phone"|"expiresAt">
   | Omit<PendingVehicleSelection, "phone" | "expiresAt">
   | Omit<PendingGoalSelection, "phone" | "expiresAt">
   | Omit<PendingAppointmentSelection, "phone" | "expiresAt">

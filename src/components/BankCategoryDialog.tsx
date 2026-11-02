@@ -1,8 +1,9 @@
 "use client";
 import {useState} from "react";
+import FinanceCategorySelect from "./FinanceCategorySelect";
 import type {LedgerEntry} from "@/lib/finance-ledger";
 import {OWN_ACCOUNT_TRANSFER_CATEGORY} from "@/lib/bank-category";
-export default function BankCategoryDialog({entry,mode,categories,onClose,onSaved}:{entry:LedgerEntry;mode:string;categories:string[];onClose:()=>void;onSaved:(matched?:number)=>void}){
+export default function BankCategoryDialog({entry,mode,categories,onClose,onSaved,onCategoryCreated}:{entry:LedgerEntry;mode:string;categories:string[];onClose:()=>void;onCategoryCreated?:(name:string)=>void;onSaved:(matched?:number)=>void}){
   const options=entry.bank?.resource_type==="account"?[...new Set([...categories,OWN_ACCOUNT_TRANSFER_CATEGORY])]:categories;
   const [category,setCategory]=useState(options.includes(entry.category)?entry.category:"");
   const [applyToMatchingHistory,setApplyToMatchingHistory]=useState(false);
@@ -16,12 +17,12 @@ export default function BankCategoryDialog({entry,mode,categories,onClose,onSave
     }catch(reason){setError(reason instanceof Error?reason.message:"Não foi possível salvar a categoria.");}finally{setSaving(false);}
   }
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-    <form role="dialog" aria-modal="true" aria-labelledby="bank-category-heading" onSubmit={e=>{e.preventDefault();void save(category);}} className="w-full max-w-md rounded-3xl bg-surface p-6 shadow-xl">
+    <form role="dialog" aria-modal="true" aria-labelledby="bank-category-heading" onSubmit={e=>{e.preventDefault();void save(category);}} className="max-h-[90dvh] overflow-y-auto w-full max-w-md rounded-3xl bg-surface p-6 shadow-xl">
       <h2 id="bank-category-heading" className="text-lg font-bold text-ink">Categoria da movimentação</h2>
       <p className="mt-3 break-words text-sm text-muted">{entry.description}</p>
       <p className="mt-2 text-xs text-muted">Sua escolha organiza o extrato e os gráficos da Zelo. Valor, data e descrição recebidos do banco permanecem iguais.</p>
       <label htmlFor="bank-category-select" className="mt-5 block text-sm font-medium text-ink">Categoria</label>
-      <select id="bank-category-select" required value={category} disabled={saving} onChange={e=>setCategory(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-surface p-3 text-sm"><option value="" disabled>Escolha uma categoria</option>{options.map(name=><option key={name}>{name}</option>)}</select>
+      <FinanceCategorySelect id="bank-category-select" required onCreated={onCategoryCreated} value={category} disabled={saving} onChange={setCategory} categories={options} type={entry.type==="income"?"income":"expense"}/>
       {category===OWN_ACCOUNT_TRANSFER_CATEGORY&&<p className="mt-2 text-xs text-muted">Essa movimentação continua no extrato, mas não entra nas receitas ou despesas.</p>}
       {category===OWN_ACCOUNT_TRANSFER_CATEGORY&&<label className="mt-3 flex items-start gap-2 text-xs text-ink"><input type="checkbox" checked={applyToMatchingHistory} disabled={saving} onChange={event=>setApplyToMatchingHistory(event.target.checked)} className="mt-0.5"/><span>Também aplicar às movimentações da mesma conta, com descrição e valor iguais, em todos os meses e nas próximas importações. Confira se todas representam transferências entre suas contas.</span></label>}
       {entry.categorySource==="description"&&<p className="mt-2 text-xs text-amber-ink">Categoria sugerida pela descrição. Confira se corresponde ao pagamento.</p>}

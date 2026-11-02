@@ -533,7 +533,7 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
     if(ai.account)return "Para consultar uma conta específica, use o filtro em Finanças. Posso informar aqui o total de todos os bancos conectados neste modo ou o gasto por categoria e estabelecimento.";
     const categoryBreakdown=/\bpor categorias?\b|\bem cada categoria\b|\bsepar(?:e|ado|ados|adas)\b[^.!?]*\bcategorias?\b/.test(text);
     const categoryDetails=categoryBreakdown&&!/\b(?:so|somente|apenas) (?:os )?totais\b/.test(text);
-    const plainSpendingSummary=!categoryBreakdown&&/\bquanto (?:eu )?(?:gastei|gastamos)\b/.test(text)&&!ai.category&&!ai.keyword&&!/\b(?:descrev\w*|detalh\w*|cada gasto|lancamentos?)\b/.test(text);
+    const plainSpendingSummary=!categoryBreakdown&&/\bquanto (?:eu )?(?:ja )?(?:gastei|gastamos)\b/.test(text)&&!ai.category&&!ai.keyword&&!/\b(?:descrev\w*|detalh\w*|cada gasto|lancamentos?)\b/.test(text);
     const topMatch=text.match(/\b(?:cinco|5)\s+(?:maiores|mais (?:altas|altos))\s+(despesas?|gastos?|saidas?|receitas?|entradas?)\b/);
     if(topMatch&&!categoryBreakdown&&!ai.category&&!ai.keyword){
       const type: "income"|"expense"=/^(?:receita|entrada)/.test(topMatch[1])?"income":"expense";

@@ -1444,6 +1444,20 @@ export function getExplicitTaskCreateResult(message: string): AIResult | null {
   };
 }
 
+/** A plain spending total has no merchant or bank filter to infer. Preserve its
+ * calendar explicitly even if the model offers help or a default period. */
+export function getExplicitSpendingSummaryResult(message:string,anchor:Date=nowBR()):AIResult|null{
+ const text=normalizeCapabilityText(message).replace(/^(?:rita|zelo)[, ]+/ ,"").replace(/[?!.]+$/g,"").trim();
+ const match=text.match(/^quanto (?:eu )?(?:ja )?(?:gastei|gastamos)(?:\s+(.+))?$/);
+ if(!match)return null;
+ const suffix=(match[1]??"").replace(/\b(?:no modo |modo |da )?(?:pessoal|empresa|empresarial)\b/g,"").trim();
+ const calendar=new RegExp(`^(?:(?:este|esse|neste|nesse|deste|desse) mes|mes (?:passado|anterior)|(?:no |em |mes de )?(?:${Object.keys(PURCHASE_MONTHS).join("|")})(?: (?:de )?(?:20\\d{2}|do ano passado|ano passado))?)$`);
+ if(suffix&&!calendar.test(suffix))return null;
+ const period=explicitPurchaseCalendarPeriod(message,anchor)??getExplicitRelativePeriod(message,anchor);
+ const mode:UserMode|undefined=/\b(?:empresa|empresarial)\b/.test(text)?"business":/\bpessoal\b/.test(text)?"personal":undefined;
+ return {intent:"finance_query",confidence:1,financeType:"expense",...(period?{period}:{}),...(mode?{mode}:{})};
+}
+
 /** Protege consultas de assinaturas/parcelas recorrentes em espanhol para
  * que "consulta" não seja confundido com pesquisa na internet. */
 export function getExplicitRecurringQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
@@ -3935,6 +3949,8 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
     return withExplicitRelativePeriod(message,{...result,bankQuery});
   }
   if(deliverySpending&&["how_to","unknown","finance_query","finance_analysis"].includes(result.intent))result={...result,...deliverySpending,keyword:deliveryQueryKeyword(result.keyword,message),response:undefined};
+  const plainSpending=getExplicitSpendingSummaryResult(message);
+  if(plainSpending&&["how_to","unknown","finance_query","finance_detail","finance_analysis"].includes(result.intent))result=plainSpending;
   const recurringQuery=getExplicitRecurringQueryResult(message);
   const focusedUpcomingRecurring=result.intent==="finance_upcoming"&&/^(?:quais?|cuales?|mostre|me mostra|me mostre|muestra|muestrame|liste|lista)\s+(?:(?:as|os|minhas|meus|mis|las|los)\s+)?(?:(?:cobrancas?|contas?|pagamentos?|despesas?|cuentas?|cobros?)\s+(?:recorrentes?|recurrentes?)|assinaturas?|suscripciones?|parcelas?|parcelamentos?|cuotas?)\b/.test(normalizeCapabilityText(message));
   if(recurringQuery&&(["how_to","unknown","finance_query","finance_detail","recurring_query"].includes(result.intent)||focusedUpcomingRecurring)){

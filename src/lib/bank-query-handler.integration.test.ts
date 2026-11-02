@@ -344,3 +344,19 @@ it("shows only a zero-balance loan as possibly settled, without inventing a bank
  expect(response).toContain("Contrato teste");expect(response).toContain("não confirma quitação contratual");
  expect(response).not.toContain("ja estao quitados? separe");expect(m.process).not.toHaveBeenCalled();
 });
+
+it.each([
+ ["quando e minha ultima parcela do veiculo","20/06/2027"],
+ ["quando termina meu empréstimo no Banco Exemplo","10/02/2027"],
+ ["quantas parcelas faltam do empréstimo no Banco Exemplo","3"],
+ ["qual valor da parcela do veículo","100,00"],
+])("answers a specific installment field instead of asking for a cutoff: %s",async(text,expected)=>{
+ m.rpc.mockImplementation(async(_scope,op)=>op==="zelo_of_overview"?{connections:[{id:"bank",status:"active",institution_name:"Banco Exemplo"}],resources:[{id:"car",connection_id:"bank",resource_type:"financing",name:"Veículos leves"},{id:"loan",connection_id:"bank",resource_type:"loan",name:"Crédito pessoal"}],credit:[{resource_id:"car",currency:"BRL",outstanding_amount:"900",next_installment_amount:null,due_date:"2027-06-20"},{resource_id:"loan",currency:"BRL",outstanding_amount:"200",next_installment_amount:"50",due_date:"2027-02-10"}]}:op==="zelo_of_credit_data"?{payments:[],plans:[{resource_id:"car",amount:"100",currency:"BRL",first_due_date:"2026-07-20",last_due_date:"2027-06-20"}],progress:[{resource_id:"loan",paid_installments:1,total_installments:4,remaining_installments:3}]}:{items:[],incomplete:false});
+ await handleIncomingMessage({from:"5511999990000",text});const response=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(response).toContain(expected);expect(response).not.toContain("Até qual data");expect(m.process).not.toHaveBeenCalled();expect(m.confirm).not.toHaveBeenCalled();
+});
+it("preserves the named bank when asking how much credit is available",async()=>{
+ m.rpc.mockResolvedValue({connections:[{id:"bank",status:"active",institution_name:"Banco Santander Pessoa Física"},{id:"other",status:"active",institution_name:"Banco Exemplo"}],resources:[{id:"card",connection_id:"bank",resource_type:"card",name:"Gold"},{id:"other-card",connection_id:"other",resource_type:"card",name:"Outro"}],limits:[{resource_id:"card",line_name:"À vista",currency:"BRL",available_amount:"321",total_amount:"500",used_amount:"179"},{resource_id:"other-card",line_name:"À vista",currency:"BRL",available_amount:"999",total_amount:"1000",used_amount:"1"}],credit:[],bills:[],sync:[]});
+ await handleIncomingMessage({from:"5511999990000",text:"quanto tenho de limite no santander"});
+ const response=m.send.mock.calls.map(call=>call[1]).join("\n");expect(response).toContain("321,00");expect(response).not.toContain("999,00");expect(m.process).not.toHaveBeenCalled();
+});

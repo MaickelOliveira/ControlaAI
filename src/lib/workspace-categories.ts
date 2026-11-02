@@ -9,5 +9,5 @@ export async function workspaceCategoryUser<T extends Pick<User,"id"|"customCate
 export async function saveWorkspaceCategories(userId:string,patch:{customCategoriesExpense?:string[];customCategoriesIncome?:string[]}):Promise<void>{
  const scope=await companyScopeFor(userId);
  if(scope?.mode==="business")await updateCompanyCategories(userId,scope.companyId,patch);
- else await updateUser(userId,patch);
+ else if(!await updateUser(userId,patch))throw Error("WORKSPACE_CATEGORIES_UNAVAILABLE");
 }

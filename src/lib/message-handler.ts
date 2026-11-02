@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import {saveWorkspaceCategories} from "./workspace-categories";
+import {getExplicitSpendingSummaryResult} from "./ai-processor";
+import {parseInstallmentDetailQuestion} from "./installment-detail";
+import {connectedInstallmentDetailAnswer} from "./connected-installment-detail";
+import {saveChosenCategory} from "./save-chosen-category";
+import {categoryCreateRequest,asksCategoryChoices,selectedCategory,categoryChoicesMessage,validCategoryName} from "./category-choice";
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
 import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
@@ -1488,7 +1493,40 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     }
 
     // ── Verifica ação pendente (ex: seleção de veículo) ──
-    const pending = await getPendingAction(from);
+    let pending = await getPendingAction(from);
+    const categoryRequest=categoryCreateRequest(messageText);
+    const categoryCandidates=pending?.type==="finance_select"&&pending.userId===user.id&&pending.action==="edit"&&pending.awaitingPatch&&!Object.keys(pending.patch??{}).length?pending.candidates:undefined;
+    if(asksCategoryChoices(messageText)){
+      const type=pending?.type==="category_name"?pending.entryType:categoryCandidates?.[0]?.type;
+      const categories=type==="income"?[...CATEGORIES_INCOME,...user.customCategoriesIncome??[]]:[...CATEGORIES_EXPENSE,...user.customCategoriesExpense??[]];
+      await wppSendLong(from,categoryChoicesMessage(categories,user.locale==="es"));return;
+    }
+    if(pending?.type==="category_name"&&!categoryRequest&&!BARE_CANCEL_RE.test(messageText.trim())&&looksLikeNewCommand(messageText.slice(0,60))){
+      await clearPendingAction(from);pending=null;
+    }
+    if((pending?.type==="category_name"&&pending.userId===user.id)||categoryRequest){
+      const categoryPending=pending?.type==="category_name"&&pending.userId===user.id?pending:null;
+      const candidates=categoryPending?.candidates??categoryCandidates;
+      const targetMode=categoryPending?.mode??candidates?.[0]?.mode??mode;
+      if(!allowsFinanceMode(targetMode)||candidates?.some(candidate=>candidate.mode!==targetMode||!allowsFinanceMode(candidate.mode))){await wppSend(from,replyModeAccessDenied(mode,user.locale));return;}
+      if(categoryPending&&BARE_CANCEL_RE.test(messageText.trim())){
+        await clearPendingAction(from);
+        if(candidates?.length)await setPendingAction(from,{type:"finance_select",userId:user.id,action:"edit",awaitingPatch:true,candidates});
+        await wppSend(from,localized(user.locale,"Cadastro de categoria cancelado.","Registro de categoría cancelado."));return;
+      }
+      const name=categoryRequest?.name??messageText.trim();
+      const type=categoryPending?.entryType??categoryRequest?.type??(candidates?.length&&candidates.every(c=>c.type===candidates[0].type)?candidates[0].type:undefined);
+      if(!name||!validCategoryName(name)){
+        await setPendingAction(from,{type:"category_name",userId:user.id,mode:targetMode,entryType:type,candidates});
+        await wppSend(from,localized(user.locale,"🏷️ Qual é o nome da nova categoria? Responda com até 100 caracteres, ou cancelar.","🏷️ ¿Cuál es el nombre de la nueva categoría? Responde con hasta 100 caracteres, o cancelar."));return;
+      }
+      const types=type?[type]:["expense","income"] as const;
+      const category=await saveChosenCategory(user.id,name,types);
+      let changed=0;
+      for(const candidate of candidates??[])if(await updateFinance(candidate.id,user.id,{category},targetMode as FinanceMode))changed++;
+      await clearPendingAction(from);
+      await wppSend(from,localized(user.locale,`✅ Categoria *${category}* salva.${candidates?` Aplicada a ${changed} lançamento(s) selecionado(s).`:" Já pode ser usada na plataforma e no WhatsApp."}`,`✅ Categoría *${category}* guardada.${candidates?` Aplicada a ${changed} movimiento(s) seleccionado(s).`:" Ya se puede usar en la plataforma y en WhatsApp."}`));return;
+    }
     if(pending?.type==="nfse_draft"||(!pending&&(/\b(nota fiscal|notas fiscais|nfs[ -]?e)\b/i.test(messageText)||isFiscalCertificateQuestion(messageText)))){setVirtualAgentIntent("nfse_draft");if(await handleFiscalWhatsApp(user,mode,from,messageText,pending))return;}
     if(pending?.userId===user.id)setVirtualAgent(agentForPendingAction(pending));
     if(pending?.type==="google_agenda_commit"&&pending.userId===user.id){
@@ -2483,7 +2521,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       // novo valor/categoria, não como uma escolha de número, e aplica em
       // todos os candidatos guardados.
       if (pending.action === "edit" && !hasPatch && pending.awaitingPatch) {
-        const patch = parseFinancePatchFromText(messageText);
+        const choice=selectedCategory(messageText,[...CATEGORIES_EXPENSE,...CATEGORIES_INCOME,...user.customCategoriesExpense??[],...user.customCategoriesIncome??[]]);
+        const patch = choice?{category:choice} as Record<string,unknown>:parseFinancePatchFromText(messageText);
         if (patch.mode && !allowsFinanceMode(patch.mode)) {
           await wppSend(from, replyModeAccessDenied(mode, user.locale));
           return;
@@ -2591,9 +2630,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           });
           if (chosen.length === 1) {
             const c = chosen[0];
-            await wppSend(from, `🔍 Encontrei: *${c.description}* — ${formatCurrency(c.amount)} · ${c.type === "income" ? "Receita" : c.type === "expense" ? "Despesa" : "Lançamento"} · ${c.category} · ${modeLabelFull(c.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_\n• _"muda para a conta Inter"_`);
+            await wppSend(from, `🔍 Encontrei: *${c.description}* — ${formatCurrency(c.amount)} · ${c.type === "income" ? "Receita" : c.type === "expense" ? "Despesa" : "Lançamento"} · ${c.category} · ${modeLabelFull(c.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_\n• _"cadastrar nova categoria"_\n• _"muda para a conta Inter"_`);
           } else {
-            await wppSend(from, `🔍 Selecionados *${chosen.length} lançamentos*.\n\nO que deseja alterar em todos eles? Ex:\n• _"muda categoria para Lazer"_\n• _"marca como a receber"_`);
+            await wppSend(from, `🔍 Selecionados *${chosen.length} lançamentos*.\n\nO que deseja alterar em todos eles? Ex:\n• _"muda categoria para Lazer"_\n• _"cadastrar nova categoria"_\n• _"marca como a receber"_`);
           }
           return;
         }
@@ -2924,6 +2963,16 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }catch{await wppSend(from,"Não consegui consultar as faturas recebidas agora. Tente novamente em Contas.");}
       return;
     }
+    const installmentDetail=parseInstallmentDetailQuestion(messageText);
+    if(installmentDetail){
+      const requestedMode=/\b(?:empresa|empresarial|pj)\b/i.test(messageText)?"business":/\b(?:pessoal|pf)\b/i.test(messageText)?"personal":mode;
+      if(!allowsFinanceMode(requestedMode)){await wppSend(from,replyModeAccessDenied(mode,user.locale));return;}
+      const selectedCompany=currentCompanyContext()?.companyId;
+      const answer=await connectedInstallmentDetailAnswer(user,requestedMode,installmentDetail,todayStrBR());
+      const freshAccess=await getPhoneAccess(user.id,from),freshUser=await getUserById(user.id);
+      if(!freshUser||!hasAccess(freshUser)||!freshAccess||(freshAccess!=="both"&&freshAccess!==requestedMode)||currentCompanyContext()?.companyId!==selectedCompany)return;
+      await wppSendLong(from,answer,3500,true);return;
+    }
     if(await sendRequestedBankBill(user,mode,from,messageText,todayStrBR()))return;
     const bankReply=await answerBankWhatsAppMessage(user,mode,phoneAccess,messageText,todayStrBR());
     if(bankReply){await wppSendLong(from,bankReply,3500,true);return;}
@@ -2948,7 +2997,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           `No encontré una foto verificable de *${imageRequest.subject}* para enviar. Dime el modelo y el color/material para intentarlo de nuevo.`));
       return;
     }
-    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
+    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = withExplicitFinanceCategoryEdit(messageText, getScopedModeReadResult(messageText) ?? (actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi));
@@ -3610,7 +3659,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             candidates: [{ id: editTarget.id, description: editTarget.description, amount: editTarget.amount, date: editTarget.date, category: editTarget.category, mode: editTarget.mode, type: editTarget.type }],
             awaitingPatch: true,
           });
-          await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} · ${editTarget.type === "income" ? "Receita" : "Despesa"} · ${editTarget.category} · ${modeLabelFull(editTarget.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_`);
+          await wppSend(from, `🔍 Encontrei: *${editTarget.description}* — ${formatCurrency(editTarget.amount)} · ${editTarget.type === "income" ? "Receita" : "Despesa"} · ${editTarget.category} · ${modeLabelFull(editTarget.mode)}\n\nO que deseja alterar? Ex:\n• _"muda para 80 reais"_\n• _"muda categoria para Lazer"_\n• _"cadastrar nova categoria"_`);
           break;
         }
 

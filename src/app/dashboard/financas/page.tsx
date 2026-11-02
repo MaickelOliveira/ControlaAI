@@ -1,6 +1,7 @@
 "use client";
 import { useSearchParams } from "next/navigation";
 import PageTitle from "@/components/PageTitle";
+import FinanceCategorySelect from "@/components/FinanceCategorySelect";
 import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
@@ -491,7 +492,7 @@ function FinancasContent() {
         </div>
       </div>
 
-      <FinanceFilterBar key={filters.search} categories={allCategories} accounts={accountOptions} value={filters} onChange={next=>{setFilters(next);setSelectedIds(new Set());}} />
+      <FinanceFilterBar key={filters.search} categories={allCategories} onCategoryCreated={()=>void loadCategories()} accounts={accountOptions} value={filters} onChange={next=>{setFilters(next);setSelectedIds(new Set());}} />
       {ledgerError&&<p role="alert" className="rounded-xl border border-line bg-amber-soft p-4 text-sm text-amber-ink">{ledgerError} O extrato pode estar desatualizado.</p>}
       {ledger?.bank&&<p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>Conta, cartão, WhatsApp e plataforma no mesmo extrato · Pessoal e Empresa separados.</span><span className="rounded-full bg-emerald-soft px-3 py-1 text-emerald-ink">Atualização automática</span></p>}
       {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-ink">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
@@ -673,8 +674,8 @@ function FinancasContent() {
 
       {ledger?.bank&&(!filters.account||filters.account.startsWith("bank:"))&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank} resourceId={filters.account?.slice(5)}/>}
 
-      {forecastCategoryTarget&&<BankForecastCategoryDialog key={`${mode}:${forecastCategoryTarget.id}`} target={forecastCategoryTarget} mode={mode} categories={catsExpense} onClose={()=>setForecastCategoryTarget(null)} onSaved={async()=>{await loadAll(mode);setBanner("✅ Categoria salva para esta cobrança e os próximos meses da mesma série.");}}/>}
-      {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onClose={()=>setBankCategoryTarget(null)} onSaved={matched=>{setBankCategoryTarget(null);setBanner(matched===undefined?"✅ Categoria salva. Os gráficos usam sua escolha.":`✅ Transferência confirmada. ${matched} movimentação(ões) com a mesma conta, descrição e valor foram atualizadas no histórico.`);loadAll(mode);}}/>}
+      {forecastCategoryTarget&&<BankForecastCategoryDialog key={`${mode}:${forecastCategoryTarget.id}`} target={forecastCategoryTarget} mode={mode} categories={catsExpense} onCategoryCreated={()=>void loadCategories()} onClose={()=>setForecastCategoryTarget(null)} onSaved={async()=>{await loadAll(mode);setBanner("✅ Categoria salva para esta cobrança e os próximos meses da mesma série.");}}/>}
+      {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onCategoryCreated={()=>void loadCategories()} onClose={()=>setBankCategoryTarget(null)} onSaved={matched=>{setBankCategoryTarget(null);setBanner(matched===undefined?"✅ Categoria salva. Os gráficos usam sua escolha.":`✅ Transferência confirmada. ${matched} movimentação(ões) com a mesma conta, descrição e valor foram atualizadas no histórico.`);loadAll(mode);}}/>}
       {bankCreditPixTarget&&<BankCreditPixDialog key={`${mode}:${bankCreditPixTarget.id}`} credit={bankCreditPixTarget} movements={ledger?.bank?.report.movements??[]} mode={mode} onClose={()=>setBankCreditPixId(null)} onSaved={()=>{setBankCreditPixId(null);setBanner("✅ Confirmação salva. O histórico e a dívida no cartão foram preservados.");loadAll(mode);}}/>}
 
       {showMovePlatform && <PlatformAccountMoveDialog mode={mode} accounts={ledger?.accounts??[]} onClose={()=>setShowMovePlatform(false)} onMoved={(moved,accountName)=>{setShowMovePlatform(false);setBanner(`✅ ${moved} lançamento(s) selecionado(s) foram vinculados à conta ${accountName}. Os valores e as datas não mudaram.`);loadAll(mode);}}/>}
@@ -723,16 +724,8 @@ function FinancasContent() {
                 className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200" />
 
               <div className="flex gap-2 items-center">
-                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  required={form.frequency === "once"}
-                  className="flex-1 border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
-                  <option value="">{form.frequency === "once" ? "Categoria *" : "Categoria (opcional)"}</option>
-                  {cats.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <button type="button" onClick={() => { setCatType(form.type); setCatName(""); setCatError(""); setShowCatModal(true); }}
-                  className="shrink-0 px-3 py-2.5 border border-dashed border-line rounded-xl text-xs text-muted hover:border-amber-400 hover:text-amber-ink transition">
-                  + Nova
-                </button>
+              <FinanceCategorySelect value={form.category} onChange={name=>setForm(f=>({...f,category:name}))} categories={cats} type={form.type} required={form.frequency === "once"} onCreated={()=>void loadCategories()}/>
+
               </div>
 
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -792,11 +785,7 @@ function FinancasContent() {
             <form onSubmit={handleEdit} className="space-y-3">
               <input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} required
                 placeholder="Valor (R$)" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
-              <select value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} required
-                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
-                <option value="">Categoria</option>
-                {editCats.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <FinanceCategorySelect value={editForm.category} onChange={name=>setEditForm(f=>({...f,category:name}))} categories={editCats} type={editTarget.type === "income"?"income":"expense"} required={true} onCreated={()=>void loadCategories()}/>
               <input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="Descrição" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
@@ -823,11 +812,7 @@ function FinancasContent() {
                 placeholder="Novo valor (R$)" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-200" />
               <input value={editRecForm.description} onChange={e => setEditRecForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="Descrição" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
-              <select value={editRecForm.category} onChange={e => setEditRecForm(f => ({ ...f, category: e.target.value }))}
-                className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none bg-surface">
-                <option value="">Categoria</option>
-                {editRecCats.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <FinanceCategorySelect value={editRecForm.category} onChange={name=>setEditRecForm(f=>({...f,category:name}))} categories={editRecCats} type={editRec.type === "income"?"income":"expense"} required={false} onCreated={()=>void loadCategories()}/>
               <input type="number" min="1" max="31" value={editRecForm.dayOfMonth} onChange={e => setEditRecForm(f => ({ ...f, dayOfMonth: e.target.value }))}
                 placeholder="Dia do mês" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <div className="flex gap-3 pt-1">
