@@ -56,3 +56,29 @@ it.each(["o que é a categoria Delivery?","como altero a categoria para Delivery
   model({intent:"how_to",response:"Ajuda fictícia"});
   expect(await processMessage(message,context)).toMatchObject({intent:"how_to",response:"Ajuda fictícia"});
 });
+it.each([
+ ["quanto gastei de delivery mes de outubro","2026-10-01","2026-10-31"],
+ ["quanto gastei de delivery mes de setembro","2026-09-01","2026-09-30"],
+ ["quanto gastei de delivery em outubo","2026-10-01","2026-10-31"],
+ ["quanto gastei com delivery em dezembro","2025-12-01","2025-12-31"],
+ ["quanto gastei com delivery em fevereiro de 2024","2024-02-01","2024-02-29"],
+])("uses the named historical month and never invents Zé Delivery: %s",async(message,from,to)=>{
+ vi.setSystemTime(new Date("2026-11-02T12:00:00-03:00"));
+ model({intent:"finance_query",period:{from:"2026-11-01",to:"2026-11-30"},category:"Outros",keyword:"Zé Delivery"});
+ const result=await processMessage(message,context);
+ expect(result).toMatchObject({intent:"finance_query",category:"Delivery",financeType:"expense",period:{from,to}});
+ expect(result.keyword).toBeUndefined();
+});
+it("overrides an incorrect prior-month answer while preserving an explicitly named merchant",async()=>{
+ vi.setSystemTime(new Date("2026-11-02T12:00:00-03:00"));
+ model({intent:"finance_query",period,category:"Delivery"});
+ const result=await processMessage("quanto gastei com Zé Delivery em outubro",context);
+ expect(result).toMatchObject({intent:"finance_query",keyword:"ze delivery",period:{from:"2026-10-01",to:"2026-10-31"}});
+ expect(result.category).toBeUndefined();
+});
+it("uses October after a September conversation instead of inheriting its period",async()=>{
+ vi.setSystemTime(new Date("2026-11-02T12:00:00-03:00"));
+ model({intent:"finance_query",period,category:"Delivery"});
+ const result=await processMessage("e em outubro?",{...context,history:[{role:"user",content:"quanto gastei com delivery em setembro?"},{role:"assistant",content:"Período 01/09/2026 a 30/09/2026"}]});
+ expect(result).toMatchObject({intent:"finance_query",period:{from:"2026-10-01",to:"2026-10-31"}});
+});

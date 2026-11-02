@@ -41,6 +41,9 @@ describe("calculateFinanceBalance", () => {
 });
 
 describe("expandMerchantAliases", () => {
+  it("keeps the broad Delivery term separate from a named app",()=>{
+    expect(expandMerchantAliases("Delivery")).toEqual(["delivery"]);
+  });
   it("expands a known merchant to all its variants", () => {
     expect(expandMerchantAliases("ifood")).toEqual(["ifood", "ifd", "i food"]);
   });

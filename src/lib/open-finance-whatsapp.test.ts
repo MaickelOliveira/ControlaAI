@@ -12,6 +12,13 @@ vi.mock("./recurring",()=>({getRecurringByUser:m.recurring}));
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "./open-finance-whatsapp";
 import {bankMoney} from "./open-finance-display";
 const user={id:"own-user",email:"user@example.test",plan:"business",activeMode:"personal",status:"active"} as const;
+it("queries the named historical month and totals all Delivery merchants without a merchant filter",async()=>{
+ const fixture=(id:string,date:string,description:string,amount:number)=>({id,date,description,amount,mode:"personal",type:"expense",included:true,status:"posted",source:"bank",category:"Delivery",bank:{resource_type:"card",institution_name:"Banco fictício"}});
+ m.read.mockResolvedValue({entries:[fixture("sept","2026-09-12","Delivery setembro",90),fixture("oct-a","2026-10-12","iFood",12),fixture("oct-b","2026-10-13","Zé Delivery",8),fixture("nov","2026-11-01","Delivery novembro",70)],bank:{overview:{connections:[{}]},report:{sync_pending:false}}});
+ const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,financeType:"expense",category:"Delivery",period:{from:"2026-10-01",to:"2026-10-31"}},["2026-11-01","2026-11-30"],"quanto gastei de delivery mes de outubro");
+ expect(m.read).toHaveBeenCalledWith(user,"personal","2026-10-01","2026-10-31");
+ expect(reply).toContain("R$ 20,00");expect(reply).toContain("01/10/2026 a 31/10/2026");expect(reply).toContain("Delivery");expect(reply).not.toContain("Estabelecimento/busca");
+});
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("OPEN_FINANCE_WHATSAPP_ENABLED","true");m.access.mockResolvedValue({userId:user.id,mode:"personal",environment:"production"});m.read.mockResolvedValue({entries:[{id:"bank:b",mode:"personal",included:true,source:"bank",date:"2026-09-10",type:"expense",category:"Outros",description:"Test",amount:35,bank:{resource_type:"account"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0,last_successful_sync_at:null}}});m.pending.mockResolvedValue([]);m.recurring.mockResolvedValue([]);m.agenda.mockResolvedValue({items:[],incomplete:false});m.financial.mockResolvedValue({commitments:[],bank:{items:[],incomplete:false},forecasts:[],coverage:""});});
 it("lists only authorized active banks in the requested personal mode",async()=>{
   m.rpc.mockResolvedValue({connections:[

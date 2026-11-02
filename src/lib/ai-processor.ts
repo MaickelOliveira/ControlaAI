@@ -874,8 +874,9 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
 
 function withExplicitRelativePeriod(message: string, result: AIResult, anchor: Date = nowBR()): AIResult {
   const groceryIntent = result.intent === "grocery_history_query" || result.intent === "grocery_spend_query";
+  const financialRead=["bank_query","finance_query","balance_query","finance_detail","finance_analysis"].includes(result.intent);
   const period = getExplicitRelativePeriod(message, anchor)
-    ?? (groceryIntent ? explicitPurchaseCalendarPeriod(message, anchor) : null);
+    ?? (groceryIntent||financialRead ? explicitPurchaseCalendarPeriod(message, anchor) : null);
   if (!period) return result;
   if (groceryIntent) {
     return { ...result, grocery: { ...(result.grocery ?? {}), period } };
@@ -1193,7 +1194,7 @@ const PURCHASE_MONTHS: Record<string, number> = {
   janeiro: 1, enero: 1, fevereiro: 2, febrero: 2, marco: 3, marzo: 3,
   abril: 4, maio: 5, mayo: 5, junho: 6, junio: 6, julho: 7, julio: 7,
   agosto: 8, setembro: 9, septiembre: 9, outubro: 10, octubre: 10,
-  novembro: 11, noviembre: 11, dezembro: 12, diciembre: 12,
+  novembro: 11, noviembre: 11, dezembro: 12, diciembre: 12, outubo: 10,
 };
 
 function explicitPurchaseCalendarPeriod(message: string, anchor: Date, future = false): DatePeriod | null {
@@ -3866,12 +3867,14 @@ function explicitCategoryDetailResult(message:string,ctx?:AiContext):AIResult|nu
  return {intent:"finance_detail",confidence:1,category,...(financeType?{financeType}:{}),...(mode?{mode}:{})};
 }
 
-function deliveryQueryKeyword(keyword:unknown):string|undefined {
- return typeof keyword==="string"&&normalizeCapabilityText(keyword).trim()!=="delivery"?keyword:undefined;
+function deliveryQueryKeyword(keyword:unknown,message:string):string|undefined {
+ if(typeof keyword!=="string"||normalizeCapabilityText(keyword).trim()==="delivery")return undefined;
+ const named=normalizeCapabilityText(keyword).replace(/[^a-z0-9]/g,"");
+ return named&&normalizeCapabilityText(message).replace(/[^a-z0-9]/g,"").includes(named)?keyword:undefined;
 }
 
 function unresolvedDeliveryMerchant(message: string, keyword: unknown, bank?: string): boolean {
-  if (deliveryQueryKeyword(keyword)?.trim()) return false;
+  if (deliveryQueryKeyword(keyword,message)?.trim()) return false;
   const qualifier = normalizeCapabilityText(message).match(/\bdelivery\s+(?:no|na|nos|nas|com|do|da)\s+(.+)/)?.[1];
   if (!qualifier || /^(?:mes|ano|semana|dia|periodo|cartao|conta|banco|modo|pessoal|empresa)\b/.test(qualifier)) return false;
   return !bank || !qualifier.startsWith(normalizeCapabilityText(bank));
@@ -3922,10 +3925,10 @@ function normalizeAIResult(message: string, result: AIResult, ctx?: AiContext): 
   if (result.intent === "bank_query") {
     let bankQuery=validateBankQuery(result.bankQuery)??undefined;
     if(merchant&&bankQuery&&(bankQuery.kind==="spending"||bankQuery.kind==="transactions"))bankQuery={...bankQuery,keyword:merchant,category:undefined};
-    else if(deliverySpending&&bankQuery?.kind==="spending")bankQuery={...bankQuery,category:"Delivery",keyword:deliveryQueryKeyword(bankQuery.keyword)};
+    else if(deliverySpending&&bankQuery?.kind==="spending")bankQuery={...bankQuery,category:"Delivery",keyword:deliveryQueryKeyword(bankQuery.keyword,message)};
     return withExplicitRelativePeriod(message,{...result,bankQuery});
   }
-  if(deliverySpending&&["how_to","unknown","finance_query","finance_analysis"].includes(result.intent))result={...result,...deliverySpending,keyword:deliveryQueryKeyword(result.keyword),response:undefined};
+  if(deliverySpending&&["how_to","unknown","finance_query","finance_analysis"].includes(result.intent))result={...result,...deliverySpending,keyword:deliveryQueryKeyword(result.keyword,message),response:undefined};
   const recurringQuery=getExplicitRecurringQueryResult(message);
   const focusedUpcomingRecurring=result.intent==="finance_upcoming"&&/^(?:quais?|cuales?|mostre|me mostra|me mostre|muestra|muestrame|liste|lista)\s+(?:(?:as|os|minhas|meus|mis|las|los)\s+)?(?:(?:cobrancas?|contas?|pagamentos?|despesas?|cuentas?|cobros?)\s+(?:recorrentes?|recurrentes?)|assinaturas?|suscripciones?|parcelas?|parcelamentos?|cuotas?)\b/.test(normalizeCapabilityText(message));
   if(recurringQuery&&(["how_to","unknown","finance_query","finance_detail","recurring_query"].includes(result.intent)||focusedUpcomingRecurring)){
