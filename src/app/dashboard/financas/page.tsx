@@ -551,7 +551,7 @@ function FinancasContent() {
                 <p className="text-xs mt-1">Envie uma mensagem para o bot ou clique em + Adicionar!</p>
               </div>
             ) : (
-              <div className="space-y-1 max-h-[480px] overflow-y-auto">
+              <div className="space-y-1">
                 {!ledger&&<p className="px-3 py-3 text-xs text-amber-ink">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
                 <FinanceLoanRows items={loanInstallments}/>
                 {ledger?.bank&&<FinanceBankSchedules compact items={bankSchedules} overview={ledger.bank.overview}/>}
