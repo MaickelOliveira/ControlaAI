@@ -298,7 +298,7 @@ export default function DashboardPage() {
       {user.status==="trial"&&<p className="text-xs text-amber-ink">Trial · {trialDays} dias</p>}
       {ledgerError&&<p role="alert" className="rounded-xl bg-amber-soft p-4 text-xs text-amber-ink">{ledgerError} Os valores exibidos podem estar desatualizados.</p>}
       <div className="z-eclipse-grid">
-        <div className="min-w-0">
+        <div className="z-dashboard-overview">
           <section className="z-eclipse-focus" aria-label="Visão geral financeira">
             <div className="z-card-heading"><h2>Visão geral financeira</h2><span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] text-white/70">{rangeLabel}</span></div>
             <div className="z-eclipse-stats">
@@ -308,7 +308,7 @@ export default function DashboardPage() {
               <div className="z-eclipse-stat"><DashboardBalanceSummary balance={activeBalance} compact/></div>
             </div>
             <div className="mb-4 flex justify-between gap-3"><h3 className="text-sm font-medium">Entradas e saídas</h3><span className="text-[10px] text-white/50">Últimos 6 meses</span></div>
-            {history.mode!==mode?<div className="z-chart-empty">Carregando histórico…</div>:history.error?<p role="alert" className="z-chart-empty">{history.error}</p>:barData.every(d=>d.receitas===0&&d.despesas===0)?<div className="z-chart-empty">Seu histórico financeiro aparecerá aqui.</div>:<DailyFlowChartComponent data={barData}/>}
+            <div className="z-dashboard-flow-chart">{history.mode!==mode?<div className="z-chart-empty">Carregando histórico…</div>:history.error?<p role="alert" className="z-chart-empty">{history.error}</p>:barData.every(d=>d.receitas===0&&d.despesas===0)?<div className="z-chart-empty">Seu histórico financeiro aparecerá aqui.</div>:<DailyFlowChartComponent data={barData} fill/>}</div>
             {ledger?.bank&&<p className="mt-3 text-[10px] leading-5 text-white/50">Saldo: posição recebida do banco. Resultado: entradas menos saídas do período. Última importação: {bankDate(ledger.bank.report.last_successful_sync_at)}{ledger.bank.report.sync_pending?" · atualizando":""}. O histórico bancário pode estar incompleto.</p>}
             {cashGroups.length>1&&<p className="mt-2 text-[10px] text-white/70">Outras moedas: {cashGroups.filter(group=>group!==primaryCash).map(group=>bankMoney(group.total,group.currency)).join(" · ")} · exibidas separadamente.</p>}
           </section>
