@@ -119,19 +119,19 @@ export default function FuncionariosPage() {
             <p className="font-semibold text-ink">Nenhum funcionário cadastrado</p>
           </div>
         ) : (
-          <div className="bg-surface rounded-2xl border border-line shadow-sm overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+          <div className="bg-surface rounded-2xl border border-line shadow-sm z-responsive-table-wrap">
+            <table role="table" className="z-responsive-table w-full">
               <thead className="bg-surface-muted border-b border-line">
                 <tr>
                   {["Funcionário", "Cargo", "Salário", "Pagamentos recebidos", "Início", "Status", ""].map(h => (
-                    <th key={h} className="text-left text-xs font-semibold text-muted uppercase tracking-wide px-5 py-3">{h}</th>
+                    <th scope="col" key={h} className="text-left text-xs font-semibold text-muted uppercase tracking-wide px-5 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody role="rowgroup" className="divide-y divide-slate-50">
                 {visibleEmployees.map(emp => (
-                  <tr key={emp.id} className="hover:bg-surface-muted transition">
-                    <td className="px-5 py-4">
+                  <tr role="row" key={emp.id} className="hover:bg-surface-muted transition">
+                    <td role="cell" data-label="Funcionário" className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-blue-soft flex items-center justify-center text-sm font-bold text-blue-ink shrink-0">
                           {emp.name.charAt(0).toUpperCase()}
@@ -142,9 +142,9 @@ export default function FuncionariosPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-sm text-muted">{emp.role}</td>
-                    <td className="px-5 py-4 text-sm font-semibold text-ink">{fmt(emp.salary)}</td>
-                    <td className="px-5 py-4 text-xs text-muted min-w-[190px]">
+                    <td role="cell" data-label="Cargo" className="px-5 py-4 text-sm text-muted">{emp.role}</td>
+                    <td role="cell" data-label="Salário" className="px-5 py-4 text-sm font-semibold text-ink">{fmt(emp.salary)}</td>
+                    <td role="cell" data-label="Pagamentos recebidos" className="px-5 py-4 text-xs text-muted">
                       {(paymentsByEmployee[emp.id] || []).length === 0 ? "Nenhum pagamento vinculado" : (
                         <div className="space-y-1">
                           {(paymentsByEmployee[emp.id] || []).slice(0, 3).map(payment => (
@@ -157,14 +157,14 @@ export default function FuncionariosPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-xs text-subtle">{new Date(emp.startDate + "T12:00:00").toLocaleDateString("pt-BR")}</td>
-                    <td className="px-5 py-4">
+                    <td role="cell" data-label="Início" className="px-5 py-4 text-xs text-subtle">{new Date(emp.startDate + "T12:00:00").toLocaleDateString("pt-BR")}</td>
+                    <td role="cell" data-label="Status" className="px-5 py-4">
                       <span className={clsx("text-xs px-2.5 py-1 rounded-full font-medium border",
                         emp.status === "active" ? "bg-amber-soft text-amber-ink border-line" : "bg-surface-muted text-muted border-line")}>
                         {emp.status === "active" ? "● Ativo" : "○ Inativo"}
                       </span>
                     </td>
-                    <td className="px-5 py-4">
+                    <td role="cell" data-label="Ações" className="px-5 py-4">
                       <div className="flex gap-2">
                         <button onClick={() => openEdit(emp)} className="text-xs text-blue-ink hover:underline">Editar</button>
                         <button onClick={() => toggleStatus(emp)} className="text-xs text-subtle hover:underline">

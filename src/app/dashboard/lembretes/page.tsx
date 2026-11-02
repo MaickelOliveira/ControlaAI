@@ -416,7 +416,7 @@ export default function LembretesPage() {
 
               <div>
                 <label className="text-xs text-muted font-medium mb-1 block">Para quem é esse lembrete?</label>
-                <div className={clsx("grid gap-2", mode === "business" ? "grid-cols-4" : "grid-cols-2")}>
+                <div className={clsx("grid gap-2", mode === "business" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2")}>
                   {(mode === "business"
                     ? (["self", "customer", "employee", "other"] as const)
                     : (["self", "other"] as const)
@@ -504,7 +504,7 @@ export default function LembretesPage() {
 
               <div>
                 <label className="text-xs text-muted font-medium mb-1 block">Repetição</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {Object.entries(REPEAT_LABEL).map(([key, label]) => (
                     <button key={key} type="button"
                       onClick={() => setForm(f => ({ ...f, repeat: key }))}

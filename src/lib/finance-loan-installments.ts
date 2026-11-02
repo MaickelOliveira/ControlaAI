@@ -3,7 +3,7 @@ import {ledgerAmount,ledgerCategoryGroups,type LedgerEntry} from "./finance-ledg
 import type {BankOverview} from "./open-finance-display";
 import {creditPlanDates,type CreditInstallmentPlan} from "./credit-installment-plan";
 
-export type LoanInstallment={id:string;resourceId?:string;name:string;bank:string;institutionId?:string;category:string;currency:string|null;amount:number|null;month:string;dueDate?:string;finalDueDate?:string|null;manualPlan?:CreditInstallmentPlan;recordedId?:string};
+export type LoanInstallment={paidInstallments?:number|null;remainingInstallments?:number|null;totalInstallments?:number|null;id:string;resourceId?:string;name:string;bank:string;institutionId?:string;category:string;currency:string|null;amount:number|null;month:string;dueDate?:string;finalDueDate?:string|null;manualPlan?:CreditInstallmentPlan;recordedId?:string};
 /** Bank estimates apply to the current full month. User schedules have explicit
  * dates, so they can span past and future months without claiming payment. */
 export function financeLoanInstallments(overview:BankOverview,entries:readonly LedgerEntry[],filters:BankLoanFilters&{from:string;to:string},today:string):LoanInstallment[]{
@@ -15,8 +15,10 @@ export function financeLoanInstallments(overview:BankOverview,entries:readonly L
  const activeConnections=new Set(overview.connections.filter(c=>c.status==="active"&&!c.revoked_at&&(!c.consent_expires_at||Date.parse(c.consent_expires_at)>Date.parse(`${today}T00:00:00Z`))).map(c=>c.id));
  const activeResources=new Set(overview.resources.filter(r=>activeConnections.has(r.connection_id)).map(r=>r.id));
  const allLoans:LoanInstallment[]=bankDashboardLoans(manualOverview).flatMap(group=>group.loans.flatMap(loan=>{
+  const progress=overview.credit.find(c=>c.resource_id===loan.id);
+  const paid=progress?.paid_installments,remaining=progress?.remaining_installments;
   const plan=plans.get(loan.id),bankAmount=ledgerAmount(loan.nextInstallment==null?null:String(loan.nextInstallment));
-  const base={id:loan.id,resourceId:loan.id,name:loan.name,bank:loan.bank,institutionId:loan.institutionId,category:group.category,currency:group.currency,amount:bankAmount!==null&&bankAmount>0?bankAmount:null,month,finalDueDate:loan.finalDueDate};
+  const base={paidInstallments:paid,remainingInstallments:remaining,totalInstallments:paid!=null&&remaining!=null?paid+remaining:plan?creditPlanDates(plan,plan.first_due_date,plan.last_due_date).length:null,id:loan.id,resourceId:loan.id,name:loan.name,bank:loan.bank,institutionId:loan.institutionId,category:group.category,currency:group.currency,amount:bankAmount!==null&&bankAmount>0?bankAmount:null,month,finalDueDate:loan.finalDueDate};
   if(plan)return creditPlanDates(plan,filters.from,filters.to).map(date=>({...base,id:`${loan.id}:${date.slice(0,7)}`,currency:plan.currency,amount:ledgerAmount(plan.amount),month:date.slice(0,7),dueDate:date,manualPlan:plan}));
   return current&&activeResources.has(loan.id)?[base]:[];
  }));

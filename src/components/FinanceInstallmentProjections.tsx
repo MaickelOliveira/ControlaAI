@@ -2,6 +2,7 @@
 import type {BankInstallmentProjection} from "@/lib/bank-installment-projections";
 import {bankMoney} from "@/lib/open-finance-display";
 import {bankFilterLabel} from "@/lib/finance-bank-filter";
+import {installmentEndMonth} from "@/lib/installment-progress";
 import BankLogo from "./BankLogo";
 
 export default function FinanceInstallmentProjections({items}:{items:readonly BankInstallmentProjection[]}){
@@ -13,6 +14,7 @@ export default function FinanceInstallmentProjections({items}:{items:readonly Ba
     <div className="min-w-0">
      <p className="break-words text-sm font-medium text-ink">{item.description} · parcela {item.position} de {item.total}</p>
      <p className="mt-1 text-[11px] text-muted">{bankFilterLabel(item.institution_name)} · {month} · dia do vencimento não informado</p>
+     <p className="mt-1 text-[10px] text-muted">Pagas: não confirmado · Restam após esta: {item.total-item.position} previstas · Última prevista: {installmentEndMonth(item.month,item.position,item.total)??"não informada"} (dia não informado)</p>
      <p className="mt-1 text-[10px] text-amber-ink">{item.observed?"Identificada pelo banco":"Previsão"} · pagamento não confirmado · fora dos gastos confirmados</p>
     </div>
    </div>

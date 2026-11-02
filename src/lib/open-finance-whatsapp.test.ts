@@ -688,3 +688,24 @@ it("honors a request to separate category spending by bank",async()=>{
   const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,category:"Transporte"},["2026-10-01","2026-10-31"],"Quanto gastei em transporte neste mês? Separe por banco.");
   expect(answer).toContain("Por banco");expect(answer).toContain("Banco A");expect(answer).toContain("Banco B");
 });
+it("honors the exact category description request even when the model selects a flat extract",async()=>{
+ m.read.mockResolvedValue({entries:[
+  {id:"small",mode:"personal",included:true,source:"whatsapp",date:"2026-10-11",type:"expense",category:"Menor",description:"Compra pequena fictícia",amount:5},
+  {id:"large",mode:"personal",included:true,source:"web",date:"2026-10-10",type:"expense",category:"Maior",description:"Compra grande fictícia",amount:30},
+  {id:"large-two",mode:"personal",included:true,source:"bank",date:"2026-10-15",type:"expense",category:"Maior",description:"Segunda compra fictícia",amount:10,bank:{resource_type:"card"}},
+ ],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0}}});
+ const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1},["2026-10-01","2026-10-31"],"descreva o que gastei mes passado por categoria?");
+ expect(answer).toContain("*1. Maior: R$ 40,00*");expect(answer).toContain("*2. Menor: R$ 5,00*");
+ expect(answer!.indexOf("Compra grande fictícia")).toBeLessThan(answer!.indexOf("*2. Menor:"));
+ expect(answer).toContain("Segunda compra fictícia");expect(answer).toContain("Compra pequena fictícia");
+ expect(answer).not.toContain("Movimentações encontradas");expect(m.pending).not.toHaveBeenCalled();expect(m.agenda).not.toHaveBeenCalled();
+});
+it.each(["Quanto gastei por categoria?","Descreva quanto gastei em cada categoria"])("describes every named expense only on the requested category detail: %s",async message=>{
+ const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1},["2026-09-01","2026-09-30"],message);
+ expect(answer).toContain("Gastos por categoria");expect(answer).toContain("• Test — R$ 35,00");
+});
+it("answers a plain monthly spending question with category totals and no named transaction list",async()=>{
+ const answer=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_detail",confidence:1},["2026-09-01","2026-09-30"],"Quanto gastei esse mês?");
+ expect(answer).toContain("Gastos por categoria");expect(answer).toContain("Outros: R$ 35,00");
+ expect(answer).not.toContain("• Test");expect(answer).not.toContain("Movimentações encontradas");expect(m.agenda).not.toHaveBeenCalled();
+});

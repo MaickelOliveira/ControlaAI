@@ -80,7 +80,7 @@ export default function FinanceFilterBar({
   return (
     <div className="bg-surface border border-line rounded-2xl p-3 shadow-sm flex flex-wrap items-center gap-2">
       {/* Período */}
-      <div className="flex items-center gap-1 bg-surface-muted rounded-xl p-1">
+      <div className="flex max-w-full min-w-0 flex-wrap items-center gap-1 bg-surface-muted rounded-xl p-1">
         {([["this_month", "Este mês"], ["last_month", "Mês passado"], ["last_3_months", "Últimos 3 meses"]] as const).map(([v, l]) => (
           <button key={v} type="button" onClick={() => applyPreset(v)}
             className={clsx("px-3 py-1.5 rounded-lg text-xs font-medium transition",
@@ -91,16 +91,16 @@ export default function FinanceFilterBar({
       </div>
 
       {/* Datas customizadas */}
-      <div className="flex items-center gap-1.5">
-        <input type="date" value={value.from} onChange={e => { setPreset("custom"); onChange({ ...value, from: e.target.value }); }}
-          className="border border-line rounded-lg px-2 py-1.5 text-xs outline-none" />
+      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto">
+        <input aria-label="Data inicial" type="date" value={value.from} onChange={e => { setPreset("custom"); onChange({ ...value, from: e.target.value }); }}
+          className="min-w-0 w-full border border-line rounded-lg px-2 py-1.5 text-xs outline-none" />
         <span className="text-subtle text-xs">até</span>
-        <input type="date" value={value.to} onChange={e => { setPreset("custom"); onChange({ ...value, to: e.target.value }); }}
-          className="border border-line rounded-lg px-2 py-1.5 text-xs outline-none" />
+        <input aria-label="Data final" type="date" value={value.to} onChange={e => { setPreset("custom"); onChange({ ...value, to: e.target.value }); }}
+          className="min-w-0 w-full border border-line rounded-lg px-2 py-1.5 text-xs outline-none" />
       </div>
 
       {/* Tipo */}
-      <div className="flex items-center gap-1 bg-surface-muted rounded-xl p-1">
+      <div className="flex max-w-full min-w-0 flex-wrap items-center gap-1 bg-surface-muted rounded-xl p-1">
         {([["all", "Todos"], ["income", "Receitas"], ["expense", "Despesas"]] as const).map(([v, l]) => (
           <button key={v} type="button" onClick={() => onChange({ ...value, type: v })}
             className={clsx("px-3 py-1.5 rounded-lg text-xs font-medium transition",
@@ -140,7 +140,7 @@ export default function FinanceFilterBar({
         )}
       </div>
 
-      {accounts&&<label className="flex min-w-0 items-center gap-2 text-xs text-muted"><span>Banco</span><select aria-label="Banco ou conta manual" value={value.account??""} onChange={e=>onChange({...value,account:e.target.value})} className="max-w-full rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink sm:max-w-72"><option value="">Todos os bancos</option>{accounts.map(account=><option key={account.value} value={account.value}>{account.label}</option>)}</select></label>}
+      {accounts&&<label className="flex max-w-full min-w-0 items-center gap-2 text-xs text-muted"><span className="shrink-0">Banco</span><select aria-label="Banco ou conta manual" value={value.account??""} onChange={e=>onChange({...value,account:e.target.value})} className="min-w-0 max-w-full rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink sm:max-w-72"><option value="">Todos os bancos</option>{accounts.map(account=><option key={account.value} value={account.value}>{account.label}</option>)}</select></label>}
 
       {/* Busca */}
       <input value={searchInput} onChange={e => setSearchInput(e.target.value)}

@@ -1,13 +1,18 @@
 "use client";
+import type {LoanInstallment} from "@/lib/finance-loan-installments";
+import {installmentEndMonth} from "@/lib/installment-progress";
 import BankLogo from "./BankLogo";
 import {clsx} from "clsx";
 import {financeOrigin,type LedgerEntry} from "@/lib/finance-ledger";
-import {bankMoney,bankResourceName} from "@/lib/open-finance-display";
+import {bankMoney,bankResourceName,bankDate,type BankOverview} from "@/lib/open-finance-display";
 import FinanceAuthor from "./FinanceAuthor";
 import {creditPaymentAdjustment,isCardCreditOperation} from "@/lib/credit-funded-payment";
 import {financeMovementDisplay} from "@/lib/finance-movement-display";
-export default function FinanceLedgerRows({entries,accounts=[],selectMode,selectedIds,onToggle,onEdit,onDelete,onCategory,onCreditPix,displayDescription,displayDate}:{entries:LedgerEntry[];accounts?:Array<{id:string;name:string}>;selectMode:boolean;selectedIds:Set<string>;onToggle:(id:string)=>void;onEdit:(entry:LedgerEntry)=>void;onDelete:(entry:LedgerEntry)=>void;onCategory?:(entry:LedgerEntry)=>void;onCreditPix?:(entry:LedgerEntry)=>void;displayDescription:(text:string)=>string;displayDate:(entry:LedgerEntry)=>string}){
+export default function FinanceLedgerRows({entries,accounts=[],loans=[],creditOverview,selectMode,selectedIds,onToggle,onEdit,onDelete,onCategory,onCreditPix,displayDescription,displayDate}:{entries:LedgerEntry[];loans?:readonly LoanInstallment[];creditOverview?:BankOverview;accounts?:Array<{id:string;name:string}>;selectMode:boolean;selectedIds:Set<string>;onToggle:(id:string)=>void;onEdit:(entry:LedgerEntry)=>void;onDelete:(entry:LedgerEntry)=>void;onCategory?:(entry:LedgerEntry)=>void;onCreditPix?:(entry:LedgerEntry)=>void;displayDescription:(text:string)=>string;displayDate:(entry:LedgerEntry)=>string}){
   return entries.map(f=>{
+    const creditId=f.bank?.credit_resource_id??f.bank?.resource_id;
+    const contract=creditOverview?.credit.find(row=>row.resource_id===creditId);
+    const progress=loans.find(row=>row.recordedId===f.id||row.resourceId===creditId)??(contract?{paidInstallments:contract.paid_installments,remainingInstallments:contract.remaining_installments,finalDueDate:contract.due_date,manualPlan:creditOverview?.installment_plans?.find(plan=>plan.resource_id===creditId)}:null);
     const bank=f.bank,display=financeMovementDisplay(f),credit=display.direction==="credit",unknownDirection=display.direction==="unknown",adjustment=bank?creditPaymentAdjustment(bank):null;
     return <div key={f.id} className="group flex items-start justify-between gap-2 rounded-xl px-3 py-3 transition hover:bg-surface-muted">
       <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -19,7 +24,8 @@ export default function FinanceLedgerRows({entries,accounts=[],selectMode,select
           {!bank&&<FinanceAuthor name={f.registeredByName}/>}
           {display.note&&<p className="mt-1 text-[11px] text-muted">{display.note}</p>}
           {bank&&f.categorySource&&f.categorySource!=="excluded"&&<p className="mt-1 text-[10px] text-subtle">{adjustment?"Juros/taxas confirmados por você":f.categorySource==="user"?"Categoria escolhida por você":f.categorySource==="provider"?"Categoria recebida da Polp":f.categorySource==="description"?"Categoria sugerida · confira":"Categoria automática"}</p>}
-          {bank?.installment_number&&<p className="mt-1 text-[11px] text-muted">Parcela {bank.installment_number}{bank.installment_count?` de ${bank.installment_count}`:""}{bank.bill_month?` · competência ${bank.bill_month.slice(5,7)}/${bank.bill_month.slice(0,4)}`:""}</p>}
+          {progress&&<p className="mt-1 text-[11px] text-muted">Pagas: {progress.paidInstallments??"não informado"} · Faltam: {progress.remainingInstallments??"não informado"} · Última: {bankDate(progress.manualPlan?.last_due_date??progress.finalDueDate)}</p>}
+          {bank?.installment_number&&<p className="mt-1 text-[11px] text-muted">Parcela {bank.installment_number}{bank.installment_count?` de ${bank.installment_count}`:""}{bank.bill_month?` · competência ${bank.bill_month.slice(5,7)}/${bank.bill_month.slice(0,4)}`:""}{bank.installment_count?` · Pagas: não confirmado · Restam após esta: ${Math.max(0,bank.installment_count-bank.installment_number)} previstas · Última prevista: ${installmentEndMonth(bank.bill_month,bank.installment_number,bank.installment_count)??"não informada"}`:""}</p>}
           {adjustment&&<p className="mt-2 text-[11px] leading-5 text-amber-ink">Pix feito com dinheiro do cartão. Nos gastos entram apenas {bankMoney(adjustment.charges_amount,"BRL")} de juros/taxas aqui; o Pix de {bankMoney(adjustment.payment_amount,"BRL")} é contado na conta. A dívida no cartão permanece.</p>}
           {adjustment&&<p className="mt-1 text-[11px] text-muted">Cobrança no cartão: {bankMoney(bank!.amount,bank!.currency)} · valor original recebido do banco.</p>}
           {bank?.credit_reconciliation?.role==="payment"&&bank.credit_reconciliation.status==="active"&&<p className="mt-2 text-[11px] leading-5 text-muted">Pix feito com dinheiro do cartão · pagamento contado uma vez.</p>}

@@ -106,19 +106,19 @@ export default function ClientesPage() {
             <p className="font-semibold text-ink">Nenhum cliente cadastrado</p>
           </div>
         ) : (
-          <div className="bg-surface rounded-2xl border border-line shadow-sm overflow-x-auto">
-            <table className="w-full min-w-[560px]">
+          <div className="bg-surface rounded-2xl border border-line shadow-sm z-responsive-table-wrap">
+            <table role="table" className="z-responsive-table w-full">
               <thead className="bg-surface-muted border-b border-line">
                 <tr>
                   {["Cliente", "Empresa", "Contato", "Status", ""].map(h => (
-                    <th key={h} className="text-left text-xs font-semibold text-muted uppercase tracking-wide px-5 py-3">{h}</th>
+                    <th scope="col" key={h} className="text-left text-xs font-semibold text-muted uppercase tracking-wide px-5 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody role="rowgroup" className="divide-y divide-slate-50">
                 {visibleCustomers.map(c => (
-                  <tr key={c.id} className="hover:bg-surface-muted transition">
-                    <td className="px-5 py-4">
+                  <tr role="row" key={c.id} className="hover:bg-surface-muted transition">
+                    <td role="cell" data-label="Cliente" className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-blue-soft flex items-center justify-center text-sm font-bold text-blue-ink shrink-0">
                           {c.name.charAt(0).toUpperCase()}
@@ -126,15 +126,15 @@ export default function ClientesPage() {
                         <p className="font-medium text-ink text-sm">{c.name}</p>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-sm text-muted">{c.company || "—"}</td>
-                    <td className="px-5 py-4 text-xs text-subtle">{[c.phone, c.email].filter(Boolean).join(" · ") || "—"}</td>
-                    <td className="px-5 py-4">
+                    <td role="cell" data-label="Empresa" className="px-5 py-4 text-sm text-muted">{c.company || "—"}</td>
+                    <td role="cell" data-label="Contato" className="px-5 py-4 text-xs text-subtle">{[c.phone, c.email].filter(Boolean).join(" · ") || "—"}</td>
+                    <td role="cell" data-label="Status" className="px-5 py-4">
                       <span className={clsx("text-xs px-2.5 py-1 rounded-full font-medium border",
                         c.status === "active" ? "bg-amber-soft text-amber-ink border-line" : "bg-surface-muted text-muted border-line")}>
                         {c.status === "active" ? "● Ativo" : "○ Inativo"}
                       </span>
                     </td>
-                    <td className="px-5 py-4">
+                    <td role="cell" data-label="Ações" className="px-5 py-4">
                       <div className="flex gap-2">
                         <button onClick={() => openEdit(c)} className="text-xs text-blue-ink hover:underline">Editar</button>
                         <button onClick={() => toggleStatus(c)} className="text-xs text-subtle hover:underline">
