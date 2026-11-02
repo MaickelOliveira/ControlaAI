@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
+import BankForecastCategoryDialog,{type ForecastCategoryTarget} from "@/components/BankForecastCategoryDialog";
 import BankCategoryDialog from "@/components/BankCategoryDialog";
 import BankCreditPixDialog from "@/components/BankCreditPixDialog";
 import FinanceLedgerRows from "@/components/FinanceLedgerRows";
@@ -110,6 +111,7 @@ function FinancasContent() {
   const accountOptions=useMemo(()=>financeBankOptions(ledger),[ledger]);
   const totalBalance:Balance=ledger?.totalBalance??{income:0,expense:0,balance:0};
 
+  const [forecastCategoryTarget,setForecastCategoryTarget]=useState<ForecastCategoryTarget|null>(null);
   const [bankCategoryTarget,setBankCategoryTarget]=useState<LedgerEntry|null>(null);
   const [bankCreditPixId,setBankCreditPixId]=useState<string|null>(null);
   const bankCreditPixTarget=finances.find(entry=>entry.id===bankCreditPixId)?.bank;
@@ -559,7 +561,7 @@ function FinancasContent() {
               <div className="z-statement-list space-y-1">
                 {!ledger&&<p className="px-3 py-3 text-xs text-amber-ink">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
                 <FinanceLoanRows key={mode} items={loanInstallments} mode={mode} canEdit={ledger?.bank?.overview.manual_installments_available} onSaved={async()=>{await loadAll(mode);}}/>
-                {ledger?.bank&&<FinanceBankSchedules compact items={bankSchedules} overview={ledger.bank.overview}/>}
+                {ledger?.bank&&<FinanceBankSchedules compact items={bankSchedules} overview={ledger.bank.overview} onCategory={item=>setForecastCategoryTarget({id:item.id,description:item.description,category:bankForecastCategory(item,finances),userCategory:item.user_category})}/>}
 
                 {/* Pendentes: recorrentes/parcelados */}
                 {sortedRecs.map(r => {
@@ -646,7 +648,7 @@ function FinancasContent() {
                   );
                 })}
 
-                <FinanceInstallmentProjections items={projectedInstallments}/>
+                <FinanceInstallmentProjections items={projectedInstallments} onCategory={item=>setForecastCategoryTarget({id:item.id,description:item.description,category:bankForecastCategory(item,finances),userCategory:item.user_category})}/>
 
                 {/* Separador se tiver pendentes e lançamentos confirmados */}
                 {(sortedRecs.length > 0 || pendingFinances.length > 0 || projectedInstallments.length > 0 || loanInstallments.some(item=>!item.recordedId) || bankSchedules.length > 0) && postedFinances.length > 0 && (
@@ -668,6 +670,7 @@ function FinancasContent() {
 
       {ledger?.bank&&(!filters.account||filters.account.startsWith("bank:"))&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank} resourceId={filters.account?.slice(5)}/>}
 
+      {forecastCategoryTarget&&<BankForecastCategoryDialog key={`${mode}:${forecastCategoryTarget.id}`} target={forecastCategoryTarget} mode={mode} categories={catsExpense} onClose={()=>setForecastCategoryTarget(null)} onSaved={async()=>{await loadAll(mode);setBanner("✅ Categoria salva para esta cobrança e os próximos meses da mesma série.");}}/>}
       {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onClose={()=>setBankCategoryTarget(null)} onSaved={matched=>{setBankCategoryTarget(null);setBanner(matched===undefined?"✅ Categoria salva. Os gráficos usam sua escolha.":`✅ Transferência confirmada. ${matched} movimentação(ões) com a mesma conta, descrição e valor foram atualizadas no histórico.`);loadAll(mode);}}/>}
       {bankCreditPixTarget&&<BankCreditPixDialog key={`${mode}:${bankCreditPixTarget.id}`} credit={bankCreditPixTarget} movements={ledger?.bank?.report.movements??[]} mode={mode} onClose={()=>setBankCreditPixId(null)} onSaved={()=>{setBankCreditPixId(null);setBanner("✅ Confirmação salva. O histórico e a dívida no cartão foram preservados.");loadAll(mode);}}/>}
 

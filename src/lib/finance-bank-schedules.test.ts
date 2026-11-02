@@ -71,3 +71,12 @@ it("keeps an unambiguous recorded category only from the same card and purchase"
  expect(bankForecastCategory({...item,currency:"USD"},history)).toBe("Assinaturas");
  expect(bankForecastCategory(item,[...history,{...history[0],category:"Outra categoria"}])).toBe("Assinaturas");
 });
+it("treats the recurring Google charges as subscriptions and lets a saved series category win",()=>{
+ expect(bankForecastCategory({...item,description:"Google"})).toBe("Assinaturas");
+ expect(bankForecastCategory({...item,description:"Google",user_category:"Educação"})).toBe("Educação");
+ expect(bankForecastCategory({...item,description:"Google Ads"})).toBe("Marketing");
+ expect(bankForecastCategory({...item,kind:"installment",description:"Google"})).toBe("Serviços");
+ const forecast={...item,description:"Google",user_category:"Educação"};
+ expect(financeBankSchedules([forecast],{...filters,categories:["Educação"]})).toHaveLength(1);
+ expect(financeBankSchedules([forecast],{...filters,categories:["Assinaturas"]})).toEqual([]);
+});

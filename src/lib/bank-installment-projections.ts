@@ -1,6 +1,6 @@
 import type {BankMovement} from "./open-finance-report";
 
-export type BankInstallmentAnchor={id:string;resource_id:string;description:string;resource_name:string;institution_name:string;institution_id?:string|null;amount:string;currency:string|null;bill_month:string;observed_installments:number;total_installments:number;synced_at:string};
+export type BankInstallmentAnchor={user_category?:string|null;id:string;resource_id:string;description:string;resource_name:string;institution_name:string;institution_id?:string|null;amount:string;currency:string|null;bill_month:string;observed_installments:number;total_installments:number;synced_at:string};
 export type BankInstallmentProjection=BankInstallmentAnchor & {month:string;position:number;total:number;observed:boolean};
 
 function monthIndex(value:string):number|null {

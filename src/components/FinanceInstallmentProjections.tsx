@@ -5,7 +5,7 @@ import {bankFilterLabel} from "@/lib/finance-bank-filter";
 import {installmentEndMonth} from "@/lib/installment-progress";
 import BankLogo from "./BankLogo";
 
-export default function FinanceInstallmentProjections({items}:{items:readonly BankInstallmentProjection[]}){
+export default function FinanceInstallmentProjections({items,onCategory}:{items:readonly BankInstallmentProjection[];onCategory?:(item:BankInstallmentProjection)=>void}){
  return items.map(item=>{
   const month=new Intl.DateTimeFormat("pt-BR",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${item.month}-01T12:00:00Z`));
   return <div key={`${item.id}:${item.month}`} className="flex items-start justify-between gap-3 rounded-xl px-3 py-3 hover:bg-surface-muted">
@@ -18,7 +18,7 @@ export default function FinanceInstallmentProjections({items}:{items:readonly Ba
      <p className="mt-1 text-[10px] text-amber-ink">{item.observed?"Identificada pelo banco":"Previsão"} · pagamento não confirmado · fora dos gastos confirmados</p>
     </div>
    </div>
-   <p className="shrink-0 text-right text-sm font-bold tabular-nums text-amber-ink">{bankMoney(item.amount,item.currency)}</p>
+   <div className="shrink-0 max-w-[45%] text-right"><p className="text-sm font-bold tabular-nums text-amber-ink">{bankMoney(item.amount,item.currency)}</p>{onCategory&&<button type="button" onClick={()=>onCategory(item)} className="mt-2 rounded-lg border border-line px-2 py-1.5 text-xs font-semibold text-amber-ink">Alterar categoria</button>}</div>
   </div>;
  });
 }

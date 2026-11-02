@@ -2,14 +2,14 @@ import {installmentEndMonth} from "@/lib/installment-progress";
 import BankLogo from "./BankLogo";
 import {bankAmountWithoutCurrency,bankDate,bankMoney,type BankOverview} from "@/lib/open-finance-display";
 import {bankInstallmentPosition,bankInstallmentProgress,groupBankAgenda,type BankAgendaItem,type BankAgendaGroup} from "@/lib/open-finance-schedules";
-export default function FinanceBankSchedules({items,overview,compact=false}:{items:BankAgendaItem[];overview:BankOverview;compact?:boolean}){
+export default function FinanceBankSchedules({items,overview,compact=false,onCategory}:{items:BankAgendaItem[];overview:BankOverview;compact?:boolean;onCategory?:(item:BankAgendaItem)=>void}){
  if(!items.length)return null;
  if(compact)return items.map(item=>{
   const progress=bankInstallmentProgress(item);
   const connection=overview.connections.find(c=>c.id===overview.resources.find(r=>r.id===item.resource_id)?.connection_id);
   return <div key={`${item.kind}:${item.id}`} className="flex items-start justify-between gap-3 rounded-xl px-3 py-3 hover:bg-surface-muted">
    <div className="flex min-w-0 items-start gap-3"><BankLogo institutionId={connection?.institution_id} size={32}/><div className="min-w-0"><p className="break-words text-sm font-medium text-ink">{item.description}</p><p className="mt-1 text-[11px] text-muted">{item.institution_name}{progress?` · última parcela identificada ${progress.current}/${progress.total}`:""} · {item.due_date?bankDate(item.due_date):"Sem vencimento informado"}</p>{progress&&<p className="mt-1 text-[10px] text-muted">Pagas: não confirmado · Restam após a identificada: {progress.remaining} previstas · Última prevista: {installmentEndMonth(item.last_observed_month,item.last_observed_installment,progress.total)??"não informada"}</p>}<p className="mt-1 text-[10px] text-amber-ink">{item.kind==="recurring"?"Cobrança prevista":"Pagamento não confirmado"}</p></div></div>
-   <div className="shrink-0 text-right"><strong className="text-sm text-ink">{item.currency?bankMoney(item.amount,item.currency):bankAmountWithoutCurrency(item.amount)}</strong>{!item.currency&&<p className="text-[10px] text-muted">Moeda não informada</p>}</div>
+   <div className="shrink-0 max-w-[45%] text-right"><strong className="text-sm text-ink">{item.currency?bankMoney(item.amount,item.currency):bankAmountWithoutCurrency(item.amount)}</strong>{!item.currency&&<p className="text-[10px] text-muted">Moeda não informada</p>}{onCategory&&item.kind!=="bill"&&<button type="button" onClick={()=>onCategory(item)} className="mt-2 rounded-lg border border-line px-2 py-1.5 text-xs font-semibold text-amber-ink">Alterar categoria</button>}</div>
   </div>;
  });
  return <section aria-label="Recorrências e parcelas bancárias" className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
