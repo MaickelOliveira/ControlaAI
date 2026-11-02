@@ -32,3 +32,17 @@ it("leaves unavailable, foreign-currency and disconnected installments outside t
  const loans=financeLoanInstallments(foreign,[],filters,today);
  expect(loans).toHaveLength(2);expect(categoriesWithLoanInstallments([],loans)).toEqual([]);
 });
+it("projects the user's vehicle plan for past and future months only until the chosen end, without posting payments",()=>{
+ const plan={resource_id:"car",amount:"890.10",currency:"BRL",first_due_date:"2026-09-30",last_due_date:"2026-12-30"};
+ const data={...overview,installment_plans:[plan]};
+ const dates=financeLoanInstallments(data,[],{from:"2026-09-01",to:"2026-12-31",categories:["Parcelas do veículo"]},today);
+ expect(dates.map(p=>p.dueDate)).toEqual(["2026-09-30","2026-10-30","2026-11-30","2026-12-30"]);
+ expect(new Set(dates.map(p=>p.id)).size).toBe(4);
+ expect(categoriesWithLoanInstallments([],dates)).toEqual([{name:"Parcelas do veículo",value:3560.4,forecast:3560.4}]);
+ expect(financeLoanInstallments(data,[],{from:"2027-01-01",to:"2027-01-31"},today)).toEqual([]);
+ expect(ledgerBalance([]).expense).toBe(0);
+ const paid={...payment,amount:890.1,category:"Categoria minha",bank:{...payment.bank!,resource_id:"car"}};
+ const current=financeLoanInstallments(data,[paid],filters,today);
+ expect(current.find(p=>p.resourceId==="car")?.recordedId).toBe("paid");
+ expect(financeLoanInstallments(data,[{...paid,amount:50}],filters,today).find(p=>p.resourceId==="car")?.recordedId).toBeUndefined();
+});

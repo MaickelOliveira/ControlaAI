@@ -23,6 +23,6 @@ export async function openFinanceRpc(scope: OpenFinanceScope, operation: string,
     query=query.setHeader("x-zelo-owner",scope.userId).setHeader("x-zelo-company",scope.companyId);
   }
   const { data, error } = await query;
-  if (error) throw new Error("OF_STORAGE_ERROR");
+  if (error) throw new Error(operation==="zelo_of_credit_data"&&(error.code==="PGRST202"||error.code==="42883")?"OF_FUNCTION_UNAVAILABLE":"OF_STORAGE_ERROR");
   return data;
 }

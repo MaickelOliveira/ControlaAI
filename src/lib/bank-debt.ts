@@ -2,7 +2,7 @@ import type { BankOverview, BankResource } from "./open-finance-display";
 import { normalizeMerchantText } from "./merchant-text";
 
 export const VEHICLE_INSTALLMENT_CATEGORY="Parcelas do veículo";
-export function bankDebtCategory(resource:BankResource):"Empréstimos"|typeof VEHICLE_INSTALLMENT_CATEGORY {
+export function bankDebtCategory(resource:Pick<BankResource,"name">):"Empréstimos"|typeof VEHICLE_INSTALLMENT_CATEGORY {
   return matchesBankDebtPurpose(resource,"veiculo")||matchesBankDebtPurpose(resource,"moto")?VEHICLE_INSTALLMENT_CATEGORY:"Empréstimos";
 }
 
@@ -14,7 +14,7 @@ export function hasZeroBankDebt(resource: BankResource, data: BankOverview): boo
 }
 
 /** Purpose aliases match the bank's product name, not unrelated personal loans. */
-export function matchesBankDebtPurpose(resource: BankResource, keyword?: string): boolean {
+export function matchesBankDebtPurpose(resource: Pick<BankResource,"name">, keyword?: string): boolean {
   if (!keyword) return true;
   const name = normalizeMerchantText(resource.name).replace(/_/g, " ");
   const target = normalizeMerchantText(keyword);
