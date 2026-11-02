@@ -36,7 +36,11 @@ export function financeLoanInstallments(overview:BankOverview,entries:readonly L
  const selected=new Set(bankDashboardLoans(manualOverview,filters).flatMap(group=>group.loans.map(loan=>loan.id)));
  const used=new Set<string>();
  return allLoans.filter(loan=>selected.has(loan.resourceId!)).map(loan=>{
-  const matches=entries.filter(entry=>!used.has(entry.id)&&entry.included&&entry.status!=="pending"&&entry.type==="expense"&&entry.bank?.currency===loan.currency&&entry.date.slice(0,7)===loan.month&&entry.amount===loan.amount&&(
+  const candidates=entries.filter(entry=>!used.has(entry.id)&&entry.included&&entry.status!=="pending"&&entry.type==="expense"&&entry.amount>0&&entry.bank?.currency===loan.currency&&entry.date.slice(0,7)===loan.month);
+  // A bank-reported repayment identifies the contract, even when fees or an
+  // adjusted installment change its paid amount. Amount-only clues stay strict.
+  const repayments=candidates.filter(entry=>entry.bank?.credit_resource_id===loan.resourceId||entry.bank?.resource_id===loan.resourceId&&entry.bank?.source_type==="LOAN_REPAYMENT");
+  const matches=repayments.length?repayments:candidates.filter(entry=>entry.amount===loan.amount&&(
    entry.bank?.resource_id===loan.resourceId||entry.bank?.credit_resource_id===loan.resourceId||entry.category===loan.category&&entry.amount===loan.amount&&entry.bank?.institution_name===loan.bank&&allLoans.filter(other=>other.bank===loan.bank&&other.category===loan.category&&other.amount===loan.amount&&other.currency===loan.currency&&other.month===loan.month).length===1
   ));
   const recordedId=matches.length===1?matches[0].id:undefined;

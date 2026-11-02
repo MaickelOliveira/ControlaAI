@@ -2,6 +2,7 @@ import {expect,it} from "vitest";
 import {categoriesWithLoanInstallments,financeLoanInstallments} from "./finance-loan-installments";
 import {ledgerBalance,type LedgerEntry} from "./finance-ledger";
 import type {BankOverview} from "./open-finance-display";
+import {financeExpensePlan} from "./finance-expense-plan";
 const overview={connections:[{id:"a",institution_name:"Banco A",status:"active"},{id:"b",institution_name:"Banco B",status:"active"}],resources:[{id:"l1",connection_id:"a",resource_type:"loan",name:"Pessoal"},{id:"l2",connection_id:"b",resource_type:"loan",name:"Consignado"},{id:"car",connection_id:"a",resource_type:"financing",name:"Veículo"}],credit:[{resource_id:"l1",currency:"BRL",outstanding_amount:"1000",next_installment_amount:"100.125"},{resource_id:"l2",currency:"BRL",outstanding_amount:"2000",next_installment_amount:"200"},{resource_id:"car",currency:"BRL",outstanding_amount:"3000",next_installment_amount:null}]} as unknown as BankOverview;
 const filters={from:"2026-11-01",to:"2026-11-30"},today="2026-11-02";
 const payment={id:"paid",date:today,type:"expense",category:"Empréstimos",amount:100.13,included:true,source:"bank",status:"posted",bank:{resource_id:"account-a",institution_name:"Banco A",currency:"BRL"}} as LedgerEntry;
@@ -64,4 +65,17 @@ it("uses a complete monthly bank schedule for prior months without posting payme
  const data={...overview,credit:overview.credit.map(c=>c.resource_id==="l1"?{...c,first_due_date:"2026-09-20",due_date:"2026-12-20",periodicity:"MENSAL",total_installments:4,paid_installments:1,remaining_installments:3}:c)};
  expect(financeLoanInstallments(data,[],{from:"2026-10-01",to:"2026-10-31"},today)[0]).toMatchObject({dueDate:"2026-10-20",paidInstallments:1,remainingInstallments:3});
  expect(ledgerBalance([]).expense).toBe(0);
+});
+it("replaces a manual vehicle forecast with the bank's differently valued repayment for the same contract and month",()=>{
+ const data={...overview,installment_plans:[{resource_id:"car",amount:"800",currency:"BRL",first_due_date:"2026-09-20",last_due_date:"2026-12-20"}]};
+ const range={from:"2026-10-01",to:"2026-10-31",categories:["Parcelas do veículo"]};
+ const paid={...payment,date:"2026-10-21",amount:817.35,category:"Parcelas do veículo",bank:{...payment.bank!,resource_id:"car",resource_type:"financing",source_type:"LOAN_REPAYMENT"}};
+ const loans=financeLoanInstallments(data,[paid],range,today);
+ expect(loans).toHaveLength(1);expect(loans[0]).toMatchObject({dueDate:"2026-10-20",amount:800,recordedId:"paid"});
+ expect(financeExpensePlan({posted:[paid],pending:[],recurring:[],loans,installments:[],schedules:[],...range})).toMatchObject({recorded:817.35,forecast:0,total:817.35});
+ expect(paid.amount).toBe(817.35);
+ const linked={...paid,bank:{...paid.bank,resource_type:"account",resource_id:"cash-account",source_type:null,credit_resource_id:"car"}};
+ expect(financeLoanInstallments(data,[linked],range,today)[0].recordedId).toBe("paid");
+ for(const invalid of [{...paid,bank:{...paid.bank,resource_id:"another-contract"}},{...paid,bank:{...paid.bank,source_type:null}},{...paid,date:"2026-09-21"},{...paid,status:"pending"},{...paid,included:false},{...paid,amount:-817.35}])expect(financeLoanInstallments(data,[invalid],range,today)[0].recordedId).toBeUndefined();
+ expect(financeLoanInstallments(data,[paid,{...paid,id:"another-payment"}],range,today)[0].recordedId).toBeUndefined();
 });
