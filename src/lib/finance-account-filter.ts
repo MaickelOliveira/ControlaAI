@@ -11,9 +11,10 @@ export function financeAccountOptions(data:FinanceLedgerData|null):FinanceAccoun
  const options=new Map<string,FinanceAccountOption>();
  for(const account of data.accounts??[])options.set(`manual:${account.id}`,{value:`manual:${account.id}`,label:`${account.name} · ${account.type==="credit_card"?"Cartão manual":"Conta manual"}`});
  for(const resource of data.bank?.overview.resources??[]){
-  if(resource.resource_type!=="account"&&resource.resource_type!=="card")continue;
+  if(!["account","card","loan","financing"].includes(resource.resource_type))continue;
   const bank=data.bank?.overview.connections.find(c=>c.id===resource.connection_id);
-  const value=`bank:${resource.id}`,label=`${bank?.institution_name??"Banco"} · ${bankResourceName(resource.name)}${resource.identification_last4?` · final ${resource.identification_last4}`:""}${bank&&bank.status!=="active"?" · Histórico":""}`;
+  const debtType=resource.resource_type==="loan"?" · Empréstimo":resource.resource_type==="financing"?" · Financiamento":"";
+  const value=`bank:${resource.id}`,label=`${bank?.institution_name??"Banco"} · ${bankResourceName(resource.name)}${debtType}${resource.identification_last4?` · final ${resource.identification_last4}`:""}${bank&&bank.status!=="active"?" · Histórico":""}`;
   options.set(value,{value,label});
  }
  for(const entry of data.finances){

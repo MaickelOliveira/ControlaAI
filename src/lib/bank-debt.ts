@@ -1,6 +1,11 @@
 import type { BankOverview, BankResource } from "./open-finance-display";
 import { normalizeMerchantText } from "./merchant-text";
 
+export const VEHICLE_INSTALLMENT_CATEGORY="Parcelas do veículo";
+export function bankDebtCategory(resource:BankResource):"Empréstimos"|typeof VEHICLE_INSTALLMENT_CATEGORY {
+  return matchesBankDebtPurpose(resource,"veiculo")||matchesBankDebtPurpose(resource,"moto")?VEHICLE_INSTALLMENT_CATEGORY:"Empréstimos";
+}
+
 /** Hide only a confirmed exact zero, never missing data or a rounded small debt. */
 export function hasZeroBankDebt(resource: BankResource, data: BankOverview): boolean {
   if (resource.resource_type !== "loan" && resource.resource_type !== "financing") return false;

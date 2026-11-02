@@ -3,7 +3,8 @@ import {creditLineLabel,creditConsolidationLabel} from "@/lib/bank-credit-label"
 import {displayCardLimits} from "@/lib/bank-card-limit";
 import BankLogo from "./BankLogo";
 import {Bar,BarChart,CartesianGrid,Cell,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from "recharts";
-import {bankDashboardAccounts} from "@/lib/bank-dashboard";
+import {bankDashboardAccounts,type BankLoanFilters} from "@/lib/bank-dashboard";
+import BankLoanSummary from "./BankLoanSummary";
 import {ledgerAmount,ledgerExpenseGroups,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankMoney,bankResourceName} from "@/lib/open-finance-display";
 import type {BankFinancialData} from "@/lib/open-finance-report";
@@ -18,11 +19,12 @@ function CardCreditRow({line}:{line:ReturnType<typeof displayCardLimits>[number]
     <dl>{([["Utilizado",line.used_amount],["Disponível",line.available_amount],["Limite total",line.total_amount]] as const).map(([label,amount])=><div key={label}><dt>{label}</dt><dd className={label==="Disponível"?"text-emerald-ink":"text-ink"}>{bankMoney(amount,line.currency)}</dd></div>)}</dl>
   </div>;
 }
-export default function BankDashboard({data,entries}:{data:BankFinancialData|null;entries:LedgerEntry[]}){
+export default function BankDashboard({data,entries,filters}:{data:BankFinancialData|null;entries:LedgerEntry[];filters?:BankLoanFilters}){
   const overview=data?.overview,groups=overview?bankDashboardAccounts(overview):[];
   const expenses=ledgerExpenseGroups(entries,"origin");
   const cards=overview?.resources.filter(r=>r.resource_type==="card")??[];
   return <>
+    {overview&&<BankLoanSummary overview={overview} filters={filters}/>}
     {overview&&overview.connections.length>0&&<>
       <article className="min-w-0 rounded-2xl border border-line/80 bg-surface p-5 shadow-sm self-start lg:col-span-12"><div className="mb-5 flex items-center gap-3"><span className="rounded-xl bg-violet-soft p-3 text-violet-ink"><OpenFinanceIcon name="bank"/></span><div><h3 className="font-semibold text-ink">Saldo disponível por conta</h3><p className="mt-1 text-[11px] text-muted">Dinheiro nas contas · limite de cartão não entra aqui</p></div></div>
         {!groups.length&&<p className="py-12 text-center text-sm text-subtle">O banco ainda não enviou contas.</p>}

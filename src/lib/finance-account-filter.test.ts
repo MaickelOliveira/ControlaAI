@@ -21,3 +21,7 @@ it("includes named manual accounts, every bank account/card and unlinked records
  expect(options.find(o=>o.value==="bank:different-id")?.label).toContain("1234");
  expect(financeAccountKey(finances.find(e=>e.id==="none")!)).toBe("unlinked");
 });
+it("makes loans and vehicle financing selectable even before their first posted movement",()=>{
+ const options=financeAccountOptions({finances:[],bank:{overview:{connections:[{id:"c",institution_name:"Banco teste",status:"active"}],resources:[{id:"car",connection_id:"c",resource_type:"financing",name:"Carro"},{id:"loan",connection_id:"c",resource_type:"loan",name:"Crédito pessoal"}]}}} as never);
+ expect(options).toEqual([{value:"bank:car",label:"Banco teste · Carro · Financiamento"},{value:"bank:loan",label:"Banco teste · Crédito pessoal · Empréstimo"}]);
+});

@@ -5,8 +5,8 @@ vi.mock("./whatsapp-config",()=>({getConfig:vi.fn(async()=>({geminiApiKey:"ficti
 import {processMessage,type AIResult,type AiContext} from "./ai-processor";
 const period={from:"2026-09-01",to:"2026-09-30"};
 const context:AiContext={phone:"5511999000000",user:{id:"fictional-delivery-user",activeMode:"personal",locale:"pt-BR",customCategoriesExpense:[],customCategoriesIncome:[]},history:[]};
-beforeEach(()=>{vi.stubEnv("AI_FIRST_INTENT_ENABLED","true");vi.stubEnv("OPENAI_TEST_USER_IDS","");vi.stubEnv("OPENAI_API_KEY","");generateContent.mockReset();});
-afterEach(()=>vi.unstubAllEnvs());
+beforeEach(()=>{vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date("2026-10-15T12:00:00-03:00"));vi.stubEnv("AI_FIRST_INTENT_ENABLED","true");vi.stubEnv("OPENAI_TEST_USER_IDS","");vi.stubEnv("OPENAI_API_KEY","");generateContent.mockReset();});
+afterEach(()=>{vi.unstubAllEnvs();vi.useRealTimers();});
 function model(result:Partial<AIResult>){generateContent.mockResolvedValueOnce({response:{text:()=>JSON.stringify({confidence:.95,period,...result})}});}
 it.each(["quanto gastei com delivery mês passado?","quanto gastei na categoria Delivery?"])("reads the whole category when the classifier omits its filter: %s",async message=>{
   model({intent:"finance_query",category:"Alimentação",keyword:"delivery"});

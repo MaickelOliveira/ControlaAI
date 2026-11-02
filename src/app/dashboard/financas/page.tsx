@@ -14,6 +14,7 @@ import PlatformAccountMoveDialog from "@/components/PlatformAccountMoveDialog";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
 import FinanceBankSchedules from "@/components/FinanceBankSchedules";
+import BankLoanSummary from "@/components/BankLoanSummary";
 import {financeBankSchedules} from "@/lib/finance-bank-schedules";
 import {projectBankInstallments} from "@/lib/bank-installment-projections";
 import {normalizeBankText} from "@/lib/bank-question-parser";
@@ -205,7 +206,7 @@ function FinancasContent() {
     fetch("/api/categories").then(r => r.json()).then(d => {
       setCatsExpense(d.expense || []);
       setCatsIncome(d.income || []);
-      const defaults = { expense: ["Alimentação", "Delivery","Transporte","Moradia","Saúde","Educação","Lazer","Vestuário","Tecnologia","Serviços","Impostos","Funcionários","Marketing","Fornecedores","Outros"], income: ["Salário","Freelance","Vendas","Investimentos","Aluguel","Serviços","Reembolso","Outros"] };
+      const defaults = { expense: ["Alimentação", "Delivery","Transporte","Moradia","Saúde","Educação","Lazer","Vestuário","Tecnologia","Serviços","Impostos","Funcionários","Marketing","Fornecedores","Outros","Empréstimos","Parcelas do veículo"], income: ["Salário","Freelance","Vendas","Investimentos","Aluguel","Serviços","Reembolso","Outros","Empréstimos"] };
       setCustomExpense((d.expense || []).filter((c: string) => !defaults.expense.includes(c)));
       setCustomIncome((d.income || []).filter((c: string) => !defaults.income.includes(c)));
     }).catch(() => {});
@@ -503,6 +504,7 @@ function FinancasContent() {
         </div>
       </div>
 
+      {ledger?.bank&&<BankLoanSummary overview={ledger.bank.overview} filters={filters}/>}
       {ledger?.bank&&<FinanceBankSchedules items={bankSchedules} overview={ledger.bank.overview}/>}
       {ledger?.bank?.overview.agenda?.incomplete&&<p role="status" className="text-xs text-amber-ink">As recorrências bancárias podem estar incompletas: há dados em atualização ou indisponíveis.</p>}
       {ledger?.installmentAnchors?.incomplete&&<p role="status" className="text-xs text-amber-ink">Há mais parcelas bancárias do que este extrato consegue mostrar de uma vez. Ajuste o período ou confira no banco.</p>}

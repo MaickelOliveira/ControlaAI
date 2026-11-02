@@ -62,6 +62,12 @@ const cases = [
   ["Pagamento de empréstimo pessoal", "debit", "Empréstimos"],
   ["Recebimento de empréstimo contratado", "credit", "Empréstimos"],
   ["Parcela de crédito consignado", "debit", "Empréstimos"],
+  ["Parcela do veículo Sicredi", "debit", "Parcelas do veículo"],
+  ["Financiamento de carro Banco do Brasil", "debit", "Parcelas do veículo"],
+  ["Prestação do automóvel Itaú", "debit", "Parcelas do veículo"],
+  ["Empréstimo para aquisição de veículos Santander", "debit", "Parcelas do veículo"],
+  ["Juros do financiamento do veículo", "debit", "Encargos bancários"],
+  ["IOF financiamento do carro", "debit", "Encargos bancários"],
   ["Crédito de empréstimo consignado", "credit", "Empréstimos"],
   ["Juros do empréstimo pessoal", "debit", "Encargos bancários"],
   ["IOF do empréstimo consignado", "debit", "Encargos bancários"],
@@ -147,3 +153,7 @@ describe("loan principal, bank charges and investment yield categories", () => {
     expect(ledgerBalance(entries)).toEqual({ income: 0, expense: 0, balance: 0 });
   });
 });
+
+ it.each(["Parcela do seguro do carro","IPVA do veículo parcelado","Parcela dos pneus do carro"])("keeps vehicle running costs out of financing: %s",description=>{
+  expect(bankCategory(movement(description,"debit")).name).not.toBe("Parcelas do veículo");
+ });
