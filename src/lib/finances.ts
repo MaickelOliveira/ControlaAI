@@ -343,6 +343,7 @@ export function explicitMerchantInQuestion(message: string): string | null {
 export function expandMerchantAliases(term: string): string[] {
   const rawLower = term.trim().toLowerCase();
   const lower = normalizeMerchantText(term);
+  if(lower==="delivery")return [rawLower]; // A category is not an alias for a particular app.
   for (const variants of Object.values(MERCHANT_ALIASES)) {
     if (variants.some(v => {
       const normalizedVariant = normalizeMerchantText(v);
