@@ -553,7 +553,7 @@ function FinancasContent() {
             ) : (
               <div className="space-y-1">
                 {!ledger&&<p className="px-3 py-3 text-xs text-amber-ink">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
-                <FinanceLoanRows items={loanInstallments}/>
+                <FinanceLoanRows key={mode} items={loanInstallments} mode={mode} canEdit={ledger?.bank?.overview.manual_installments_available} onSaved={async()=>{await loadAll(mode);}}/>
                 {ledger?.bank&&<FinanceBankSchedules compact items={bankSchedules} overview={ledger.bank.overview}/>}
 
                 {/* Pendentes: recorrentes/parcelados */}

@@ -1,4 +1,6 @@
 import "server-only";
+import {mergeCreditPayments} from "./credit-payment-ledger";
+import {validCreditPlan,type CreditInstallmentPlan} from "./credit-installment-plan";
 import {openFinanceRpc} from "./open-finance-http";
 import type {OpenFinanceScope} from "./open-finance-access";
 import type {BankOverview} from "./open-finance-display";
@@ -47,8 +49,8 @@ export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;
     }
     throw Error("OF_LEDGER_LIMIT");
   }
-  const [report,overview]=await Promise.all([pages(),readBankOverview(scope)]);
-  return {report,overview};
+  const [report,overview,credit]=await Promise.all([pages(),readBankOverview(scope),readCreditData(scope,period)]);
+  return credit?{report:{...report,movements:mergeCreditPayments(report.movements,credit.payments)},overview:{...overview,installment_plans:credit.plans,manual_installments_available:true}}:{report,overview};
 }
 
 export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise<{items:BankInstallmentAnchor[];incomplete:boolean}> {
@@ -58,4 +60,13 @@ export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise
     return !row||typeof row.id!=="string"||typeof row.resource_id!=="string"||typeof row.description!=="string"||typeof row.resource_name!=="string"||typeof row.institution_name!=="string"||typeof row.amount!=="string"||typeof row.bill_month!=="string"||typeof row.synced_at!=="string"||typeof row.observed_installments!=="number"||typeof row.total_installments!=="number";
   }))throw Error("OF_INSTALLMENT_ANCHORS_INVALID");
   return result as {items:BankInstallmentAnchor[];incomplete:boolean};
+}
+
+export async function readCreditData(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<{payments:BankMovement[];plans:CreditInstallmentPlan[]}|null>{
+ let value:unknown;
+ try{value=await openFinanceRpc(scope,"zelo_of_credit_data",{p_from:period.from,p_to:period.to});}
+ catch(error){if(error instanceof Error&&error.message==="OF_FUNCTION_UNAVAILABLE")return null;throw error;}
+ const result=value as {payments?:BankMovement[];plans?:CreditInstallmentPlan[]};
+ if(!result||!Array.isArray(result.payments)||result.payments.length>2000||!Array.isArray(result.plans)||result.plans.length>2000||result.plans.some(p=>!validCreditPlan(p))||result.payments.some(p=>!p||typeof p.id!=="string"||typeof p.resource_id!=="string"||typeof p.resource_name!=="string"||typeof p.institution_name!=="string"||!["loan","financing"].includes(p.resource_type)||p.source_type!=="LOAN_REPAYMENT"||p.direction!=="debit"||typeof p.date!=="string"||p.date<period.from||p.date>period.to||typeof p.amount!=="string"||!/^\d{1,16}(\.\d{1,8})?$/.test(p.amount)||Number(p.amount)<=0||typeof p.currency!=="string"||!/^[A-Z]{3}$/.test(p.currency)))throw Error("OF_CREDIT_DATA_INVALID");
+ return result as {payments:BankMovement[];plans:CreditInstallmentPlan[]};
 }

@@ -56,3 +56,11 @@ describe("real provider normalization", () => {
     expect(bill.total_amount).toBe("100");
   });
 });
+it("keeps only documented paid releases and no inferred payment dates or private payload",async()=>{
+ const {normalizeCreditPayments}=await import("./open-finance-normalize");
+ const row={paymentId:"payment-1",paidDate:"2026-07-10",paidAmount:"123.45",currency:"BRL",private_data:"discard"};
+ expect(normalizeCreditPayments([row,row])).toEqual([{external_id:"payment-1",date:"2026-07-10",amount:"123.45",currency:"BRL"}]);
+ expect(normalizeCreditPayments(null)).toBeNull();
+ expect(()=>normalizeCreditPayments([{...row,paidDate:"2026-02-30"}])).toThrow();
+ expect(()=>normalizeCreditPayments([row,{...row,paidAmount:"100"}])).toThrow("CONFLICTING_CREDIT_PAYMENTS");
+});

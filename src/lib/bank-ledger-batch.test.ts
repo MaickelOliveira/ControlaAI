@@ -84,6 +84,7 @@ beforeEach(() => {
   storedReport = report(51);
   // Both contracts are simulated so the pre-fix reader can reproduce its actual 50-row serial pagination.
   boundary.rpc.mockImplementation(async (_scope: OpenFinanceScope, operation: string, params: Record<string, unknown>) => {
+    if (operation === "zelo_of_credit_data") return {payments:[],plans:[]};
     if (operation === "zelo_of_overview") return structuredClone(overview);
     if (operation === "zelo_of_ledger_report") return structuredClone(storedReport);
     if (operation === "zelo_of_report") {
@@ -110,10 +111,10 @@ describe("complete saved bank ledger batch reads", () => {
     expect(result.report).toEqual(before);
     expect(result.report.movements).toHaveLength(size);
     expect(result.report.movements.map(row => row.id)).toEqual(before.movements.map(row => row.id));
-    expect(result.overview).toEqual(overview);
+    expect(result.overview).toEqual({...overview,installment_plans:[],manual_installments_available:true});
     expect(storedReport).toEqual(before);
     expect(boundary.fetch).not.toHaveBeenCalled();
-    expect(boundary.rpc).toHaveBeenCalledTimes(2);
+    expect(boundary.rpc).toHaveBeenCalledTimes(3);
     expect(boundary.rpc).toHaveBeenCalledWith(scope, "zelo_of_ledger_report", {p_from: period.from, p_to: period.to});
     expect(boundary.rpc).toHaveBeenCalledWith(scope, "zelo_of_overview", {p_environment: scope.environment});
     expect(boundary.rpc.mock.calls.filter(([, operation]) => operation === "zelo_of_report")).toHaveLength(0);
@@ -124,7 +125,7 @@ describe("complete saved bank ledger batch reads", () => {
 
     await expect(readBankLedger(scope, period)).rejects.toThrow("OF_LEDGER_LIMIT");
     expect(boundary.fetch).not.toHaveBeenCalled();
-    expect(boundary.rpc).toHaveBeenCalledTimes(2);
+    expect(boundary.rpc).toHaveBeenCalledTimes(3);
     expect(boundary.rpc).toHaveBeenCalledWith(scope, "zelo_of_ledger_report", {p_from: period.from, p_to: period.to});
     expect(boundary.rpc.mock.calls.filter(([, operation]) => operation === "zelo_of_report")).toHaveLength(0);
   });
@@ -132,6 +133,7 @@ describe("complete saved bank ledger batch reads", () => {
   it("propagates a failed saved report read instead of providing a partial result or contacting the provider", async () => {
     const failure = new Error("FICTIONAL_STORAGE_UNAVAILABLE");
     boundary.rpc.mockImplementation(async (_scope: OpenFinanceScope, operation: string) => {
+      if (operation === "zelo_of_credit_data") return {payments:[],plans:[]};
       if (operation === "zelo_of_overview") return structuredClone(overview);
       throw failure;
     });
@@ -139,13 +141,13 @@ describe("complete saved bank ledger batch reads", () => {
     await expect(readBankLedger(scope, period)).rejects.toBe(failure);
     expect(boundary.fetch).not.toHaveBeenCalled();
     expect(boundary.rpc).toHaveBeenCalledWith(scope, "zelo_of_ledger_report", {p_from: period.from, p_to: period.to});
-    expect(boundary.rpc).toHaveBeenCalledTimes(2);
+    expect(boundary.rpc).toHaveBeenCalledTimes(3);
   });
 
   it("rejects the bounded SQL overflow cursor instead of accepting its first 2000 rows", async () => {
     storedReport = {...report(2000), next: movement(1999).id};
     await expect(readBankLedger(scope, period)).rejects.toThrow("OF_LEDGER_LIMIT");
-    expect(boundary.rpc).toHaveBeenCalledTimes(2);
+    expect(boundary.rpc).toHaveBeenCalledTimes(3);
     expect(boundary.fetch).not.toHaveBeenCalled();
   });
 
@@ -162,7 +164,7 @@ describe("complete saved bank ledger batch reads", () => {
     expect(boundary.rpc).toHaveBeenCalledWith(authorizedScope, "zelo_of_ledger_report", {p_from: period.from, p_to: period.to});
     expect(boundary.rpc).toHaveBeenCalledWith(authorizedScope, "zelo_of_overview", {p_environment: authorizedScope.environment});
     expect(boundary.rpc.mock.calls.every(([actualScope]) => actualScope === authorizedScope)).toBe(true);
-    expect(boundary.rpc).toHaveBeenCalledTimes(2);
+    expect(boundary.rpc).toHaveBeenCalledTimes(3);
     expect(boundary.fetch).not.toHaveBeenCalled();
   });
 
@@ -174,7 +176,7 @@ describe("complete saved bank ledger batch reads", () => {
     expect(boundary.rpc.mock.calls.filter(([, operation]) => operation === "zelo_of_ledger_report")).toHaveLength(0);
     expect(boundary.rpc.mock.calls.filter(([, operation]) => operation === "zelo_of_report")).toHaveLength(2);
     expect(boundary.rpc).toHaveBeenCalledWith(scope, "zelo_of_report", {p_from: period.from, p_to: period.to, p_after: null});
-    expect(boundary.rpc).toHaveBeenCalledTimes(3);
+    expect(boundary.rpc).toHaveBeenCalledTimes(4);
     expect(boundary.fetch).not.toHaveBeenCalled();
   });
 });

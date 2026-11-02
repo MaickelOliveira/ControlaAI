@@ -1,3 +1,4 @@
+import {bankDebtCategory} from "./bank-debt";
 import type {BankMovement} from "./open-finance-report";
 import {descriptionExpenseCategory,descriptionIncomeCategory,isNonFoodDeliveryDescription} from "./expense-category";
 
@@ -12,6 +13,8 @@ export function bankCategory(movement:BankMovement):BankCategory {
   if(movement.kind==="excluded")return {name:"Transferências e pagamentos",source:"excluded"};
   if(movement.resource_type==="account"&&movement.user_category?.trim()===OWN_ACCOUNT_TRANSFER_CATEGORY)return {name:OWN_ACCOUNT_TRANSFER_CATEGORY,source:"excluded"};
   if(movement.user_category?.trim())return {name:movement.user_category.trim(),source:"user"};
+  if(movement.credit_category)return {name:movement.credit_category,source:"provider"};
+  if(movement.resource_type==="loan"||movement.resource_type==="financing")return {name:bankDebtCategory({name:movement.resource_name}),source:"provider"};
   const income=movement.resource_type!=="card"&&movement.direction==="credit";
   const merchant=income?descriptionIncomeCategory(movement.description):descriptionExpenseCategory(movement.description);
   if(merchant)return {name:merchant,source:"description"};

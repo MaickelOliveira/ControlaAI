@@ -74,7 +74,8 @@ export function normalizeCredit(family: "loans" | "financings", row: PolpObject)
   const payments=object(row.payments), schedule=object(row.scheduled_instalments);
   const makeMoney=(value:unknown)=>money(value==null?null:{amount:value,currency:row.currency});
   const contract=makeMoney(row.contract_amount), outstanding=makeMoney(payments.contract_outstanding_balance), next=makeMoney(family==="loans"?row.next_instalment_amount:null);
-  return { resource_external_id:polpExternalId(row.id),resource_type:family==="loans"?"loan":"financing",currency:currencyOf(contract,outstanding,next),contract_amount:contract.amount,outstanding_amount:outstanding.amount,next_installment_amount:next.amount,paid_installments:Number.isInteger(schedule.paid_instalments)?schedule.paid_instalments:null,remaining_installments:Number.isInteger(schedule.contract_remaining_number)?schedule.contract_remaining_number:null,due_date:sourceDate(row.due_date),source_updated_at:sourceText(row.updated_at,40) };
+  const history=normalizeCreditPayments(payments.releases);
+  return { payment_history:history,resource_external_id:polpExternalId(row.id),resource_type:family==="loans"?"loan":"financing",currency:currencyOf(contract,outstanding,next),contract_amount:contract.amount,outstanding_amount:outstanding.amount,next_installment_amount:next.amount,paid_installments:Number.isInteger(schedule.paid_instalments)?schedule.paid_instalments:null,remaining_installments:Number.isInteger(schedule.contract_remaining_number)?schedule.contract_remaining_number:null,due_date:sourceDate(row.due_date),source_updated_at:sourceText(row.updated_at,40) };
 }
 export function normalizeReserves(accountId: string, rows: PolpObject[]): PolpObject[] {
   return rows.flatMap(row=>{
@@ -89,4 +90,20 @@ export function normalizeReserves(accountId: string, rows: PolpObject[]): PolpOb
       return {external_id:`${id}.${balance.currency}`,parent_external_id:accountId,resource_type:"reserve",name:sourceText(row.reserved_name ?? "Reserva da conta",250),subtype:"reserved-balances",currency:balance.currency,available_amount:balance.amount,source_updated_at:sourceText(row.updated_at,40)};
     });
   });
+}
+
+/** Repayment history is sourced only from payments.releases, never contract dates. */
+export function normalizeCreditPayments(releases:unknown):PolpObject[]|null{
+ if(releases==null)return null;
+ if(!Array.isArray(releases)||releases.length>5000)throw Error("INVALID_CREDIT_PAYMENTS");
+ const seen=new Map<string,string>();
+ return releases.flatMap(value=>{
+  const row=polpObject(value),id=polpExternalId(row.paymentId),date=sourceDate(row.paidDate);
+  const amount=money({amount:row.paidAmount,currency:row.currency});
+  if(!date||!amount.amount||Number(amount.amount)<=0)throw Error("INVALID_CREDIT_PAYMENTS");
+  const payment={external_id:id,date,amount:amount.amount,currency:amount.currency};
+  const signature=JSON.stringify(payment);
+  if(seen.has(id)){if(seen.get(id)!==signature)throw Error("CONFLICTING_CREDIT_PAYMENTS");return [];}
+  seen.set(id,signature);return [payment];
+ });
 }

@@ -43,7 +43,7 @@ export function ledgerBalance(entries:readonly LedgerEntry[]) {
   return {income:income/100,expense:expense/100,balance:(income-expense)/100};
 }
 export function financeOrigin(entry:LedgerEntry):string {
-  return entry.source==="bank"?`${entry.bank?.resource_type==="card"?"Cartão":"Conta"} · ${entry.bank?.institution_name}`:entry.source==="whatsapp"?"WhatsApp":"Plataforma";
+  return entry.source==="bank"?`${entry.bank?.resource_type==="card"?"Cartão":entry.bank?.resource_type==="loan"?"Empréstimo":entry.bank?.resource_type==="financing"?"Financiamento":"Conta"} · ${entry.bank?.institution_name}`:entry.source==="whatsapp"?"WhatsApp":"Plataforma";
 }
 /** Signed amounts: credit card refunds stay negative instead of disappearing from charts. */
 export function ledgerExpenseGroups(entries:readonly LedgerEntry[],groupBy:"origin"|"category") {
