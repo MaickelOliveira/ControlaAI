@@ -22,6 +22,7 @@ function foodDelivery(text: string): boolean {
 }
 const bankingPriorityRules: Array<[RegExp, string]> = [
   [/\b(?:iof|juros\s+(?:bancarios|do\s+(?:cartao|emprestimo|financiamento)|de\s+mora|mora|rotativo|sobre\s+(?:saldo|emprestimo|financiamento))|encargos\s+(?:bancarios|financeiros)|tarifa\s+(?:bancaria|do\s+banco)|anuidade\s+(?:do\s+cartao|diferenciada|cartao))\b|^juros$/, "Encargos bancários"],
+  [/^(?!.*\b(?:seguros?|ipva|licenciamento|manutencao|oficina|pneus?|combustivel|gasolina)\b)(?=.*\b(?:parcelas?|prestacoes?|prestacao|financiamentos?|emprestimos?|cdc)\b)(?=.*\b(?:carros?|veiculos?|automoveis|automovel|automotores|motos?|motocicletas?)\b)/, "Parcelas do veículo"],
   [/\b(?:emprestimos?|consignado|credito\s+(?:pessoal|facil\s+mobi))\b/, "Empréstimos"],
 ];
 const priorityRules: Array<[RegExp, string]> = [

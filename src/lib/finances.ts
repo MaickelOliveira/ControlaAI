@@ -42,7 +42,7 @@ export function parseFinanceDestinationMode(text: string): FinanceMode | null {
 export const CATEGORIES_EXPENSE = [
   "Alimentação", "Transporte", "Moradia", "Saúde", "Educação",
   "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Encargos bancários",
-  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência", "Empréstimos", "Inteligência Artificial", "Delivery", "Assinaturas",
+  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência", "Empréstimos", "Inteligência Artificial", "Delivery", "Assinaturas", "Parcelas do veículo",
 ];
 export const CATEGORIES_INCOME = [
   "Salário", "Freelance", "Vendas", "Investimentos", "Aluguel",
@@ -58,12 +58,12 @@ export const CATEGORIES_INCOME = [
 const CATEGORIES_EXPENSE_ES = [
   "Alimentación", "Transporte", "Vivienda", "Salud", "Educación",
   "Ocio", "Ropa", "Tecnología", "Servicios", "Impuestos", "Cargos bancarios",
-  "Empleados", "Marketing", "Proveedores", "Otros", "Transferencia", "Préstamos", "Inteligencia Artificial", "Comida a domicilio", "Suscripciones",
+  "Empleados", "Marketing", "Proveedores", "Otros", "Transferencia", "Préstamos", "Inteligencia Artificial", "Comida a domicilio", "Suscripciones", "Cuotas del vehículo",
 ];
 const CATEGORIES_EXPENSE_PTPT = [
   "Alimentação", "Transporte", "Habitação", "Saúde", "Educação",
   "Lazer", "Vestuário", "Tecnologia", "Serviços", "Impostos", "Encargos bancários",
-  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência", "Empréstimos", "Inteligência Artificial", "Delivery", "Assinaturas",
+  "Funcionários", "Marketing", "Fornecedores", "Outros", "Transferência", "Empréstimos", "Inteligência Artificial", "Delivery", "Assinaturas", "Prestações do veículo",
 ];
 const CATEGORIES_INCOME_ES = [
   "Salario", "Freelance", "Ventas", "Inversiones", "Alquiler",

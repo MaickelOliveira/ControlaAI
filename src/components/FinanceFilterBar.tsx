@@ -140,7 +140,7 @@ export default function FinanceFilterBar({
         )}
       </div>
 
-      {accounts&&<label className="flex min-w-0 items-center gap-2 text-xs text-muted"><span>Conta</span><select aria-label="Conta ou cartão" value={value.account??""} onChange={e=>onChange({...value,account:e.target.value})} className="max-w-full rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink sm:max-w-72"><option value="">Todas as contas e cartões</option>{accounts.map(account=><option key={account.value} value={account.value}>{account.label}</option>)}</select></label>}
+      {accounts&&<label className="flex min-w-0 items-center gap-2 text-xs text-muted"><span>Conta</span><select aria-label="Conta, cartão ou empréstimo" value={value.account??""} onChange={e=>onChange({...value,account:e.target.value})} className="max-w-full rounded-xl border border-line bg-surface px-3 py-1.5 text-xs text-ink sm:max-w-72"><option value="">Todas as contas, cartões e empréstimos</option>{accounts.map(account=><option key={account.value} value={account.value}>{account.label}</option>)}</select></label>}
 
       {/* Busca */}
       <input value={searchInput} onChange={e => setSearchInput(e.target.value)}

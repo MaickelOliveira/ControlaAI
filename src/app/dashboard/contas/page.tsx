@@ -81,7 +81,7 @@ export default function ContasPage() {
 
   return <div className="z-page z-accounts-page">
     <div className="z-page-heading flex items-center justify-between gap-3">
-      <div><PageTitle icon="wallet">{es ? "Cuentas" : "Contas"}</PageTitle><p className="text-sm text-muted mt-1">{es ? "Organiza tus cuentas manuales y conecta bancos de Brasil para consultar saldos, tarjetas y movimientos." : "Saldos, cartões e investimentos dos seus bancos, em uma visão simples."}</p></div>
+      <div><PageTitle icon="wallet">{es ? "Cuentas" : "Contas"}</PageTitle><p className="text-sm text-muted mt-1">{es ? "Organiza tus cuentas manuales y conecta bancos de Brasil para consultar saldos, tarjetas y movimientos." : "Saldos, cartões, empréstimos, financiamentos e investimentos dos seus bancos."}</p></div>
       <button disabled={!mode} onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold disabled:opacity-50">+ {es ? "Nueva cuenta" : "Conta manual"}</button>
     </div>
 
