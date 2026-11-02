@@ -1,4 +1,5 @@
 import "server-only";
+import {replyModeSwitch} from "./bot-replies";
 import { createCompany, getCompanies, multiCompanyEnabled, requireCompany, type Company } from "./companies";
 import { currentCompanyContext, runWithCompanyContext, setCompanyContext } from "./company-context";
 import { getUserById, hasAccess, type User } from "./users";
@@ -16,7 +17,8 @@ function asksForBusinessWorkspace(text: string): boolean {
   return /\b(?:empresa|empresarial|negocio|pj|funcionarios?|colaboradores?|clientes?|fornecedores?|nota(?:s)? fiscal(?:is)?|folha de pagamento|pro labore)\b/.test(value);
 }
 function isModeSwitchToPersonal(text: string): boolean {
-  return /^(?:muda|mude|mudar|troca|troque|trocar|passa|passe|passar|ir|usar|usa|quero|voltar|cambia|cambie|cambiar|pasa|pase|pasar|quiero|volver)\s+(?:(?:para|pro|ao|a|el|o|no|en)\s+)?(?:(?:modo|espaco|area|conta)\s+)?(?:pessoal|personal)$/.test(normalize(text).replace(/[.!?]+$/, ""));
+  const value=normalize(text).replace(/[.!?]+$/, "").trim();
+  return /^(?:(?:muda|mude|mudar|troca|troque|trocar|passa|passe|passar|ir|usar|usa|quero|voltar|cambia|cambie|cambiar|pasa|pase|pasar|quiero|volver)\s+)?(?:(?:para|pro|ao|a|no|en)\s+)?(?:(?:o|el)\s+)?(?:(?:modo|espaco|area|conta)\s+)?(?:pessoal|personal)$/.test(value);
 }
 function isGeneralConversation(text: string): boolean {
   const value = normalize(text);
@@ -65,12 +67,23 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
     const all=await getCompanies(user.id,true),companies=all.filter(c=>!c.archivedAt),archivedCompanyIds=all.filter(c=>c.archivedAt).map(c=>c.id);
     const mode = link.access === "both" ? link.activeWorkspaceMode ?? user.activeMode : link.access;
     let selected = link.activeCompanyId ? companies.find(company => company.id === link.activeCompanyId) : undefined;
-    if (link.activeCompanyId && !selected) {
+    const pending = await getPendingAction(msg.from);
+    if(pending&&pending.userId!==user.id){await clearPendingAction(msg.from);throw Error("COMPANY_OWNER_MISMATCH");}
+    // An explicit personal switch supersedes a pending business choice. Never
+    // replay the held business action in the participant's personal workspace.
+    if(isModeSwitchToPersonal(text)){
+      if(link.access==="business"){await sendText(msg.from,es?"Este número solo tiene acceso al modo empresarial.":"Este número tem acesso somente ao modo empresarial.");return;}
+      const personal=all.find(company=>company.isDefault)??all[0];
+      if(!personal)throw Error("COMPANY_REQUIRED");
+      await clearPendingAction(msg.from);
+      if(link.access==="both")await setPhoneWorkspace(user.id,link.phone,personal.id,"personal");
+      activate(user.id,personal,"personal",link.access,archivedCompanyIds);
+      await sendText(msg.from,replyModeSwitch("personal",user.locale));return;
+    }
+    if (mode==="business" && link.activeCompanyId && !selected) {
       await clearPendingAction(msg.from);
       await sendText(msg.from,es?"La empresa seleccionada ya no está activa. Elige otra empresa antes de repetir el pedido.":"A empresa selecionada não está mais ativa. Escolha outra antes de repetir o pedido.");return;
     }
-    const pending = await getPendingAction(msg.from);
-    if(pending&&pending.userId!==user.id){await clearPendingAction(msg.from);throw Error("COMPANY_OWNER_MISMATCH");}
     const pendingMode=pending?.workspaceMode??(pending&&"mode" in pending&&(pending.mode==="personal"||pending.mode==="business")?pending.mode:undefined);
     if(pendingMode&&pendingMode!==mode&&!companyCommand){
       await clearPendingAction(msg.from);await sendText(msg.from,es?"El pedido pendiente pertenece a otro modo. Hazlo nuevamente en el modo correcto.":"O pedido pendente pertence a outro modo. Faça novamente no modo correto.");return;

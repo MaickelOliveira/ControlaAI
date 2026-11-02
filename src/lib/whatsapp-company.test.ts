@@ -12,7 +12,7 @@ vi.mock("./company-context", () => ({ runWithCompanyContext: (callback: () => Pr
 import { companyChoice, withWhatsAppCompany } from "./whatsapp-company";
 const companies = [{ id: "a", name: "Empresa A", isDefault: true }, { id: "b", name: "Empresa B", isDefault: false }];
 beforeEach(() => {
-  vi.clearAllMocks(); m.enabled.mockReturnValue(true); m.owner.mockResolvedValue("owner"); m.user.mockResolvedValue({ id: "owner", activeMode: "business", locale: "pt-BR" });
+  vi.clearAllMocks();m.workspace.mockReset();m.clear.mockReset(); m.enabled.mockReturnValue(true); m.owner.mockResolvedValue("owner"); m.user.mockResolvedValue({ id: "owner", activeMode: "business", locale: "pt-BR" });
   m.links.mockResolvedValue([{ phone: "5511", userId: "owner", access: "both" }]); m.list.mockResolvedValue(companies); m.pending.mockResolvedValue(null); m.paused.mockResolvedValue(false);
   m.require.mockImplementation(async (_owner, id) => companies.find(company => company.id === id));
 });
@@ -68,9 +68,10 @@ it("does not interrupt a scoped follow-up or a switch back to personal", async (
   expect(next).toHaveBeenCalledOnce(); expect(m.savePending).not.toHaveBeenCalled();
   m.pending.mockResolvedValue(null);
   await withWhatsAppCompany({ from: "5511", text: "mudar para modo pessoal" }, next);
-  expect(next).toHaveBeenCalledTimes(2); expect(m.savePending).not.toHaveBeenCalled();
+  expect(next).toHaveBeenCalledTimes(1); expect(m.savePending).not.toHaveBeenCalled();
+  expect(m.workspace).toHaveBeenCalledWith("owner","5511","a","personal");
   await withWhatsAppCompany({ from: "5511", text: "oi" }, next);
-  expect(next).toHaveBeenCalledTimes(3); expect(m.savePending).not.toHaveBeenCalled();
+  expect(next).toHaveBeenCalledTimes(2); expect(m.savePending).not.toHaveBeenCalled();
 });
 it("asks again when a new business command replaces an unfinished action", async () => {
   m.links.mockResolvedValue([{ phone: "5511", access: "both", activeCompanyId: "a", activeWorkspaceMode: "business" }]);
@@ -157,4 +158,28 @@ it("marks a dedicated business participant as unable to access personal rows",as
  await withWhatsAppCompany({from:"5511",text:"1"},next);
  expect(next).toHaveBeenCalledOnce();
  expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({mode:"business",allowPersonal:false,allowBusiness:true}));
+});
+it.each(["pessoal","modo pessoal","mudar para o modo pessoal","personal","modo personal"])("accepts %s during a held company choice without replaying its business request",async text=>{
+ m.links.mockResolvedValue([{phone:"5511",access:"both",activeCompanyId:"b",activeWorkspaceMode:"business"}]);
+ m.pending.mockResolvedValue({type:"company_selection",userId:"owner",resume:{text:"paguei fornecedor 500",providerMessageId:"held-business"}});
+ const next=vi.fn();await withWhatsAppCompany({from:"5511",text},next);
+ expect(m.workspace).toHaveBeenCalledExactlyOnceWith("owner","5511","a","personal");
+ expect(m.clear).toHaveBeenCalledWith("5511");expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({mode:"personal",companyId:"a"}));
+ expect(m.send).toHaveBeenCalledWith("5511",expect.stringContaining("Pessoal"));expect(m.savePending).not.toHaveBeenCalled();expect(next).not.toHaveBeenCalled();
+});
+it("keeps the next financial question personal after switching out of a company prompt",async()=>{
+ let mode="business";m.links.mockImplementation(async()=>[{phone:"5511",access:"both",activeCompanyId:"a",activeWorkspaceMode:mode}]);m.workspace.mockImplementation(async(_owner,_phone,_company,nextMode)=>{mode=nextMode;});
+ m.pending.mockResolvedValue({type:"company_selection",userId:"owner",resume:{text:"paguei fornecedor 500"}});
+ m.clear.mockImplementation(async()=>{m.pending.mockResolvedValue(null);});const next=vi.fn();
+ await withWhatsAppCompany({from:"5511",text:"modo pessoal"},next);
+ await withWhatsAppCompany({from:"5511",text:"descreva o que gastei mês passado por categoria"},next);
+ expect(next).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({text:"descreva o que gastei mês passado por categoria"}));
+ expect(m.scope).toHaveBeenLastCalledWith(expect.objectContaining({mode:"personal"}));expect(m.savePending).not.toHaveBeenCalled();
+});
+it("refuses a personal switch for a business-only participant and preserves foreign-owner protection",async()=>{
+ m.links.mockResolvedValue([{phone:"5511",access:"business",activeCompanyId:"a",activeWorkspaceMode:"business"}]);const next=vi.fn();
+ await withWhatsAppCompany({from:"5511",text:"modo pessoal"},next);expect(m.workspace).not.toHaveBeenCalled();expect(next).not.toHaveBeenCalled();
+ expect(m.send).toHaveBeenCalledWith("5511",expect.stringContaining("somente ao modo empresarial"));
+ m.links.mockResolvedValue([{phone:"5511",access:"both"}]);m.pending.mockResolvedValue({type:"company_selection",userId:"foreign"});
+ await expect(withWhatsAppCompany({from:"5511",text:"pessoal"},next)).rejects.toThrow("COMPANY_OWNER_MISMATCH");expect(m.workspace).not.toHaveBeenCalled();
 });
