@@ -15,6 +15,7 @@ import {sendRequestedBankBill} from "@/lib/open-finance-bill-whatsapp";
 import {answerBankWhatsAppMessage,answerConnectedFinanceQuery} from "@/lib/open-finance-whatsapp";
 import {answerStructuredBankQuery} from "@/lib/structured-bank-query";
 import {connectedRecurringAppendix} from "@/lib/connected-recurring-query";
+import {connectedEndingCommitmentsAnswer} from "@/lib/connected-ending-commitments";
 import {recurringQueryKind,isUnregisteredBankRecurringRequest,isUnreliableRecurringValueRequest,isRemainingKnownInstallmentsRequest} from "@/lib/recurring-query-kind";
 import {formatRemainingKnownInstallments} from "@/lib/remaining-installments-answer";
 import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
@@ -5048,7 +5049,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const requestedKind=recurringQueryKind(messageText);
         const registered=await getRecurringByUser(user.id, recurringMode, "active", true);
         const recs=registered.filter(item=>(!requestedKind||item.recurrenceType===requestedKind)&&(ai.installmentForecast||(!ai.period?.from||item.nextDueDate>=ai.period.from)&&(!ai.period?.to||item.nextDueDate<=ai.period.to)));
-        const appendix = await connectedRecurringAppendix(user, recurringMode, ai, messageText, todayStrBR(), registered);
+        const appendix = ai.installmentForecast ? "" : await connectedRecurringAppendix(user, recurringMode, ai, messageText, todayStrBR(), registered);
         const sendRecurring = (reply: string) => wppSendLong(from, `${reply}${appendix ? `\n\n${appendix}` : ""}`, 3500, !!appendix);
         if(isRemainingKnownInstallmentsRequest(messageText)){
           const label=recurringMode==="business"?"Empresa":"Pessoal";
@@ -5066,71 +5067,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (ai.installmentForecast) {
           const targetDate = ai.period?.to;
           if (!targetDate) {
-            await sendRecurring(localized(user.locale,
-              "❓ Até qual mês você quer saber quais parcelas terminam?",
-              "❓ ¿Hasta qué mes quieres saber qué cuotas terminan?"));
+            await wppSend(from, localized(user.locale,
+              "❓ Até qual data ou mês você quer saber quais parcelas e empréstimos terminam?",
+              "❓ ¿Hasta qué fecha o mes quieres saber qué cuotas y préstamos terminan?"));
             break;
           }
-          const today = todayStrBR();
-          const addMonths = (date: string, months: number) => {
-            const [year, month, day] = date.split("-").map(Number);
-            const shifted = new Date(year, month - 1 + months, 1, 12, 0, 0);
-            const lastDay = new Date(shifted.getFullYear(), shifted.getMonth() + 1, 0).getDate();
-            return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
-          };
           const imported = await getImportedInstallmentStatuses(user.id, recurringMode);
-          // Importações novas também criam uma pendência recorrente real para
-          // permitir "Pago" no painel/bot. Mantemos o fallback histórico para
-          // lançamentos antigos, mas nunca contamos a mesma compra duas vezes.
-          const importedWithoutSchedule = imported.filter(item => !recs.some(recurring =>
-            recurring.recurrenceType === "installment"
-            && recurring.totalInstallments === item.total
-            && Math.abs(recurring.amount - item.amount) <= 0.009
-            && descriptionsLikelyMatch(item.description, recurring.description),
-          ));
-          const ending = [
-            ...importedWithoutSchedule.map(item => ({
-              description: item.description,
-              amount: item.amount,
-              current: item.current,
-              total: item.total,
-              endDate: addMonths(item.date, item.remaining),
-            })),
-            ...recs.filter(item => item.recurrenceType === "installment" && item.totalInstallments && item.paidInstallments < item.totalInstallments).map(item => {
-              const total = item.totalInstallments!;
-              const installmentsToPay = total - item.paidInstallments;
-              return {
-                description: item.description,
-                amount: item.amount,
-                current: item.paidInstallments + 1,
-                total,
-                endDate: addMonths(item.nextDueDate, installmentsToPay - 1),
-              };
-            }),
-          ].filter(item => item.endDate >= today && item.endDate <= targetDate)
-            .sort((a, b) => a.endDate.localeCompare(b.endDate) || a.description.localeCompare(b.description));
-
-          const targetLabel = new Date(`${targetDate}T12:00:00`).toLocaleDateString(
-            user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR",
-            { month: "long", year: "numeric" },
-          );
-          if (!ending.length) {
-            await sendRecurring(localized(user.locale,
-              `Não encontrei parcelas cadastradas que terminem até *${targetLabel}*.`,
-              `No encontré cuotas registradas que terminen hasta *${targetLabel}*.`));
-            break;
-          }
-          const monthlyRelief = ending.reduce((sum, item) => sum + item.amount, 0);
-          const lines = ending.map(item => {
-            const endLabel = new Date(`${item.endDate}T12:00:00`).toLocaleDateString(
-              user.locale === "es" ? "es-419" : user.locale === "pt-PT" ? "pt-PT" : "pt-BR",
-              { month: "2-digit", year: "numeric" },
-            );
-            return `• ${item.description} — ${item.current}/${item.total} · ${user.locale === "es" ? "termina" : "termina em"} ${endLabel} · ${formatCurrency(item.amount)}/${user.locale === "es" ? "mes" : "mês"}`;
-          }).join("\n");
-          await sendRecurring(localized(user.locale,
-            `💳 *Parcelas que terminam até ${targetLabel}:*\n\n${lines}\n\n✅ Depois que todas terminarem, você deixará de pagar *${formatCurrency(monthlyRelief)} por mês*.`,
-            `💳 *Cuotas que terminan hasta ${targetLabel}:*\n\n${lines}\n\n✅ Cuando todas terminen, dejarás de pagar *${formatCurrency(monthlyRelief)} por mes*.`));
+          const answer = await connectedEndingCommitmentsAnswer(user, recurringMode, todayStrBR(), targetDate, registered, imported, user.locale);
+          await wppSendLong(from, answer, 3500, true);
           break;
         }
         const keyword = ai.keyword?.trim();

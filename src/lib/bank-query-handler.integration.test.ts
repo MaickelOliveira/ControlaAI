@@ -200,12 +200,23 @@ it("separates annuities from purchases using bank records without falling into g
 });
 it("says bank installment end dates cannot be projected from undated observations",async()=>{
  m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message,new Date(2026,9,15,12,0,0)));
- m.rpc.mockResolvedValue({incomplete:false,items:[{id:"undated",kind:"installment",resource_id:"card",description:"Geladeira",institution_name:"Banco fictício",resource_name:"Gold",amount:"80",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:10,observed_installments:2}]});
+ const agenda={incomplete:false,items:[{id:"undated",kind:"installment",resource_id:"card",description:"Geladeira",institution_name:"Banco fictício",resource_name:"Gold",amount:"80",currency:"BRL",due_date:null,synced_at:"2026-10-11",total_installments:10,observed_installments:2}]};
+ m.rpc.mockImplementation(async(_scope,op)=>op==="zelo_of_overview"?{connections:[{id:"bank",status:"active",institution_name:"Banco fictício"}],resources:[{id:"card",connection_id:"bank",resource_type:"card"}],credit:[],agenda}:op==="zelo_of_credit_data"?{payments:[],plans:[],progress:[]}:{items:[],incomplete:false});
  await handleIncomingMessage({from:"5511999990000",text:"Quais parcelamentos terminam neste mês?"});
  const response=m.send.mock.calls.map(call=>call[1]).join("\n");
- expect(response).toContain("Não projetei o mês de término dos parcelamentos bancários");
+ expect(response).toContain("sem dados suficientes ficaram fora do total");
  expect(response).not.toContain("termina em 10/2026");
  expect(m.confirm).not.toHaveBeenCalled();
+});
+it("answers the exact monthly-relief request with loans and bank installments ending by January only",async()=>{
+ vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date("2026-11-02T15:00:00Z"));
+ try{
+  m.process.mockImplementation(async(message:string)=>getExplicitRecurringQueryResult(message));
+  m.rpc.mockImplementation(async(_scope,op)=>op==="zelo_of_overview"?{connections:[{id:"bank",status:"active",institution_name:"Banco fictício"}],resources:[{id:"loan",connection_id:"bank",resource_type:"loan",name:"Empréstimo que termina"},{id:"later",connection_id:"bank",resource_type:"loan",name:"Empréstimo posterior"},{id:"card",connection_id:"bank",resource_type:"card",name:"Cartão fictício"}],credit:[{resource_id:"loan",currency:"BRL",outstanding_amount:"100",next_installment_amount:"30",due_date:"2026-12-20"},{resource_id:"later",currency:"BRL",outstanding_amount:"900",next_installment_amount:"800",due_date:"2027-02-01"}],agenda:{items:[],incomplete:false}}:op==="zelo_of_credit_data"?{payments:[],plans:[],progress:[{resource_id:"loan",periodicity:"MENSAL"},{resource_id:"later",periodicity:"MENSAL"}]}:{items:[{id:"purchase",resource_id:"card",description:"Compra que termina",resource_name:"Cartão fictício",institution_name:"Banco fictício",amount:"20",currency:"BRL",bill_month:"2026-10-01",observed_installments:1,total_installments:3,synced_at:"2026-11-02"}],incomplete:false});
+  await handleIncomingMessage({from:"5511999990000",text:"quanto elimino de contas ate janeiro"});
+  const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
+  expect(reply).toContain("R$ 50,00 por mês");expect(reply).toContain("31/01/2027");expect(reply).toContain("Empréstimo que termina");expect(reply).toContain("Compra que termina");expect(reply).not.toContain("Empréstimo posterior");expect(reply).not.toContain("Assinaturas recorrentes");expect(m.confirm).not.toHaveBeenCalled();
+ }finally{vi.useRealTimers();}
 });
 afterEach(() => vi.unstubAllEnvs());
 it("answers the exact reported parcelados phrase with manual and bank installments only",async()=>{

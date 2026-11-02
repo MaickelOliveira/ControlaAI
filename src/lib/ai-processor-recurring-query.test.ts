@@ -4,6 +4,14 @@ vi.mock("@google/generative-ai",()=>({GoogleGenerativeAI:class{getGenerativeMode
 vi.mock("./whatsapp-config",()=>({getConfig:vi.fn(async()=>({geminiApiKey:"fake-recurring-key"}))}));
 import {getExplicitRecurringQueryResult,processMessage,type AiContext} from "./ai-processor";
 const context:AiContext={user:{id:"recurring-fixture",activeMode:"personal",locale:"pt-BR",customCategoriesExpense:[],customCategoriesIncome:[]},history:[]};
+it.each(["quanto elimino de contas ate janeiro","quanto elimino de emprestimos e parcelados ate janeiro","quais empréstimos terminam até janeiro"])("recognizes a monthly relief forecast through the next January: %s",async message=>{
+ vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date("2026-11-02T12:00:00-03:00"));
+ try{
+  generateContent.mockResolvedValue({response:{text:()=>JSON.stringify({intent:"finance_query",confidence:.98,period:{from:"2026-11-01",to:"2026-11-30"}})}});
+  expect(await processMessage(message,context)).toMatchObject({intent:"recurring_query",installmentForecast:true,period:{from:"2026-11-02",to:"2027-01-31"}});
+  expect(getExplicitRecurringQueryResult("Elimine minhas parcelas",new Date(2026,10,2))).toBeNull();
+ }finally{vi.useRealTimers();}
+});
 beforeEach(()=>{vi.stubEnv("AI_FIRST_INTENT_ENABLED","true");vi.stubEnv("OPENAI_TEST_USER_IDS","");vi.stubEnv("OPENAI_API_KEY","");generateContent.mockReset()});afterEach(()=>vi.unstubAllEnvs());
 it.each(["o que tenho de parcelados","quanto tenho de parcelados","quais contas recorrentes eu tenho","me mostra minhas assinaturas"])("recognizes the customer's wording as a schedule lookup: %s",message=>{
  expect(getExplicitRecurringQueryResult(message)).toMatchObject({intent:"recurring_query"});
