@@ -38,9 +38,9 @@ export function BarChartComponent({ data }: { data: BarEntry[] }) {
   );
 }
 
-export function DailyFlowChartComponent({ data }: { data: FlowEntry[] }) {
+export function DailyFlowChartComponent({ data, fill = false }: { data: FlowEntry[]; fill?: boolean }) {
   return (
-    <ResponsiveContainer width="100%" height={230}>
+    <ResponsiveContainer width="100%" height={fill ? "100%" : 230}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--z-chart-grid)" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--z-chart-text)" }} axisLine={false} tickLine={false} minTickGap={22} />
