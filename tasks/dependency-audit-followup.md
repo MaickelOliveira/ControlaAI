@@ -40,3 +40,18 @@ A CI da correção da hero parou porque o prazo anterior terminou na virada de d
 - [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq): os caminhos afetados são v3/v5/v6 com buffer externo. npm ls confirmou uuid 8.3.2 somente através de exceljs 4.4.0; as duas chamadas em node_modules/exceljs/lib/xlsx/xform/sheet/cf-ext/cf-rule-ext-xform.js usam v4 sem buffer. A aplicação não importa uuid diretamente. A sugestão automática regride exceljs para 3.4.0; não aplicar essa mudança incompatível para liberar uma correção visual.
 
 As duas exceções existentes foram reavaliadas até 31/10/2026 UTC, com os mesmos limites de alcance. Alertas novos, críticos, desconhecidos, falha de consulta ou prazo vencido continuam bloqueando a CI. Os achados permanecem pendentes de correção das bibliotecas e não são declarados resolvidos. Evidências locais: auditoria npm, árvore npm ls e teste de src/lib/nfse-certificate.test.ts.
+
+## Liberação de empréstimos — 02/11/2026
+
+Atualizações corrigidas, sem downgrade de Next ou ExcelJS: node-forge 1.4.0 → 1.4.2; qs 6.16.0 → 6.17.1; glob 10.5.0 → 14.0.2 somente sob rimraf 5.0.10; minimatch 10.2.6 → 11.0.1 somente sob typescript-estree; uuid 8.3.2 → 11.1.1 somente sob ExcelJS. A nova versão de glob continua oferecendo glob/globSync, usados por rimraf; uuid 11.1.1 oferece require CommonJS e v4, usados por ExcelJS. Testes geram e reabrem uma planilha com barras condicionais e verificam remoção com glob exclusivamente em diretório temporário. Os testes de certificado PKCS#12 e importação de fatura também passaram.
+
+Referências oficiais: [forge 1.4.2](https://github.com/digitalbazaar/forge/releases/tag/v1.4.2), [glob 14.0.2](https://github.com/isaacs/node-glob/releases/tag/v14.0.2), [uuid, aviso e versões corrigidas](https://github.com/advisories/GHSA-w5hq-g745-h8pq), [uuid 11.1.1 com export CommonJS](https://raw.githubusercontent.com/uuidjs/uuid/v11.1.1/package.json). As exceções anteriores para forge e uuid foram removidas.
+
+A auditoria agora informa zero ocorrências altas/críticas e 24 moderadas, todas da cadeia minimatch. O aviso [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249) informa uma faixa ampla menor que 11.0.1, mas descreve especificamente firstPhasePreProcess com optimizationLevel >= 2. Comparação com os fontes oficiais [3.1.5](https://raw.githubusercontent.com/isaacs/minimatch/v3.1.5/minimatch.js) e [5.1.9](https://raw.githubusercontent.com/isaacs/minimatch/v5.1.9/minimatch.js) confirmou que esse pré-processador e a opção não existem nessas implementações. Avaliação local de aplicabilidade: esse caminho não é executável nos dois fontes legados exatos; não se afirma correção de todas as versões de minimatch nem ausência de outros riscos.
+
+A revisão restrita vence em 09/11/2026 UTC e só aceita esse único aviso, severidade moderada, pacote minimatch, versões exatas 3.1.5/5.1.9 e SHA-256 dos fontes iguais aos upstream. Os hashes foram comparados diretamente com as duas URLs oficiais, além do lockfile/integridade npm:
+
+- 3.1.5: `746849f267c4868a53729225bd85c7dccd387712136fb305fcc0a3eadd4a3d9d`.
+- 5.1.9: `1339bca8b70e33847860daa8fc3ccfa62487e143670da01a3b718d40d5fd424f`.
+
+A checagem recusa versões modernas vulneráveis, outras versões, alteração de bytes, pacote ausente, caminho inválido, conjunto misto, agravamento da severidade, aviso novo, falha da consulta ou prazo vencido. Três testes Node dessas fronteiras executam antes de toda auditoria na CI. Não existe mais permissão genérica por ID de aviso para forge/uuid. Auditoria local passou com essa avaliação delimitada; as 24 ocorrências moderadas continuam explicitamente registradas como não corrigidas no relatório npm.

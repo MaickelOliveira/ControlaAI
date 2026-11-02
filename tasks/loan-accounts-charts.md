@@ -13,3 +13,5 @@ Validação: 3.772 testes aprovados e 15 ignorados; tipos e lint aprovados, com 
 A suíte de consultas de Delivery recebeu uma correção isolada para fixar a data em outubro de 2026: suas expectativas de mês passado eram setembro e falhavam quando executadas em novembro. Não houve mudança no comportamento de Delivery do produto.
 
 Compilação de produção aprovada (147 páginas). A auditoria de dependências bloqueou a liberação por alertas existentes em glob, minimatch, node-forge, qs e uuid, incluindo a expiração das duas exceções restritas em 31/10/2026. Bibliotecas e exceções não foram alteradas por esta implementação. Não considerar a alteração publicada.
+
+Atualização de liberação em 02/11: dependências corrigidas e avaliação de aplicabilidade limitada por versão/hash do minimatch legado, conforme tasks/dependency-audit-followup.md. Auditoria agora aprovada, sem alertas altos/críticos. Após instalação limpa, 3.774 testes Vitest + três testes Node passaram; tipos, lint e build de 147 páginas aprovados. Publicação depende da CI e da implantação do digest correspondente à revisão integrada.
