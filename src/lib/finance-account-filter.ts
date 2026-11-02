@@ -1,10 +1,22 @@
 import type {FinanceLedgerData,LedgerEntry} from "./finance-ledger";
 import {bankResourceName} from "./open-finance-display";
+import {bankFilterLabel,bankFilterValue,matchesBankFilter} from "./finance-bank-filter";
 export type FinanceAccountOption={value:string;label:string};
 export function financeAccountKey(entry:LedgerEntry):string {
  return entry.source==="bank"?(entry.bank?.resource_id?`bank:${entry.bank.resource_id}`:"unlinked"):(entry.accountId?`manual:${entry.accountId}`:"unlinked");
 }
-export function matchesFinanceAccount(entry:LedgerEntry,account?:string):boolean {return !account||financeAccountKey(entry)===account;}
+export function matchesFinanceAccount(entry:LedgerEntry,account?:string):boolean {
+ if(!account)return true;
+ return account.startsWith("institution:")?entry.source==="bank"&&matchesBankFilter(entry.bank?.institution_name??"",entry.bank?.resource_id,account):financeAccountKey(entry)===account;
+}
+/** One bank choice includes all of its accounts, cards and credit contracts. */
+export function financeBankOptions(data:FinanceLedgerData|null):FinanceAccountOption[]{
+ if(!data)return [];
+ const banks=new Map<string,FinanceAccountOption>();
+ for(const connection of data.bank?.overview.connections??[])banks.set(bankFilterValue(connection.institution_name),{value:bankFilterValue(connection.institution_name),label:bankFilterLabel(connection.institution_name)});
+ for(const entry of data.finances)if(entry.source==="bank"&&entry.bank?.institution_name){const name=entry.bank.institution_name;banks.set(bankFilterValue(name),{value:bankFilterValue(name),label:bankFilterLabel(name)});}
+ return [...(data.accounts??[]).map(account=>({value:`manual:${account.id}`,label:account.name})),...banks.values(),...(data.finances.some(entry=>financeAccountKey(entry)==="unlinked")?[{value:"unlinked",label:"Sem conta"}]:[])];
+}
 /** IDs preserve distinct accounts even when two banks or people reuse a name. */
 export function financeAccountOptions(data:FinanceLedgerData|null):FinanceAccountOption[] {
  if(!data)return [];

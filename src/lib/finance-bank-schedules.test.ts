@@ -1,10 +1,22 @@
 import {expect,it} from "vitest";
-import {financeBankSchedules} from "./finance-bank-schedules";
+import {financeBankSchedules,unrepresentedBankSchedules} from "./finance-bank-schedules";
+import {bankFilterValue} from "./finance-bank-filter";
+import type {LedgerEntry} from "./finance-ledger";
 import type {BankAgendaItem} from "./open-finance-schedules";
 const item:BankAgendaItem={id:"fixture",kind:"recurring",description:"Assinatura música",resource_id:"card-a",resource_name:"Gold",institution_name:"Banco fictício",due_date:"2026-10-15",amount:"29.90",currency:"BRL",synced_at:"2026-10-11"};
 const filters={from:"2026-10-01",to:"2026-10-31",type:"all",search:"",categories:[]};
 it("includes received bank recurring predictions with an empty manual list, excluding the bill itself",()=>{
  expect(financeBankSchedules([item,{...item,id:"bill",kind:"bill"},{...item,id:"later",due_date:"2026-11-15"}],filters).map(row=>row.id)).toEqual(["fixture"]);
+});
+it("keeps one bank selection across all cards and preserves distinct banks",()=>{
+ expect(financeBankSchedules([item,{...item,id:"second",resource_id:"card-b"},{...item,id:"other",institution_name:"Another bank"}],{...filters,account:bankFilterValue(item.institution_name)}).map(row=>row.id)).toEqual(["fixture","second"]);
+});
+it("does not repeat a represented schedule or hide unrelated actual ledger records",()=>{
+ const entry={id:"actual",date:item.due_date,description:item.description,amount:29.90,bank:{resource_id:item.resource_id,currency:"BRL"}} as LedgerEntry;
+ expect(unrepresentedBankSchedules([item],[entry],[])).toEqual([]);
+ expect(unrepresentedBankSchedules([item],[{...entry,bank:{...entry.bank!,resource_id:"other-card"}}],[])).toHaveLength(1);
+ expect(unrepresentedBankSchedules([item],[{...entry,date:"2026-10-01"}],[])).toHaveLength(1);
+ expect(entry.id).toBe("actual");
 });
 it("filters a selected card by resource ID, never by bank name or amount",()=>{
  const rows=[item,{...item,id:"another",resource_id:"card-b"}];

@@ -2,12 +2,10 @@
 import {useCallback,useState} from "react";
 import {useBankUpdates} from "./useBankUpdates";
 import OpenFinanceIcon from "./OpenFinanceIcon";
-import OpenFinanceResources from "./OpenFinanceResources";
+import BankConnectionMap from "./BankConnectionMap";
 import OpenFinanceEligibility from "./OpenFinanceEligibility";
 import OpenFinanceConnect from "./OpenFinanceConnect";
 import OpenFinanceConnection from "./OpenFinanceConnection";
-import BankLoanSummary from "./BankLoanSummary";
-import {bankDebtCategory,VEHICLE_INSTALLMENT_CATEGORY} from "@/lib/bank-debt";
 import {type BankConnectionAction} from "@/lib/open-finance-connection-actions";
 import {type BankAuthorization,type BankOverview} from "@/lib/open-finance-display";
 async function fetchBankOverview(mode:"personal"|"business",signal?:AbortSignal):Promise<BankOverview|null> {
@@ -21,7 +19,6 @@ export default function OpenFinanceAccounts({mode}:{mode:"personal"|"business"})
   const {data,setData,error:updatesError}=useBankUpdates(loader);
   const [error,setError]=useState(""),[connecting,setConnecting]=useState(false),[busy,setBusy]=useState("");
   const [authorizations,setAuthorizations]=useState<Record<string,BankAuthorization>>({});
-  const [category,setCategory]=useState<"all"|"loans"|"vehicles">("all");
   async function load(){setData(await fetchBankOverview(mode));}
   async function action(id:string,name:BankConnectionAction) {
     if(busy)return;
@@ -41,8 +38,6 @@ export default function OpenFinanceAccounts({mode}:{mode:"personal"|"business"})
   const pending = current.filter(c => c.status !== "active");
   const active = current.filter(c => c.status === "active");
   const archived = data.connections.filter(c => c.archived_at);
-  const selectedCategory=category==="vehicles"?VEHICLE_INSTALLMENT_CATEGORY:"Empréstimos";
-  const visibleResources=category==="all"?data.resources:data.resources.filter(resource=>(resource.resource_type==="loan"||resource.resource_type==="financing")&&bankDebtCategory(resource)===selectedCategory);
   const renderConnection = (c: BankOverview["connections"][number]) => <OpenFinanceConnection key={c.id} connection={c} busy={!!busy} connectAvailable={!!data.connectAvailable && !c.archived_at} onAction={(id,name)=>void action(id,name)} authorization={authorizations[c.id]}/>;
   return <section aria-label="Bancos conectados" className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Bancos conectados</h2><p className="mt-1 flex items-center gap-2 text-xs text-muted"><span className={`h-1.5 w-1.5 rounded-full ${updatesError?"bg-amber-500":"bg-emerald-500"}`}/>{updatesError?"Atualização em nova tentativa":"Atualização automática"} · {mode==="personal"?"PF":"PJ"}</p></div>
@@ -50,13 +45,8 @@ export default function OpenFinanceAccounts({mode}:{mode:"personal"|"business"})
     {!data.connectAvailable&&<p role="status" className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink">Novas conexões aguardam a conclusão da configuração.</p>}
     {(error||updatesError)&&<p role="alert" className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink">{error||updatesError}</p>}
     {connecting&&<OpenFinanceConnect mode={mode} contactEmail={data.contactEmail} onClose={()=>{setConnecting(false);void load();}}/>}
-    <div role="group" aria-label="Categorias de contas" className="flex flex-wrap gap-2">
-      {([['all','Todas as categorias'],['loans','Empréstimos e financiamentos'],['vehicles',VEHICLE_INSTALLMENT_CATEGORY]] as const).map(([value,label])=><button key={value} type="button" aria-pressed={category===value} onClick={()=>setCategory(value)} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${category===value?"border-amber-500 bg-amber-soft text-amber-ink":"border-line bg-surface text-muted hover:bg-surface-muted"}`}>{label}</button>)}
-    </div>
-    <BankLoanSummary overview={data} filters={category==="all"?undefined:{categories:[selectedCategory]}} showEmpty={category!=="all"}/>
-    {(category==="all"||visibleResources.length>0)&&<OpenFinanceResources data={{...data,resources:visibleResources}} mode={mode} busy={!!busy} onDisconnect={id=>void action(id,"revoke")} onRemove={id=>void action(id,"remove")}/>}
-    {pending.length>0&&<section className="z-card"><h3 className="text-sm font-semibold">Conexões em andamento e tentativas</h3><p className="mt-1 text-xs text-muted">Continue a autorização ou remova uma tentativa que não concluiu.</p>{pending.map(renderConnection)}</section>}
-    {(active.length>0||archived.length>0)&&<details className="z-finance-details"><summary>Permissões e histórico de conexões <span className="text-xs font-normal text-muted">{active.length} ativa(s)</span></summary><div className="mt-3 rounded-2xl border border-line bg-surface p-4"><p className="text-xs leading-5 text-muted">Consulte as autorizações e o histórico. Desconectar interrompe o compartilhamento e preserva os dados recebidos.</p>{active.map(renderConnection)}
+    <BankConnectionMap connections={current}/>
+    {(current.length>0||archived.length>0)&&<details className="z-finance-details"><summary>Gerenciar conexões <span className="text-xs font-normal text-muted">{active.length} ativa(s)</span></summary><div className="mt-3 rounded-2xl border border-line bg-surface p-4"><p className="text-xs leading-5 text-muted">Autorizações, tentativas e histórico. Desconectar preserva os dados recebidos.</p>{pending.map(renderConnection)}{active.map(renderConnection)}
       {archived.length>0&&<details className="mt-4 rounded-xl border border-line bg-surface-muted p-4"><summary className="cursor-pointer text-xs font-semibold">Conexões removidas · {archived.length}</summary>{archived.map(renderConnection)}</details>}
     </div></details>}
   </section>;

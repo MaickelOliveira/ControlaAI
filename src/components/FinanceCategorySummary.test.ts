@@ -8,3 +8,7 @@ it("shows income and expense categories in their own clearly labelled summaries"
  expect(income).toContain("Receitas por categoria");expect(income).toContain("Serviços");expect(income).toContain("123,45");expect(income).not.toContain("Despesas por categoria");
  expect(expense).toContain("Despesas por categoria");expect(expense).not.toContain("Receitas por categoria");
 });
+it("shows a different circular expense chart and labels monthly loan forecasts",()=>{
+ const html=renderToStaticMarkup(React.createElement(FinanceCategorySummary,{type:"expense",groups:[{name:"Empréstimos",value:350.25,forecast:200},{name:"Parcelas do veículo",value:500,forecast:500}],onAdd:()=>{}}));
+ expect(html).toContain("<circle");expect(html).toContain("Distribuição das despesas");expect(html).toContain("350,25");expect(html).toContain("200,00");expect(html).toContain("parcelas previstas");expect(html).toContain("saldo realizado");expect(html).not.toContain("Saldo devedor");
+});
