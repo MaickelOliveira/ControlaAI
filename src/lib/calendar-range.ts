@@ -21,3 +21,10 @@ export function last3MonthsRange(now = new Date()): { from: string; to: string }
     to: current.to,
   };
 }
+
+/** A month/year selector can read any stored month, without a rolling cutoff. */
+export function selectedMonthRange(value: string): { from: string; to: string } | null {
+  if (!/^(?:19|20)\d{2}-(?:0[1-9]|1[0-2])$/.test(value)) return null;
+  const [year, month] = value.split("-").map(Number);
+  return {from: `${value}-01`, to: ymd(year, month, new Date(Date.UTC(year, month, 0)).getUTCDate())};
+}

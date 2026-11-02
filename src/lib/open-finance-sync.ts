@@ -65,8 +65,10 @@ async function resourcePage(job:PolpObject) {
     if(kind==="transactions"&&family==="credit-cards"&&!page.nextCursor)for(const kind of ["recurrings","installments","bills"] as const)children.push({kind,family,external_resource_id:target,window:{}});
   }else if(kind==="bills"){
     rows.bills=normalizeBills(target,page.data).map((bill,i)=>({...bill,...normalizeBillPayments(page.data[i],bill.currency as string|null)}));
-    const recent=new Date();recent.setUTCFullYear(recent.getUTCFullYear()-1);
-    for(const bill of rows.bills)if(typeof bill.due_date==="string"&&bill.due_date>=recent.toISOString().slice(0,10))children.push({kind:"bill-transactions",family:"credit-cards",external_resource_id:target,window:{billId:String(bill.external_id)},initial_only:bill.due_date<new Date(Date.now()-62*86400000).toISOString().slice(0,10)});
+    // Import every bill the provider actually returned, including older history.
+    // Historical bills remain initial-only; each job still imports one bounded
+    // page and uses the existing idempotent transaction identities.
+    for(const bill of rows.bills)if(typeof bill.due_date==="string")children.push({kind:"bill-transactions",family:"credit-cards",external_resource_id:target,window:{billId:String(bill.external_id)},initial_only:bill.due_date<new Date(Date.now()-62*86400000).toISOString().slice(0,10)});
   }else if(kind==="recurrings"||kind==="installments")rows.schedules=normalizeCardSchedules(kind,page.data);
   else rows.resources=normalizeReserves(target,page.data);
   return {rows,nextCursor:page.nextCursor,children};

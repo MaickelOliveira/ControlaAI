@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { clsx } from "clsx";
 import type {FinanceAccountOption} from "@/lib/finance-account-filter";
-import { last3MonthsRange, monthRange } from "@/lib/calendar-range";
+import { last3MonthsRange, monthRange, selectedMonthRange } from "@/lib/calendar-range";
 
 export type FinanceFilters = {
   from: string;   // YYYY-MM-DD
@@ -65,6 +65,9 @@ export default function FinanceFilterBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
+  const calendarMonth = selectedMonthRange(value.from.slice(0,7));
+  const selectedMonth = calendarMonth?.from===value.from&&calendarMonth?.to===value.to?value.from.slice(0,7):"";
+
   function applyPreset(p: Preset) {
     setPreset(p);
     if (p === "this_month") onChange({ ...value, ...monthRange(0) });
@@ -89,6 +92,14 @@ export default function FinanceFilterBar({
           </button>
         ))}
       </div>
+
+      <label className="flex min-w-0 max-w-full items-center gap-2 text-xs text-muted">
+        Mês/ano
+        <input aria-label="Consultar mês e ano" type="month" min="1900-01" max="2099-12"
+          value={selectedMonth}
+          onChange={e=>{const range=selectedMonthRange(e.target.value);if(range){setPreset("custom");onChange({...value,...range});}}}
+          className="min-w-0 max-w-full border border-line rounded-lg px-2 py-1.5 text-xs outline-none"/>
+      </label>
 
       {/* Datas customizadas */}
       <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto">

@@ -79,3 +79,13 @@ it("replaces a manual vehicle forecast with the bank's differently valued repaym
  for(const invalid of [{...paid,bank:{...paid.bank,resource_id:"another-contract"}},{...paid,bank:{...paid.bank,source_type:null}},{...paid,date:"2026-09-21"},{...paid,status:"pending"},{...paid,included:false},{...paid,amount:-817.35}])expect(financeLoanInstallments(data,[invalid],range,today)[0].recordedId).toBeUndefined();
  expect(financeLoanInstallments(data,[paid,{...paid,id:"another-payment"}],range,today)[0].recordedId).toBeUndefined();
 });
+
+it.each(["2025-10","2026-09","2026-10","2026-11","2026-12","2027-03"])("reconciles the same contract in any previous or subsequent month: %s",month=>{
+ const data={...overview,installment_plans:[{resource_id:"car",amount:"800",currency:"BRL",first_due_date:"2024-06-20",last_due_date:"2027-05-20"}]};
+ const range={from:`${month}-01`,to:`${month}-28`,categories:["Parcelas do veículo"]};
+ const paid={...payment,date:`${month}-22`,amount:817.35,category:"Parcelas do veículo",bank:{...payment.bank!,resource_id:"car",source_type:"LOAN_REPAYMENT",resource_type:"financing"}};
+ const loans=financeLoanInstallments(data,[paid],range,today);
+ expect(loans).toHaveLength(1);expect(loans[0].recordedId).toBe("paid");
+ expect(financeExpensePlan({posted:[paid],pending:[],recurring:[],loans,installments:[],schedules:[],...range})).toMatchObject({recorded:817.35,forecast:0,total:817.35});
+ expect(financeLoanInstallments(data,[],range,today)[0].recordedId).toBeUndefined();
+});

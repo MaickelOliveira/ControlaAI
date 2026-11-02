@@ -18,6 +18,7 @@ import FinanceBankSchedules from "@/components/FinanceBankSchedules";
 import FinanceLoanRows from "@/components/FinanceLoanRows";
 import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} from "@/lib/finance-bank-schedules";
 import {financeLoanInstallments} from "@/lib/finance-loan-installments";
+import {missingHistoricalLedgerNotice} from "@/lib/finance-history";
 import {recurringInstallmentEnd} from "@/lib/installment-progress";
 import {financeExpensePlan} from "@/lib/finance-expense-plan";
 import {matchesBankFilter} from "@/lib/finance-bank-filter";
@@ -440,6 +441,7 @@ function FinancasContent() {
 
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
+  const missingHistory = missingHistoricalLedgerNotice(ledger?.bank??null,finances.length,today);
   const loanInstallments=ledger?.bank?financeLoanInstallments(ledger.bank.overview,finances,filters,today):[];
   const incomeGroups=ledgerCategoryGroups(postedFinances,"income");
 
@@ -493,6 +495,7 @@ function FinancasContent() {
       {ledgerError&&<p role="alert" className="rounded-xl border border-line bg-amber-soft p-4 text-sm text-amber-ink">{ledgerError} O extrato pode estar desatualizado.</p>}
       {ledger?.bank&&<p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>Conta, cartão, WhatsApp e plataforma no mesmo extrato · Pessoal e Empresa separados.</span><span className="rounded-full bg-emerald-soft px-3 py-1 text-emerald-ink">Atualização automática</span></p>}
       {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-ink">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
+      {missingHistory&&<p role="status" className="text-xs text-amber-ink">{missingHistory}</p>}
       {!!ledger?.bank?.report.missing_dates&&<p className="text-xs text-amber-ink">Há {ledger.bank.report.missing_dates} movimento(s) sem data enviados pelo banco, fora deste período.</p>}
       {postedFinances.some(f=>f.possibleDuplicate)&&<p className="rounded-xl border border-line bg-amber-soft p-3 text-xs text-amber-ink">Há registros com mesmo valor e data em mais de uma origem. Estão identificados no extrato para conferência; os totais ainda podem conter repetições.</p>}
 
