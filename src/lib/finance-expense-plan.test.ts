@@ -45,3 +45,10 @@ it("counts one anchored installment for the selected month, with cent rounding a
  expect(result).toMatchObject({recorded:-0.1,forecast:0.2,total:0.1});
  expect(financeExpensePlan({...base,schedules:[{...subscription,kind:"bill"}]}).total).toBe(0);
 });
+
+it("keeps forecast amounts in genuine expense categories without creating billing-type categories",()=>{
+ const result=financeExpensePlan({...base,installments:[installment],schedules:[subscription]});
+ expect(result.groups).toEqual([{name:"Outros",value:20,forecast:20},{name:"Assinaturas",value:10,forecast:10}]);
+ expect(result.total).toBe(30);
+ expect(result.groups.some(g=>/recorrentes|parceladas/i.test(g.name))).toBe(false);
+});
