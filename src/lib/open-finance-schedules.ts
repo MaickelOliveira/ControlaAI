@@ -1,6 +1,6 @@
 import { bankDate, bankMoney, bankAmountWithoutCurrency } from "./open-finance-display";
 import {descriptionExpenseCategory} from "./expense-category";
-export type BankAgendaItem={user_category?:string|null;id:string;mode?:"personal"|"business";resource_id?:string;kind:"bill"|"recurring"|"installment";description:string;resource_name:string;institution_name:string;due_date:string|null;amount:string|null;currency:string|null;synced_at:string;payment_evidence?:boolean;payment_amount?:string|null;total_installments?:number|null;observed_installments?:number|null;regularity_score?:number|null;last_observed_month?:string|null;last_observed_installment?:number|null;purchase_date?:string|null;source_ordinals?:number[]|null;amount_varies?:boolean;merged_source_count?:number};
+export type BankAgendaItem={source_schedule_ids?:string[];user_category?:string|null;id:string;mode?:"personal"|"business";resource_id?:string;kind:"bill"|"recurring"|"installment";description:string;resource_name:string;institution_name:string;due_date:string|null;amount:string|null;currency:string|null;synced_at:string;payment_evidence?:boolean;payment_amount?:string|null;total_installments?:number|null;observed_installments?:number|null;regularity_score?:number|null;last_observed_month?:string|null;last_observed_installment?:number|null;purchase_date?:string|null;source_ordinals?:number[]|null;amount_varies?:boolean;merged_source_count?:number};
 export type BankAgenda={items:BankAgendaItem[];incomplete:boolean};
 function cents(value:string|null):number|null {
   if(value===null||!/^\d{1,16}(?:\.\d{1,8})?$/.test(value))return null;
@@ -45,6 +45,7 @@ export function collapseBankInstallmentFragments(items:readonly BankAgendaItem[]
       source_ordinals:[...(left.source_ordinals??[]),...(right.source_ordinals??[])].sort((a,b)=>a-b),
       amount_varies:left.amount!==right.amount,
       merged_source_count:2,
+      source_schedule_ids:[...(left.source_schedule_ids??[left.id]),...(right.source_schedule_ids??[right.id])],
       synced_at:left.synced_at>right.synced_at?left.synced_at:right.synced_at,
     });
   }
