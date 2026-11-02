@@ -84,7 +84,7 @@
 .z-search-dialog a {display:block;padding:10px 12px;border-radius:10px;font-size:13px;}
 .z-search-dialog a:hover {background:var(--z-surface-muted);}
 .z-theme-toggle {display:inline-flex;background:var(--z-surface-muted);border:1px solid var(--z-line);border-radius:30px;padding:4px;flex-shrink:0;}
-.z-theme-toggle button {display:flex;align-items:center;gap:6px;padding:7px 9px;font-size:11px;border-radius:22px;color:var(--z-subtle);}
+.z-theme-toggle button {white-space:nowrap;overflow-wrap:normal;display:flex;align-items:center;gap:6px;padding:7px 9px;font-size:11px;border-radius:22px;color:var(--z-subtle);}
 .z-theme-toggle button[aria-pressed=true] {background:var(--z-surface-raised);color:var(--z-ink);box-shadow:0 1px 5px #0001;}
 .z-main {max-width:1500px;width:100%;margin:0 auto;padding:14px 27px 32px;}
 .z-page {display:flex;flex-direction:column;gap:24px;}
@@ -284,7 +284,7 @@
 .z-header-preferences .z-mode-selector button {font-size:11px;padding:8px 11px;}
 @media(max-width:1279px) {.z-dashboard-actions {gap:8px;}.z-dashboard-actions .z-primary {padding:12px 14px;font-size:11px;}}
 @media(max-width:1279px) and (min-width:768px) {.z-dashboard-controls .z-topbar {flex-wrap:wrap;}.z-dashboard-controls .z-search {flex-basis:100%;}.z-dashboard-controls .z-header-preferences {margin-left:auto;}}
-@media(max-width:767px) {.z-topbar {flex-wrap:wrap;}.z-topbar .z-search {flex-basis:100%;}.z-header-preferences {width:100%;gap:10px;}.z-header-preferences .z-mode-control {flex:1 0 max-content;min-width:max-content;}.z-header-preferences .z-mode-selector button {padding:10px 8px;}.z-header-preferences .z-theme-toggle {flex:1;}.z-header-preferences .z-theme-toggle button {flex:1;justify-content:center;padding:10px 7px;}.z-header-preferences .z-theme-toggle span {display:inline;}.z-dashboard-controls .z-topbar {flex-wrap:wrap;}.z-dashboard-actions .z-date-pill {display:none;}.z-dashboard-actions .z-primary {padding:12px 13px;}.z-dashboard-header {gap:14px;}.zelo-app .support-bubble-label {display:none;}}
+@media(max-width:767px) {.z-topbar {flex-wrap:wrap;}.z-topbar .z-search {flex-basis:100%;}.z-header-preferences {width:100%;gap:10px;}.z-header-preferences .z-mode-control {flex:1 0 max-content;min-width:max-content;}.z-header-preferences .z-mode-selector button {padding:10px 8px;}.z-header-preferences .z-theme-toggle {flex:1 0 max-content;min-width:max-content;}.z-header-preferences .z-theme-toggle button {flex:1;justify-content:center;padding:10px 7px;}.z-header-preferences .z-theme-toggle span {display:inline;}.z-dashboard-controls .z-topbar {flex-wrap:wrap;}.z-dashboard-actions .z-date-pill {display:none;}.z-dashboard-actions .z-primary {padding:12px 13px;}.z-dashboard-header {gap:14px;}.zelo-app .support-bubble-label {display:none;}}
 
 /* Bank faces overlap; native buttons keep every card accessible by touch/keyboard. */
 .z-credit-deck-viewport {max-height:464px;overflow:auto;padding:14px 7px 16px;scrollbar-width:thin;}
