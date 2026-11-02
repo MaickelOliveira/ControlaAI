@@ -9,6 +9,7 @@ import type { BankQuestion } from "./bank-question-parser";
 import { BANK_QUERY_GUIDANCE, isBankPositionKind, validateBankQuery } from "./bank-query-intent";
 import { readUnifiedFinances } from "./unified-finances";
 import { financeCoverageNotice, summarizeFinanceQuery } from "./finance-query";
+import {missingHistoricalLedgerNotice} from "./finance-history";
 import { formatBankSchedules } from "./bank-schedule-answer";
 import { expandMerchantAliases } from "./finances";
 import { bankDate, bankMoney } from "./open-finance-display";
@@ -69,6 +70,8 @@ export async function answerStructuredBankQuery(user: OpenFinanceIdentity, mode:
     const banks = query.bankName ? matchingBankNames(bank.overview.connections.map(c => c.institution_name), query.bankName) : null;
     if (banks && !banks.length) return "Não encontrei esse banco no histórico recebido deste modo. Confira Contas.";
     const selected = entries.filter(entry => entry.source === "bank" && (!banks || banks.includes(entry.bank?.institution_name ?? "")));
+    const missingHistory=missingHistoricalLedgerNotice(bank,selected.length,today);
+    if(missingHistory)return `${safe(label)}${banks?` · ${banks.map(safe).join(", ")}`:""}\n${missingHistory}${financeCoverageNotice(bank,selected)}`;
     if (query.kind === "transactions" && (query.operation || query.direction || query.movementClass)) {
       const matches = selected.filter(entry => entry.mode === requested && entry.status !== "pending" && entry.date >= period.from && entry.date <= period.to
         && (!query.source || entry.bank?.resource_type === query.source)

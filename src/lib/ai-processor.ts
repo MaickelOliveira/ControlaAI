@@ -875,8 +875,10 @@ export function getExplicitRelativePeriod(message: string, anchor: Date = nowBR(
 function withExplicitRelativePeriod(message: string, result: AIResult, anchor: Date = nowBR()): AIResult {
   const groceryIntent = result.intent === "grocery_history_query" || result.intent === "grocery_spend_query";
   const financialRead=["bank_query","finance_query","balance_query","finance_detail","finance_analysis"].includes(result.intent);
-  const period = getExplicitRelativePeriod(message, anchor)
-    ?? (groceryIntent||financialRead ? explicitPurchaseCalendarPeriod(message, anchor) : null);
+  // A named month is more precise than a relative whole year: October of
+  // last year means that October, rather than every month of last year.
+  const period = (groceryIntent||financialRead ? explicitPurchaseCalendarPeriod(message, anchor) : null)
+    ?? getExplicitRelativePeriod(message, anchor);
   if (!period) return result;
   if (groceryIntent) {
     return { ...result, grocery: { ...(result.grocery ?? {}), period } };
@@ -1221,8 +1223,12 @@ function explicitPurchaseCalendarPeriod(message: string, anchor: Date, future = 
   const namedMonth = normalized.match(new RegExp(`\\b(${monthNames})(?:\\s+(?:de\\s+)?(20\\d{2}))?\\b`));
   if (namedMonth) {
     const month = PURCHASE_MONTHS[namedMonth[1]];
+    const relativeYear = /\bano\s+(?:passado|anterior|pasado)\b|\bultimo\s+ano\b/.test(normalized) ? -1
+      : /\b(?:este|esse|neste|nesse|deste|atual|actual)\s+ano\b|\bano\s+(?:atual|actual)\b/.test(normalized) ? 0
+      : /\bano\s+(?:que\s+vem|seguinte|siguiente|que\s+viene)\b|\bproximo\s+ano\b/.test(normalized) ? 1 : null;
     const year = namedMonth[2]
       ? Number(namedMonth[2])
+      : relativeYear !== null ? anchor.getFullYear() + relativeYear
       : future
         ? month >= anchor.getMonth() + 1 ? anchor.getFullYear() : anchor.getFullYear() + 1
         : month <= anchor.getMonth() + 1 ? anchor.getFullYear() : anchor.getFullYear() - 1;

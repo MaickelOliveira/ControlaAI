@@ -191,3 +191,15 @@ describe("one complete manual snapshot for the real ledger GET", () => {
     expect(boundary.accounts).not.toHaveBeenCalled();
   });
 });
+
+it("reads an authorized calendar month from a previous year without a rolling historical cutoff",async()=>{
+ const scope={userId:owner.id,mode:"business",environment:"production",companyId:"fictional-authorized-company"};
+ boundary.access.mockResolvedValue(scope);
+ boundary.records.mockResolvedValue([recorded("historic-whatsapp",{source:"whatsapp",date:"2025-10-31",amount:5}),recorded("adjacent",{date:"2025-11-01",amount:700})]);
+ boundary.bank.mockResolvedValue({overview:{connections:[{}]},report:{from:"2025-10-01",to:"2025-10-31",movements:[bankMovement("historic-card",{date:"2025-10-01",amount:"20",resource_type:"card",kind:"card_purchases"})]}});
+ const response=await GET(new Request("https://zelo.test/api/finances/ledger?mode=business&from=2025-10-01&to=2025-10-31"));
+ expect(response.status).toBe(200);const payload=await response.json();
+ expect(boundary.bank).toHaveBeenCalledWith(scope,{from:"2025-10-01",to:"2025-10-31"});
+ expect(payload.finances.map((r:{id:string})=>r.id).sort()).toEqual(["bank:historic-card","historic-whatsapp"]);
+ expect(payload.balance).toMatchObject({expense:25});
+});

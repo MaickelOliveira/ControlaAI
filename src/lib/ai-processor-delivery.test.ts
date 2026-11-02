@@ -82,3 +82,16 @@ it("uses October after a September conversation instead of inheriting its period
  const result=await processMessage("e em outubro?",{...context,history:[{role:"user",content:"quanto gastei com delivery em setembro?"},{role:"assistant",content:"Período 01/09/2026 a 30/09/2026"}]});
  expect(result).toMatchObject({intent:"finance_query",period:{from:"2026-10-01",to:"2026-10-31"}});
 });
+
+it.each([
+ ["quanto gastei no mês de outubro do ano passado","2025-10-01","2025-10-31"],
+ ["quanto gastei com delivery em outubro do ano passado","2025-10-01","2025-10-31"],
+ ["cuánto gasté en octubre del año pasado","2025-10-01","2025-10-31"],
+ ["descreva meus gastos por categoria em fevereiro do ano passado","2025-02-01","2025-02-28"],
+ ["quanto gastei em dezembro deste ano","2026-12-01","2026-12-31"],
+ ["quanto gastei em outubro de 2024","2024-10-01","2024-10-31"],
+])("honors a named month and its relative or explicit year: %s",async(message,from,to)=>{
+ vi.setSystemTime(new Date("2026-11-02T12:00:00-03:00"));
+ model({intent:"finance_query",period:{from:"2026-11-01",to:"2026-11-30"}});
+ expect(await processMessage(message,context)).toMatchObject({period:{from,to}});
+});

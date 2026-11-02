@@ -67,3 +67,17 @@ it("completes a current installment import without the removed provider paidInst
  expect(await runBankSyncPage(scope)).toBe("processed");
  expect(m.rpc.mock.lastCall?.[1]).toBe("zelo_of_commit_page");expect(m.rpc.mock.lastCall?.[2]?.p_rows.schedules[0]).toMatchObject({observed_installments:null,total_installments:3});
 });
+
+it("imports older provider-returned bills once, without a twelve-month cutoff",async()=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValueOnce({...base,kind:"bills",external_resource_id:"card-1"}).mockResolvedValue(null);
+ m.page.mockResolvedValue({data:[{id:"historic-bill",credit_card_id:"card-1",due_date:"2024-10-11",bill_total_amount:{amount:"30",currency:"BRL"},payments:[]}],nextCursor:null});
+ expect(await runBankSyncPage(scope)).toBe("processed");
+ expect(m.rpc.mock.lastCall?.[2]?.p_children).toEqual([{kind:"bill-transactions",family:"credit-cards",external_resource_id:"card-1",window:{billId:"historic-bill"},initial_only:true}]);
+});
+it("preserves an explicit historic transaction filter and cursor through bounded pages",async()=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValueOnce({...base,kind:"transactions",family:"accounts",external_resource_id:"account-1",cursor:"older-page",filter_window:{fromDate:"2025-10-01",toDate:"2025-10-31"}}).mockResolvedValue(null);
+ m.page.mockResolvedValue({data:[],nextCursor:"older-next"});
+ expect(await runBankSyncPage(scope)).toBe("processed");
+ expect(m.page).toHaveBeenCalledWith("/accounts/account-1/transactions","older-page",{fromDate:"2025-10-01",toDate:"2025-10-31"});
+ expect(m.rpc.mock.lastCall?.[2]?.p_next).toBe("older-next");
+});

@@ -716,3 +716,15 @@ it("answers a plain monthly spending question with category totals and no named 
  expect(answer).toContain("Gastos por categoria");expect(answer).toContain("Outros: R$ 35,00");
  expect(answer).not.toContain("• Test");expect(answer).not.toContain("Movimentações encontradas");expect(m.agenda).not.toHaveBeenCalled();
 });
+
+it("reads last-year October across all recorded origins without leaking adjacent months",async()=>{
+ const fixture=(id:string,date:string,amount:number,source="bank")=>({id,date,amount,source,mode:"personal",type:"expense",included:true,status:"posted",description:id,category:"Outros",...(source==="bank"?{bank:{resource_type:"card"}}:{})});
+ m.read.mockResolvedValue({entries:[fixture("before","2025-09-30",900),fixture("bank-a","2025-10-01",10),fixture("bank-b","2025-10-31",20),fixture("whatsapp","2025-10-15",5,"whatsapp"),fixture("web","2025-10-16",7,"web"),fixture("after","2025-11-01",700)],bank:{overview:{connections:[{}]},report:{from:"2025-10-01",to:"2025-10-31",movements:[],sync_pending:false}}});
+ const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,financeType:"expense",period:{from:"2025-10-01",to:"2025-10-31"}},["2026-11-01","2026-11-30"],"quanto gastei no mês de outubro do ano passado");
+ expect(m.read).toHaveBeenCalledWith(user,"personal","2025-10-01","2025-10-31");expect(reply).toContain("R$ 42,00");expect(reply).toContain("01/10/2025 a 31/10/2025");expect(reply).toContain("WhatsApp");expect(reply).not.toContain("900");
+});
+it("does not report zero spending when a historic period has no received records",async()=>{
+ m.read.mockResolvedValue({entries:[],bank:{overview:{connections:[{}]},report:{from:"2025-10-01",to:"2025-10-31",movements:[],sync_pending:false}}});
+ const reply=await answerConnectedFinanceQuery(user,"personal","both",{intent:"finance_query",confidence:1,period:{from:"2025-10-01",to:"2025-10-31"}},["2026-11-01","2026-11-30"],"quanto gastei em outubro do ano passado");
+ expect(reply).toContain("Isso não significa que você não gastou");expect(reply).not.toContain("Você gastou");
+});

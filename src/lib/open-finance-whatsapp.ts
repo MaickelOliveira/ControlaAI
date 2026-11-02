@@ -18,6 +18,7 @@ import {readBankLedger} from "./finance-ledger-storage";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
+import {missingHistoricalLedgerNotice} from "./finance-history";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
 const isCardCharge=(entry:LedgerEntry)=>/\b(?:juros?|multa|iof|tarifas?|anuidade|encargos?)\b/.test(normalize(entry.description))
   ||/^(?:BANK_FEES|FEES)(?:_|$)/.test((entry.bank?.source_category??"").toUpperCase());
@@ -527,6 +528,8 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
     }
     const {entries,bank}=await readUnifiedFinances(user,requested,from,to);
     if(!bank?.overview.connections.length)return null;
+    const missingHistory=missingHistoricalLedgerNotice(bank,entries.length,todayStrBR());
+    if(missingHistory)return missingHistory+financeCoverageNotice(bank,entries);
     if(ai.account)return "Para consultar uma conta específica, use o filtro em Finanças. Posso informar aqui o total de todos os bancos conectados neste modo ou o gasto por categoria e estabelecimento.";
     const categoryBreakdown=/\bpor categorias?\b|\bem cada categoria\b|\bsepar(?:e|ado|ados|adas)\b[^.!?]*\bcategorias?\b/.test(text);
     const categoryDetails=categoryBreakdown&&!/\b(?:so|somente|apenas) (?:os )?totais\b/.test(text);
