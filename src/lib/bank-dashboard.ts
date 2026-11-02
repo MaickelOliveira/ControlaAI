@@ -1,6 +1,7 @@
 import {bankResourceName,type BankOverview} from "./open-finance-display";
 import {bankDebtCategory,hasZeroBankDebt} from "./bank-debt";
 import {normalizeBankText} from "./bank-question-parser";
+import {matchesBankFilter} from "./finance-bank-filter";
 function amountUnits(raw:string|null):bigint|null{
   if(raw===null||! /^-?\d{1,16}(\.\d{1,8})?$/.test(raw))return null;
   const [whole,fraction=""]=raw.replace(/^-/ ,"").split(".");
@@ -27,7 +28,7 @@ export function bankDashboardAccounts(overview:BankOverview){
 export type BankLoanFilters={type?:string;categories?:readonly string[];account?:string;search?:string};
 /** Contract positions are separate from posted expenses and have no payment date. */
 export function bankDashboardLoans(overview:BankOverview,filters:BankLoanFilters={}){
-  if(filters.type==="income"||(filters.account&&!filters.account.startsWith("bank:")))return [];
+  if(filters.type==="income"||(filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:")))return [];
   const groups=new Map<string,{category:string;currency:string|null;total:string|null;missing:number;loans:Array<{id:string;name:string;bank:string;institutionId?:string;kind:string;amount:number|null;rawAmount:string|null;contractAmount:string|number|null;nextInstallment:string|number|null;finalDueDate:string|null;historical:boolean}>}>();
   const totals=new Map<string,bigint>(),seen=new Set<string>();
   const query=normalizeBankText(filters.search??"");
@@ -36,7 +37,7 @@ export function bankDashboardLoans(overview:BankOverview,filters:BankLoanFilters
     const category=bankDebtCategory(resource);
     if(filters.categories?.length&&!filters.categories.includes(category))continue;
     const connection=overview.connections.find(c=>c.id===resource.connection_id);
-    if(connection?.archived_at||(filters.account&&filters.account!==`bank:${resource.id}`))continue;
+    if(connection?.archived_at||!matchesBankFilter(connection?.institution_name??"",resource.id,filters.account))continue;
     const credit=overview.credit.find(c=>c.resource_id===resource.id);
     const bank=connection?.institution_name??"Banco conectado",name=bankResourceName(resource.name);
     const kind=resource.resource_type==="financing"?"Financiamento":"Empréstimo";

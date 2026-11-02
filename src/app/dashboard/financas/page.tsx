@@ -14,11 +14,13 @@ import PlatformAccountMoveDialog from "@/components/PlatformAccountMoveDialog";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
 import FinanceBankSchedules from "@/components/FinanceBankSchedules";
-import BankLoanSummary from "@/components/BankLoanSummary";
-import {financeBankSchedules} from "@/lib/finance-bank-schedules";
+import FinanceLoanRows from "@/components/FinanceLoanRows";
+import {financeBankSchedules,unrepresentedBankSchedules} from "@/lib/finance-bank-schedules";
+import {categoriesWithLoanInstallments,financeLoanInstallments} from "@/lib/finance-loan-installments";
+import {matchesBankFilter} from "@/lib/finance-bank-filter";
 import {projectBankInstallments} from "@/lib/bank-installment-projections";
 import {normalizeBankText} from "@/lib/bank-question-parser";
-import {financeAccountOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
+import {financeBankOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
 import {ledgerCategoryGroups,ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 
 type Finance = LedgerEntry;
@@ -103,7 +105,7 @@ function FinancasContent() {
   },[mode,filters.from,filters.to]);
   const {data:ledger,setData:setLedger,error:ledgerError}=useBankUpdates(loader,!!mode);
   const finances=useMemo(()=>ledger?.finances??[],[ledger]);
-  const accountOptions=useMemo(()=>financeAccountOptions(ledger),[ledger]);
+  const accountOptions=useMemo(()=>financeBankOptions(ledger),[ledger]);
   const totalBalance:Balance=ledger?.totalBalance??{income:0,expense:0,balance:0};
 
   const [bankCategoryTarget,setBankCategoryTarget]=useState<LedgerEntry|null>(null);
@@ -432,19 +434,20 @@ function FinancasContent() {
 
   const periodBalance = ledgerBalance(postedFinances);
 
-  const expenseGroups=ledgerCategoryGroups(postedFinances,"expense"),incomeGroups=ledgerCategoryGroups(postedFinances,"income");
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
   const today = new Date().toISOString().slice(0, 10);
+  const loanInstallments=ledger?.bank?financeLoanInstallments(ledger.bank.overview,postedFinances,filters,today):[];
+  const expenseGroups=categoriesWithLoanInstallments(postedFinances,loanInstallments),incomeGroups=ledgerCategoryGroups(postedFinances,"income");
 
   // Recs sorted: overdue first, then by nextDueDate
   const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
-  const bankSchedules=financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters);
-  const projectedInstallments=useMemo(()=>{
-    if(!ledger?.bank||filters.type==="income"||filters.categories.length||filters.account&&!filters.account.startsWith("bank:"))return [];
+  const projectedInstallments=(()=>{
+    if(!ledger?.bank||filters.type==="income"||filters.categories.length||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:"))return [];
     const search=normalizeBankText(filters.search);
     return projectBankInstallments(ledger.installmentAnchors?.items??[],ledger.bank.report.movements,{from:filters.from,to:filters.to,today})
-      .filter(item=>(!filters.account||item.resource_id===filters.account.slice(5))&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
-  },[ledger,filters,today]);
+      .filter(item=>matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
+  })();
+  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters),postedFinances,projectedInstallments);
 
   function recStatus(r: Recurring): { label: string; color: string } {
     if (r.nextDueDate < today) return { label: "Vencido", color: "bg-red-soft text-red-ink" };
@@ -504,8 +507,6 @@ function FinancasContent() {
         </div>
       </div>
 
-      {ledger?.bank&&<BankLoanSummary overview={ledger.bank.overview} filters={filters}/>}
-      {ledger?.bank&&<FinanceBankSchedules items={bankSchedules} overview={ledger.bank.overview}/>}
       {ledger?.bank?.overview.agenda?.incomplete&&<p role="status" className="text-xs text-amber-ink">As recorrências bancárias podem estar incompletas: há dados em atualização ou indisponíveis.</p>}
       {ledger?.installmentAnchors?.incomplete&&<p role="status" className="text-xs text-amber-ink">Há mais parcelas bancárias do que este extrato consegue mostrar de uma vez. Ajuste o período ou confira no banco.</p>}
       {!!filters.categories.length&&!!ledger?.bank?.overview.agenda?.items.some(item=>item.kind!=="bill")&&<p className="text-xs text-subtle">As previsões bancárias não informam categoria e ficam fora deste filtro.</p>}
@@ -543,7 +544,7 @@ function FinancasContent() {
             </div>
           )}
           {loading ? <p className="text-subtle text-sm">Carregando...</p> :
-            (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0 && projectedInstallments.length === 0) ? (
+            (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0 && projectedInstallments.length === 0 && loanInstallments.length === 0 && bankSchedules.length === 0) ? (
               <div className="text-center py-16 text-subtle">
                 <p className="text-4xl mb-3">💬</p>
                 <p className="font-medium text-muted">Nenhum registro ainda</p>
@@ -552,6 +553,8 @@ function FinancasContent() {
             ) : (
               <div className="space-y-1 max-h-[480px] overflow-y-auto">
                 {!ledger&&<p className="px-3 py-3 text-xs text-amber-ink">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
+                <FinanceLoanRows items={loanInstallments}/>
+                {ledger?.bank&&<FinanceBankSchedules compact items={bankSchedules} overview={ledger.bank.overview}/>}
 
                 {/* Pendentes: recorrentes/parcelados */}
                 {sortedRecs.map(r => {
@@ -640,7 +643,7 @@ function FinancasContent() {
                 <FinanceInstallmentProjections items={projectedInstallments}/>
 
                 {/* Separador se tiver pendentes e lançamentos confirmados */}
-                {(sortedRecs.length > 0 || pendingFinances.length > 0 || projectedInstallments.length > 0) && postedFinances.length > 0 && (
+                {(sortedRecs.length > 0 || pendingFinances.length > 0 || projectedInstallments.length > 0 || loanInstallments.some(item=>!item.recordedId) || bankSchedules.length > 0) && postedFinances.length > 0 && (
                   <div className="flex items-center gap-2 py-1">
                     <div className="flex-1 h-px bg-surface-muted" />
                     <span className="text-xs text-subtle">confirmados</span>

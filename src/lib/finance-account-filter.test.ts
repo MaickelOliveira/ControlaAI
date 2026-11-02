@@ -1,5 +1,6 @@
 import {expect,it} from "vitest";
-import {financeAccountKey,financeAccountOptions,matchesFinanceAccount} from "./finance-account-filter";
+import {financeAccountKey,financeAccountOptions,financeBankOptions,matchesFinanceAccount} from "./finance-account-filter";
+import {bankFilterValue} from "./finance-bank-filter";
 import {createFinanceLedger} from "./finance-ledger";
 import type {BankMovement} from "./open-finance-report";
 const movement={id:"m",resource_id:"same-id",resource_name:"Conta corrente",institution_name:"Banco teste",resource_type:"account",date:"2026-10-11",description:"Compra",amount:"20",currency:"BRL",direction:"debit",classification:"purchase",kind:"account_debits",bill_month:null,installment_number:null,installment_count:null} as BankMovement;
@@ -24,4 +25,10 @@ it("includes named manual accounts, every bank account/card and unlinked records
 it("makes loans and vehicle financing selectable even before their first posted movement",()=>{
  const options=financeAccountOptions({finances:[],bank:{overview:{connections:[{id:"c",institution_name:"Banco teste",status:"active"}],resources:[{id:"car",connection_id:"c",resource_type:"financing",name:"Carro"},{id:"loan",connection_id:"c",resource_type:"loan",name:"Crédito pessoal"}]}}} as never);
  expect(options).toEqual([{value:"bank:car",label:"Banco teste · Carro · Financiamento"},{value:"bank:loan",label:"Banco teste · Crédito pessoal · Empréstimo"}]);
+});
+it("offers each bank once and includes all its products in a single selection",()=>{
+ const entries=createFinanceLedger(records,[movement,{...movement,id:"card",resource_type:"card",resource_id:"other-product"},{...movement,id:"other",institution_name:"Other bank"}],"personal");
+ const options=financeBankOptions({finances:entries,accounts:[{id:"same-id",name:"Dinheiro",type:"bank"}],bank:{overview:{connections:[{institution_name:"Banco teste"},{institution_name:"Banco teste"},{institution_name:"Other bank"}]}}} as never);
+ expect(options.map(o=>o.label)).toEqual(["Dinheiro","Banco teste","Other bank","Sem conta"]);
+ expect(entries.filter(e=>matchesFinanceAccount(e,bankFilterValue("Banco teste")))).toHaveLength(2);
 });

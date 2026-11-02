@@ -81,13 +81,13 @@ export default function ContasPage() {
 
   return <div className="z-page z-accounts-page">
     <div className="z-page-heading flex items-center justify-between gap-3">
-      <div><PageTitle icon="wallet">{es ? "Cuentas" : "Contas"}</PageTitle><p className="text-sm text-muted mt-1">{es ? "Organiza tus cuentas manuales y conecta bancos de Brasil para consultar saldos, tarjetas y movimientos." : "Saldos, cartões, empréstimos, financiamentos e investimentos dos seus bancos."}</p></div>
+      <div><PageTitle icon="wallet">{es ? "Cuentas" : "Contas"}</PageTitle><p className="text-sm text-muted mt-1">{es ? "Organiza tus cuentas y conexiones." : "Seus bancos conectados à Zelo. Movimentações e parcelas estão no extrato de Finanças."}</p></div>
       <button disabled={!mode} onClick={() => { setEditing(null); setName(""); setShowForm(true); }} className="px-4 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold disabled:opacity-50">+ {es ? "Nueva cuenta" : "Conta manual"}</button>
     </div>
 
     {!es&&mode&&<OpenFinanceAccounts key={mode} mode={mode}/>}
     {error && <div className="rounded-xl bg-red-soft border border-line p-3 text-sm text-red-ink">{error}</div>}
-    <div className="flex items-center justify-between gap-3 border-t border-line pt-6"><div><h2 className="text-base font-semibold">{es ? "Cuentas registradas" : "Contas registradas"}</h2><p className="mt-1 text-xs text-muted">{es ? "Cuentas organizadas por ti para tus movimientos." : "Contas organizadas por você para os seus lançamentos."}</p></div><span className="z-badge">{accounts.length}</span></div>
+    <details className="rounded-2xl border border-line bg-surface p-5" open={es}><summary className="cursor-pointer text-sm font-semibold">{es ? "Cuentas registradas" : "Gerenciar contas manuais"} · {accounts.length}</summary>
     {loading ? <div className="py-16 text-center text-subtle">{es ? "Cargando..." : "Carregando..."}</div> : accounts.length === 0 ? <div className="z-empty">{es ? "Añade una cuenta para organizar tus movimientos." : "Adicione uma conta para organizar seus lançamentos manuais."}</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{accounts.map(account => <div key={account.id} className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
       <div className="flex justify-between gap-2"><div><div className="font-semibold text-ink">{account.currentInvoice || account.type === "credit_card" ? "💳" : "👛"} {account.name}</div><div className="text-xs text-subtle mt-1">{account.currentInvoice || account.type === "credit_card" ? (es ? "Tarjeta/factura" : "Cartão/fatura") : (es ? "Cuenta manual" : "Conta manual")}</div></div>{account.isDefault && <span className="text-xs text-amber-ink bg-amber-soft h-fit px-2 py-1 rounded-full">⭐ {es ? "Predeterminada" : "Padrão"}</span>}</div>
       {account.currentInvoice && <div className="mt-4 rounded-xl border border-line bg-blue-soft p-3">
@@ -104,6 +104,7 @@ export default function ContasPage() {
         {account.name.toLocaleLowerCase() !== "dinheiro" && <button onClick={() => { if (confirm(es ? `¿Eliminar ${account.name}? Los movimientos anteriores se conservarán.` : `Excluir ${account.name}? Os lançamentos antigos serão preservados.`)) void post({ action: "delete", id: account.id }); }} className="text-xs px-3 py-1.5 rounded-lg bg-red-soft text-red-ink">🗑️ {es ? "Eliminar" : "Excluir"}</button>}
       </div>
     </div>)}</div>}
+    </details>
 
     {showForm && <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center p-4"><form onSubmit={submit} className="bg-surface rounded-2xl p-6 w-full max-w-md shadow-xl">
       <h2 className="font-bold text-lg mb-4">{editing ? (es ? "Editar cuenta" : "Editar conta") : (es ? "Nueva cuenta" : "Nova conta")}</h2>
