@@ -15,7 +15,9 @@ export function validCreditPlan(plan:unknown):plan is CreditInstallmentPlan{
  * The last date is an inclusive boundary, never an inferred payment. */
 export function creditPlanDates(plan:CreditInstallmentPlan,from:string,to:string):string[]{
  if(!validCreditPlan(plan))return [];
- const [year,month,day]=plan.first_due_date.split("-").map(Number),dates:string[]=[];
+ const [year,month,firstDay]=plan.first_due_date.split("-").map(Number),dates:string[]=[];
+ const firstMonthEnd=new Date(Date.UTC(year,month,0)).getUTCDate(),lastDay=Number(plan.last_due_date.slice(8,10));
+ const day=firstDay===firstMonthEnd&&firstDay<lastDay?lastDay:firstDay;
  for(let offset=0;offset<600;offset++){
   const first=new Date(Date.UTC(year,month-1+offset,1));
   const last=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0)).getUTCDate();
@@ -32,4 +34,14 @@ export function creditPlanAmount(value:string):string{
  const text=value.trim();
  if(/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(text))return text.replace(/\./g,"").replace(",",".");
  return /^\d+(?:[,.]\d{1,2})?$/.test(text)?text.replace(",","."):"";
+}
+
+/** Count includes the final monthly installment; calendar arithmetic stays in UTC. */
+export function creditPlanFirstDueDate(last:string,count:number):string{
+ if(!validDate(last)||!Number.isInteger(count)||count<1||count>600)return "";
+ const [year,month,day]=last.split("-").map(Number);
+ const first=new Date(Date.UTC(year,month-count,1));
+ if(first.getUTCFullYear()<1900)return "";
+ const end=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0)).getUTCDate();
+ first.setUTCDate(Math.min(day,end));return first.toISOString().slice(0,10);
 }

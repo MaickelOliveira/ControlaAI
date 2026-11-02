@@ -46,3 +46,22 @@ it("projects the user's vehicle plan for past and future months only until the c
  expect(current.find(p=>p.resourceId==="car")?.recordedId).toBe("paid");
  expect(financeLoanInstallments(data,[{...paid,amount:50}],filters,today).find(p=>p.resourceId==="car")?.recordedId).toBeUndefined();
 });
+it("uses bank values when available and retains manual data only as the missing-field fallback",()=>{
+ const manual={resource_id:"car",amount:"99",currency:"BRL",first_due_date:"2026-09-30",last_due_date:"2026-12-30"};
+ const data={...overview,installment_plans:[manual],credit:overview.credit.map(c=>c.resource_id==="car"?{...c,next_installment_amount:"30",paid_installments:1,remaining_installments:2,total_installments:3,due_date:"2026-11-30"}:c)};
+ const row=financeLoanInstallments(data,[],{...filters,categories:["Parcelas do veículo"]},today)[0];
+ expect(row).toMatchObject({bankAmount:30,bankTotalInstallments:3,amount:30,dueDate:"2026-11-30",finalDueDate:"2026-11-30"});
+ expect(manual.amount).toBe("99");expect(manual.last_due_date).toBe("2026-12-30");
+});
+
+it("does not turn an old unverified remaining duration into a quantity or replace the user's schedule",()=>{
+ const manual={resource_id:"car",amount:"80",currency:"BRL",first_due_date:"2024-06-20",last_due_date:"2027-05-20"};
+ const data={...overview,installment_plans:[manual],credit:overview.credit.map(c=>c.resource_id==="car"?{...c,paid_installments:29,remaining_installments:200,due_date:"2027-05-20"}:c)};
+ const row=financeLoanInstallments(data,[],filters,today).find(r=>r.resourceId==="car");
+ expect(row).toMatchObject({bankTotalInstallments:null,totalInstallments:36,remainingInstallments:7,dueDate:"2026-11-20",amount:80});
+});
+it("uses a complete monthly bank schedule for prior months without posting payments",()=>{
+ const data={...overview,credit:overview.credit.map(c=>c.resource_id==="l1"?{...c,first_due_date:"2026-09-20",due_date:"2026-12-20",periodicity:"MENSAL",total_installments:4,paid_installments:1,remaining_installments:3}:c)};
+ expect(financeLoanInstallments(data,[],{from:"2026-10-01",to:"2026-10-31"},today)[0]).toMatchObject({dueDate:"2026-10-20",paidInstallments:1,remainingInstallments:3});
+ expect(ledgerBalance([]).expense).toBe(0);
+});

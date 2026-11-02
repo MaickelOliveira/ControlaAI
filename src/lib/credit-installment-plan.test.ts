@@ -16,3 +16,12 @@ it("accepts familiar Brazilian amounts without accepting malformed or ambiguous 
  expect(creditPlanAmount("890.10")).toBe("890.10");expect(creditPlanAmount("1.234")).toBe("1234");
  for(const value of ["1.2.3","12,345","-10","NaN"])expect(creditPlanAmount(value)).toBe("");
 });
+it("calculates the first due date from the final due date and the total installment count",async()=>{
+ const {creditPlanFirstDueDate}=await import("./credit-installment-plan");
+ expect(creditPlanFirstDueDate("2027-05-20",36)).toBe("2024-06-20");
+ expect(creditPlanFirstDueDate("2027-05-20",1)).toBe("2027-05-20");
+ expect(creditPlanFirstDueDate("2024-05-31",4)).toBe("2024-02-29");
+ const clamped={...plan,first_due_date:creditPlanFirstDueDate("2024-05-31",4),last_due_date:"2024-05-31"};
+ expect(creditPlanDates(clamped,"2024-01-01","2024-12-31")).toEqual(["2024-02-29","2024-03-31","2024-04-30","2024-05-31"]);
+ for(const count of [0,-1,1.5,601])expect(creditPlanFirstDueDate("2027-05-20",count)).toBe("");
+});

@@ -98,3 +98,7 @@ it("keeps separate purchases with different dates, overlapping numbers or substa
  expect(collapseBankInstallmentFragments([base,{...tail,amount:"250.00"}])).toHaveLength(2);
  expect(collapseBankInstallmentFragments([base,{...tail,purchase_date:null}])).toHaveLength(2);
 });
+it("imports the current provider installment shape after removal of paidInstallments",()=>{
+ const [row]=normalizeCardSchedules("installments",[{description:"Loja fictícia",amount:12.5,totalInstallments:10,occurrences:["tx-3","tx-4"]}]);
+ expect(row).toMatchObject({total_installments:10,observed_installments:null,observed_transactions:["tx-3","tx-4"],amount:"12.50"});
+});

@@ -70,6 +70,9 @@ try:
         return json.loads(invoke(user,company or companies[user],mode,'zelo_of_credit_data',",'2026-09-01','2026-11-30'"))
     assert credit_data()['plans']==[dict(plan,resource_id=resource)]
     assert credit_data()['progress']==[{'resource_id':resource,'paid_installments':8,'remaining_installments':7,'due_date':'2027-05-31'}]
+    sql((repo/'supabase/migrations/20261102203000_credit_schedule_units.sql').read_text())
+    assert before==read(metadata) and progress_before==read(progress_metadata),'Credit access metadata changed'
+    assert credit_data()['progress'][0]['remaining_installments'] is None,'Legacy duration exposed as a count'
     assert all(row['resource_id']!=resource for row in credit_data(company=alternate)['progress'])
     assert credit_data(company=alternate)['plans']==[]
     assert credit_data(user=other)['plans']==[]
@@ -82,14 +85,17 @@ try:
     for patch in [{'amount':None},{'currency':None},{'amount':'-1'},{'amount':'0'},{'amount':'0.001'},{'currency':'USD'},{'first_due_date':'2026-02-30'},{'last_due_date':'2026-01-01'},{'last_due_date':'2076-09-30'},{'user_id':other}]:
         rejected(lambda:invoke(owner,companies[owner],'business','zelo_of_set_credit_plan',','+quote(resource)+','+quote(json.dumps(dict(plan,**patch)))+'::jsonb'))
     release={'external_id':'repayment-1','date':'2026-09-15','amount':'500.25','currency':'BRL'}
-    def commit(history,updated='2026-11-02T12:00:00Z',lease_override=None):
+    def commit(history,updated='2026-11-02T12:00:00Z',lease_override=None,schedule=None):
         lease=str(uuid.uuid4())
         job=sql("insert into open_finance.sync_jobs(connection_id,user_id,environment,mode,kind,family,external_resource_id,status,lease_token,lease_until) values("+','.join(map(quote,[connection,owner,'production','business','catalog','financings','fixture-consent','running',lease]))+",now()+interval '1 minute') returning id;")
-        rows={'credit':[{'resource_external_id':'fixture-car','resource_type':'financing','currency':'BRL','outstanding_amount':'0','source_updated_at':updated,'payment_history':history}]}
+        rows={'credit':[{'resource_external_id':'fixture-car','resource_type':'financing','currency':'BRL','outstanding_amount':'0','source_updated_at':updated,'payment_history':history,'paid_installments':8,'remaining_installments':7,'credit_schedule':schedule}]}
         call=','+quote(job)+','+quote(lease_override or lease)+','+quote(json.dumps(rows))+'::jsonb,null,\'[]\'::jsonb'
         try:return invoke(owner,companies[owner],'business','zelo_of_commit_page',call)
         finally:sql("update open_finance.sync_jobs set status='complete' where id="+quote(job)+';')
-    commit([release])
+    schedule={'version':1,'periodicity':'MENSAL','first_due_date':'2026-03-31','total_installments':15,'remaining_installments':7}
+    commit([release],schedule=schedule)
+    assert credit_data()['progress'][0]['total_installments']==15
+    assert credit_data()['progress'][0]['remaining_installments']==7
     first=credit_data();assert len(first['payments'])==1 and first['payments'][0]['date']=='2026-09-15'
     assert first['payments'][0]['amount']=='500.25' and first['payments'][0]['resource_type']=='financing'
     assert first['plans']==[dict(plan,resource_id=resource)],'Bank refresh erased manual plan'

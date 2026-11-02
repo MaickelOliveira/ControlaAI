@@ -73,9 +73,24 @@ export function normalizeBills(cardId: string, rows: PolpObject[]): PolpObject[]
 export function normalizeCredit(family: "loans" | "financings", row: PolpObject): PolpObject {
   const payments=object(row.payments), schedule=object(row.scheduled_instalments);
   const makeMoney=(value:unknown)=>money(value==null?null:{amount:value,currency:row.currency});
-  const contract=makeMoney(row.contract_amount), outstanding=makeMoney(payments.contract_outstanding_balance), next=makeMoney(family==="loans"?row.next_instalment_amount:null);
+  const contract=makeMoney(row.contract_amount), outstanding=makeMoney(payments.contract_outstanding_balance), next=makeMoney(row.next_instalment_amount);
   const history=normalizeCreditPayments(payments.releases);
-  return { payment_history:history,resource_external_id:polpExternalId(row.id),resource_type:family==="loans"?"loan":"financing",currency:currencyOf(contract,outstanding,next),contract_amount:contract.amount,outstanding_amount:outstanding.amount,next_installment_amount:next.amount,paid_installments:Number.isInteger(schedule.paid_instalments)?schedule.paid_instalments:null,remaining_installments:Number.isInteger(schedule.contract_remaining_number)?schedule.contract_remaining_number:null,due_date:sourceDate(row.due_date),source_updated_at:sourceText(row.updated_at,40) };
+  const count=(v:unknown)=>Number.isInteger(v)&&Number(v)>=0&&Number(v)<=10000?Number(v):null;
+  const paid=count(payments.paid_instalments)??count(schedule.paid_instalments);
+  const first=sourceDate(row.first_instalment_due_date),last=sourceDate(row.due_date);
+  const monthly=row.instalment_periodicity==="MENSAL";
+  // These provider numbers are durations in DIA/SEMANA/MES/ANO, not counts.
+  // Only a matching monthly duration or explicit monthly date range gives a count.
+  let total=monthly&&schedule.type_number_of_instalments==="MES"?count(schedule.total_number_of_instalments):null;
+  if(monthly&&first&&last&&first<=last){
+    const a=new Date(`${first}T00:00:00Z`),b=new Date(`${last}T00:00:00Z`);
+    const dated=(b.getUTCFullYear()-a.getUTCFullYear())*12+b.getUTCMonth()-a.getUTCMonth()+1;
+    total=total===null||total===dated?dated:null;
+  }
+  if(total!==null&&(total<1||paid!==null&&paid>total))total=null;
+  const remaining=total!==null&&paid!==null?total-paid:null;
+  const creditSchedule={version:1,periodicity:sourceText(row.instalment_periodicity,40),first_due_date:first,total_installments:total,remaining_installments:remaining};
+  return { payment_history:history,resource_external_id:polpExternalId(row.id),resource_type:family==="loans"?"loan":"financing",currency:currencyOf(contract,outstanding,next),contract_amount:contract.amount,outstanding_amount:outstanding.amount,next_installment_amount:next.amount,credit_schedule:creditSchedule,paid_installments:paid,remaining_installments:remaining,due_date:sourceDate(row.due_date),source_updated_at:sourceText(row.updated_at,40) };
 }
 export function normalizeReserves(accountId: string, rows: PolpObject[]): PolpObject[] {
   return rows.flatMap(row=>{

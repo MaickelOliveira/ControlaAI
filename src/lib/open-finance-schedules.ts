@@ -73,7 +73,7 @@ export function visibleBankSchedules(items:readonly BankAgendaItem[],today:strin
 export type BankInstallmentProgress={current:number;total:number;remaining:number;stage:"ongoing"|"last"};
 /** Polp's paidInstallments is the last observed ordinal, not payment evidence. */
 export function bankInstallmentProgress(item:BankAgendaItem):BankInstallmentProgress|null {
-  const current=item.observed_installments,total=item.total_installments;
+  const current=item.last_observed_installment??item.observed_installments,total=item.total_installments;
   if(item.kind!=="installment"||typeof current!=="number"||typeof total!=="number"||!Number.isInteger(current)||!Number.isInteger(total)||total<2||total>1000||current<1||current>total)return null;
   return {current,total,remaining:total-current,stage:current===total?"last":"ongoing"};
 }

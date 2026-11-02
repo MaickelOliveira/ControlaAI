@@ -31,7 +31,7 @@ export function normalizeCardSchedules(kind:"recurrings"|"installments",rows:Pol
     const period=kind==="recurrings"?integer(row.periodMonths,1,12):null;
     const total=kind==="installments"?integer(row.totalInstallments,2,1000):null;
     const observed=kind==="installments"?integer(row.paidInstallments,1,total??1000):null;
-    if(kind==="installments"&&(total==null||observed==null))throw Error("INVALID_SCHEDULE");
+    if(kind==="installments"&&total==null)throw Error("INVALID_SCHEDULE");
     const first=kind==="recurrings"?optionalDate(row.firstOccurrenceAt):null;
     const last=kind==="recurrings"?optionalDate(row.lastOccurrenceAt):null;
     const due=kind==="recurrings"?optionalDate(row.nextExpectedAt):null;
