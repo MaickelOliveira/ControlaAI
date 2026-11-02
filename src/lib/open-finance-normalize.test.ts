@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-import { normalizeResource, normalizeMovements, normalizeLimits, normalizeBills, normalizeReserves } from "./open-finance-normalize";
+import { normalizeResource, normalizeMovements, normalizeLimits, normalizeBills, normalizeReserves, normalizeCredit } from "./open-finance-normalize";
 const amount = (amount: string, currency = "BRL") => ({ amount, currency });
 describe("real provider normalization", () => {
   it("preserves each reserve currency using the stable reservation ID", () => {
@@ -63,4 +63,12 @@ it("keeps only documented paid releases and no inferred payment dates or private
  expect(normalizeCreditPayments(null)).toBeNull();
  expect(()=>normalizeCreditPayments([{...row,paidDate:"2026-02-30"}])).toThrow();
  expect(()=>normalizeCreditPayments([row,{...row,paidAmount:"100"}])).toThrow("CONFLICTING_CREDIT_PAYMENTS");
+});
+
+it("interprets loan duration units before exposing installment counts and imports supplied financing amounts",()=>{
+ const source={id:"fixture-credit",currency:"BRL",next_instalment_amount:"50",instalment_periodicity:"MENSAL",first_instalment_due_date:"2024-06-20",due_date:"2027-05-20",payments:{paid_instalments:29},scheduled_instalments:{type_number_of_instalments:"DIA",total_number_of_instalments:1095,type_contract_remaining:"DIA",contract_remaining_number:200}};
+ expect(normalizeCredit("financings",source)).toMatchObject({next_installment_amount:"50",paid_installments:29,remaining_installments:7,credit_schedule:{version:1,total_installments:36,first_due_date:"2024-06-20"}});
+ expect(normalizeCredit("loans",{...source,first_instalment_due_date:null})).toMatchObject({paid_installments:29,remaining_installments:null,credit_schedule:{total_installments:null}});
+ expect(normalizeCredit("loans",{...source,first_instalment_due_date:null,scheduled_instalments:{type_number_of_instalments:"MES",total_number_of_instalments:36}})).toMatchObject({remaining_installments:7});
+ expect(normalizeCredit("loans",{...source,instalment_periodicity:"SEMANAL"})).toMatchObject({remaining_installments:null,credit_schedule:{total_installments:null}});
 });

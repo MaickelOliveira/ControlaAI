@@ -62,13 +62,14 @@ export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise
   return result as {items:BankInstallmentAnchor[];incomplete:boolean};
 }
 
-type CreditData={payments:BankMovement[];plans:CreditInstallmentPlan[];progress?:Array<Pick<BankCredit,"resource_id"|"paid_installments"|"remaining_installments">>};
+type CreditData={payments:BankMovement[];plans:CreditInstallmentPlan[];progress?:Array<Pick<BankCredit,"resource_id"|"paid_installments"|"remaining_installments"|"total_installments"|"first_due_date"|"periodicity">>};
 export async function readCreditData(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<CreditData|null>{
  let value:unknown;
  try{value=await openFinanceRpc(scope,"zelo_of_credit_data",{p_from:period.from,p_to:period.to});}
  catch(error){if(error instanceof Error&&error.message==="OF_FUNCTION_UNAVAILABLE")return null;throw error;}
  const result=value as Partial<CreditData>;
- if(result?.progress!==undefined&&(!Array.isArray(result.progress)||result.progress.length>2000||result.progress.some(row=>!row||typeof row.resource_id!=="string"||[row.paid_installments,row.remaining_installments].some(count=>count!==null&&count!==undefined&&(!Number.isInteger(count)||count<0||count>10000)))))throw Error("OF_CREDIT_DATA_INVALID");
+ if(result?.progress!==undefined&&(!Array.isArray(result.progress)||result.progress.length>2000||result.progress.some(row=>!row||typeof row.resource_id!=="string"||[row.paid_installments,row.remaining_installments,row.total_installments].some(count=>count!==null&&count!==undefined&&(!Number.isInteger(count)||count<0||count>10000)))))throw Error("OF_CREDIT_DATA_INVALID");
+ if(result.progress?.some(row=>[row.first_due_date].some(date=>date!=null&&(typeof date!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))))||row.periodicity!=null&&typeof row.periodicity!=="string"))throw Error("OF_CREDIT_DATA_INVALID");
  if(!result||!Array.isArray(result.payments)||result.payments.length>2000||!Array.isArray(result.plans)||result.plans.length>2000||result.plans.some(p=>!validCreditPlan(p))||result.payments.some(p=>!p||typeof p.id!=="string"||typeof p.resource_id!=="string"||typeof p.resource_name!=="string"||typeof p.institution_name!=="string"||!["loan","financing"].includes(p.resource_type)||p.source_type!=="LOAN_REPAYMENT"||p.direction!=="debit"||typeof p.date!=="string"||p.date<period.from||p.date>period.to||typeof p.amount!=="string"||!/^\d{1,16}(\.\d{1,8})?$/.test(p.amount)||Number(p.amount)<=0||typeof p.currency!=="string"||!/^[A-Z]{3}$/.test(p.currency)))throw Error("OF_CREDIT_DATA_INVALID");
  return result as CreditData;
 }

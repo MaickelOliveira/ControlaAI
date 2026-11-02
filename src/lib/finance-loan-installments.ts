@@ -1,9 +1,9 @@
 import {bankDashboardLoans,type BankLoanFilters} from "./bank-dashboard";
 import {ledgerAmount,ledgerCategoryGroups,type LedgerEntry} from "./finance-ledger";
 import type {BankOverview} from "./open-finance-display";
-import {creditPlanDates,type CreditInstallmentPlan} from "./credit-installment-plan";
+import {creditPlanDates,creditPlanFirstDueDate,type CreditInstallmentPlan} from "./credit-installment-plan";
 
-export type LoanInstallment={paidInstallments?:number|null;remainingInstallments?:number|null;totalInstallments?:number|null;id:string;resourceId?:string;name:string;bank:string;institutionId?:string;category:string;currency:string|null;amount:number|null;month:string;dueDate?:string;finalDueDate?:string|null;manualPlan?:CreditInstallmentPlan;recordedId?:string};
+export type LoanInstallment={bankAmount?:number|null;bankTotalInstallments?:number|null;paidInstallments?:number|null;remainingInstallments?:number|null;totalInstallments?:number|null;id:string;resourceId?:string;name:string;bank:string;institutionId?:string;category:string;currency:string|null;amount:number|null;month:string;dueDate?:string;finalDueDate?:string|null;manualPlan?:CreditInstallmentPlan;recordedId?:string};
 /** Bank estimates apply to the current full month. User schedules have explicit
  * dates, so they can span past and future months without claiming payment. */
 export function financeLoanInstallments(overview:BankOverview,entries:readonly LedgerEntry[],filters:BankLoanFilters&{from:string;to:string},today:string):LoanInstallment[]{
@@ -16,10 +16,21 @@ export function financeLoanInstallments(overview:BankOverview,entries:readonly L
  const activeResources=new Set(overview.resources.filter(r=>activeConnections.has(r.connection_id)).map(r=>r.id));
  const allLoans:LoanInstallment[]=bankDashboardLoans(manualOverview).flatMap(group=>group.loans.flatMap(loan=>{
   const progress=overview.credit.find(c=>c.resource_id===loan.id);
-  const paid=progress?.paid_installments,remaining=progress?.remaining_installments;
+  const paid=progress?.paid_installments;
   const plan=plans.get(loan.id),bankAmount=ledgerAmount(loan.nextInstallment==null?null:String(loan.nextInstallment));
-  const base={paidInstallments:paid,remainingInstallments:remaining,totalInstallments:paid!=null&&remaining!=null?paid+remaining:plan?creditPlanDates(plan,plan.first_due_date,plan.last_due_date).length:null,id:loan.id,resourceId:loan.id,name:loan.name,bank:loan.bank,institutionId:loan.institutionId,category:group.category,currency:group.currency,amount:bankAmount!==null&&bankAmount>0?bankAmount:null,month,finalDueDate:loan.finalDueDate};
-  if(plan)return creditPlanDates(plan,filters.from,filters.to).map(date=>({...base,id:`${loan.id}:${date.slice(0,7)}`,currency:plan.currency,amount:ledgerAmount(plan.amount),month:date.slice(0,7),dueDate:date,manualPlan:plan}));
+  const bankTotal=progress?.total_installments??null;
+  const manualTotal=plan?creditPlanDates(plan,plan.first_due_date,plan.last_due_date).length:null;
+  const total=bankTotal??manualTotal;
+  const remaining=total!=null&&paid!=null&&paid<=total?total-paid:bankTotal!=null?progress?.remaining_installments:null;
+  const base={bankAmount:bankAmount!==null&&bankAmount>0?bankAmount:null,bankTotalInstallments:bankTotal,paidInstallments:paid,remainingInstallments:remaining,totalInstallments:total,id:loan.id,resourceId:loan.id,name:loan.name,bank:loan.bank,institutionId:loan.institutionId,category:group.category,currency:group.currency,amount:bankAmount!==null&&bankAmount>0?bankAmount:null,month,finalDueDate:loan.finalDueDate};
+  const bankFirst=progress?.first_due_date??(bankTotal&&loan.finalDueDate?creditPlanFirstDueDate(loan.finalDueDate,bankTotal):null);
+  const bankPlan=bankFirst&&loan.finalDueDate&&base.bankAmount&&group.currency&&progress?.periodicity==="MENSAL"?{resource_id:loan.id,amount:String(base.bankAmount),currency:group.currency,first_due_date:bankFirst,last_due_date:loan.finalDueDate}:null;
+  const schedule=bankPlan??plan;
+  if(schedule){
+   const end=loan.finalDueDate??schedule.last_due_date;
+   const effective={...schedule,amount:base.bankAmount!==null?String(base.bankAmount):schedule.amount,currency:base.bankAmount!==null?group.currency??schedule.currency:schedule.currency,first_due_date:bankFirst??(total&&loan.finalDueDate?creditPlanFirstDueDate(end,total):schedule.first_due_date),last_due_date:end};
+   return creditPlanDates(effective,filters.from,filters.to).map(date=>({...base,id:`${loan.id}:${date.slice(0,7)}`,currency:effective.currency,amount:ledgerAmount(effective.amount),month:date.slice(0,7),dueDate:date,manualPlan:plan}));
+  }
   return current&&activeResources.has(loan.id)?[base]:[];
  }));
  const selected=new Set(bankDashboardLoans(manualOverview,filters).flatMap(group=>group.loans.map(loan=>loan.id)));

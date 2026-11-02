@@ -61,3 +61,9 @@ it("rejects transactions falsely attached to another bill",async()=>{
   expect(await runBankSyncPage(scope)).toBe("failed");
   expect(m.rpc.mock.lastCall?.[2]?.p_error).toBe("BILL_IDENTITY_MISMATCH");
 });
+it("completes a current installment import without the removed provider paidInstallments field",async()=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValueOnce({...base,kind:"installments",external_resource_id:"card-1"}).mockResolvedValue(null);
+ m.page.mockResolvedValue({data:[{description:"Compra fictícia",amount:25,totalInstallments:3,occurrences:["tx-1","tx-2"]}],nextCursor:null});
+ expect(await runBankSyncPage(scope)).toBe("processed");
+ expect(m.rpc.mock.lastCall?.[1]).toBe("zelo_of_commit_page");expect(m.rpc.mock.lastCall?.[2]?.p_rows.schedules[0]).toMatchObject({observed_installments:null,total_installments:3});
+});
