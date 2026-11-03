@@ -4,7 +4,7 @@ import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {useBankUpdates} from "@/components/useBankUpdates";
-import {fetchActiveFinanceLedger} from "@/lib/active-finance-ledger-client";
+import {createActiveFinanceLedgerReader} from "@/lib/active-finance-ledger-client";
 import {fetchDashboardMe} from "@/lib/dashboard-me-client";
 import {ledgerBalance,type FinanceHistoryData,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankDate} from "@/lib/open-finance-display";
@@ -183,7 +183,8 @@ export default function DashboardPage() {
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
 
   const [prevFinances, setPrevFinances] = useState<Finance[]>([]);
-  const ledgerLoader=useCallback((signal:AbortSignal)=>fetchActiveFinanceLedger(signal,filters.from,filters.to),[filters.from,filters.to]);
+  const [readLedger]=useState(createActiveFinanceLedgerReader);
+  const ledgerLoader=useCallback((signal:AbortSignal)=>readLedger(signal,filters.from,filters.to),[readLedger,filters.from,filters.to]);
   const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader);
   const mode=ledger?.mode??bootstrapMode;
   const historyLoader=useCallback(async(signal:AbortSignal):Promise<FinanceHistoryData|null>=>{

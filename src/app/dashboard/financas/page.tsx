@@ -5,7 +5,7 @@ import FinanceCategorySelect from "@/components/FinanceCategorySelect";
 import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
-import {fetchActiveFinanceLedger} from "@/lib/active-finance-ledger-client";
+import {createActiveFinanceLedgerReader} from "@/lib/active-finance-ledger-client";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
 import BankForecastCategoryDialog,{type ForecastCategoryTarget} from "@/components/BankForecastCategoryDialog";
@@ -99,7 +99,8 @@ function FinancasContent() {
 
   const loadSequence = useRef(0);
   const [visibleCount,setVisibleCount]=useState(50);
-  const loader=useCallback((signal:AbortSignal)=>fetchActiveFinanceLedger(signal,filters.from,filters.to),[filters.from,filters.to]);
+  const [readLedger]=useState(createActiveFinanceLedgerReader);
+  const loader=useCallback((signal:AbortSignal)=>readLedger(signal,filters.from,filters.to),[readLedger,filters.from,filters.to]);
   const {data:ledger,setData:setLedger,error:ledgerError}=useBankUpdates<FinanceLedgerData>(loader);
   const mode=ledger?.mode??bootstrapMode;
   const finances=useMemo(()=>ledger?.finances??[],[ledger]);
