@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {projectBankInstallments,linkScheduledBankInstallments,type BankInstallmentAnchor,type ScheduledBankInstallment} from "./bank-installment-projections";
+import {projectBankInstallments,linkScheduledBankInstallments,linkBankInstallmentAnchors,type BankInstallmentAnchor,type ScheduledBankInstallment} from "./bank-installment-projections";
 import {financeExpensePlan} from "./finance-expense-plan";
 import {unrepresentedBankSchedules} from "./finance-bank-schedules";
 import type {BankAgendaItem} from "./open-finance-schedules";
@@ -58,4 +58,20 @@ it("reuses positively identified provider fragments and their category without c
  const linked=linkScheduledBankInstallments([row],[group]);
  const forecast=projectBankInstallments([historical],[],month("2026-09"),linked);
  expect(forecast).toHaveLength(1);expect(forecast[0]).toMatchObject({amount:"88.33",user_category:"Tecnologia",source_schedule_ids:["fragment-one","fragment-two"]});
+});
+
+it("joins incomplete complementary fragments and uses each bank ordinal's amount without double counting",()=>{
+ const base:BankAgendaItem={id:"cloud-first",kind:"installment",resource_id:"fixture-card",description:"Fixture Cloud Provider",amount:"81.10",currency:null,due_date:null,total_installments:8,resource_name:"Fixture",institution_name:"Fixture bank",synced_at:"2026-08-04",purchase_date:"2026-05-14",source_ordinals:[1,2],last_observed_month:"2026-06-01",last_observed_installment:2};
+ const tail={...base,id:"cloud-tail",description:"Fixture Cloud Provide",amount:"81.09",source_ordinals:[5,8],last_observed_month:null,last_observed_installment:null};
+ const anchor:BankInstallmentAnchor={id:base.id,resource_id:"fixture-card",description:base.description,resource_name:"Fixture",institution_name:"Fixture bank",amount:"81.10",currency:"BRL",bill_month:"2026-06-01",observed_installments:2,total_installments:8,synced_at:"2026-08-04"};
+ const prepared=linkBankInstallmentAnchors([anchor],[base,tail]);
+ expect(prepared).toHaveLength(1);
+ const forecast=projectBankInstallments(prepared,[],month("2026-09"));
+ expect(forecast).toHaveLength(1);expect(forecast[0]).toMatchObject({position:5,amount:"81.09",currency:"BRL"});
+ expect(unrepresentedBankSchedules([base,tail],[],forecast)).toEqual([]);
+ expect(projectBankInstallments(prepared,[],month("2027-01"))).toEqual([]);
+ const overlapping={...tail,source_ordinals:[2,5,8]};
+ expect(linkBankInstallmentAnchors([anchor],[base,overlapping])[0].source_schedule_ids).not.toContain(tail.id);
+ const differentPurchase={...tail,purchase_date:"2026-05-15"};
+ expect(linkBankInstallmentAnchors([anchor],[base,differentPurchase])[0].source_schedule_ids).not.toContain(tail.id);
 });

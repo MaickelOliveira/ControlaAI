@@ -23,7 +23,7 @@ import {missingHistoricalLedgerNotice} from "@/lib/finance-history";
 import {recurringInstallmentEnd} from "@/lib/installment-progress";
 import {financeExpensePlan} from "@/lib/finance-expense-plan";
 import {matchesBankFilter} from "@/lib/finance-bank-filter";
-import {projectBankInstallments,linkScheduledBankInstallments} from "@/lib/bank-installment-projections";
+import {projectBankInstallments,linkScheduledBankInstallments,linkBankInstallmentAnchors} from "@/lib/bank-installment-projections";
 import {normalizeBankText} from "@/lib/bank-question-parser";
 import {financeBankOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
 import {ledgerCategoryGroups,ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
@@ -448,14 +448,15 @@ function FinancasContent() {
 
   // Recs sorted: overdue first, then by nextDueDate
   const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
-  const scheduledInstallments=linkScheduledBankInstallments(ledger?.installmentAnchors?.scheduled??[],ledger?.bank?.overview.agenda?.items??[]);
+  const installmentAnchors=linkBankInstallmentAnchors(ledger?.installmentAnchors?.items??[],ledger?.bank?.overview.agenda?.items??[]);
+  const scheduledInstallments=linkScheduledBankInstallments(ledger?.installmentAnchors?.scheduled??[],ledger?.bank?.overview.agenda?.items??[],installmentAnchors);
   const projectedInstallments=(()=>{
     if(!ledger?.bank||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:"))return [];
     const search=normalizeBankText(filters.search);
-    return projectBankInstallments((ledger.installmentAnchors?.items??[]).map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today},scheduledInstallments)
+    return projectBankInstallments(installmentAnchors.map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today},scheduledInstallments)
       .filter(item=>(!filters.categories.length||filters.categories.includes(bankForecastCategory(item,finances)))&&matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
   })();
-  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,scheduledInstallments.flatMap(row=>row.schedule_ids));
+  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,[...scheduledInstallments.flatMap(row=>row.schedule_ids),...installmentAnchors.flatMap(row=>row.source_schedule_ids??[])]);
   const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:pendingFinances,recurring:sortedRecs,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,from:filters.from,to:filters.to});
   const expenseGroups=expensePlan.groups;
 
