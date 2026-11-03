@@ -203,3 +203,31 @@ it("reads an authorized calendar month from a previous year without a rolling hi
  expect(payload.finances.map((r:{id:string})=>r.id).sort()).toEqual(["bank:historic-card","historic-whatsapp"]);
  expect(payload.balance).toMatchObject({expense:25});
 });
+
+
+it("overlaps authorized metadata with bank access while keeping bank reads behind the access decision",async()=>{
+ let finish!:(value:unknown)=>void;boundary.access.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+ const request=GET(new Request(url));
+ try{
+  await vi.waitFor(()=>expect(boundary.records).toHaveBeenCalledExactlyOnceWith(owner.id,"business"));
+  expect(boundary.phones).toHaveBeenCalledExactlyOnceWith(owner.id);
+  expect(boundary.accounts).toHaveBeenCalledExactlyOnceWith(owner.id,"business");
+  expect(boundary.bank).not.toHaveBeenCalled();expect(boundary.anchors).not.toHaveBeenCalled();
+ }finally{finish({userId:owner.id,mode:"business",environment:"production",companyId:"authorized-company"});}
+ expect((await request).status).toBe(200);
+});
+
+it("removes the serial network wait without caching completed financial results",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(0);
+ const delay=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+ boundary.access.mockImplementation(async()=>{await delay(300);return {userId:owner.id,mode:"business",environment:"production",companyId:"authorized-company"};});
+ boundary.records.mockImplementation(async()=>{await delay(700);return [];});
+ boundary.bank.mockImplementation(async()=>{await delay(200);return {overview:{connections:[]},report:{movements:[]}};});
+ let readyAt:number|undefined;
+ try{
+  const request=GET(new Request(url)).then(response=>{readyAt=Date.now();return response;});
+  await vi.advanceTimersByTimeAsync(1000);
+  expect((await request).status).toBe(200);expect(readyAt).toBe(700);
+  expect(boundary.records).toHaveBeenCalledOnce();expect(boundary.access).toHaveBeenCalledOnce();
+ }finally{vi.useRealTimers();}
+});

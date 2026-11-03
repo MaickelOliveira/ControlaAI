@@ -10,6 +10,10 @@ import type {BankInstallmentAnchor,ScheduledBankInstallment} from "./bank-instal
 const overviewReadsKey=Symbol.for("zelo.pendingBankOverviewReads");
 const registry=globalThis as typeof globalThis & {[overviewReadsKey]?:Map<string,Promise<BankOverview>>};
 const pendingOverviews=registry[overviewReadsKey]??(registry[overviewReadsKey]=new Map<string,Promise<BankOverview>>());
+type InstallmentAnchors={items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean};
+const anchorReadsKey=Symbol.for("zelo.pendingBankAnchorReads");
+const anchorRegistry=globalThis as typeof globalThis & {[anchorReadsKey]?:Map<string,Promise<InstallmentAnchors>>};
+const pendingAnchors=anchorRegistry[anchorReadsKey]??(anchorRegistry[anchorReadsKey]=new Map<string,Promise<InstallmentAnchors>>());
 
 /** Combine concurrent reads of the same authorized overview, never completed
  * results. Every later read reaches storage again; consumers get separate objects. */
@@ -53,7 +57,18 @@ export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;
   return credit?{report:{...report,movements:mergeCreditPayments(report.movements,credit.payments)},overview:{...overview,...(credit.progress?.length?{credit:overview.credit.map(row=>({...row,...credit.progress?.find(progress=>progress.resource_id===row.resource_id)}))}:{}),installment_plans:credit.plans,manual_installments_available:true}}:{report,overview};
 }
 
-export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise<{items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean}> {
+export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise<InstallmentAnchors> {
+ if(process.env.MULTI_COMPANY_ENABLED==="true"&&!scope.companyId)throw Error("OF_COMPANY_SCOPE_MISSING");
+ const key=JSON.stringify([scope.userId,scope.mode,scope.environment,scope.companyId??null]);
+ let pending=pendingAnchors.get(key);
+ if(!pending){
+  if(pendingAnchors.size>=128)return structuredClone(await loadBankInstallmentAnchors(scope));
+  pending=loadBankInstallmentAnchors(scope).finally(()=>{if(pendingAnchors.get(key)===pending)pendingAnchors.delete(key);});
+  pendingAnchors.set(key,pending);
+ }
+ return structuredClone(await pending);
+}
+async function loadBankInstallmentAnchors(scope:OpenFinanceScope):Promise<InstallmentAnchors> {
   const result=await openFinanceRpc(scope,"zelo_of_installment_anchors") as {items?:unknown;scheduled?:unknown;incomplete?:unknown};
   if(!result||!Array.isArray(result.items)||result.items.length>2000||typeof result.incomplete!=="boolean"||result.items.some(item=>{
     const row=item as Partial<BankInstallmentAnchor>;
@@ -63,7 +78,7 @@ export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise
     const row=item as Partial<ScheduledBankInstallment>;
     return !row||typeof row.id!=="string"||typeof row.resource_id!=="string"||typeof row.description!=="string"||typeof row.resource_name!=="string"||typeof row.institution_name!=="string"||typeof row.date!=="string"||typeof row.bill_month!=="string"||typeof row.synced_at!=="string"||typeof row.amount!=="string"||row.currency!==null&&typeof row.currency!=="string"||typeof row.installment_number!=="number"||typeof row.installment_count!=="number"||row.direction!=="debit"||row.resource_type!=="card"||!Array.isArray(row.schedule_ids)||row.schedule_ids.length>1000||row.schedule_ids.some(id=>typeof id!=="string");
   })))throw Error("OF_SCHEDULED_INSTALLMENTS_INVALID");
-  return result as {items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean};
+  return result as InstallmentAnchors;
 }
 
 type CreditData={payments:BankMovement[];plans:CreditInstallmentPlan[];progress?:Array<Pick<BankCredit,"resource_id"|"paid_installments"|"remaining_installments"|"total_installments"|"first_due_date"|"periodicity">>};

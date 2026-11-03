@@ -29,7 +29,7 @@ it("preserves long manual periods for clients without bank access",async()=>{
  expect((await GET(new Request(url.replace("2026-10-01","2020-01-01")))).status).toBe(400);expect(m.bank).not.toHaveBeenCalled();
 });
 it("does not hide bank data behind manual-only success during an owner access outage",async()=>{
- m.access.mockRejectedValue(Error("OF_ACCESS_UNAVAILABLE"));expect((await GET(new Request(url))).status).toBe(503);expect(m.records).not.toHaveBeenCalled();
+ m.access.mockRejectedValue(Error("OF_ACCESS_UNAVAILABLE"));const response=await GET(new Request(url));expect(response.status).toBe(503);expect(await response.json()).not.toHaveProperty("finances");expect(m.bank).not.toHaveBeenCalled();
 });
 it("does not present a bank-only total if manual history cannot be read completely",async()=>{
  m.access.mockResolvedValue({userId:"owner",mode:"business",environment:"production"});m.bank.mockResolvedValue({report:{movements:[]}});m.records.mockRejectedValue(Error("FINANCE_READ_UNAVAILABLE"));
