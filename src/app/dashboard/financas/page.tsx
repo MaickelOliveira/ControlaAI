@@ -676,7 +676,7 @@ function FinancasContent() {
 
       {ledger?.bank&&(!filters.account||filters.account.startsWith("bank:"))&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank} resourceId={filters.account?.slice(5)}/>}
 
-      {forecastCategoryTarget&&<BankForecastCategoryDialog key={`${mode}:${forecastCategoryTarget.id}`} target={forecastCategoryTarget} mode={mode} categories={catsExpense} onCategoryCreated={()=>void loadCategories()} onClose={()=>setForecastCategoryTarget(null)} onSaved={async()=>{await loadAll(mode);setBanner(forecastCategoryTarget.movementId?"✅ Categoria salva para esta parcela.":"✅ Categoria salva para esta cobrança e os próximos meses da mesma série.");}}/>}
+      {forecastCategoryTarget&&<BankForecastCategoryDialog key={`${mode}:${forecastCategoryTarget.id}`} target={forecastCategoryTarget} mode={mode} categories={catsExpense} onCategoryCreated={()=>void loadCategories()} onClose={()=>setForecastCategoryTarget(null)} onSaved={async()=>{await loadAll(mode);setBanner("✅ Categoria salva para os lançamentos anteriores e futuros desta mesma compra.");}}/>}
       {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onCategoryCreated={()=>void loadCategories()} onClose={()=>setBankCategoryTarget(null)} onSaved={matched=>{setBankCategoryTarget(null);setBanner(matched===undefined?"✅ Categoria salva. Os gráficos usam sua escolha.":`✅ Transferência confirmada. ${matched} movimentação(ões) com a mesma conta, descrição e valor foram atualizadas no histórico.`);loadAll(mode);}}/>}
       {bankCreditPixTarget&&<BankCreditPixDialog key={`${mode}:${bankCreditPixTarget.id}`} credit={bankCreditPixTarget} movements={ledger?.bank?.report.movements??[]} mode={mode} onClose={()=>setBankCreditPixId(null)} onSaved={()=>{setBankCreditPixId(null);setBanner("✅ Confirmação salva. O histórico e a dívida no cartão foram preservados.");loadAll(mode);}}/>}
 
@@ -815,6 +815,7 @@ function FinancasContent() {
               <input value={editRecForm.description} onChange={e => setEditRecForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="Descrição" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <FinanceCategorySelect value={editRecForm.category} onChange={name=>setEditRecForm(f=>({...f,category:name}))} categories={editRecCats} type={editRec.type === "income"?"income":"expense"} required={false} onCreated={()=>void loadCategories()}/>
+              <p className="text-xs text-muted">A categoria fica salva para os lançamentos anteriores e futuros desta mesma conta ou compra.</p>
               <input type="number" min="1" max="31" value={editRecForm.dayOfMonth} onChange={e => setEditRecForm(f => ({ ...f, dayOfMonth: e.target.value }))}
                 placeholder="Dia do mês" className="w-full border border-line rounded-xl px-4 py-2.5 text-sm outline-none" />
               <div className="flex gap-3 pt-1">

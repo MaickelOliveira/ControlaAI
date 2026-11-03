@@ -20,7 +20,7 @@ export default function BankCategoryDialog({entry,mode,categories,onClose,onSave
     <form role="dialog" aria-modal="true" aria-labelledby="bank-category-heading" onSubmit={e=>{e.preventDefault();void save(category);}} className="max-h-[90dvh] overflow-y-auto w-full max-w-md rounded-3xl bg-surface p-6 shadow-xl">
       <h2 id="bank-category-heading" className="text-lg font-bold text-ink">Categoria da movimentação</h2>
       <p className="mt-3 break-words text-sm text-muted">{entry.description}</p>
-      <p className="mt-2 text-xs text-muted">Sua escolha organiza o extrato e os gráficos da Zelo. Valor, data e descrição recebidos do banco permanecem iguais.</p>
+      <p className="mt-2 text-xs text-muted">Sua escolha fica salva no extrato e nos gráficos. Em parcelamentos ou assinaturas identificados, ela vale para os lançamentos anteriores e futuros da mesma compra.</p>
       <label htmlFor="bank-category-select" className="mt-5 block text-sm font-medium text-ink">Categoria</label>
       <FinanceCategorySelect id="bank-category-select" required onCreated={onCategoryCreated} value={category} disabled={saving} onChange={setCategory} categories={options} type={entry.type==="income"?"income":"expense"}/>
       {category===OWN_ACCOUNT_TRANSFER_CATEGORY&&<p className="mt-2 text-xs text-muted">Essa movimentação continua no extrato, mas não entra nas receitas ou despesas.</p>}
