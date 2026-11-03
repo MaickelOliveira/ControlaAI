@@ -4,7 +4,7 @@ import type {BankInstallmentAnchor,ScheduledBankInstallment} from "./bank-instal
 import {bankCategory,type BankCategory} from "./bank-category";
 import {creditPaymentAdjustment} from "./credit-funded-payment";
 import {isBankBillPaymentDescription} from "./bank-bill-payment";
-export type FinanceLedgerData={finances:LedgerEntry[];balance:{income:number;expense:number;balance:number};totalBalance:{income:number;expense:number;balance:number};bank:BankFinancialData|null;installmentAnchors?:{items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean};accounts?:Array<{id:string;name:string;type:"bank"|"credit_card"}>};
+export type FinanceLedgerData={mode?:"personal"|"business";finances:LedgerEntry[];balance:{income:number;expense:number;balance:number};totalBalance:{income:number;expense:number;balance:number};bank:BankFinancialData|null;installmentAnchors?:{items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean};accounts?:Array<{id:string;name:string;type:"bank"|"credit_card"}>};
 export type RecordedFinance = {id:string;type:string;amount:number;category:string;description:string;date:string;mode:string;source?:"whatsapp"|"web";status?:string;createdAt?:string;registeredByName?:string;accountId?:string};
 export type LedgerEntry = Omit<RecordedFinance,"source"> & {source:"whatsapp"|"web"|"bank";included:boolean;possibleDuplicate:boolean;bank?:BankMovement;categorySource?:BankCategory["source"]};
 export function ledgerAmount(value:string|null):number|null {
