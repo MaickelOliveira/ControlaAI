@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import FinanceCategorySelect from "./FinanceCategorySelect";
-export type ForecastCategoryTarget={id:string;description:string;category:string;userCategory?:string|null};
+export type ForecastCategoryTarget={id:string;description:string;category:string;userCategory?:string|null;movementId?:string};
 export default function BankForecastCategoryDialog({target,mode,categories,onClose,onSaved,onCategoryCreated}:{target:ForecastCategoryTarget;mode:string;categories:string[];onClose:()=>void;onCategoryCreated?:(name:string)=>void;onSaved:()=>Promise<void>}){
  const options=[...new Set([...categories,target.category])];
  const [category,setCategory]=useState(target.category),[saving,setSaving]=useState(false),[error,setError]=useState("");
@@ -10,7 +10,7 @@ export default function BankForecastCategoryDialog({target,mode,categories,onClo
  async function save(value:string|null){
   setSaving(true);setError("");
   try{
-   const response=await fetch(`/api/open-finance/schedules/category?mode=${encodeURIComponent(mode)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({scheduleId:target.id,category:value})});
+   const response=await fetch(`/api/open-finance/${target.movementId?"movements":"schedules"}/category?mode=${encodeURIComponent(mode)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({...(target.movementId?{movementId:target.movementId}:{scheduleId:target.id}),category:value})});
    if(!response.ok){const body=await response.json();throw Error(body.error||"Não foi possível salvar.");}
    try{await onSaved();onClose();}catch{setError("Categoria salva. Atualize o extrato para ver a alteração.");}
   }catch(reason){setError(reason instanceof Error?reason.message:"Não foi possível salvar.");}finally{setSaving(false);}
@@ -22,7 +22,7 @@ export default function BankForecastCategoryDialog({target,mode,categories,onClo
   <form ref={dialog} role="dialog" aria-modal="true" aria-labelledby="forecast-category-title" onSubmit={e=>{e.preventDefault();void save(category);}} className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-xl">
    <h2 id="forecast-category-title" className="text-lg font-bold text-ink">Alterar categoria</h2>
    <p className="mt-3 break-words text-sm text-muted">{target.description}</p>
-   <p className="mt-2 text-xs text-muted">Sua escolha vale para esta cobrança e os próximos meses da mesma série. Valor e vencimento permanecem iguais.</p>
+   <p className="mt-2 text-xs text-muted">{target.movementId?"Sua escolha vale para esta parcela.":"Sua escolha vale para esta cobrança e os próximos meses da mesma série."} Valor e vencimento permanecem iguais.</p>
    <label htmlFor="forecast-category-select" className="mt-5 block text-sm font-medium text-ink">Categoria</label>
    <FinanceCategorySelect id="forecast-category-select" required onCreated={onCategoryCreated} value={category} disabled={saving} onChange={setCategory} categories={options} type="expense"/>
    {error&&<p role="alert" className="mt-3 text-sm text-red-ink">{error}</p>}

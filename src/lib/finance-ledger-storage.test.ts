@@ -93,3 +93,14 @@ it("accepts explicitly scoped credit counts and rejects impossible counts withou
  rpc.mockResolvedValue({payments:[],plans:[],progress:[{resource_id:"fictional-contract",paid_installments:-1,remaining_installments:7}]});
  await expect(readCreditData(scope,period)).rejects.toThrow("OF_CREDIT_DATA_INVALID");
 });
+
+it("accepts separately scoped future bill facts and rejects malformed future payloads",async()=>{
+ const row={id:"fixture-movement",resource_id:"fixture-card",resource_name:"Fixture card",institution_name:"Fixture bank",resource_type:"card",date:"2026-07-25",description:"Fixture purchase",amount:"55.10",currency:"BRL",direction:"debit",bill_month:"2026-09-01",installment_number:1,installment_count:3,schedule_ids:["fixture-series"],synced_at:"2026-08-04"};
+ rpc.mockResolvedValue({items:[],scheduled:[row],incomplete:false});
+ expect((await readBankInstallmentAnchors({...scope,companyId:"fixture-company"})).scheduled).toEqual([row]);
+ expect(rpc.mock.calls[0][0]).toMatchObject({mode:"business",companyId:"fixture-company"});
+ for(const patch of [{schedule_ids:"wrong"},{installment_number:null},{direction:"credit"},{currency:42},{amount:null}]){
+  rpc.mockResolvedValue({items:[],scheduled:[{...row,...patch}],incomplete:false});
+  await expect(readBankInstallmentAnchors(scope)).rejects.toThrow("OF_SCHEDULED_INSTALLMENTS_INVALID");
+ }
+});

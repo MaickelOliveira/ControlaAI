@@ -18,7 +18,7 @@ describe("parcelas bancárias previstas no extrato",()=>{
   expect(projectBankInstallments([anchor],[{...received,id:"movement-2",date:"2026-10-03",bill_month:"2026-10-01",installment_number:2}],{from:"2026-10-01",to:"2026-10-31",today:"2026-10-15"})).toEqual([]);
  });
  it("não fabrica parcelas para observações antigas, números inválidos ou moeda desconhecida",()=>{
-  expect(projectBankInstallments([{...anchor,bill_month:"2026-06-01"}],[],period)).toEqual([]);
+  expect(projectBankInstallments([{...anchor,bill_month:"2026-06-01",synced_at:"2026-06-15T12:00:00Z"}],[],period)).toEqual([]);
   expect(projectBankInstallments([{...anchor,observed_installments:11}],[],period)).toEqual([]);
   expect(projectBankInstallments([{...anchor,currency:null}],[],period)).toEqual([]);
  });
@@ -30,4 +30,10 @@ describe("parcelas bancárias previstas no extrato",()=>{
   expect(projectBankInstallments([anchor],[],{from:"2026-10-15",to:"2026-10-31",today:"2026-10-15"})).toEqual([]);
   expect(projectBankInstallments([anchor],[],{from:"2026-10-01",to:"2026-10-20",today:"2026-10-15"})).toEqual([]);
  });
+});
+
+it("retains an older bill anchor when the bank has just refreshed the ongoing series",()=>{
+ const refreshed={...anchor,bill_month:"2026-06-01",synced_at:"2026-10-14T12:00:00Z"};
+ expect(projectBankInstallments([refreshed],[],period)).toMatchObject([{month:"2026-11",position:7,total:10}]);
+ expect(projectBankInstallments([refreshed],[],{...period,from:"2027-03-01",to:"2027-03-31"})).toEqual([]);
 });

@@ -21,11 +21,12 @@ export function financeBankSchedules(items:readonly BankAgendaItem[],filters:Fil
 }
 /** Hide the schedule's extra display row when the same purchase already has
  * a dated ledger/projection row. This never removes a real ledger entry. */
-export function unrepresentedBankSchedules(items:readonly BankAgendaItem[],entries:readonly LedgerEntry[],projections:readonly BankInstallmentProjection[]):BankAgendaItem[]{
+export function unrepresentedBankSchedules(items:readonly BankAgendaItem[],entries:readonly LedgerEntry[],projections:readonly BankInstallmentProjection[],knownScheduleIds:readonly string[]=[]):BankAgendaItem[]{
  return items.filter(item=>{
+  if(knownScheduleIds.includes(item.id)||item.source_schedule_ids?.some(id=>knownScheduleIds.includes(id)))return false;
   if(!item.resource_id||item.amount===null)return true;
   const name=normalizeBankText(item.description);
-  const projected=projections.some(row=>row.resource_id===item.resource_id&&normalizeBankText(row.description)===name&&Number(row.amount)===Number(item.amount)&&(!item.currency||item.currency===row.currency)&&item.total_installments===row.total);
+  const projected=projections.some(row=>row.source_schedule_ids?.includes(item.id)||row.resource_id===item.resource_id&&normalizeBankText(row.description)===name&&Number(row.amount)===Number(item.amount)&&(!item.currency||item.currency===row.currency)&&item.total_installments===row.total);
   const posted=entries.some(entry=>!!entry.bank&&entry.bank.resource_id===item.resource_id&&normalizeBankText(entry.description)===name&&entry.bank.currency===item.currency&&entry.amount===Number(item.amount)&&(!item.due_date||item.due_date===entry.date)&&(item.kind!=="installment"||entry.bank.installment_number===item.observed_installments&&entry.bank.installment_count===item.total_installments));
   return !projected&&!posted;
  });
