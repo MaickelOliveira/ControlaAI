@@ -5,7 +5,10 @@ type BankUpdates<T> = {
   isVisible: () => boolean;
   subscribeWake: (wake: () => void) => () => void;
   needsFastUpdates?: (data: T) => boolean;
+  once?: boolean;
 };
+
+export const BANK_READ_TIMEOUT_MS=30000;
 
 /** Keep authorization and reported import activity fast; absent state is not activity. */
 export function bankUpdatesPending(data: unknown): boolean {
@@ -28,12 +31,17 @@ export function startBankUpdates<T>(options: BankUpdates<T>): () => void {
   let stopped=false, unavailable=false, running=false, failures=0, idleDelay=10000;
   let previousJson: string | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const controller=new AbortController();
+  let controller:AbortController|undefined;
+  let deadline:ReturnType<typeof setTimeout>|undefined;
   async function update() {
     if(stopped || unavailable || running || !options.isVisible())return;
     clearTimeout(timer);running=true;
+    const readController=new AbortController();controller=readController;
     try {
-      const data=await options.load(controller.signal);
+      const expired=new Promise<never>((_,reject)=>{
+        deadline=setTimeout(()=>{readController.abort();reject(Error("BANK_READ_TIMEOUT"));},BANK_READ_TIMEOUT_MS);
+      });
+      const data=await Promise.race([options.load(readController.signal),expired]);
       if(stopped)return;
       unavailable=data===null;
       let json: string | undefined;
@@ -46,14 +54,17 @@ export function startBankUpdates<T>(options: BankUpdates<T>): () => void {
       previousJson=json;
       failures=0;
       options.onData(data);
+      if(options.once)unavailable=true;
     } catch(error) {
       if(!stopped){failures++;options.onError(error);}
     } finally {
+      clearTimeout(deadline);deadline=undefined;
+      if(controller===readController)controller=undefined;
       running=false;
       if(!stopped && !unavailable && options.isVisible())timer=setTimeout(()=>void update(),failures?Math.min(60000,10000*2**Math.min(failures,3)):idleDelay);
     }
   }
   const unsubscribe=options.subscribeWake(()=>void update());
   void update();
-  return ()=>{stopped=true;previousJson=undefined;clearTimeout(timer);controller.abort();unsubscribe();};
+  return ()=>{stopped=true;previousJson=undefined;clearTimeout(timer);clearTimeout(deadline);controller?.abort();unsubscribe();};
 }

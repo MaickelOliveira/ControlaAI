@@ -64,7 +64,7 @@ try:
         return ids
     def pattern(context,key,external_ids,amount='47.41',name='Fixture Shop',total=6,kind='installment'):
         _,resource,job,user,mode=context
-        return sql("insert into open_finance.card_schedules(id,resource_id,user_id,environment,mode,source_key,kind,description,amount,currency,total_installments,period_months,observed_transactions,last_job_id) values("+','.join(map(quote,[str(uuid.uuid4()),resource,user,'production',mode,key*64,kind,name,amount]))+",'BRL',"+(str(total) if kind=='installment' else 'null')+","+('null' if kind=='installment' else '1')+",array["+','.join(map(quote,external_ids))+"],"+quote(job)+") returning id;")
+        return sql("insert into open_finance.card_schedules(id,resource_id,user_id,environment,mode,source_key,kind,description,amount,currency,total_installments,period_months,observed_transactions,last_job_id) values("+','.join(map(quote,[str(uuid.uuid4()),resource,user,'production',mode,__import__('hashlib').sha256(key.encode()).hexdigest(),kind,name,amount]))+",'BRL',"+(str(total) if kind=='installment' else 'null')+","+('null' if kind=='installment' else '1')+",array["+','.join(map(quote,external_ids))+"],"+quote(job)+") returning id;")
     ids=purchase(primary,'first')
     first=pattern(primary,'a',['first-1'])
     tail=pattern(primary,'b',['first-2','first-4','first-5'],amount='47.40')
@@ -73,6 +73,8 @@ try:
     def meta(signature):return read("select json_build_object('owner',pg_get_userbyid(proowner),'acl',proacl::text,'config',proconfig,'definer',prosecdef) from pg_proc where oid="+quote(signature)+'::regprocedure;')
     before={s:meta(s) for s in protected}
     sql((repo/'supabase/migrations/20261103120000_persistent_purchase_categories.sql').read_text())
+    for name in ['20261103141000_bank_category_read_indexes','20261103142000_bank_category_read_performance']:
+        sql((repo/('supabase/migrations/'+name+'.sql')).read_text())
     assert before=={s:meta(s) for s in protected},'Public reader/writer access changed'
     def set_schedule(target,category='Educação',user=owner,company=None,mode='business',role='service_role'):
         return invoke(user,company or companies[user],mode,'zelo_of_set_schedule_category',','+quote(target)+','+('null' if category is None else quote(category)),role)
@@ -113,6 +115,19 @@ try:
     subscription=pattern(primary,'e',['subscription-1','subscription-2','subscription-3'],amount='12.90',name='Fixture Cloud',kind='recurring')
     assert set_schedule(subscription,'Assinaturas')=='t'
     assert category_values(subscription_ids)==['Assinaturas']*5,'Older known subscription charges retained the previous category'
+    # A history dominated by one-off rows missed the expensive installment path.
+    # Include many unrelated installment series on a card that also has overrides.
+    for n in range(20):
+        purchase(primary,'unrelated-series-'+str(n),positions=range(1,13),name='Unrelated fixture series '+str(n),amount=str(80+n),total=12,day_offset=200+n)
+        pattern(primary,'unrelated-pattern-'+str(n),['unrelated-series-'+str(n)+'-'+str(k) for k in range(1,13)],amount=str(80+n),name='Unrelated fixture series '+str(n),total=12)
+    import time
+    started_installments=time.monotonic()
+    installment_result=future()
+    installment_seconds=time.monotonic()-started_installments
+    assert len(installment_result['scheduled'])>=150
+    assert installment_seconds<5,'Installment category resolution exceeded the page read budget'
+    assert all(row.get('user_category') is None for row in installment_result['scheduled'] if row['description'].startswith('Unrelated fixture series'))
+    print('Installment-heavy reader benchmark: '+str(round(installment_seconds,3))+' seconds',flush=True)
     # Production-sized reader sample: ordinary purchases must remain bounded and uncategorized.
     sql("insert into open_finance.movements(resource_id,user_id,environment,mode,resource_type,external_id,description,amount,currency,direction,classification,transaction_date) select "+','.join(map(quote,[primary[1],owner,'production','business','card']))+",'bulk-category-'||i,'Fixture unrelated purchase '||i,1,'BRL','debit','purchase',current_date-1 from generate_series(1,1500)i;")
     import time
@@ -127,6 +142,17 @@ try:
         for role in ['anon','authenticated','service_role']:assert sql("select has_function_privilege("+quote(role)+','+quote(signature)+",'execute');")=='f'
     assert sql("select has_schema_privilege('zelo_of_workspace','public','CREATE') or has_schema_privilege('zelo_of_workspace','open_finance','CREATE');")=='f'
     assert sql("select count(*) from pg_auth_members where roleid='zelo_of_workspace'::regrole and member=(select oid from pg_roles where rolname=current_user);")=='0'
+    optimized_future=future()
+    sql((repo/'supabase/rollback/20261103142000_bank_category_read_performance.sql').read_text())
+    started_previous=time.monotonic()
+    try:
+        previous_future=json.loads(sql(scoped(owner,companies[owner],"set statement_timeout='5s';select public.zelo_of_installment_anchors("+quote(owner)+",'business');")).splitlines()[-1])
+        assert previous_future==optimized_future,'Read optimization changed reported installments or categories'
+        print('Previous installment-heavy reader: '+str(round(time.monotonic()-started_previous,3))+' seconds',flush=True)
+    except RuntimeError as error:
+        assert 'statement timeout' in str(error)
+        print('Previous installment-heavy reader exceeded 5 seconds; optimized read completed in '+str(round(installment_seconds,3))+' seconds',flush=True)
+    assert category_values(subscription_ids)==['Assinaturas']*5,'Performance rollback erased stored choices'
     sql((repo/'supabase/rollback/20261103120000_persistent_purchase_categories.sql').read_text())
     started_read=time.monotonic()
     json.loads(invoke(owner,companies[owner],'business','zelo_of_ledger_report',",current_date-180,current_date"))

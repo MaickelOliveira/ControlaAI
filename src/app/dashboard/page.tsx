@@ -191,8 +191,14 @@ export default function DashboardPage() {
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
 
   const [prevFinances, setPrevFinances] = useState<Finance[]>([]);
-  const [history,setHistory]=useState<{mode:string;finances:Finance[];error:string}>({mode:"",finances:[],error:""});
-  const finances6mo=useMemo(()=>history.mode===mode?history.finances:[],[history,mode]);
+  const historyLoader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
+    if(!mode)return null;
+    const {from,to}=sixMonthRange();
+    const response=await fetch(`/api/finances/ledger?${new URLSearchParams({mode,from,to})}`,{signal,cache:"no-store"});
+    if(response.status===401)return null;
+    if(!response.ok)throw Error("HISTORY_UNAVAILABLE");
+    return response.json();
+  },[mode]);
   const ledgerLoader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
     if(!mode)return null;
     const response=await fetch(`/api/finances/ledger?${new URLSearchParams({mode,from:filters.from,to:filters.to})}`,{cache:"no-store",signal});
@@ -201,6 +207,10 @@ export default function DashboardPage() {
   },[mode,filters.from,filters.to]);
   const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader,!!mode);
   const finances=useMemo(()=>(ledger?.finances??[]).filter(f=>f.included),[ledger]);
+  // Retry temporary failures, then stop after the first complete history read.
+  const {data:historyLedger,error:historyError}=useBankUpdates(historyLoader,!!mode,true);
+  const finances6mo=useMemo(()=>(historyLedger?.finances??[]).filter(f=>f.included),[historyLedger]);
+  const history={mode:historyLedger||historyError?mode:"",error:historyError?"Não foi possível carregar os seis meses. Tentaremos novamente. O gráfico não representa valores zerados.":""};
   const fetchSequence = useRef(0);
 
   // Carrega dados independentes de filtro: usuário, tarefas, categorias, metas
@@ -232,17 +242,6 @@ export default function DashboardPage() {
     fetch(`/api/goals?mode=${mode}`).then(r => r.json()).then(d => {
       setGoals((Array.isArray(d) ? d : []).filter((g: Goal) => g.status === "active"));
     }).catch(() => {});
-  }, [mode]);
-
-  // Gráfico de 6 meses fica fixo, independente do filtro de período
-  useEffect(() => {
-    if (!mode) return;
-    const { from, to } = sixMonthRange();
-    const controller=new AbortController();
-    fetch(`/api/finances/ledger?mode=${mode}&from=${from}&to=${to}`,{signal:controller.signal,cache:"no-store"}).then(async r => {if(!r.ok)throw Error("HISTORY_UNAVAILABLE");return r.json();}).then(d => {
-      if(!controller.signal.aborted)setHistory({mode,finances:(d.finances || []).filter((f:Finance)=>f.included),error:""});
-    }).catch(() => {if(!controller.signal.aborted)setHistory({mode,finances:[],error:"Não foi possível carregar os seis meses. O gráfico não representa valores zerados."});});
-    return ()=>controller.abort();
   }, [mode]);
 
   const fetchFiltered = useCallback((m: string, f: FinanceFilters) => {
