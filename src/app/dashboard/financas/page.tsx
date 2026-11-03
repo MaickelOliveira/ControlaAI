@@ -14,18 +14,15 @@ import FinanceLedgerRows from "@/components/FinanceLedgerRows";
 import FinanceInstallmentProjections from "@/components/FinanceInstallmentProjections";
 import PlatformAccountMoveDialog from "@/components/PlatformAccountMoveDialog";
 import {useBankUpdates} from "@/components/useBankUpdates";
+import {financePeriodExpenses} from "@/lib/finance-period-expenses";
+import FinanceDuplicateReview from "@/components/FinanceDuplicateReview";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
 import FinanceBankSchedules from "@/components/FinanceBankSchedules";
 import FinanceLoanRows from "@/components/FinanceLoanRows";
-import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} from "@/lib/finance-bank-schedules";
-import {financeLoanInstallments} from "@/lib/finance-loan-installments";
+import {bankForecastCategory} from "@/lib/finance-bank-schedules";
 import {missingHistoricalLedgerNotice} from "@/lib/finance-history";
 import {recurringInstallmentEnd} from "@/lib/installment-progress";
-import {financeExpensePlan} from "@/lib/finance-expense-plan";
-import {matchesBankFilter} from "@/lib/finance-bank-filter";
-import {projectBankInstallments,linkScheduledBankInstallments,linkBankInstallmentAnchors} from "@/lib/bank-installment-projections";
-import {normalizeBankText} from "@/lib/bank-question-parser";
-import {financeBankOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
+import {financeBankOptions} from "@/lib/finance-account-filter";
 import {ledgerCategoryGroups,ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
 
 type Finance = LedgerEntry;
@@ -144,6 +141,7 @@ function FinancasContent() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showDuplicateReview,setShowDuplicateReview]=useState(false);
   const [showMovePlatform, setShowMovePlatform] = useState(false);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [cancellingRec, setCancellingRec] = useState<string | null>(null);
@@ -412,27 +410,8 @@ function FinancasContent() {
   // TODOS o mesmo array filtrado, o que corrige o bug de percentual (antes
   // catTotals somava tudo sem filtro de data enquanto o saldo usado como
   // denominador era só do mês atual).
-  const filteredFinances = useMemo(() => finances.filter(f => {
-    if(!matchesFinanceAccount(f,filters.account))return false;
-    if (filters.type !== "all" && f.type !== filters.type) return false;
-    if (filters.categories.length > 0 && !filters.categories.includes(f.category)) return false;
-    if (filters.search.trim() && !f.description.toLowerCase().includes(filters.search.trim().toLowerCase())) return false;
-    return true;
-  }), [finances, filters]);
-
-  const filteredRecs = useMemo(() => recs.filter(r => {
-    if(filters.account&&filters.account!=="unlinked")return false; // Recurring registrations have no account association.
-    if (filters.from && r.nextDueDate < filters.from) return false;
-    if (filters.to && r.nextDueDate > filters.to) return false;
-    if (filters.type !== "all" && r.type !== filters.type) return false;
-    if (filters.categories.length > 0 && !filters.categories.includes(r.category)) return false;
-    if (filters.search.trim() && !r.description.toLowerCase().includes(filters.search.trim().toLowerCase())) return false;
-    return true;
-  }), [recs, filters]);
-
-  // Finanças pendentes (data futura, status pending) separadas das confirmadas
-  const pendingFinances = filteredFinances.filter(f => f.status === "pending");
-  const postedFinances = filteredFinances.filter(f => f.status !== "pending");
+  const today = new Date().toISOString().slice(0, 10);
+  const {pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,expensePlan}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
   // Só os lançamentos que aparecem na tela têm checkbox — "selecionar tudo"
   // não pode marcar o que nem está visível (postedFinances é limitado a 50).
   const selectableFinances = [...pendingFinances, ...postedFinances.slice(0, visibleCount)].filter(f=>f.source!=="bank");
@@ -441,23 +420,8 @@ function FinancasContent() {
   const periodBalance = ledgerBalance(postedFinances);
 
   const modeLabel = mode === "business" ? "🏢 Empresa" : "👤 Pessoal";
-  const today = new Date().toISOString().slice(0, 10);
   const missingHistory = missingHistoricalLedgerNotice(ledger?.bank??null,finances.length,today);
-  const loanInstallments=ledger?.bank?financeLoanInstallments(ledger.bank.overview,finances,filters,today):[];
   const incomeGroups=ledgerCategoryGroups(postedFinances,"income");
-
-  // Recs sorted: overdue first, then by nextDueDate
-  const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
-  const installmentAnchors=linkBankInstallmentAnchors(ledger?.installmentAnchors?.items??[],ledger?.bank?.overview.agenda?.items??[]);
-  const scheduledInstallments=linkScheduledBankInstallments(ledger?.installmentAnchors?.scheduled??[],ledger?.bank?.overview.agenda?.items??[],installmentAnchors);
-  const projectedInstallments=(()=>{
-    if(!ledger?.bank||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:"))return [];
-    const search=normalizeBankText(filters.search);
-    return projectBankInstallments(installmentAnchors.map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today},scheduledInstallments)
-      .filter(item=>(!filters.categories.length||filters.categories.includes(bankForecastCategory(item,finances)))&&matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
-  })();
-  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,[...scheduledInstallments.flatMap(row=>row.schedule_ids),...installmentAnchors.flatMap(row=>row.source_schedule_ids??[])]);
-  const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:pendingFinances,recurring:sortedRecs,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,from:filters.from,to:filters.to});
   const expenseGroups=expensePlan.groups;
 
   function recStatus(r: Recurring): { label: string; color: string } {
@@ -500,7 +464,8 @@ function FinancasContent() {
       {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-ink">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
       {missingHistory&&<p role="status" className="text-xs text-amber-ink">{missingHistory}</p>}
       {!!ledger?.bank?.report.missing_dates&&<p className="text-xs text-amber-ink">Há {ledger.bank.report.missing_dates} movimento(s) sem data enviados pelo banco, fora deste período.</p>}
-      {postedFinances.some(f=>f.possibleDuplicate)&&<p className="rounded-xl border border-line bg-amber-soft p-3 text-xs text-amber-ink">Há registros com mesmo valor e data em mais de uma origem. Estão identificados no extrato para conferência; os totais ainda podem conter repetições.</p>}
+      {postedFinances.some(f=>f.possibleDuplicate)&&<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-amber-soft p-3 text-xs text-amber-ink"><p className="min-w-0 flex-1 basis-64">Há registros com mesmo valor e data em mais de uma origem. Os totais ainda podem conter repetições.</p><button type="button" onClick={()=>setShowDuplicateReview(true)} className="rounded-xl border border-current px-4 py-2 font-semibold">Conferir possíveis duplicadas</button></div>}
+      {showDuplicateReview&&<FinanceDuplicateReview entries={finances} visibleEntries={postedFinances} onClose={()=>setShowDuplicateReview(false)}/>}
 
       {/* Saldo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

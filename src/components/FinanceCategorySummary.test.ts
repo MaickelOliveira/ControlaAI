@@ -17,3 +17,7 @@ it("deducts refunds from the total while keeping signed category labels",()=>{
  const html=renderToStaticMarkup(React.createElement(FinanceCategorySummary,{type:"expense",groups:[{name:"Compras",value:100},{name:"Estornos",value:-20}],onAdd:()=>{}}));
  expect(html).toContain("80,00");expect(html).toContain("-R$");expect(html).toContain("20,00");
 });
+it("can show the same summary on Dashboard without an unused category action",()=>{
+ const html=renderToStaticMarkup(React.createElement(FinanceCategorySummary,{type:"expense",groups:[{name:"Empréstimos",value:300,forecast:300}]}));
+ expect(html).toContain("Despesas por categoria");expect(html).toContain("300,00");expect(html).not.toContain("<button");
+});

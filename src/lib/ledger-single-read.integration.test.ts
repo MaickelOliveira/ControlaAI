@@ -5,14 +5,14 @@ import type { BankMovement } from "./open-finance-report";
 
 vi.mock("server-only", () => ({}));
 const boundary = vi.hoisted(() => ({
-  auth: vi.fn(), access: vi.fn(), records: vi.fn(), bank: vi.fn(), anchors: vi.fn(), phones: vi.fn(), accounts: vi.fn(),
+  auth: vi.fn(), access: vi.fn(), records: vi.fn(), bank: vi.fn(), history:vi.fn(), anchors: vi.fn(), phones: vi.fn(), accounts: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({getSessionWithUser: boundary.auth}));
 vi.mock("@/lib/open-finance-access", () => ({getOpenFinanceAccess: boundary.access}));
 vi.mock("@/lib/finances", async original => ({
   ...await original<typeof import("@/lib/finances")>(), getFinancesInRangeStrict: boundary.records,
 }));
-vi.mock("@/lib/finance-ledger-storage", () => ({readBankLedger: boundary.bank,readBankInstallmentAnchors: boundary.anchors}));
+vi.mock("@/lib/finance-ledger-storage", () => ({readBankLedger: boundary.bank,readBankHistory:boundary.history,readBankInstallmentAnchors: boundary.anchors}));
 vi.mock("@/lib/wpp-phone-links", () => ({getPhonesForUser: boundary.phones}));
 vi.mock("@/lib/accounts", () => ({getAccountsByUser: boundary.accounts}));
 
@@ -230,4 +230,23 @@ it("removes the serial network wait without caching completed financial results"
   expect((await request).status).toBe(200);expect(readyAt).toBe(700);
   expect(boundary.records).toHaveBeenCalledOnce();expect(boundary.access).toHaveBeenCalledOnce();
  }finally{vi.useRealTimers();}
+});
+
+it("serves the historical chart as compact cent-based totals without re-reading unrelated bank metadata",async()=>{
+ const scope={userId:owner.id,mode:"business",environment:"production",companyId:"fictional-company"};boundary.access.mockResolvedValue(scope);
+ const bank=await boundary.bank(scope,{from,to});boundary.bank.mockClear();boundary.history.mockResolvedValue(bank.report);
+ const response=await GET(new Request(`${url}&view=history`));
+ expect(response.status).toBe(200);expect(await response.json()).toEqual({months:[{key:"2026-10",income:160,expense:125}]});
+ expect(boundary.records).toHaveBeenCalledExactlyOnceWith(owner.id,"business",from,to);
+ expect(boundary.history).toHaveBeenCalledExactlyOnceWith(scope,{from,to});
+ expect(boundary.bank).not.toHaveBeenCalled();expect(boundary.anchors).not.toHaveBeenCalled();expect(boundary.accounts).not.toHaveBeenCalled();expect(boundary.phones).not.toHaveBeenCalled();
+ expect(response.headers.get("cache-control")).toBe("private, no-store");
+});
+it("does not turn a failed historical source into zero totals",async()=>{
+ boundary.access.mockResolvedValue({userId:owner.id,mode:"business",environment:"production"});boundary.history.mockRejectedValue(Error("FICTIONAL_OUTAGE"));
+ const response=await GET(new Request(`${url}&view=history`));expect(response.status).toBe(503);expect(await response.json()).not.toHaveProperty("months");
+});
+it("enforces the same bank history range limit for compact charts",async()=>{
+ boundary.access.mockResolvedValue({userId:owner.id,mode:"business",environment:"production"});
+ expect((await GET(new Request(`${url.replace("2026-10-01","2020-01-01")}&view=history`))).status).toBe(400);expect(boundary.history).not.toHaveBeenCalled();
 });

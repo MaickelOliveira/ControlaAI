@@ -3,8 +3,8 @@ import {getSessionWithUser} from "@/lib/auth";
 import {getFinancesInRangeStrict,calculateFinanceBalance} from "@/lib/finances";
 import {getOpenFinanceAccess} from "@/lib/open-finance-access";
 import {bankPeriod} from "@/lib/open-finance-report";
-import {readBankLedger,readBankInstallmentAnchors} from "@/lib/finance-ledger-storage";
-import {createFinanceLedger,ledgerBalance} from "@/lib/finance-ledger";
+import {readBankLedger,readBankInstallmentAnchors,readBankHistory} from "@/lib/finance-ledger-storage";
+import {createFinanceLedger,ledgerBalance,ledgerMonthlyTotals} from "@/lib/finance-ledger";
 import {getPhonesForUser} from "@/lib/wpp-phone-links";
 import {getAccountsByUser} from "@/lib/accounts";
 import {identifyFinanceAuthors} from "@/lib/finance-attribution";
@@ -22,6 +22,20 @@ export async function GET(request:Request){
     if(to<from)throw Error("OF_PERIOD_INVALID");period={from,to};
   }catch{return NextResponse.json({error:"Escolha um período válido."},{status:400,headers});}
   try{
+    if(query.get("view")==="history"){
+      const bankRead=(async()=>{
+        const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
+        if(!scope)return null;
+        try{bankPeriod(period.from,period.to);}catch{return "invalidPeriod" as const;}
+        return readBankHistory(scope,period);
+      })();
+      const [records,report]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode,period.from,period.to),bankRead]);
+      if(report==="invalidPeriod")return NextResponse.json({error:"Para incluir os bancos, escolha um período de até 366 dias."},{status:400,headers});
+      // Keep the same ledger classification/refund rules. History has no need
+      // for accumulated balances, author labels, account labels or forecasts.
+      const finances=createFinanceLedger(records.map(({id,type,amount,category,description,date,mode,source,status})=>({id,type,amount,category,description,date,mode,source,status})),report?.movements??[],mode);
+      return NextResponse.json(ledgerMonthlyTotals(finances),{headers});
+    }
     // Resolve bank access alongside the authorized platform reads. Those reads
     // also start the request's shared company check, rather than waiting for
     // access and then starting the same workspace resolution in a later stage.

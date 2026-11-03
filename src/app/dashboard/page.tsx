@@ -5,10 +5,12 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import {useBankUpdates} from "@/components/useBankUpdates";
 import {fetchDashboardMe} from "@/lib/dashboard-me-client";
-import {ledgerBalance,ledgerExpenseGroups,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
+import {ledgerBalance,type FinanceLedgerData,type FinanceHistoryData,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankDate} from "@/lib/open-finance-display";
 import {bankDashboardAccounts} from "@/lib/bank-dashboard";
 import {bankMoney} from "@/lib/open-finance-display";
+import FinanceCategorySummary from "@/components/FinanceCategorySummary";
+import {financePeriodExpenses,type PeriodRecurring} from "@/lib/finance-period-expenses";
 import DashboardRecentMovements from "@/components/DashboardRecentMovements";
 import DashboardCredit from "@/components/DashboardCredit";
 import DashboardAgenda from "@/components/DashboardAgenda";
@@ -21,10 +23,6 @@ const BankDashboard = dynamic(()=>import("@/components/BankDashboard"),{ssr:fals
 const BarChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.BarChartComponent),
   { ssr: false, loading: () => <div className="h-[220px] flex items-center justify-center text-subtle text-sm">Carregando gráfico...</div> }
-);
-const PieChartComponent = dynamic(
-  () => import("./DashboardCharts").then(m => m.PieChartComponent),
-  { ssr: false, loading: () => <div className="h-[170px] flex items-center justify-center text-subtle text-sm">Carregando...</div> }
 );
 const AreaChartComponent = dynamic(
   () => import("./DashboardCharts").then(m => m.AreaChartComponent),
@@ -44,10 +42,7 @@ type Goal = { id: string; title: string; targetAmount: number; currentAmount: nu
 
 type DashData = {
   user: { name: string; plan: string; status: string; activeMode: string; trialEndsAt: string };
-  personal: { balance: { income: number; expense: number; balance: number } };
-  business: { balance: { income: number; expense: number; balance: number } };
   tasks: { pendingCount: number; overdueCount: number; recent: Array<{ id: string; title: string; priority: string; dueDate?: string }> };
-  recentTransactions: Array<{ id: string; type: string; amount: number; category: string; description: string; date: string; mode: string }>;
 };
 
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -74,18 +69,12 @@ function sixMonthRange(): { from: string; to: string } {
   return { from: toYMD(first), to: toYMD(now) };
 }
 
-function buildBarData(finances: Finance[]) {
-  const months = lastNMonths(6);
-  return months.map(({ key, label }) => {
-    const slice = finances.filter(f => f.date.startsWith(key) && f.status !== "pending");
-    const receitas = slice.filter(f => f.type === "income").reduce((s, f) => s + f.amount, 0);
-    const despesas = slice.filter(f => f.type === "expense").reduce((s, f) => s + f.amount, 0);
-    return { label, receitas, despesas, saldo: receitas - despesas };
+function buildBarData(history:FinanceHistoryData|null) {
+  return lastNMonths(6).map(({key,label})=>{
+    const month=history?.months.find(row=>row.key===key);
+    const receitas=month?.income??0,despesas=month?.expense??0;
+    return {label,receitas,despesas,saldo:receitas-despesas};
   });
-}
-
-function buildPieData(finances: Finance[]) {
-  return ledgerExpenseGroups(finances,"category").sort((a,b)=>b.value-a.value);
 }
 
 // Agrupa por dia se o período for curto (<=45 dias), senão por mês — evita
@@ -187,17 +176,21 @@ export default function DashboardPage() {
   const [bootstrapAttempt,setBootstrapAttempt]=useState(0);
   const [mode, setMode] = useState<string>("");
   const [categories, setCategories] = useState<string[]>([]);
+  const [recs,setRecs]=useState<PeriodRecurring[]>([]);
+  const [recurringError,setRecurringError]=useState("");
   const [goals, setGoals] = useState<Goal[]>([]);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
 
   const [prevFinances, setPrevFinances] = useState<Finance[]>([]);
-  const historyLoader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
+  const historyLoader=useCallback(async(signal:AbortSignal):Promise<FinanceHistoryData|null>=>{
     if(!mode)return null;
     const {from,to}=sixMonthRange();
-    const response=await fetch(`/api/finances/ledger?${new URLSearchParams({mode,from,to})}`,{signal,cache:"no-store"});
+    const response=await fetch(`/api/finances/ledger?${new URLSearchParams({mode,from,to,view:"history"})}`,{signal,cache:"no-store"});
     if(response.status===401)return null;
     if(!response.ok)throw Error("HISTORY_UNAVAILABLE");
-    return response.json();
+    const body=await response.json();
+    if(!Array.isArray(body.months)||body.months.some((row:{key?:unknown;income?:unknown;expense?:unknown})=>typeof row.key!=="string"||!/^\d{4}-\d{2}$/.test(row.key)||!Number.isFinite(row.income)||!Number.isFinite(row.expense)))throw Error("HISTORY_INVALID");
+    return body;
   },[mode]);
   const ledgerLoader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
     if(!mode)return null;
@@ -209,7 +202,6 @@ export default function DashboardPage() {
   const finances=useMemo(()=>(ledger?.finances??[]).filter(f=>f.included),[ledger]);
   // Retry temporary failures, then stop after the first complete history read.
   const {data:historyLedger,error:historyError}=useBankUpdates(historyLoader,!!mode,true);
-  const finances6mo=useMemo(()=>(historyLedger?.finances??[]).filter(f=>f.included),[historyLedger]);
   const history={mode:historyLedger||historyError?mode:"",error:historyError?"Não foi possível carregar os seis meses. Tentaremos novamente. O gráfico não representa valores zerados.":""};
   const fetchSequence = useRef(0);
 
@@ -219,7 +211,7 @@ export default function DashboardPage() {
     const identity=fetchDashboardMe().then(d=>{
       if(!disposed&&!dashboardModeKnown&&(d.user?.activeMode==="personal"||d.user?.activeMode==="business"))setMode(d.user.activeMode);
     }).catch(()=>{});
-    const dashboard=fetch("/api/dashboard")
+    const dashboard=fetch("/api/dashboard?view=panel")
       .then(r => {if(!r.ok)throw Error("DASHBOARD_UNAVAILABLE");return r.json();})
       .then((d: DashData) => {
         if(!d.user||(d.user.activeMode!=="personal"&&d.user.activeMode!=="business"))throw Error("DASHBOARD_MODE_UNAVAILABLE");
@@ -244,6 +236,13 @@ export default function DashboardPage() {
     }).catch(() => {});
   }, [mode]);
 
+  useEffect(()=>{
+    if(!mode)return;
+    const controller=new AbortController();
+    fetch(`/api/recurring?mode=${mode}&status=active`,{signal:controller.signal,cache:"no-store"}).then(async response=>{if(!response.ok)throw Error("RECURRING_UNAVAILABLE");const result=await response.json();if(!Array.isArray(result))throw Error("RECURRING_INVALID");setRecs(result);setRecurringError("");}).catch(()=>{if(!controller.signal.aborted)setRecurringError("Não foi possível atualizar as contas recorrentes. As previsões podem estar incompletas.");});
+    return()=>controller.abort();
+  },[mode]);
+
   const fetchFiltered = useCallback((m: string, f: FinanceFilters) => {
     const sequence = ++fetchSequence.current;
     const prev = previousRange(f.from, f.to);
@@ -265,8 +264,10 @@ export default function DashboardPage() {
   const activeBalance = useMemo(() => ledgerBalance(filteredFinances), [filteredFinances]);
   const prevBalance = useMemo(() => ledgerBalance(filteredPrevFinances), [filteredPrevFinances]);
 
-  const barData = useMemo(() => buildBarData(finances6mo), [finances6mo]);
-  const pieData = useMemo(() => buildPieData(filteredFinances), [filteredFinances]);
+  const barData = useMemo(() => buildBarData(historyLedger), [historyLedger]);
+  const today=new Date(now).toISOString().slice(0,10);
+  const {expensePlan}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
+  const pieData=expensePlan.groups;
   const areaData = useMemo(() => buildAreaData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
   const flowData = useMemo(() => buildFlowData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
 
@@ -276,14 +277,13 @@ export default function DashboardPage() {
 
   if (!data) return null;
 
-  const { user, tasks, recentTransactions } = data;
+  const { user, tasks } = data;
   const monthLabel = new Date(now).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const trialDays = Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now) / 86400000));
   const rangeDays = Math.max(1, Math.round((new Date(filters.to + "T12:00:00").getTime() - new Date(filters.from + "T12:00:00").getTime()) / 86_400_000) + 1);
   const savingsRate = activeBalance.income > 0 ? Math.round((activeBalance.balance / activeBalance.income) * 100) : 0;
   const averageDailyExpense = activeBalance.expense / rangeDays;
   const topCategory = pieData.find(g=>g.value>0);
-  const positiveExpenses=pieData.filter(g=>g.value>0),positiveExpenseTotal=positiveExpenses.reduce((sum,g)=>sum+g.value,0);
   const postedCount = filteredFinances.filter(f => f.status !== "pending").length;
   const rangeLabel = `${new Date(filters.from + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} — ${new Date(filters.to + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
   const cashGroups=ledger?.bank?bankDashboardAccounts(ledger.bank.overview):[];
@@ -317,7 +317,7 @@ export default function DashboardPage() {
         </aside>
       </div>
           <div className="z-eclipse-secondary">
-            <article className="z-card z-activity-card"><div className="z-card-heading"><h2>Onde você gastou</h2><span className="z-badge">{rangeLabel}</span></div><div className="z-activity-chart" role="region" tabIndex={0} aria-label="Participação das categorias">{positiveExpenses.length?<PieChartComponent data={positiveExpenses} totalExpense={positiveExpenseTotal}/>:<div className="z-empty">Sem despesas positivas neste período.</div>}{pieData.some(g=>g.value<0)&&<p className="mt-3 text-[10px] text-emerald-ink">Estornos líquidos aparecem no ranking, fora desta participação.</p>}</div></article>
+            <div className="min-w-0"><FinanceCategorySummary type="expense" groups={expensePlan.groups}/>{recurringError&&<p role="alert" className="mt-2 text-xs text-amber-ink">{recurringError}</p>}{!!expensePlan.unquantified&&<p className="mt-2 text-xs text-amber-ink">{expensePlan.unquantified} previsão(ões) fora do total em reais: valor, moeda ou período a conferir.</p>}</div>
             <DashboardRecentMovements entries={filteredFinances}/>
           </div>
       <section className="z-dashboard-planning z-dashboard-compact z-card" aria-label="Planejamento">
@@ -330,7 +330,7 @@ export default function DashboardPage() {
         <div className="grid gap-5 lg:grid-cols-12"><article className="z-card lg:col-span-8"><div className="z-card-heading"><h2>Receitas, despesas e resultado</h2></div>{history.error?<p role="alert" className="text-amber-ink text-xs">{history.error}</p>:<BarChartComponent data={barData}/>}</article><article className="z-card lg:col-span-4"><div className="z-card-heading"><h2>Ranking de categorias</h2></div>{pieData.length?<CategoryBarChartComponent data={pieData}/>:<EmptyChart label="Sem categorias para comparar"/>}</article><BankDashboard data={ledger?.bank??null} entries={filteredFinances}/><article className="z-card lg:col-span-12"><div className="z-card-heading"><h2>Evolução do resultado</h2></div>{areaData.length?<AreaChartComponent data={areaData}/>:<EmptyChart label="Sem movimentações no período"/>}</article><article className="z-card lg:col-span-12"><div className="z-card-heading"><h2>Ritmo das movimentações</h2></div>{flowData.length?<DailyFlowChartComponent data={flowData}/>:<EmptyChart label="Sem fluxo para visualizar"/>}</article></div>
       </section>
 
-      {recentTransactions.length===0&&<p className="text-xs text-subtle">Comece pelo WhatsApp: “Gastei 50 no mercado”, “Criar tarefa: ligar para o cliente” ou “Meta: guardar 5000 para viagem”.</p>}
+      {ledger?.finances.length===0&&<p className="text-xs text-subtle">Comece pelo WhatsApp: “Gastei 50 no mercado”, “Criar tarefa: ligar para o cliente” ou “Meta: guardar 5000 para viagem”.</p>}
     </div>
   );
 }

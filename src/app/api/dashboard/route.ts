@@ -7,11 +7,21 @@ import { getTasksByUser } from "@/lib/tasks";
 import {identifyFinanceAuthors} from "@/lib/finance-attribution";
 import {runWithCompanyRequest} from "@/lib/company-context";
 
-export async function GET() {
+export async function GET(request:Request) {
   return runWithCompanyRequest(async()=>{
   const auth = await getSessionWithUser();
   if (!auth) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { user } = auth;
+
+  if(new URL(request.url).searchParams.get("view")==="panel"){
+    const tasks=await getTasksByUser(user.id,user.activeMode);
+    const pending=tasks.filter(task=>task.status!=="completed").sort((a,b)=>({high:0,medium:1,low:2}[a.priority]-{high:0,medium:1,low:2}[b.priority]));
+    const today=new Date().toISOString().slice(0,10);
+    return NextResponse.json({
+      user:{name:user.name,plan:user.plan,status:user.status,activeMode:user.activeMode,trialEndsAt:user.trialEndsAt},
+      tasks:{pendingCount:pending.length,overdueCount:pending.filter(task=>task.dueDate&&task.dueDate<today).length,recent:pending.slice(0,5)},
+    },{headers:{"Cache-Control":"private, no-store"}});
+  }
 
   const now = new Date();
   const year = now.getFullYear();
