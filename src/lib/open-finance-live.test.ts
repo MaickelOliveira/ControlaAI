@@ -20,7 +20,7 @@ it("does not overlap requests and aborts on a mode/page change",async()=>{
   vi.useFakeTimers();let resolve:(v:object)=>void=()=>{},wake=()=>{},signal:AbortSignal|undefined;const received=vi.fn(),unsubscribe=vi.fn();
   const load=vi.fn((s:AbortSignal)=>{signal=s;return new Promise<object>(r=>{resolve=r;});});
   const stop=startBankUpdates({load,onData:received,onError:vi.fn(),isVisible:()=>true,subscribeWake:f=>{wake=f;return unsubscribe;}});
-  wake();wake();await vi.advanceTimersByTimeAsync(60000);expect(load).toHaveBeenCalledTimes(1);stop();expect(signal?.aborted).toBe(true);resolve({});await vi.advanceTimersByTimeAsync(0);expect(received).not.toHaveBeenCalled();expect(unsubscribe).toHaveBeenCalledOnce();
+  wake();wake();await vi.advanceTimersByTimeAsync(29999);expect(load).toHaveBeenCalledTimes(1);stop();expect(signal?.aborted).toBe(true);resolve({});await vi.advanceTimersByTimeAsync(0);expect(received).not.toHaveBeenCalled();expect(unsubscribe).toHaveBeenCalledOnce();
 });
 it("stops when the feature is unavailable and backs off on failures",async()=>{
   vi.useFakeTimers();const load=vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(null),error=vi.fn();
@@ -97,7 +97,7 @@ it("does not overlap an idle read even when timers and wake events occur while i
 
     wake();
     wake();
-    await vi.advanceTimersByTimeAsync(120000);
+    await vi.advanceTimersByTimeAsync(29999);
     expect(load).toHaveBeenCalledTimes(14);
     expect(received).toHaveBeenCalledTimes(13);
 
@@ -390,4 +390,39 @@ it("does not log or persist bank data while comparing snapshots and refreshing",
   } finally {
     stop();
   }
+});
+
+
+it("aborts a stalled read, retries and ignores the expired response",async()=>{
+  vi.useFakeTimers();
+  let resolveExpired:(value:{balance:number})=>void=()=>{};
+  const signals:AbortSignal[]=[];
+  const load=vi.fn((signal:AbortSignal)=>{
+    signals.push(signal);
+    return signals.length===1?new Promise<{balance:number}>(resolve=>{resolveExpired=resolve;}):Promise.resolve({balance:250});
+  });
+  const received=vi.fn(),error=vi.fn();
+  const stop=startBankUpdates({load,onData:received,onError:error,isVisible:()=>true,subscribeWake:()=>()=>{}});
+  await vi.advanceTimersByTimeAsync(29999);
+  expect(error).not.toHaveBeenCalled();expect(signals[0].aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(signals[0].aborted).toBe(true);expect(error).toHaveBeenCalledOnce();expect(received).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(signals[1].aborted).toBe(false);expect(received).toHaveBeenCalledExactlyOnceWith({balance:250});
+  resolveExpired({balance:1});await vi.advanceTimersByTimeAsync(0);
+  expect(received).toHaveBeenCalledTimes(1);
+  stop();expect(vi.getTimerCount()).toBe(0);
+});
+
+it("retries a failed history read and stops after its first complete result",async()=>{
+  vi.useFakeTimers();let wake=()=>{};
+  const load=vi.fn().mockRejectedValueOnce(Error("temporary")).mockResolvedValue({months:[10,20,30]});
+  const received=vi.fn(),error=vi.fn();
+  const stop=startBankUpdates({load,once:true,onData:received,onError:error,isVisible:()=>true,subscribeWake:listener=>{wake=listener;return()=>{};}});
+  await vi.advanceTimersByTimeAsync(0);
+  expect(error).toHaveBeenCalledOnce();expect(received).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(received).toHaveBeenCalledExactlyOnceWith({months:[10,20,30]});
+  wake();await vi.advanceTimersByTimeAsync(180000);
+  expect(load).toHaveBeenCalledTimes(2);expect(vi.getTimerCount()).toBe(0);stop();
 });
