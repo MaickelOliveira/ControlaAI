@@ -32,8 +32,7 @@ export async function readBankOverview(scope:OpenFinanceScope):Promise<BankOverv
   }
   return structuredClone(await pending);
 }
-export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankFinancialData> {
-  async function pages():Promise<BankReport>{
+async function readBankReport(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankReport> {
     if(process.env.OPEN_FINANCE_BATCH_REPORT_ENABLED==="true"){
       const report=await openFinanceRpc(scope,"zelo_of_ledger_report",{p_from:period.from,p_to:period.to}) as BankReport;
       if(!report||!Array.isArray(report.movements))throw Error("OF_LEDGER_INVALID");
@@ -52,8 +51,16 @@ export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;
       seen.add(report.next);after=report.next;
     }
     throw Error("OF_LEDGER_LIMIT");
-  }
-  const [report,overview,credit]=await Promise.all([pages(),readBankOverview(scope),readCreditData(scope,period)]);
+}
+
+/** Historical charts need posted movements, including loan repayments, without
+ * re-reading account metadata, schedules and all installment anchors. */
+export async function readBankHistory(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankReport>{
+ const [report,credit]=await Promise.all([readBankReport(scope,period),readCreditData(scope,period)]);
+ return credit?{...report,movements:mergeCreditPayments(report.movements,credit.payments)}:report;
+}
+export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankFinancialData> {
+  const [report,overview,credit]=await Promise.all([readBankReport(scope,period),readBankOverview(scope),readCreditData(scope,period)]);
   return credit?{report:{...report,movements:mergeCreditPayments(report.movements,credit.payments)},overview:{...overview,...(credit.progress?.length?{credit:overview.credit.map(row=>({...row,...credit.progress?.find(progress=>progress.resource_id===row.resource_id)}))}:{}),installment_plans:credit.plans,manual_installments_available:true}}:{report,overview};
 }
 

@@ -64,7 +64,7 @@ it("loads the bank GET with one authorized company snapshot",async()=>{
 });
 
 it("shares the Dashboard company read across tasks and finances",async()=>{
- const response=await requests.run(business,()=>dashboard());expect(response.status).toBe(200);
+ const response=await requests.run(business,()=>dashboard(new Request("https://zelo.test/api/dashboard")));expect(response.status).toBe(200);
  expect(companyReads()).toHaveLength(1);
  expect(reads.filter(r=>["/rest/v1/finances","/rest/v1/tasks"].includes(r.path)).every(r=>r.companyHeader===companyA)).toBe(true);
 });
@@ -111,4 +111,17 @@ it("checks an explicitly requested worker company separately from the HTTP selec
  }));
  expect(scope).toMatchObject({userId:ownerA,companyId:companyB});expect(companyReads()).toHaveLength(2);
  await expect(getOpenFinanceAccess(identity,"business",{companyId:companyC,throwOnStorageError:true})).rejects.toThrow("OF_ACCESS_UNAVAILABLE");
+});
+
+it("loads the compact Dashboard bootstrap without redundant finance history or phone reads",async()=>{
+ const response=await requests.run(business,()=>dashboard(new Request("https://zelo.test/api/dashboard?view=panel")));
+ expect(response.status).toBe(200);expect(await response.json()).toMatchObject({user:{activeMode:"business"},tasks:{pendingCount:0}});
+ expect(companyReads()).toHaveLength(1);expect(reads.some(row=>row.path==="/rest/v1/finances"||row.path==="/rest/v1/wpp_phone_links")).toBe(false);
+ expect(reads.find(row=>row.path==="/rest/v1/tasks")?.companyHeader).toBe(companyA);
+});
+it("keeps compact chart reads within the same authenticated company and omits unrelated metadata",async()=>{
+ const response=await requests.run(business,()=>ledger(new Request("https://zelo.test/api/finances/ledger?mode=business&from=2026-10-01&to=2026-10-31&view=history")));
+ expect(response.status).toBe(200);expect(await response.json()).toEqual({months:[]});expect(companyReads()).toHaveLength(1);
+ expect(reads.filter(row=>row.path.includes("/rpc/")&&!row.path.endsWith("/zelo_of_access")).every(row=>row.companyHeader===companyA)).toBe(true);
+ expect(reads.some(row=>/overview|installment_anchors|accounts|wpp_phone_links/.test(row.path))).toBe(false);
 });

@@ -60,3 +60,15 @@ export function ledgerCategoryGroups(entries:readonly LedgerEntry[],type:"income
  for(const entry of entries)if(entry.included&&entry.status!=="pending"&&entry.type===type)totals.set(entry.category,(totals.get(entry.category)??0)+Math.round(entry.amount*100));
  return [...totals].map(([name,cents])=>({name,value:cents/100})).sort((a,b)=>b.value-a.value);
 }
+
+export type FinanceHistoryData={months:Array<{key:string;income:number;expense:number}>};
+/** Cent-based posted totals, using the exact inclusion/refund rules of the ledger. */
+export function ledgerMonthlyTotals(entries:readonly LedgerEntry[]):FinanceHistoryData{
+ const months=new Map<string,{income:number;expense:number}>();
+ for(const entry of entries){
+  if(!entry.included||entry.status==="pending"||(entry.type!=="income"&&entry.type!=="expense"))continue;
+  const key=entry.date.slice(0,7),totals=months.get(key)??{income:0,expense:0};
+  totals[entry.type]+=Math.round(entry.amount*100);months.set(key,totals);
+ }
+ return {months:[...months.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([key,totals])=>({key,income:totals.income/100,expense:totals.expense/100}))};
+}

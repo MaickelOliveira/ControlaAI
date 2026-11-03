@@ -10,7 +10,7 @@ vi.mock("./open-finance-http", () => ({
   OF_HEADERS: {"Cache-Control": "private, no-store"},
 }));
 
-import { readBankLedger } from "./finance-ledger-storage";
+import { readBankLedger,readBankHistory } from "./finance-ledger-storage";
 import { GET as paginatedReport } from "../app/api/open-finance/report/route";
 
 const period = {from: "2026-10-01", to: "2026-10-31"};
@@ -199,4 +199,18 @@ describe("existing paginated report HTTP contract", () => {
     expect(boundary.rpc).toHaveBeenCalledTimes(2);
     expect(boundary.fetch).not.toHaveBeenCalled();
   });
+});
+
+it("preserves historical movement classification with fewer bank RPCs and no overview/agenda read",async()=>{
+ const result=await readBankHistory(scope,period);
+ expect(result).toEqual(storedReport);expect(boundary.rpc).toHaveBeenCalledTimes(2);
+ expect(boundary.rpc).toHaveBeenCalledWith(scope,"zelo_of_credit_data",{p_from:period.from,p_to:period.to});
+ expect(boundary.rpc.mock.calls.some(([,operation])=>operation==="zelo_of_overview")).toBe(false);
+});
+it("keeps bank loan repayments in the compact history reader",async()=>{
+ const previous=boundary.rpc.getMockImplementation()!;
+ const payment={...movement(2500),id:"fictional-loan-payment",resource_type:"loan",source_type:"LOAN_REPAYMENT",amount:"70.25",currency:"BRL",direction:"debit",date:"2026-10-20"};
+ boundary.rpc.mockImplementation(async(scope,operation,params)=>operation==="zelo_of_credit_data"?{payments:[payment],plans:[]}:previous(scope,operation,params));
+ const history=await readBankHistory(scope,period);const full=await readBankLedger(scope,period);
+ expect(history.movements).toEqual(full.report.movements);expect(history.movements).toContainEqual(payment);
 });
