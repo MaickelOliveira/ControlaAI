@@ -315,8 +315,9 @@ export default function DashboardPage() {
         </aside>
       </div>
           <div className="z-eclipse-secondary">
-            <div className="min-w-0"><FinanceCategorySummary type="expense" groups={expensePlan.groups}/>{recurringError&&<p role="alert" className="mt-2 text-xs text-amber-ink">{recurringError}</p>}{!!expensePlan.unquantified&&<p className="mt-2 text-xs text-amber-ink">{expensePlan.unquantified} previsão(ões) fora do total em reais: valor, moeda ou período a conferir.</p>}</div>
+            <div className="z-dashboard-category-card min-w-0"><FinanceCategorySummary type="expense" groups={expensePlan.groups}/></div>
             <DashboardRecentMovements entries={filteredFinances}/>
+            {(recurringError||!!expensePlan.unquantified)&&<div className="col-span-full space-y-2 text-xs text-amber-ink">{recurringError&&<p role="alert">{recurringError}</p>}{!!expensePlan.unquantified&&<p>{expensePlan.unquantified} previsão(ões) fora do total em reais: valor, moeda ou período a conferir.</p>}</div>}
           </div>
       <section className="z-dashboard-planning z-dashboard-compact z-card" aria-label="Planejamento">
           <DashboardAgenda/>
