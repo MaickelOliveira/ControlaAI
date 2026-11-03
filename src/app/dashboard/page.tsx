@@ -4,8 +4,9 @@ import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {useBankUpdates} from "@/components/useBankUpdates";
+import {fetchActiveFinanceLedger} from "@/lib/active-finance-ledger-client";
 import {fetchDashboardMe} from "@/lib/dashboard-me-client";
-import {ledgerBalance,type FinanceLedgerData,type FinanceHistoryData,type LedgerEntry} from "@/lib/finance-ledger";
+import {ledgerBalance,type FinanceHistoryData,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankDate} from "@/lib/open-finance-display";
 import {bankDashboardAccounts} from "@/lib/bank-dashboard";
 import {bankMoney} from "@/lib/open-finance-display";
@@ -174,7 +175,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [bootstrapError,setBootstrapError]=useState("");
   const [bootstrapAttempt,setBootstrapAttempt]=useState(0);
-  const [mode, setMode] = useState<string>("");
+  const [bootstrapMode, setMode] = useState<string>("");
   const [categories, setCategories] = useState<string[]>([]);
   const [recs,setRecs]=useState<PeriodRecurring[]>([]);
   const [recurringError,setRecurringError]=useState("");
@@ -182,6 +183,9 @@ export default function DashboardPage() {
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
 
   const [prevFinances, setPrevFinances] = useState<Finance[]>([]);
+  const ledgerLoader=useCallback((signal:AbortSignal)=>fetchActiveFinanceLedger(signal,filters.from,filters.to),[filters.from,filters.to]);
+  const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader);
+  const mode=ledger?.mode??bootstrapMode;
   const historyLoader=useCallback(async(signal:AbortSignal):Promise<FinanceHistoryData|null>=>{
     if(!mode)return null;
     const {from,to}=sixMonthRange();
@@ -192,13 +196,6 @@ export default function DashboardPage() {
     if(!Array.isArray(body.months)||body.months.some((row:{key?:unknown;income?:unknown;expense?:unknown})=>typeof row.key!=="string"||!/^\d{4}-\d{2}$/.test(row.key)||!Number.isFinite(row.income)||!Number.isFinite(row.expense)))throw Error("HISTORY_INVALID");
     return body;
   },[mode]);
-  const ledgerLoader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
-    if(!mode)return null;
-    const response=await fetch(`/api/finances/ledger?${new URLSearchParams({mode,from:filters.from,to:filters.to})}`,{cache:"no-store",signal});
-    if(response.status===401)return null;
-    const body=await response.json();if(!response.ok)throw Error(body.error);return body;
-  },[mode,filters.from,filters.to]);
-  const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader,!!mode);
   const finances=useMemo(()=>(ledger?.finances??[]).filter(f=>f.included),[ledger]);
   // Retry temporary failures, then stop after the first complete history read.
   const {data:historyLedger,error:historyError}=useBankUpdates(historyLoader,!!mode,true);

@@ -5,6 +5,7 @@ import FinanceCategorySelect from "@/components/FinanceCategorySelect";
 import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { clsx } from "clsx";
 import FinanceFilterBar, { type FinanceFilters, defaultFilters } from "@/components/FinanceFilterBar";
+import {fetchActiveFinanceLedger} from "@/lib/active-finance-ledger-client";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 import OpenFinanceFinancial from "@/components/OpenFinanceFinancial";
 import BankForecastCategoryDialog,{type ForecastCategoryTarget} from "@/components/BankForecastCategoryDialog";
@@ -84,7 +85,7 @@ const EMPTY_FORM: FormState = {
 };
 
 function FinancasContent() {
-  const [mode, setMode] = useState("");
+  const [bootstrapMode, setMode] = useState("");
 
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,14 +99,9 @@ function FinancasContent() {
 
   const loadSequence = useRef(0);
   const [visibleCount,setVisibleCount]=useState(50);
-  const loader=useCallback(async(signal:AbortSignal):Promise<FinanceLedgerData|null>=>{
-    if(!mode)return null;
-    const query=new URLSearchParams({mode,from:filters.from,to:filters.to});
-    const response=await fetch(`/api/finances/ledger?${query}`,{cache:"no-store",signal});
-    if(response.status===401)return null;
-    const body=await response.json();if(!response.ok)throw Error(body.error);return body;
-  },[mode,filters.from,filters.to]);
-  const {data:ledger,setData:setLedger,error:ledgerError}=useBankUpdates(loader,!!mode);
+  const loader=useCallback((signal:AbortSignal)=>fetchActiveFinanceLedger(signal,filters.from,filters.to),[filters.from,filters.to]);
+  const {data:ledger,setData:setLedger,error:ledgerError}=useBankUpdates<FinanceLedgerData>(loader);
+  const mode=ledger?.mode??bootstrapMode;
   const finances=useMemo(()=>ledger?.finances??[],[ledger]);
   const accountOptions=useMemo(()=>financeBankOptions(ledger),[ledger]);
   const totalBalance:Balance=ledger?.totalBalance??{income:0,expense:0,balance:0};

@@ -250,3 +250,10 @@ it("enforces the same bank history range limit for compact charts",async()=>{
  boundary.access.mockResolvedValue({userId:owner.id,mode:"business",environment:"production"});
  expect((await GET(new Request(`${url.replace("2026-10-01","2020-01-01")}&view=history`))).status).toBe(400);expect(boundary.history).not.toHaveBeenCalled();
 });
+it.each(["personal","business"] as const)("uses the authenticated active %s mode when the page starts without a mode hint",async activeMode=>{
+ boundary.auth.mockResolvedValue({session:{role:"client"},user:{...owner,activeMode}});
+ const response=await GET(new Request(`https://zelo.test/api/finances/ledger?from=${from}&to=${to}`));
+ expect(response.status).toBe(200);const payload=await response.json();expect(payload.mode).toBe(activeMode);
+ expect(payload.finances.every((row:Finance)=>row.mode===activeMode)).toBe(true);
+ expect(boundary.access).toHaveBeenCalledWith({...owner,activeMode},activeMode,{throwOnStorageError:true});expect(boundary.records).toHaveBeenCalledWith(owner.id,activeMode);
+});

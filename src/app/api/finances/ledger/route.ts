@@ -53,7 +53,7 @@ export async function GET(request:Request){
     const records=allRecords.filter(record=>record.date>=period.from&&record.date<=period.to);
     const totalBalance=calculateFinanceBalance(allRecords);
     const finances=createFinanceLedger(identifyFinanceAuthors(records,auth.user,participants).map(({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})=>({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})),bank?.report.movements??[],mode);
-    return NextResponse.json({finances,balance:ledgerBalance(finances),totalBalance,bank,installmentAnchors,accounts:accounts.map(({id,name,type})=>({id,name,type}))},{headers});
+    return NextResponse.json({mode,finances,balance:ledgerBalance(finances),totalBalance,bank,installmentAnchors,accounts:accounts.map(({id,name,type})=>({id,name,type}))},{headers});
   }catch{
     return NextResponse.json({error:"Não foi possível atualizar o extrato completo. Tente um período menor ou aguarde uma nova tentativa."},{status:503,headers});
   }
