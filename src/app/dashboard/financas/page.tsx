@@ -23,7 +23,7 @@ import {missingHistoricalLedgerNotice} from "@/lib/finance-history";
 import {recurringInstallmentEnd} from "@/lib/installment-progress";
 import {financeExpensePlan} from "@/lib/finance-expense-plan";
 import {matchesBankFilter} from "@/lib/finance-bank-filter";
-import {projectBankInstallments} from "@/lib/bank-installment-projections";
+import {projectBankInstallments,linkScheduledBankInstallments} from "@/lib/bank-installment-projections";
 import {normalizeBankText} from "@/lib/bank-question-parser";
 import {financeBankOptions,matchesFinanceAccount} from "@/lib/finance-account-filter";
 import {ledgerCategoryGroups,ledgerBalance,type FinanceLedgerData,type LedgerEntry} from "@/lib/finance-ledger";
@@ -448,13 +448,14 @@ function FinancasContent() {
 
   // Recs sorted: overdue first, then by nextDueDate
   const sortedRecs = [...filteredRecs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
+  const scheduledInstallments=linkScheduledBankInstallments(ledger?.installmentAnchors?.scheduled??[],ledger?.bank?.overview.agenda?.items??[]);
   const projectedInstallments=(()=>{
     if(!ledger?.bank||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:"))return [];
     const search=normalizeBankText(filters.search);
-    return projectBankInstallments((ledger.installmentAnchors?.items??[]).map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today})
+    return projectBankInstallments((ledger.installmentAnchors?.items??[]).map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today},scheduledInstallments)
       .filter(item=>(!filters.categories.length||filters.categories.includes(bankForecastCategory(item,finances)))&&matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
   })();
-  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments);
+  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,scheduledInstallments.flatMap(row=>row.schedule_ids));
   const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:pendingFinances,recurring:sortedRecs,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,from:filters.from,to:filters.to});
   const expenseGroups=expensePlan.groups;
 
@@ -652,7 +653,7 @@ function FinancasContent() {
                   );
                 })}
 
-                <FinanceInstallmentProjections items={projectedInstallments} onCategory={item=>setForecastCategoryTarget({id:item.id,description:item.description,category:bankForecastCategory(item,finances),userCategory:item.user_category})}/>
+                <FinanceInstallmentProjections items={projectedInstallments} onCategory={item=>setForecastCategoryTarget({id:item.id,description:item.description,category:bankForecastCategory(item,finances),userCategory:item.user_category,...("category_movement_id" in item?{movementId:item.category_movement_id}: {})})}/>
 
                 {/* Separador se tiver pendentes e lançamentos confirmados */}
                 {(sortedRecs.length > 0 || pendingFinances.length > 0 || projectedInstallments.length > 0 || loanInstallments.some(item=>!item.recordedId) || bankSchedules.length > 0) && postedFinances.length > 0 && (
@@ -674,7 +675,7 @@ function FinancasContent() {
 
       {ledger?.bank&&(!filters.account||filters.account.startsWith("bank:"))&&(mode==="personal"||mode==="business")&&<OpenFinanceFinancial key={mode} mode={mode} data={ledger.bank} resourceId={filters.account?.slice(5)}/>}
 
-      {forecastCategoryTarget&&<BankForecastCategoryDialog key={`${mode}:${forecastCategoryTarget.id}`} target={forecastCategoryTarget} mode={mode} categories={catsExpense} onCategoryCreated={()=>void loadCategories()} onClose={()=>setForecastCategoryTarget(null)} onSaved={async()=>{await loadAll(mode);setBanner("✅ Categoria salva para esta cobrança e os próximos meses da mesma série.");}}/>}
+      {forecastCategoryTarget&&<BankForecastCategoryDialog key={`${mode}:${forecastCategoryTarget.id}`} target={forecastCategoryTarget} mode={mode} categories={catsExpense} onCategoryCreated={()=>void loadCategories()} onClose={()=>setForecastCategoryTarget(null)} onSaved={async()=>{await loadAll(mode);setBanner(forecastCategoryTarget.movementId?"✅ Categoria salva para esta parcela.":"✅ Categoria salva para esta cobrança e os próximos meses da mesma série.");}}/>}
       {bankCategoryTarget&&<BankCategoryDialog key={`${mode}:${bankCategoryTarget.id}`} entry={bankCategoryTarget} mode={mode} categories={[...new Set(bankCategoryTarget.type==="income"?catsIncome:catsExpense)]} onCategoryCreated={()=>void loadCategories()} onClose={()=>setBankCategoryTarget(null)} onSaved={matched=>{setBankCategoryTarget(null);setBanner(matched===undefined?"✅ Categoria salva. Os gráficos usam sua escolha.":`✅ Transferência confirmada. ${matched} movimentação(ões) com a mesma conta, descrição e valor foram atualizadas no histórico.`);loadAll(mode);}}/>}
       {bankCreditPixTarget&&<BankCreditPixDialog key={`${mode}:${bankCreditPixTarget.id}`} credit={bankCreditPixTarget} movements={ledger?.bank?.report.movements??[]} mode={mode} onClose={()=>setBankCreditPixId(null)} onSaved={()=>{setBankCreditPixId(null);setBanner("✅ Confirmação salva. O histórico e a dívida no cartão foram preservados.");loadAll(mode);}}/>}
 

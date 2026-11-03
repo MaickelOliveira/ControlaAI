@@ -6,7 +6,7 @@ import type {OpenFinanceScope} from "./open-finance-access";
 import type {BankOverview,BankCredit} from "./open-finance-display";
 import {collapseBankInstallmentFragments} from "./open-finance-schedules";
 import type {BankFinancialData,BankMovement,BankReport} from "./open-finance-report";
-import type {BankInstallmentAnchor} from "./bank-installment-projections";
+import type {BankInstallmentAnchor,ScheduledBankInstallment} from "./bank-installment-projections";
 const overviewReadsKey=Symbol.for("zelo.pendingBankOverviewReads");
 const registry=globalThis as typeof globalThis & {[overviewReadsKey]?:Map<string,Promise<BankOverview>>};
 const pendingOverviews=registry[overviewReadsKey]??(registry[overviewReadsKey]=new Map<string,Promise<BankOverview>>());
@@ -53,13 +53,17 @@ export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;
   return credit?{report:{...report,movements:mergeCreditPayments(report.movements,credit.payments)},overview:{...overview,...(credit.progress?.length?{credit:overview.credit.map(row=>({...row,...credit.progress?.find(progress=>progress.resource_id===row.resource_id)}))}:{}),installment_plans:credit.plans,manual_installments_available:true}}:{report,overview};
 }
 
-export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise<{items:BankInstallmentAnchor[];incomplete:boolean}> {
-  const result=await openFinanceRpc(scope,"zelo_of_installment_anchors") as {items?:unknown;incomplete?:unknown};
+export async function readBankInstallmentAnchors(scope:OpenFinanceScope):Promise<{items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean}> {
+  const result=await openFinanceRpc(scope,"zelo_of_installment_anchors") as {items?:unknown;scheduled?:unknown;incomplete?:unknown};
   if(!result||!Array.isArray(result.items)||result.items.length>2000||typeof result.incomplete!=="boolean"||result.items.some(item=>{
     const row=item as Partial<BankInstallmentAnchor>;
     return !row||typeof row.id!=="string"||typeof row.resource_id!=="string"||typeof row.description!=="string"||typeof row.resource_name!=="string"||typeof row.institution_name!=="string"||typeof row.amount!=="string"||typeof row.bill_month!=="string"||typeof row.synced_at!=="string"||typeof row.observed_installments!=="number"||typeof row.total_installments!=="number";
   }))throw Error("OF_INSTALLMENT_ANCHORS_INVALID");
-  return result as {items:BankInstallmentAnchor[];incomplete:boolean};
+  if(result.scheduled!==undefined&&(!Array.isArray(result.scheduled)||result.scheduled.length>4000||result.scheduled.some(item=>{
+    const row=item as Partial<ScheduledBankInstallment>;
+    return !row||typeof row.id!=="string"||typeof row.resource_id!=="string"||typeof row.description!=="string"||typeof row.resource_name!=="string"||typeof row.institution_name!=="string"||typeof row.date!=="string"||typeof row.bill_month!=="string"||typeof row.synced_at!=="string"||typeof row.amount!=="string"||row.currency!==null&&typeof row.currency!=="string"||typeof row.installment_number!=="number"||typeof row.installment_count!=="number"||row.direction!=="debit"||row.resource_type!=="card"||!Array.isArray(row.schedule_ids)||row.schedule_ids.length>1000||row.schedule_ids.some(id=>typeof id!=="string");
+  })))throw Error("OF_SCHEDULED_INSTALLMENTS_INVALID");
+  return result as {items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean};
 }
 
 type CreditData={payments:BankMovement[];plans:CreditInstallmentPlan[];progress?:Array<Pick<BankCredit,"resource_id"|"paid_installments"|"remaining_installments"|"total_installments"|"first_due_date"|"periodicity">>};
