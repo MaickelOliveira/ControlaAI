@@ -22,7 +22,7 @@ export default function BankForecastCategoryDialog({target,mode,categories,onClo
   <form ref={dialog} role="dialog" aria-modal="true" aria-labelledby="forecast-category-title" onSubmit={e=>{e.preventDefault();void save(category);}} className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-xl">
    <h2 id="forecast-category-title" className="text-lg font-bold text-ink">Alterar categoria</h2>
    <p className="mt-3 break-words text-sm text-muted">{target.description}</p>
-   <p className="mt-2 text-xs text-muted">{target.movementId?"Sua escolha vale para esta parcela.":"Sua escolha vale para esta cobrança e os próximos meses da mesma série."} Valor e vencimento permanecem iguais.</p>
+   <p className="mt-2 text-xs text-muted">Sua escolha vale para os lançamentos anteriores e futuros desta mesma compra ou assinatura e permanece salva após as atualizações do banco.</p>
    <label htmlFor="forecast-category-select" className="mt-5 block text-sm font-medium text-ink">Categoria</label>
    <FinanceCategorySelect id="forecast-category-select" required onCreated={onCategoryCreated} value={category} disabled={saving} onChange={setCategory} categories={options} type="expense"/>
    {error&&<p role="alert" className="mt-3 text-sm text-red-ink">{error}</p>}

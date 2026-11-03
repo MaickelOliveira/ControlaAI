@@ -441,7 +441,12 @@ export async function confirmRecurring(
       mode: rec.mode,
       source: "whatsapp",
       employeeId: rec.employeeId,
+      recurringId: rec.id,
     });
+  if(existingFinance&&!existingFinance.recurringId){
+    const linked=await getSupabase().from("finances").update({recurring_id:rec.id}).eq("id",existingFinance.id).eq("user_id",userId);
+    if(linked.error)throw Error("RECURRING_PURCHASE_LINK_FAILED");
+  }
   const alreadyPosted = Boolean(existingFinance);
 
   const paidInstallments = rec.paidInstallments + 1;
@@ -489,7 +494,7 @@ export async function updateRecurring(
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
   if (patch.description !== undefined) rowPatch.description = patch.description;
-  if (patch.category !== undefined) rowPatch.category = patch.category;
+  if (patch.category !== undefined) {rowPatch.category = patch.category;rowPatch.category_override=patch.category;}
   if (patch.dayOfMonth !== undefined) rowPatch.day_of_month = patch.dayOfMonth;
   if (patch.repeatUnit !== undefined) rowPatch.repeat_unit = patch.repeatUnit;
   if (patch.totalInstallments !== undefined) rowPatch.total_installments = patch.totalInstallments;

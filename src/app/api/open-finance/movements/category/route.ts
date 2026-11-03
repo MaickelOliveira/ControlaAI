@@ -1,3 +1,4 @@
+import {runWithCompanyRequest} from "@/lib/company-context";
 import {workspaceCategoryUser} from "@/lib/workspace-categories";
 import {NextResponse} from "next/server";
 import {getSessionWithUser} from "@/lib/auth";
@@ -7,6 +8,7 @@ import {readBankBody} from "@/lib/open-finance-body";
 import {CATEGORIES_EXPENSE,CATEGORIES_INCOME} from "@/lib/finances";
 import {OWN_ACCOUNT_TRANSFER_CATEGORY} from "@/lib/bank-category";
 export async function PATCH(request:Request){
+ return runWithCompanyRequest(async()=>{
   const auth=await getSessionWithUser();
   if(!auth||auth.session.role!=="client")return NextResponse.json({error:"Não autorizado"},{status:401,headers:OF_HEADERS});
   const scope=await getOpenFinanceAccess(auth.user,new URL(request.url).searchParams.get("mode"));
@@ -37,4 +39,5 @@ export async function PATCH(request:Request){
     if(saved!==true)return NextResponse.json({error:"Movimentação não encontrada neste modo."},{status:404,headers:OF_HEADERS});
     return NextResponse.json({ok:true},{headers:OF_HEADERS});
   }catch{return NextResponse.json({error:"Não foi possível salvar a categoria. Tente novamente."},{status:503,headers:OF_HEADERS});}
+ });
 }

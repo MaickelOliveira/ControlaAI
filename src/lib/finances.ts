@@ -104,6 +104,7 @@ export type Finance = {
   registeredBy?: string; // número de WhatsApp de quem registrou (para contas com vários números vinculados)
   registeredByName?: string; // nome resolvido para exibição; não é um campo enviado ao banco
   accountId?: string; // conta bancária/cartão associada (src/lib/accounts.ts) — ausente em lançamentos antigos ou quem não cadastrou conta
+  recurringId?: string; // Identidade da compra/conta cadastrada, compartilhada com as parcelas.
   cardInvoiceId?: string; // só quando accountId aponta pra um cartão — a fatura do ciclo em que a despesa caiu
   /** Funcionário ao qual este pagamento/gasto pertence. O vínculo é opcional:
    *  lançamentos antigos e a escolha explícita "sem funcionário" ficam vazios. */
@@ -140,11 +141,13 @@ type Row = {
   id: string; user_id: string; type: FinanceType; amount: number; category: string;
   description: string; date: string; mode: FinanceMode; source: FinanceSource;
   pending: boolean; auto_post: boolean; registered_by: string | null; created_at: string;
+  recurring_id?: string | null;
   account_id: string | null; card_invoice_id: string | null; employee_id: string | null;
 };
 
 function fromRow(r: Row): Finance {
   return {
+    ...(r.recurring_id?{recurringId:r.recurring_id}:{}),
     id: r.id, userId: r.user_id, type: r.type, amount: Number(r.amount), category: r.category,
     description: r.description, date: r.date, mode: r.mode, source: r.source,
     status: r.pending ? "pending" : "posted", autoPost: r.auto_post, registeredBy: r.registered_by ?? undefined, createdAt: r.created_at,
@@ -187,6 +190,7 @@ function financeInsertRow(data: Omit<Finance, "id" | "createdAt">): Record<strin
     registered_by: data.registeredBy ?? (data.source === "web" ? data.userId : undefined),
     account_id: data.accountId ?? null, card_invoice_id: data.cardInvoiceId ?? null,
   };
+  if(data.recurringId)row.recurring_id=data.recurringId;
   // Compatibilidade durante a implantação da migração: lançamentos comuns
   // não mencionam a coluna nova. Quando há vínculo explícito, ela é enviada.
   if (data.employeeId !== undefined) row.employee_id = data.employeeId;

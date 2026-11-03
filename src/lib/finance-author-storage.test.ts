@@ -13,3 +13,12 @@ it("preserves the actual WhatsApp sender instead of replacing it with the accoun
 it("leaves unidentified WhatsApp history unidentified",async()=>{
  await addFinance({...base,source:"whatsapp"});expect(m.row?.registered_by).toBeUndefined();
 });
+
+it("keeps a confirmed payment linked to its registered purchase through storage and reads",async()=>{
+ const record=await addFinance({...base,source:"whatsapp",recurringId:"fixture-purchase"});
+ expect(m.row?.recurring_id).toBe("fixture-purchase");expect(record.recurringId).toBe("fixture-purchase");
+});
+it("does not assign an ordinary one-off purchase to an unrelated registered series",async()=>{
+ const record=await addFinance({...base,source:"web"});
+ expect(m.row).not.toHaveProperty("recurring_id");expect(record.recurringId).toBeUndefined();
+});
