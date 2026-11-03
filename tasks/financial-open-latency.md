@@ -1,0 +1,11 @@
+# Financial page opening latency
+
+Authorized bank access previously completed before any independent platform metadata read started. The ledger now starts authorized manual history, account labels and authors at the same time as bank eligibility. This lets those protected reads resolve the shared request company context while eligibility is in flight. Bank data still waits for the successful access decision; any failed source returns an unavailable response, never a partial financial success. Invalid bank periods retain their 400 response and manual-only long periods stay supported.
+
+The current-period ledger and six-month chart also requested identical installment anchors separately. Only simultaneous pending anchor reads now share work, keyed by owner, company, mode and environment. Every completed promise is removed, each consumer receives a separate clone, errors clear the pending entry and the map is bounded. Later requests still reach storage; no completed financial result or identity snapshot is cached.
+
+Fictitious tests prove concurrent protected reads start while eligibility is pending and bank reads do not. A controlled 300 ms access / 700 ms metadata / 200 ms bank transport finishes in 700 ms rather than the old serial 1,000 ms; these are test delays, not production latency claims. Sharing, isolation, failed-read recovery, missing company context and fresh later reads are covered.
+
+Production diagnosis on 03/11: Supabase unified Postgres logs filtered to errors had statement timeouts ending at 14:45 during the earlier incident, with no newer database failure visible in the reviewed window. The financial reads returned successfully. Context-matched SQL samples returned overview 731 ms, anchors 136 ms and six-month report 235 ms; a later warm sample returned 244/72/212 ms. The database already has JIT disabled; no JIT setting, RLS, credential or financial record was changed for this optimization.
+
+Before publication, three repeated real personal monthly ledger GETs measured 1,330/1,151/1,267 ms including browser control overhead. Three complete Finanças openings measured 2,706/1,628/1,827 ms with data loaded and no errors. Compare using the same procedure after publication; distinguish the first opening and warmed navigation.

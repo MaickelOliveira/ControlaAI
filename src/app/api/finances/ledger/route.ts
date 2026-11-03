@@ -22,11 +22,20 @@ export async function GET(request:Request){
     if(to<from)throw Error("OF_PERIOD_INVALID");period={from,to};
   }catch{return NextResponse.json({error:"Escolha um período válido."},{status:400,headers});}
   try{
-    const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
-    if(scope){try{bankPeriod(period.from,period.to);}catch{return NextResponse.json({error:"Para incluir os bancos, escolha um período de até 366 dias."},{status:400,headers});}}
+    // Resolve bank access alongside the authorized platform reads. Those reads
+    // also start the request's shared company check, rather than waiting for
+    // access and then starting the same workspace resolution in a later stage.
+    const bankRead=(async()=>{
+      const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
+      if(scope){try{bankPeriod(period.from,period.to);}catch{return {invalidPeriod:true as const};}}
+      const [bank,installmentAnchors]=await Promise.all([scope?readBankLedger(scope,period):null,scope?readBankInstallmentAnchors(scope):{items:[],incomplete:false}]);
+      return {invalidPeriod:false as const,bank,installmentAnchors};
+    })();
     // The complete authorized history already contains the selected period.
     // Read it once so totals and the visible records share the same snapshot.
-    const [allRecords,bank,installmentAnchors,participants,accounts]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode),scope?readBankLedger(scope,period):null,scope?readBankInstallmentAnchors(scope):{items:[],incomplete:false},getPhonesForUser(auth.user.id),getAccountsByUser(auth.user.id,mode)]);
+    const [allRecords,snapshot,participants,accounts]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode),bankRead,getPhonesForUser(auth.user.id),getAccountsByUser(auth.user.id,mode)]);
+    if(snapshot.invalidPeriod)return NextResponse.json({error:"Para incluir os bancos, escolha um período de até 366 dias."},{status:400,headers});
+    const {bank,installmentAnchors}=snapshot;
     const records=allRecords.filter(record=>record.date>=period.from&&record.date<=period.to);
     const totalBalance=calculateFinanceBalance(allRecords);
     const finances=createFinanceLedger(identifyFinanceAuthors(records,auth.user,participants).map(({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})=>({id,type,amount,category,description,date,mode,source,status,createdAt,registeredByName,accountId})),bank?.report.movements??[],mode);

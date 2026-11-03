@@ -104,3 +104,36 @@ it("accepts separately scoped future bill facts and rejects malformed future pay
   await expect(readBankInstallmentAnchors(scope)).rejects.toThrow("OF_SCHEDULED_INSTALLMENTS_INVALID");
  }
 });
+
+
+it("shares pending installment reads, returns separate objects and re-reads after completion",async()=>{
+ let finish!:(value:unknown)=>void;
+ rpc.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+ const first=readBankInstallmentAnchors(scope),second=readBankInstallmentAnchors(scope);
+ expect(rpc).toHaveBeenCalledTimes(1);
+ finish({items:[{id:"series",resource_id:"card",description:"Fixture",resource_name:"Fixture card",institution_name:"Fixture bank",amount:"10.00",bill_month:"2026-10-01",synced_at:"2026-11-01",observed_installments:1,total_installments:3}],incomplete:false});
+ const [a,b]=await Promise.all([first,second]);
+ a.items[0].description="Changed by one consumer";expect(b.items[0].description).toBe("Fixture");
+ rpc.mockResolvedValue({items:[],incomplete:false});
+ expect(await readBankInstallmentAnchors(scope)).toEqual({items:[],incomplete:false});expect(rpc).toHaveBeenCalledTimes(2);
+});
+
+it("never shares installment reads across owners, companies or modes",async()=>{
+ let finish!:(value:unknown)=>void;const pending=new Promise(resolve=>{finish=resolve;});rpc.mockReturnValue(pending);
+ const scopes=[{...scope,userId:"owner-a",companyId:"a"},{...scope,userId:"owner-b",companyId:"a"},{...scope,userId:"owner-a",companyId:"b"},{...scope,userId:"owner-a",companyId:"a",mode:"personal" as const}];
+ const reads=scopes.map(s=>readBankInstallmentAnchors(s));expect(rpc).toHaveBeenCalledTimes(4);
+ finish({items:[],incomplete:false});await Promise.all(reads);
+});
+
+it("drops a failed installment read and recovers on the next authorized request",async()=>{
+ rpc.mockRejectedValue(Error("OF_STORAGE_ERROR"));
+ const failed=await Promise.allSettled([readBankInstallmentAnchors(scope),readBankInstallmentAnchors(scope)]);
+ expect(failed.every(r=>r.status==="rejected")).toBe(true);expect(rpc).toHaveBeenCalledTimes(1);
+ rpc.mockResolvedValue({items:[],incomplete:false});await expect(readBankInstallmentAnchors(scope)).resolves.toEqual({items:[],incomplete:false});expect(rpc).toHaveBeenCalledTimes(2);
+});
+
+it("requires the verified company before joining an installment read",async()=>{
+ vi.stubEnv("MULTI_COMPANY_ENABLED","true");
+ try{await expect(readBankInstallmentAnchors(scope)).rejects.toThrow("OF_COMPANY_SCOPE_MISSING");expect(rpc).not.toHaveBeenCalled();}
+ finally{vi.unstubAllEnvs();}
+});
