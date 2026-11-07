@@ -3,6 +3,7 @@ import {financePeriodExpenses} from "./finance-period-expenses";
 import {createFinanceLedger,ledgerBalance,type FinanceLedgerData} from "./finance-ledger";
 import type {BankOverview} from "./open-finance-display";
 import type {BankMovement} from "./open-finance-report";
+import {mergeCreditPayments} from "./credit-payment-ledger";
 const filters={from:"2026-11-01",to:"2026-11-30",type:"all" as const,categories:[] as string[],search:""};
 const overview={connections:[{id:"bank",institution_name:"Banco fictício",status:"active"}],resources:[{id:"loan",connection_id:"bank",resource_type:"loan",name:"Pessoal"},{id:"car",connection_id:"bank",resource_type:"financing",name:"Veículo"},{id:"card",connection_id:"bank",resource_type:"card",name:"Cartão"}],credit:[{resource_id:"loan",currency:"BRL",outstanding_amount:"1000",next_installment_amount:"300"},{resource_id:"car",currency:"BRL",outstanding_amount:"2000",next_installment_amount:null}],limits:[],bills:[],sync:[],installment_plans:[{resource_id:"car",currency:"BRL",amount:"800",first_due_date:"2026-10-20",last_due_date:"2026-12-20"}],agenda:{items:[{id:"subscription",resource_id:"card",kind:"recurring",description:"Netflix",institution_name:"Banco fictício",resource_name:"Cartão",due_date:"2026-11-15",amount:"20.00",currency:"BRL",synced_at:"2026-11-01"}]}} as unknown as BankOverview;
 const movement=(patch:Partial<BankMovement>={}):BankMovement=>({id:"pix",resource_id:"cash",resource_name:"Conta",institution_name:"Banco fictício",resource_type:"account",date:"2026-11-05",description:"Mercado",amount:"50",currency:"BRL",direction:"debit",classification:"purchase",kind:"account_debits",user_category:"Alimentação",bill_month:null,installment_number:null,installment_count:null,...patch});
@@ -23,6 +24,16 @@ it("replaces the vehicle prediction after the bank reports its payment even when
  ledger.bank!.report.movements.push(payment);ledger.finances.push(...createFinanceLedger([],[payment],"personal"));
  const result=financePeriodExpenses(ledger,[],{...filters,categories:["Parcelas do veículo"]},"2026-11-03");
  expect(result.expensePlan).toMatchObject({recorded:817.35,forecast:0,total:817.35});
+});
+it("counts a loan's account debit once in Empréstimos and replaces its monthly forecast",()=>{
+ const cash=movement({id:"loan-debit",description:"Parcela Paga | Reforma",amount:"300.00",user_category:null,source_category:"LOAN_PAYMENTS_OTHER_PAYMENT",source_type:"OPERACAO_CREDITO"});
+ const payment=movement({id:"loan-payment",resource_id:"loan",resource_type:"loan",resource_name:"Crédito pessoal",description:"Crédito pessoal",amount:"300.0034",user_category:null,source_type:"LOAN_REPAYMENT"});
+ const movements=mergeCreditPayments([cash],[payment]);
+ const ledger=data();ledger.finances=createFinanceLedger([],movements,"personal");ledger.bank!.report.movements=movements;
+ const result=financePeriodExpenses(ledger,[],{...filters,categories:["Empréstimos"]},"2026-11-07");
+ expect(result.filteredFinances).toHaveLength(1);
+ expect(result.loanInstallments[0].recordedId).toBe("bank:loan-debit");
+ expect(result.expensePlan).toMatchObject({recorded:300,forecast:0,total:300,groups:[{name:"Empréstimos",value:300,forecast:0}]});
 });
 it("applies category, search, income and bank filters before calculating the shared chart",()=>{
  expect(financePeriodExpenses(data(),[],{...filters,categories:["Empréstimos"]},"2026-11-03").expensePlan.total).toBe(300);
