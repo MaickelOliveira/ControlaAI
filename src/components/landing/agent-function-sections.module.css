@@ -203,8 +203,6 @@
 }
 .agent:nth-child(even) .preview { padding-inline: clamp(22px, 2.2vw, 42px) 0; }
 .more { padding: 0 clamp(18px, 3vw, 52px) 12px; background: #fafaf5; color: #263729; }
-.more > div { margin-top: 0; }
-.more details { border-color: #ccd3c8; }
 @media (min-width: 1100px) {
   .portrait {
     height: calc(100% - clamp(112px, 9.3vw, 180px));
