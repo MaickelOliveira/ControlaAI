@@ -90,7 +90,7 @@ export default function CinematicHero() {
               <span>No seu</span>{" "}
               <span className={s.accent}>WhatsApp.</span>
             </h1>
-            <p>Consulte suas finanças, marque compromissos e organize tarefas e documentos em uma conversa com a Zelo.</p>
+            <p><strong>Escreva, grave um áudio ou envie uma imagem ou um PDF.</strong>{" "}A Zelo marca compromissos, registra gastos a partir de comprovantes e guarda seus documentos.</p>
           </div>
           <div className={s.actions}>
             <a className={s.primary} href="#planos">Ver planos <UiIcon name="arrow" /></a>
