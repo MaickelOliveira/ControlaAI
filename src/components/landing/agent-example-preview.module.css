@@ -1,0 +1,317 @@
+.preview {
+  --text: #182821;
+  --muted: #536157;
+  --line: #d9e1d8;
+  --accent: #296143;
+  --mint: #e6f2e7;
+  container-type: inline-size;
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: clamp(14px, 2vw, 26px);
+  color: var(--text);
+  background: #f3f4ed;
+  border: 1px solid #d7ded1;
+  border-radius: 20px;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #435548;
+  font-size: .83rem;
+  font-weight: 650;
+}
+
+.bubbles {
+  position: relative;
+  display: inline-block;
+  width: 21px;
+  height: 16px;
+  flex: none;
+}
+
+.bubbles::before,
+.bubbles::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-radius: 5px 5px 5px 1px;
+}
+.bubbles::before { top: 0; left: 0; }
+.bubbles::after { right: 0; bottom: 0; background: #f3f4ed; border-radius: 5px 5px 1px; }
+
+.preview .request {
+  justify-self: end;
+  max-width: 88%;
+  margin: 0;
+  padding: 10px 14px;
+  color: #183b24;
+  background: #def5d5;
+  border: 1px solid #c4dfba;
+  border-radius: 15px 4px 15px 15px;
+  font-size: .94rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.reply {
+  min-width: 0;
+  border-radius: 4px 16px 16px 16px;
+  border: 1px solid #d5ded2;
+  background: #fff;
+  padding: 12px clamp(12px, 3.5cqi, 20px) 16px;
+  box-shadow: 0 3px 10px #203b2608;
+}
+
+.sender {
+  display: block;
+  font-size: .8rem;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.result { min-width: 0; }
+.heading { display: flex; align-items: center; gap: 9px; }
+.heading .symbol {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--accent);
+  background: var(--mint);
+}
+.symbol svg { width: 18px; height: 18px; }
+.heading h4 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 680;
+  font-size: clamp(1.01rem, 4.5cqi, 1.3rem);
+  letter-spacing: -.025em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.rows { padding: 0; margin: 12px 0 0; }
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  gap: 4px 14px;
+  align-items: baseline;
+  padding-block: 8px;
+  border-top: 1px solid var(--line);
+  font-size: .88rem;
+  line-height: 1.4;
+}
+.row:last-child { padding-bottom: 0; }
+.row dt, .row dd { min-width: 0; overflow-wrap: anywhere; }
+.row dt { color: var(--muted); }
+.row dd { margin: 0; color: var(--text); font-weight: 620; text-align: end; }
+
+/* Statement with a proportional expense breakdown and matching row markers. */
+.result[data-kind="finance"] { --accent: #725014; --mint: #fff1c5; }
+.breakdown { display: flex; gap: 2px; height: 8px; margin-top: 14px; overflow: hidden; border-radius: 10px; }
+.breakdown > span { flex-basis: 0; }
+.breakdown > span:nth-child(3n + 1),
+.result[data-kind="finance"] .row:nth-child(3n + 1) dt::before { background: #d6a43c; }
+.breakdown > span:nth-child(3n + 2),
+.result[data-kind="finance"] .row:nth-child(3n + 2) dt::before { background: #308367; }
+.breakdown > span:nth-child(3n),
+.result[data-kind="finance"] .row:nth-child(3n) dt::before { background: #6f79ac; }
+.result[data-kind="finance"] dt::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: .05em;
+}
+.result[data-kind="finance"] .rows { margin-top: 6px; }
+.result[data-kind="finance"] .row:first-child { border: 0; }
+
+/* Calendar event and reminder share a time emphasis, but have different rhythms. */
+.result[data-kind="agenda"] { border-left: 4px solid #447a9c; padding-left: 12px; --accent: #285676; --mint: #e8f1f8; }
+.result[data-kind="agenda"] .row:first-child,
+.result[data-kind="drive"] .row:first-child {
+  grid-template-columns: 1fr;
+  border: 0;
+  border-radius: 8px;
+  background: var(--mint);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+.result[data-kind="agenda"] .row:first-child dd,
+.result[data-kind="drive"] .row:first-child dd { text-align: start; font-size: .98rem; }
+.result[data-kind="reminder"] { --accent: #765412; --mint: #faf0d6; }
+.result[data-kind="reminder"] .rows {
+  border-left: 2px solid #e6c978;
+  margin-left: 15px;
+  padding-left: 13px;
+}
+.result[data-kind="reminder"] .row { position: relative; border: 0; }
+.result[data-kind="reminder"] .row::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: -18px;
+  width: 8px;
+  height: 8px;
+  background: #b88a30;
+  border: 2px solid white;
+  border-radius: 50%;
+}
+
+/* A task card, a saved file and a goal with measured progress. */
+.result[data-kind="task"] .row:not(:first-child) dd {
+  justify-self: end;
+  padding: 1px 8px;
+  border-radius: 5px;
+  background: #eef1f4;
+  color: #394d5c;
+}
+.result[data-kind="task"] .row:nth-child(2) dd { background: #f9e7da; color: #854a23; }
+.result[data-kind="drive"] { --mint: #f0ebfa; --accent: #5b4579; }
+.result[data-kind="goal"] { --mint: #e4f1e6; }
+.progress {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: #286144;
+  font-weight: 680;
+  font-size: .82rem;
+}
+.progress progress {
+  display: block;
+  width: 100%;
+  height: 9px;
+  color: #327851;
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #dfe8dc;
+}
+.progress progress::-webkit-progress-bar { background: #dfe8dc; }
+.progress progress::-webkit-progress-value { background: #327851; border-radius: 10px; }
+.progress progress::-moz-progress-bar { background: #327851; border-radius: 10px; }
+
+/* Itemized receipt and a vehicle's three numeric readings. */
+.result[data-kind="grocery"] { --mint: #fff4dd; --accent: #78542a; }
+.result[data-kind="grocery"] .row { border-top: 1px dashed #c2b9a4; }
+.result[data-kind="grocery"] dd { font-family: ui-monospace, monospace; }
+.result[data-kind="vehicle"] { --mint: #e8eef2; --accent: #35556b; }
+.result[data-kind="vehicle"] .rows {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.result[data-kind="vehicle"] .row {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #edf2f4;
+}
+.result[data-kind="vehicle"] dt { font-size: .76rem; }
+.result[data-kind="vehicle"] dd { text-align: start; }
+
+/* Contact card, payroll roster, a working invoice and a comparison checklist. */
+.result[data-kind="people"] .symbol { border-radius: 50%; }
+.result[data-kind="people"] .row:last-child,
+.result[data-kind="support"] .row { grid-template-columns: 1fr; }
+.result[data-kind="people"] .row:last-child dd,
+.result[data-kind="support"] dd { text-align: start; }
+.result[data-kind="employee"] dt { display: flex; align-items: center; gap: 7px; }
+.initial {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #325743;
+  background: #e3eee5;
+  font-size: .74rem;
+  font-weight: 700;
+}
+.result[data-kind="employee"] .row:last-child {
+  background: #f2f5ef;
+  border: 0;
+  padding: 8px;
+  border-radius: 4px;
+}
+.result[data-kind="nfse"] { --mint: #e9eef4; --accent: #465b70; }
+.result[data-kind="nfse"] .heading { padding-bottom: 9px; border-bottom: 2px solid #adb8c3; }
+.result[data-kind="nfse"] .rows { margin-top: 0; }
+.result[data-kind="nfse"] .row:first-child { border: 0; }
+.result[data-kind="nfse"] .row:last-child { font-size: 1rem; }
+.controls {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.controls legend {
+  padding: 0;
+  color: #344b3b;
+  font-size: .82rem;
+  font-weight: 650;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.controls .choices button {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid #a9b9aa;
+  border-radius: 8px;
+  background: white;
+  color: #254431;
+  font-size: .85rem;
+  font-weight: 620;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.controls .choices button[aria-pressed="true"] { background: #244d35; border-color: #244d35; color: #fff; }
+.controls .choices button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.controls .choices button:focus-visible { outline: 3px solid #224eb6; outline-offset: 2px; }
+.conversation { display: grid; gap: 12px; min-width: 0; }
+
+@container (max-width: 315px) {
+  .preview .request { max-width: 96%; }
+  .row { gap: 3px 8px; }
+  .result[data-kind="vehicle"] .rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .result[data-kind="vehicle"] .row:first-child { grid-column: 1 / -1; }
+  .result[data-kind="people"] .row { grid-template-columns: 1fr; }
+  .result[data-kind="people"] dd { text-align: start; }
+}
