@@ -79,7 +79,7 @@ const FAQS = [
   ],
   [
     "A Zelo já emite nota fiscal?",
-    "Você pode organizar dados fiscais, cadastrar serviços e preparar rascunhos de NFS-e. A emissão direta e o PDF oficial ainda aguardam homologação e configuração do emissor. Rascunho não é nota fiscal emitida.",
+    "Hoje a Zelo prepara os dados da nota fiscal de serviço (NFS-e). O Otto reúne cliente, serviço e valor, e você confere tudo no painel. A emissão oficial pela Zelo ainda está indisponível.",
   ],
   [
     "Como funciona a compra e a garantia?",

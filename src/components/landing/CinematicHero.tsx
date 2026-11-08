@@ -1,6 +1,13 @@
+"use client";
+
 import Image from "next/image";
+import { useEffect, useRef } from "react";
 import UiIcon from "@/components/UiIcon";
+import { usePresentationMotion } from "./PresentationMotion";
 import s from "./cinematic-hero.module.css";
+
+const QUESTION = "Rita, quanto tenho no Nubank, Inter e Santander?";
+const TYPING_MS = 720;
 
 const DEMO_ACCOUNTS = [
   { id: "nubank", name: "Nubank", value: "R$ 3.250,00" },
@@ -33,6 +40,40 @@ function BankNodes({ banks, className }: {
 }
 
 export default function CinematicHero() {
+  const { running } = usePresentationMotion();
+  const chat = useRef<HTMLDivElement>(null);
+  const typedText = useRef<HTMLSpanElement>(null);
+  const played = useRef(false);
+
+  useEffect(() => {
+    const body = chat.current;
+    const letters = typedText.current;
+    if (!running || played.current || !body || !letters || !("IntersectionObserver" in window)) return;
+
+    let frame = 0;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.intersectionRatio < 0.5) return;
+      observer.disconnect();
+      played.current = true;
+      body.dataset.typing = "true";
+      const start = performance.now();
+      const type = (now: number) => {
+        const progress = Math.min(1, Math.max(0, now - start) / TYPING_MS);
+        const length = Math.floor(QUESTION.length * progress);
+        letters.textContent = QUESTION.slice(0, length);
+        if (length < QUESTION.length) frame = requestAnimationFrame(type);
+      };
+      frame = requestAnimationFrame(type);
+    }, { threshold: 0.5 });
+    observer.observe(body);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+      delete body.dataset.typing;
+      letters.textContent = "";
+    };
+  }, [running]);
+
   return (
     <section id="inicio" className={s.hero} aria-labelledby="hero-title">
       <div className={s.backdrop} aria-hidden="true">
@@ -75,24 +116,30 @@ export default function CinematicHero() {
                   <Image src="/brand/zelo-icon.png" width={40} height={40} alt="" />
                   <div><strong>Zelo</strong><small>Seu time de IA</small></div>
                 </div>
-                <div className={s.chatBody}>
+                <div className={s.chatBody} ref={chat}>
                   <p className={s.demoLabel}>Demonstração com valores fictícios</p>
                   <div className={s.outgoing}>
-                    <p>Rita, quanto tenho no Nubank, Inter e Santander?</p>
+                    <p className={s.question}>
+                      <span className={s.transcript}>{QUESTION}</span>
+                      <span className={s.typedText} ref={typedText} aria-hidden="true" />
+                    </p>
                     <small aria-hidden="true">09:41 ✓✓</small>
                   </div>
-                  <div className={s.incoming}>
-                    <strong className={s.agentLabel}>Rita <span>· Finanças</span></strong>
-                    <p>Suas três contas somam <strong>R$ 8.420,00</strong>.</p>
-                    <div className={s.bankRows}>
-                      {DEMO_ACCOUNTS.map((bank) => (
-                        <div key={bank.id}>
-                          <Image src={`/brand/banks/${bank.id}.svg`} width={20} height={20} alt="" />
-                          <span>{bank.name}</span><b>{bank.value}</b>
-                        </div>
-                      ))}
+                  <div className={s.reply}>
+                    <span className={s.typingIndicator} aria-hidden="true">Rita está digitando…</span>
+                    <div className={s.incoming}>
+                      <strong className={s.agentLabel}>Rita <span>· Finanças</span></strong>
+                      <p>Suas três contas somam <strong>R$ 8.420,00</strong>.</p>
+                      <div className={s.bankRows}>
+                        {DEMO_ACCOUNTS.map((bank) => (
+                          <div key={bank.id}>
+                            <Image src={`/brand/banks/${bank.id}.svg`} width={20} height={20} alt="" />
+                            <span>{bank.name}</span><b>{bank.value}</b>
+                          </div>
+                        ))}
+                      </div>
+                      <small className={s.time} aria-hidden="true">09:41</small>
                     </div>
-                    <small className={s.time} aria-hidden="true">09:41</small>
                   </div>
                 </div>
                 <div className={s.composer} aria-hidden="true"><span>+</span><div>Mensagem</div></div>
