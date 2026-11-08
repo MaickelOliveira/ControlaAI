@@ -137,16 +137,13 @@
 }
 .proof > div {
   display: flex;
-  padding-left: 6px;
+  align-items: end;
 }
 .proof img {
-  margin-left: -6px;
-  border: 2px solid #161916;
-  border-radius: 50%;
-  object-fit: cover;
+  object-fit: contain;
 }
-.proof p {
-  font-size: 10px;
+.proof a {
+  font-size: 13px;
   line-height: 1.7;
 }
 .proof strong {
@@ -154,8 +151,8 @@
   font-weight: 500;
   color: #e9ece4;
 }
-.proof p > span {
-  color: #8e958a;
+.proof a > span {
+  color: #c2c9bd;
 }
 .stage {
   min-width: 0;
@@ -502,9 +499,6 @@
   width: 50px;
   height: 50px;
 }
-
-/* Keep all four scroll scenes on short phones. Prioritize the actual WhatsApp
-   exchange over device chrome so the pinned frame fits below the site header. */
 
 .actions p {
   color: #d7d9cf;

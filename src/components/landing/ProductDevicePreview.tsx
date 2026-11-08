@@ -1,0 +1,58 @@
+import Image from "next/image";
+import s from "./product-device-preview.module.css";
+
+const screens = [
+  {
+    device: "desktop",
+    label: "Computador",
+    src: "/brand/product/dashboard-demo.webp",
+    width: 1687,
+    height: 932,
+    alt: "Painel da Zelo no computador, com saldo de R$ 18.450, entradas e saídas do mês, gráfico e cartões.",
+    sizes: "(max-width: 700px) 86vw, (max-width: 1350px) 63vw, 830px",
+  },
+  {
+    device: "mobile",
+    label: "Celular",
+    src: "/brand/product/mobile-demo.webp",
+    width: 853,
+    height: 1844,
+    alt: "Painel da Zelo no celular, com o mesmo saldo de R$ 18.450 e o gráfico de entradas e saídas em uma coluna.",
+    sizes: "(max-width: 700px) 212px, (max-width: 1350px) 18vw, 216px",
+  },
+] as const;
+
+export default function ProductDevicePreview() {
+  return (
+    <figure className={s.preview}>
+      <div className={s.devices}>
+        {screens.map((screen) => (
+          <a
+            key={screen.device}
+            className={s.device}
+            data-device={screen.device}
+            href={screen.src}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Ampliar painel no ${screen.label.toLowerCase()} em nova aba`}
+          >
+            <div className={s.display}>
+              <Image
+                src={screen.src}
+                width={screen.width}
+                height={screen.height}
+                sizes={screen.sizes}
+                alt={screen.alt}
+              />
+            </div>
+            <div className={s.caption}>
+              <strong>{screen.label}</strong>
+              <span>Ampliar <span aria-hidden="true">↗</span></span>
+            </div>
+          </a>
+        ))}
+      </div>
+      <figcaption>As duas telas mostram o mesmo mês, com dados de demonstração.</figcaption>
+    </figure>
+  );
+}

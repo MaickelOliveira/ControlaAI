@@ -1,0 +1,105 @@
+.preview {
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: clamp(16px, 3vw, 40px);
+  border: 1px solid #c8cfbe;
+  border-radius: clamp(12px, 1.4vw, 20px);
+  background: linear-gradient(126deg, #f6f7ee 6%, #e7ebda 64%, #e2e7d8);
+  color: #253023;
+}
+
+.devices {
+  display: grid;
+  grid-template-columns: minmax(0, 3.65fr) minmax(0, 1fr);
+  align-items: end;
+  gap: clamp(18px, 3vw, 52px);
+  max-width: 1140px;
+  margin-inline: auto;
+}
+
+.preview .device {
+  display: grid;
+  min-width: 0;
+  align-items: end;
+  justify-items: center;
+  gap: 14px;
+  color: #253023;
+  text-decoration: none;
+  border-radius: 12px;
+}
+
+.display {
+  width: 100%;
+  position: relative;
+  box-sizing: border-box;
+  background: #252a29;
+  border: 2px solid #5d625e;
+  box-shadow: 0 12px 24px -16px #14242280;
+}
+
+.display img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: inherit;
+}
+
+.device[data-device="desktop"] .display {
+  width: 94%;
+  padding: clamp(5px, .8vw, 10px);
+  border-radius: clamp(8px, 1.4vw, 18px) clamp(8px, 1.4vw, 18px) 4px 4px;
+}
+
+.device[data-device="desktop"] .display img { border-radius: 4px; }
+
+.device[data-device="desktop"] .display::after {
+  content: "";
+  position: absolute;
+  inset: auto -3% -6px;
+  height: clamp(6px, .65vw, 9px);
+  border-radius: 1px 1px 32% 32% / 1px 1px 80% 80%;
+  background: linear-gradient(#8b928d, #c7cac4 35%, #666c65);
+}
+
+.device[data-device="mobile"] .display {
+  width: min(100%, 216px);
+  border-radius: clamp(14px, 2vw, 28px);
+  padding: clamp(3px, .45vw, 6px);
+}
+.device[data-device="mobile"] .display img { border-radius: clamp(10px, 1.4vw, 20px); }
+
+.caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 12px;
+  line-height: 1.35;
+}
+.caption strong { font-size: 1rem; font-weight: 680; }
+.caption > span {
+  font-size: .85rem;
+  font-weight: 600;
+  color: #344b36;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.device:hover .caption > span { color: #14291a; }
+.preview figcaption {
+  margin-top: clamp(16px, 2vw, 24px);
+  padding-top: 12px;
+  border-top: 1px solid #c4ccbc;
+  text-align: center;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: #465440;
+}
+
+@media (max-width: 700px) {
+  .devices {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+  .device[data-device="mobile"] .display { width: min(82%, 224px); }
+}

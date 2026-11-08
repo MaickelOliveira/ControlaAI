@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import PlanLink from "./PlanLink";
 import UiIcon from "@/components/UiIcon";
 import { usePresentationMotion, useVisible } from "./PresentationMotion";
 import s from "./shared-life.module.css";
@@ -350,6 +351,7 @@ export default function SharedLife() {
             pode ajustar ou remover os números vinculados nas configurações.
           </small>
         </div>
+        <PlanLink />
       </div>
     </section>
   );

@@ -48,7 +48,7 @@
   outline-offset: 5px;
 }
 .page :is(section, [id]) {
-  scroll-margin-top: 104px;
+  scroll-margin-top: 16px;
 }
 .page summary {
   cursor: pointer;
@@ -1701,7 +1701,7 @@
     padding-inline: 20px;
   }
   .page :is(section, [id]) {
-    scroll-margin-top: 88px;
+    scroll-margin-top: 6px;
   }
   .heroGrid {
     grid-template-columns: 1fr;
@@ -3654,24 +3654,86 @@
   opacity: 1;
 }
 
-.teamDetails {
-  background: #20231e;
-  color: #f7f8f1;
+.extraExamples {
+  min-width: 0;
+  margin-top: 1rem;
 }
-.teamDetails > summary {
+
+.demoDetails {
+  overflow: clip;
+  border-top: 1px solid #ccd3c8;
+  background: #fafaf6;
+  color: #243224;
+}
+
+.demoDetails > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding-block: clamp(1.5rem, 5vw, 3rem);
-  font-family: var(--font-heading), sans-serif;
-  font-size: clamp(1.35rem, 3vw, 2.5rem);
+  padding: 14px 16px;
+  min-height: 48px;
+  font-size: .95rem;
   font-weight: 650;
-  line-height: 1.2;
+  line-height: 1.45;
 }
-.teamDetails > summary > span {
-  color: #fec307;
+
+.demoDetails > summary:focus-visible {
+  outline-offset: -3px;
 }
+
+.demoDetails > summary > span {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.demoDetails > section {
+  padding-block: clamp(28px, 5vw, 68px);
+}
+
+.extraExamples a.catalogLink {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  min-height: 44px;
+  margin: .25rem 0;
+  font-size: .9rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: .2rem;
+}
+
+.catalogLink svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.mobileLogin {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .headerInner {
+    padding-inline: 14px;
+    gap: 6px;
+  }
+  .headerActions {
+    gap: clamp(6px, 2vw, 12px);
+  }
+  .headerCta {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .headerActions .login {
+    display: none;
+  }
+  .mobileNav .mobileLogin {
+    display: flex;
+  }
+}
+
 .bankCoverage > .textLink {
   justify-self: start;
   color: #fec307;

@@ -34,10 +34,10 @@ export default function CinematicHero() {
           <div className={s.proof}>
             <div>
               {["rita", "lucas", "dora", "theo"].map((name) => (
-                <Image key={name} src={`/brand/team/${name}.png`} width={38} height={38} alt="" />
+                <Image key={name} src={`/brand/team/ilustrados/${name}.webp`} width={38} height={38} alt="" />
               ))}
             </div>
-            <p><strong>12 agentes de IA</strong><span>Para sua rotina pessoal e empresarial.</span></p>
+            <a href="#equipe"><strong>Conheça os 12 agentes de IA</strong><span>Veja o que você pode pedir a cada um ↓</span></a>
           </div>
         </div>
         <figure className={s.stage} id="como-funciona" aria-label="Exemplo de conversa com a Zelo">
