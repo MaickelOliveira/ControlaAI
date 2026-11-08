@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
 import s from "./cinematic.module.css";
+import { CookiePreferencesButton } from "@/components/MetaTracking";
 import CinematicHero from "./CinematicHero";
 import BankConnections from "./BankConnections";
 import { usePageScrollMotion } from "./PageScrollMotion";
@@ -60,7 +61,7 @@ const FAQS = [
   ],
   [
     "Posso usar no pessoal e em mais de uma empresa?",
-    "Sim. A Zelo tem um espaço Pessoal e espaços separados para suas empresas. Os registros, acessos e conexões Google seguem o espaço escolhido. Quando houver mais de uma empresa, escolha em qual delas realizar o pedido.",
+    "Sua conta tem um espaço Pessoal. Com acesso empresarial, cada empresa habilitada tem seu próprio espaço. Os registros, acessos e conexões Google seguem o espaço escolhido. Quando houver mais de uma empresa, escolha em qual delas realizar o pedido.",
   ],
   [
     "Como conecto meus bancos?",
@@ -86,21 +87,6 @@ const FAQS = [
 function Arrow() {
   return <UiIcon name="arrow" />;
 }
-function SectionLabel({
-  number,
-  children,
-}: {
-  number: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <p className={s.sectionLabel}>
-      <span>{number}</span>
-      {children}
-    </p>
-  );
-}
-
 export default function LandingCinematic({ fontClass }: { fontClass: string }) {
   return (
     <PresentationMotion>
@@ -215,22 +201,12 @@ function LandingContent({ fontClass }: { fontClass: string }) {
       </header>
       <main id="conteudo">
         <CinematicHero />
-        <div className={s.marquee} aria-hidden="true">
-          <div>
-            {Array.from({ length: 4 }, (_, i) => (
-              <span key={i}>
-                VOCÊ VIVE. <em>A ZELO ORGANIZA.</em> ✦{" "}
-              </span>
-            ))}
-          </div>
-        </div>
+        <PricingSection />
         <section className={`${s.section} ${s.overview}`} id="painel">
           <div className={s.wrap}>
             <div className={s.sectionHead} data-scroll-scene="title">
               <div>
-                <SectionLabel number="01">
-                  O WHATSAPP É O COMEÇO. O PAINEL É A VISÃO COMPLETA.
-                </SectionLabel>
+                <p className={s.sectionLabel}>O PAINEL ZELO</p>
                 <h2>
                   Sua vida organizada.
                   <br />À vista, de verdade.
@@ -274,9 +250,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
         </section>
         <section className={`${s.section} ${s.openFinance}`} id="open-finance">
           <div className={s.wrap}>
-            <SectionLabel number="02">
-              OPEN FINANCE + IA NO WHATSAPP
-            </SectionLabel>
+            <p className={s.sectionLabel}>OPEN FINANCE</p>
             <div className={s.bankIntro} data-scroll-scene="title">
               <h2>
                 Seu dinheiro conectado.
@@ -296,32 +270,13 @@ function LandingContent({ fontClass }: { fontClass: string }) {
               </div>
             </div>
             <div className={s.bankCoverage}>
-              <p className={s.bankCoverageMetric}>
-                <strong>210</strong>
-                <span>
-                  opções de conexão
-                  <br />
-                  bancária no catálogo
-                </span>
-              </p>
               <div className={s.bankCoverageDetails}>
-                <h3>Para você. Para sua empresa.</h3>
-                <p>
-                  Bancos e instituições com conexões para contas pessoais (PF)
-                  e empresariais (PJ).
-                </p>
-                <p className={s.bankCoverageNote}>
-                  Catálogo Polp/Celcoin consultado em 24/10/2026. Inclui opções
-                  PF e PJ da mesma instituição. A disponibilidade pode variar.{" "}
-                  <a
-                    href="https://api.polp.com.br/api/v2/institutions"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Conferir catálogo <span aria-hidden="true">↗</span>
-                  </a>
-                </p>
+                <h3>Quais bancos posso conectar?</h3>
+                <p>Consulte as instituições disponíveis para contas pessoais e empresariais.</p>
               </div>
+              <Link href="/bancos" className={s.textLink}>
+                Consultar bancos <Arrow />
+              </Link>
             </div>
             <BankConnections />
             <div className={s.bankGrid} id="dados-bancarios">
@@ -343,19 +298,22 @@ function LandingContent({ fontClass }: { fontClass: string }) {
                 <strong>A autorização é sua.</strong> A conexão é feita pela
                 Celcoin, com autorização no banco. A Zelo não pede sua senha
                 bancária. Disponível para contas brasileiras, conforme plano,
-                acesso e dados compartilhados pela instituição.
+                acesso e dados compartilhados pela instituição.{" "}
+                <Link href="/privacidade#open-finance" className={s.privacyLink}>Como a Zelo usa seus dados bancários</Link>
               </p>
             </div>
           </div>
         </section>
         <WorkspaceJourney />
         <SharedLife />
-        <AgentShowcase />
-        <PricingSection />
+        <details className={s.teamDetails} id="equipe">
+          <summary className={s.wrap}>Conheça os 12 agentes da Zelo <span aria-hidden="true">+</span></summary>
+          <AgentShowcase />
+        </details>
         <section className={`${s.section} ${s.faq}`} id="duvidas">
           <div className={`${s.wrap} ${s.faqGrid}`} data-scroll-scene="faq">
             <div>
-              <SectionLabel number="06">ANTES DE COMEÇAR</SectionLabel>
+              <p className={s.sectionLabel}>ANTES DE COMEÇAR</p>
               <h2>
                 Alguma dúvida
                 <br />
@@ -424,6 +382,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             <nav aria-label="Informações legais">
               <Link href="/privacidade">Privacidade</Link>
               <Link href="/termos">Termos de uso</Link>
+              <CookiePreferencesButton />
               <a href="mailto:contato@zelogestaointeligente.com.br">
                 Fale com a Zelo
                 <Arrow />

@@ -5,6 +5,7 @@ type Locale = "pt-BR" | "es" | "pt-PT";
 type Kind = "privacy" | "terms";
 
 type Section = {
+  id?: string;
   title: string;
   paragraphs?: string[];
   bullets?: string[];
@@ -19,6 +20,7 @@ type Copy = {
   privacyLabel: string;
   termsLabel: string;
   updated: string;
+  privacyUpdated?: string;
   contact: string;
   privacy: { title: string; intro: string; sections: Section[] };
   terms: { title: string; intro: string; sections: Section[] };
@@ -33,10 +35,11 @@ const copies: Record<Locale, Copy> = {
     privacyLabel: "Privacidade",
     termsLabel: "Termos de Uso",
     updated: "Última atualização: 8 de setembro de 2026",
+    privacyUpdated: "Última atualização em 8 de novembro de 2026",
     contact: "Dúvidas ou solicitações: contato@zelogestaointeligente.com.br",
     privacy: {
       title: "Política de Privacidade",
-      intro: "Esta Política explica como o Zelo Gestão Inteligente (“Zelo”) coleta, utiliza, armazena, compartilha e protege dados pessoais quando você usa nosso site, painel, atendimento pelo WhatsApp e integrações, incluindo o Google Calendar.",
+      intro: "Esta Política explica como o Zelo Gestão Inteligente (“Zelo”) coleta, utiliza, armazena, compartilha e protege dados pessoais quando você usa nosso site, painel, atendimento pelo WhatsApp e integrações com bancos pelo Open Finance e com o Google Calendar.",
       sections: [
         {
           title: "1. Responsável e contato",
@@ -52,6 +55,15 @@ const copies: Record<Locale, Copy> = {
             "Informações que você decide organizar no Zelo, como finanças, tarefas, lembretes, metas, agenda, clientes, funcionários, veículos, arquivos e listas de compras.",
             "Dados técnicos e de segurança, como registros de acesso, endereço IP processado para prevenção de abuso, data e hora das operações e identificadores necessários ao funcionamento do serviço.",
             "Situação da assinatura e dados essenciais da compra recebidos da plataforma de pagamento. O Zelo não armazena o número completo do seu cartão.",
+          ],
+        },
+        {
+          id: "open-finance",
+          title: "2.1. Conexão bancária pelo Open Finance",
+          paragraphs: [
+            "Se você decidir conectar um banco, a Zelo usa a integração da Polp com a Celcoin. Para iniciar o pedido, você informa seu CPF e, no modo Empresa, também o CNPJ. Antes de autorizar, você pode conferir os dados solicitados, a finalidade e o prazo do compartilhamento. Você se identifica diretamente no ambiente da instituição financeira. Sua senha bancária fica com o banco.",
+            "Conforme a autorização e os produtos que o banco disponibiliza, a Zelo pode receber saldos, transações, dados de cartões e faturas, investimentos, empréstimos e financiamentos. Usamos esses dados para montar seu extrato, gráficos e resumos e para responder às suas consultas financeiras no WhatsApp vinculado à conta. A conexão pertence ao espaço Pessoal ou à empresa escolhida.",
+            "Para interromper o compartilhamento, abra Contas, entre em Gerenciar conexões e selecione Desconectar banco na instituição desejada. Quando o pedido é registrado, a Zelo interrompe novas importações dessa conexão e solicita o cancelamento ao provedor. O histórico já recebido permanece na sua conta. Para solicitar a exclusão dos dados, escreva para contato@zelogestaointeligente.com.br a partir do seu e-mail cadastrado.",
           ],
         },
         {
@@ -268,12 +280,12 @@ export default function LegalDocument({ locale, kind }: { locale: Locale; kind: 
             </span>
             <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">{document.title}</h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">{document.intro}</p>
-            <p className="mt-4 text-xs font-medium text-slate-400">{copy.updated}</p>
+            <p className="mt-4 text-xs font-medium text-slate-400">{kind === "privacy" ? copy.privacyUpdated ?? copy.updated : copy.updated}</p>
           </div>
 
           <div className="space-y-9 pt-8">
             {document.sections.map(section => (
-              <section key={section.title}>
+              <section key={section.title} id={section.id}>
                 <h2 className="text-xl font-bold text-slate-900">{section.title}</h2>
                 {section.paragraphs?.map(paragraph => (
                   <p key={paragraph} className="mt-3 leading-7 text-slate-600">{paragraph}</p>

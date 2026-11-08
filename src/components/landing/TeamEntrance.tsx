@@ -53,7 +53,6 @@ export default function TeamEntrance({
   return (
     <div
       ref={root}
-      id="equipe"
       className={`${s.entrance} ${reduced ? s.reduced : ""}`}
     >
       <div className={s.sticky}>
