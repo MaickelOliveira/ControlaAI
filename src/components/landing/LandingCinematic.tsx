@@ -9,8 +9,10 @@ import { CookiePreferencesButton } from "@/components/MetaTracking";
 import CinematicHero from "./CinematicHero";
 import BankConnections from "./BankConnections";
 import { usePageScrollMotion } from "./PageScrollMotion";
-import AgentShowcase from "./AgentShowcase";
+import AgentFunctionSections from "./AgentFunctionSections";
+import PlanLink from "./PlanLink";
 import PricingSection from "./PricingSection";
+import ProductDevicePreview from "./ProductDevicePreview";
 import WorkspaceJourney from "./WorkspaceJourney";
 import SharedLife from "./SharedLife";
 import {
@@ -87,6 +89,71 @@ const FAQS = [
 function Arrow() {
   return <UiIcon name="arrow" />;
 }
+function FinanceExamples() {
+  return (
+    <div className={s.extraExamples}>
+      <details className={s.demoDetails}>
+        <summary>Como a Rita consulta seus bancos <span aria-hidden="true">+</span></summary>
+        <section className={`${s.section} ${s.openFinance}`} id="open-finance">
+          <div className={s.wrap}>
+            <p className={s.sectionLabel}>OPEN FINANCE</p>
+            <div className={s.bankIntro} data-scroll-scene="title">
+              <h2>
+                Consulte suas contas pelo WhatsApp
+              </h2>
+              <div>
+                <p>
+                  “Quanto eu tenho parcelado?” “Qual é o saldo das minhas
+                  contas?” Conecte seus bancos pelo Open Finance e pergunte à IA
+                  no WhatsApp. Ela consulta os dados recebidos para ajudar você
+                  a entender seu dinheiro.
+                </p>
+                <a href="#dados-bancarios" className={s.textLink}>
+                  O que posso acompanhar?<span aria-hidden="true">↓</span>
+                </a>
+              </div>
+            </div>
+            <div className={s.bankCoverage}>
+              <div className={s.bankCoverageDetails}>
+                <h3>Quais bancos posso conectar?</h3>
+                <p>Consulte as instituições disponíveis para contas pessoais e empresariais.</p>
+              </div>
+              <Link href="/bancos" className={s.textLink}>
+                Consultar bancos <Arrow />
+              </Link>
+            </div>
+            <BankConnections />
+            <div className={s.bankGrid} id="dados-bancarios">
+              {BANK_DATA.map((item) => (
+                <article key={item.title}>
+                  <UiIcon name={item.icon} />
+                  <div>
+                    <h3>{item.title}</h3>
+                    <p>{item.copy}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className={s.bankConsent}>
+              <div className={s.consentIcon}>
+                <UiIcon name="person" />
+              </div>
+              <p>
+                <strong>A autorização é sua.</strong> A conexão é feita pela
+                Celcoin, com autorização no banco. A Zelo não pede sua senha
+                bancária. Disponível para contas brasileiras, conforme plano,
+                acesso e dados compartilhados pela instituição.{" "}
+                <Link href="/privacidade#open-finance" className={s.privacyLink}>Como a Zelo usa seus dados bancários</Link>
+              </p>
+            </div>
+            <PlanLink />
+          </div>
+        </section>
+      </details>
+      <Link href="/bancos" className={s.catalogLink}>Consultar bancos disponíveis <Arrow /></Link>
+    </div>
+  );
+}
 export default function LandingCinematic({ fontClass }: { fontClass: string }) {
   return (
     <PresentationMotion>
@@ -114,9 +181,8 @@ function LandingContent({ fontClass }: { fontClass: string }) {
   }, [menuOpen]);
   const nav = [
     ["como-funciona", "Como funciona"],
-    ["open-finance", "Open Finance"],
-    ["equipe", "Seu time"],
-    ["planos", "Planos"],
+    ["equipe", "Agentes e funções"],
+    ["duvidas", "Dúvidas"],
   ];
   return (
     <div
@@ -169,7 +235,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
               <Arrow />
             </Link>
             <a href="#planos" className={s.headerCta}>
-              Quero meu Zelo
+              Ver planos
             </a>
             <button
               ref={menuButton}
@@ -196,130 +262,45 @@ function LandingContent({ fontClass }: { fontClass: string }) {
                 <Arrow />
               </a>
             ))}
+            <Link href="/login" className={s.mobileLogin}>Entrar na Zelo <Arrow /></Link>
           </nav>
         )}
       </header>
       <main id="conteudo">
         <CinematicHero />
+        <section className={`${s.section} ${s.overview}`} id="painel" aria-labelledby="titulo-painel">
+          <div className={s.wrap}>
+            <div className={s.sectionHead}>
+              <h2 id="titulo-painel">Seu painel no celular e no computador</h2>
+              <p>Abra a Zelo pelo navegador para ver seu saldo, consultar as compras e acompanhar o mês em qualquer uma das telas.</p>
+            </div>
+            <ProductDevicePreview />
+            <PlanLink />
+          </div>
+        </section>
+        <AgentFunctionSections
+          detailsByAgent={{
+            finance: <FinanceExamples />,
+            support: (
+              <div className={s.extraExamples}>
+                <details className={s.demoDetails}>
+                  <summary>Como alternar entre o Pessoal e a Empresa <span aria-hidden="true">+</span></summary>
+                  <WorkspaceJourney />
+                </details>
+                <details className={s.demoDetails}>
+                  <summary>Como compartilhar o acesso com a família ou a equipe <span aria-hidden="true">+</span></summary>
+                  <SharedLife />
+                </details>
+              </div>
+            ),
+          }}
+        />
         <PricingSection />
-        <section className={`${s.section} ${s.overview}`} id="painel">
-          <div className={s.wrap}>
-            <div className={s.sectionHead} data-scroll-scene="title">
-              <div>
-                <p className={s.sectionLabel}>O PAINEL ZELO</p>
-                <h2>
-                  Sua vida organizada.
-                  <br />À vista, de verdade.
-                </h2>
-              </div>
-              <p>
-                O que você organiza na conversa ganha espaço na plataforma. Veja
-                suas finanças, filtre os lançamentos, acompanhe compromissos e
-                encontre documentos. No computador ou no celular.
-              </p>
-            </div>
-            <figure className={s.productFigure} data-scroll-scene="panel">
-              <div className={s.browserBar}>
-                <span aria-hidden="true">● ● ●</span>
-                <span>SEU PAINEL ZELO</span>
-                <span>
-                  <UiIcon name="finance" />
-                  Tudo à vista
-                </span>
-              </div>
-              <picture>
-                <source
-                  media="(max-width: 650px)"
-                  srcSet="/brand/product/mobile-demo.webp"
-                  width={853}
-                  height={1844}
-                />
-                <Image
-                  src="/brand/product/dashboard-demo.webp"
-                  alt="Painel da Zelo com visão financeira, entradas, saídas, gráfico e crédito por conta. Valores ilustrativos."
-                  width={1687}
-                  height={932}
-                  sizes="(max-width:1280px) 92vw, 1200px"
-                />
-              </picture>
-              <figcaption>
-                Interface da Zelo com informações de demonstração.
-              </figcaption>
-            </figure>
-          </div>
-        </section>
-        <section className={`${s.section} ${s.openFinance}`} id="open-finance">
-          <div className={s.wrap}>
-            <p className={s.sectionLabel}>OPEN FINANCE</p>
-            <div className={s.bankIntro} data-scroll-scene="title">
-              <h2>
-                Seu dinheiro conectado.
-                <br />
-                <em>Sua IA bem informada.</em>
-              </h2>
-              <div>
-                <p>
-                  “Quanto eu tenho parcelado?” “Qual é o saldo das minhas
-                  contas?” Conecte seus bancos pelo Open Finance e pergunte à IA
-                  no WhatsApp. Ela consulta os dados recebidos para ajudar você
-                  a entender seu dinheiro.
-                </p>
-                <a href="#dados-bancarios" className={s.textLink}>
-                  O que posso acompanhar?<span aria-hidden="true">↓</span>
-                </a>
-              </div>
-            </div>
-            <div className={s.bankCoverage}>
-              <div className={s.bankCoverageDetails}>
-                <h3>Quais bancos posso conectar?</h3>
-                <p>Consulte as instituições disponíveis para contas pessoais e empresariais.</p>
-              </div>
-              <Link href="/bancos" className={s.textLink}>
-                Consultar bancos <Arrow />
-              </Link>
-            </div>
-            <BankConnections />
-            <div className={s.bankGrid} id="dados-bancarios">
-              {BANK_DATA.map((item) => (
-                <article key={item.title}>
-                  <UiIcon name={item.icon} />
-                  <div>
-                    <h3>{item.title}</h3>
-                    <p>{item.copy}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-            <div className={s.bankConsent}>
-              <div className={s.consentIcon}>
-                <UiIcon name="person" />
-              </div>
-              <p>
-                <strong>A autorização é sua.</strong> A conexão é feita pela
-                Celcoin, com autorização no banco. A Zelo não pede sua senha
-                bancária. Disponível para contas brasileiras, conforme plano,
-                acesso e dados compartilhados pela instituição.{" "}
-                <Link href="/privacidade#open-finance" className={s.privacyLink}>Como a Zelo usa seus dados bancários</Link>
-              </p>
-            </div>
-          </div>
-        </section>
-        <WorkspaceJourney />
-        <SharedLife />
-        <details className={s.teamDetails} id="equipe">
-          <summary className={s.wrap}>Conheça os 12 agentes da Zelo <span aria-hidden="true">+</span></summary>
-          <AgentShowcase />
-        </details>
         <section className={`${s.section} ${s.faq}`} id="duvidas">
           <div className={`${s.wrap} ${s.faqGrid}`} data-scroll-scene="faq">
             <div>
-              <p className={s.sectionLabel}>ANTES DE COMEÇAR</p>
-              <h2>
-                Alguma dúvida
-                <br />
-                por aí?
-              </h2>
-              <p>Vamos deixar tudo claro.</p>
+              <h2>Perguntas frequentes</h2>
+              <PlanLink />
             </div>
             <div>
               {FAQS.map(([question, answer]) => (
@@ -339,18 +320,11 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             className={`${s.wrap} ${s.closingInner}`}
             data-scroll-scene="closing"
           >
-            <p>
-              UM POUCO MAIS DE ORDEM.
-              <br />
-              UM TANTO MAIS DE LEVEZA.
-            </p>
             <h2>
-              Seu próximo passo?
-              <br />
-              Uma mensagem.
+              Comece a organizar sua rotina pelo WhatsApp.
             </h2>
             <a className={s.darkButton} href="#planos">
-              Quero começar
+              Ver planos
               <Arrow />
             </a>
           </div>
@@ -374,8 +348,8 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             </div>
             <nav aria-label="Links do rodapé">
               <a href="#como-funciona">Como funciona</a>
-              <a href="#recursos">Recursos</a>
-              <a href="#equipe">Equipe virtual</a>
+              <a href="#equipe">Agentes e funções</a>
+              <Link href="/bancos">Bancos disponíveis</Link>
               <a href="#planos">Planos</a>
               <Link href="/login">Entrar na Zelo</Link>
             </nav>

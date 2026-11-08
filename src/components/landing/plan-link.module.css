@@ -1,0 +1,33 @@
+a.link {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  margin-top: 1rem;
+  align-items: center;
+  justify-content: center;
+  gap: .8rem;
+  padding: .6rem 1.15rem;
+  border: 1px solid #c99600;
+  border-radius: .55rem;
+  background: #ffca25;
+  color: #202319;
+  font-size: .94rem;
+  font-weight: 650;
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+a.link:hover {
+  background: #ffdb62;
+}
+
+a.link:focus-visible {
+  outline: 3px solid #325acf;
+  outline-offset: 3px;
+}
+
+a.link svg {
+  width: 1rem;
+  height: 1rem;
+}

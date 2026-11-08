@@ -218,9 +218,7 @@
 .responseHead > img {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  border: 1px solid #fec30777;
-  object-fit: cover;
+  object-fit: contain;
 }
 .responseHead > div {
   flex: 1;

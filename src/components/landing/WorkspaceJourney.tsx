@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import PlanLink from "./PlanLink";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
 import { usePresentationMotion, useVisible } from "./PresentationMotion";
 import s from "./workspace-journey.module.css";
@@ -143,7 +144,7 @@ export default function WorkspaceJourney() {
         <div className={s.heading}>
           <div>
             <p className={s.eyebrow}>
-              <span>03</span> PESSOAL. EMPRESAS. CADA UM NO SEU ESPAÇO.
+              PESSOAL E EMPRESA
             </p>
             <h2>
               Sua vida pessoal
@@ -262,6 +263,7 @@ export default function WorkspaceJourney() {
             autorização.
           </p>
         </div>
+        <PlanLink />
       </div>
     </section>
   );

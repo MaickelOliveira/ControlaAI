@@ -137,7 +137,7 @@ export default function BankConnections() {
         </div>
         <div className={s.response}>
           <div className={s.responseHead}>
-            <Image src="/brand/team/rita.png" width={36} height={36} alt="" />
+            <Image src="/brand/team/ilustrados/rita.webp" width={36} height={36} alt="" />
             <div>
               <strong>Rita</strong>
               <span>Sua agente de finanças no WhatsApp</span>
