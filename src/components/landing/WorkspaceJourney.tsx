@@ -155,20 +155,19 @@ export default function WorkspaceJourney() {
           </div>
           <div className={s.introduction}>
             <p>
-              Organize o pessoal e o empresarial separadamente.
-              <br />
-              <strong>Com a mesma IA no WhatsApp.</strong>
+              No painel, escolha <strong>Pessoal</strong> ou <strong>Empresa</strong>.
+              Se tiver mais de uma empresa, selecione o nome dela.
             </p>
             <p>
-              Um espaço para você. Um espaço para cada empresa. Cada um com suas
-              finanças, agenda, arquivos e permissões.
+              Trocar de espaço muda as finanças, a agenda e os arquivos que você vê.
+              No WhatsApp, indique o espaço na mensagem, como no exemplo abaixo.
             </p>
             <div className={s.rule}>
               <UiIcon name="business" />
               <span>
                 Mais de uma empresa?
                 <br />
-                <strong>A IA pergunta em qual delas agir.</strong>
+                <strong>A Zelo pergunta em qual empresa registrar o pedido.</strong>
               </span>
             </div>
           </div>
@@ -176,7 +175,7 @@ export default function WorkspaceJourney() {
 
         <div className={s.experience} data-scroll-scene="workspace-journey">
           <div className={s.experienceHeader}>
-            <span>VEJA COMO FICA SEPARADO</span>
+            <span>ESCOLHA UM ESPAÇO PARA VER O PEDIDO</span>
             <small>Demonstração · dados fictícios</small>
           </div>
           <div

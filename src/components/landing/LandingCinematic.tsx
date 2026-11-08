@@ -55,7 +55,7 @@ const BANK_DATA: { icon: UiIconName; title: string; copy: string }[] = [
 const FAQS = [
   [
     "Preciso instalar mais um aplicativo?",
-    "Não para conversar com a Zelo: você usa o WhatsApp. O painel web complementa a experiência para visualizar, conferir e organizar suas informações no celular ou computador.",
+    "Se você já usa o WhatsApp, basta vincular o número à Zelo para conversar por lá. Para conferir os lançamentos e ver os gráficos, abra o painel pelo navegador do celular ou do computador.",
   ],
   [
     "Preciso decorar comandos?",
@@ -103,10 +103,9 @@ function FinanceExamples() {
               </h2>
               <div>
                 <p>
-                  “Quanto eu tenho parcelado?” “Qual é o saldo das minhas
-                  contas?” Conecte seus bancos pelo Open Finance e pergunte à IA
-                  no WhatsApp. Ela consulta os dados recebidos para ajudar você
-                  a entender seu dinheiro.
+                  No painel, abra Contas e escolha <strong>Conectar banco</strong>.
+                  Selecione a instituição e autorize o compartilhamento no banco.
+                  Depois, pergunte à Rita pelo WhatsApp “Qual é o saldo das minhas contas?”.
                 </p>
                 <a href="#dados-bancarios" className={s.textLink}>
                   O que posso acompanhar?<span aria-hidden="true">↓</span>
@@ -272,7 +271,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
           <div className={s.wrap}>
             <div className={s.sectionHead}>
               <h2 id="titulo-painel">Seu painel no celular e no computador</h2>
-              <p>Abra a Zelo pelo navegador para ver seu saldo, consultar as compras e acompanhar o mês em qualquer uma das telas.</p>
+              <p>Abra o painel pelo navegador. No gráfico, compare o que entrou e saiu no mês. No extrato, confira as compras uma a uma.</p>
             </div>
             <ProductDevicePreview />
             <PlanLink />

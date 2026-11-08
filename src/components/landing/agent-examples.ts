@@ -6,6 +6,7 @@ export type AgentExample = {
   topic: string;
   title: string;
   description: string;
+  outcome: string;
   request: string;
   resultTitle: string;
   rows: { label: string; value: string }[];
@@ -18,9 +19,10 @@ export const agentExamples: AgentExample[] = [
     key: "finance",
     area: "Finanças",
     topic: "Finanças",
-    title: "Quanto já tenho a pagar?",
-    description: "Antes de planejar o mês, peça à Rita a soma das parcelas, dos empréstimos e das contas recorrentes. Você também pode ver os gastos por categoria ou consultar saldos, limites e investimentos dos bancos conectados. Para importar uma fatura, mande o PDF, a foto ou a planilha em CSV ou Excel e confira os lançamentos.",
-    request: "Rita, quanto já tenho a pagar em dezembro no Pessoal? Me mostra as parcelas e assinaturas.",
+    title: "Veja onde gastou e o que falta pagar",
+    description: "Conte à Rita o que entrou ou saiu, consulte os gastos por categoria ou envie uma fatura em PDF, foto, CSV ou Excel para revisar as compras. Com os bancos conectados, também dá para consultar saldos, limites e investimentos.",
+    outcome: "Ao planejar dezembro, você vê quanto já está comprometido e quais parcelas, empréstimos e assinaturas compõem o total.",
+    request: "Rita, quanto já tenho a pagar em dezembro no Pessoal? Me mostra o que entra nessa conta.",
     resultTitle: "R$ 550,00 previstos para dezembro",
     rows: [
       { label: "Notebook · parcela 4 de 10", value: "R$ 190,00" },
@@ -33,8 +35,9 @@ export const agentExamples: AgentExample[] = [
     key: "agenda",
     area: "Rotina",
     topic: "Agenda",
-    title: "Marque a reunião com link do Meet",
-    description: "Informe ao Lucas o assunto, o horário e a duração da reunião. Com o Google Agenda conectado ao espaço pessoal ou da empresa, ele cria o evento e o link do Meet. Depois, você pode consultar os compromissos, mudar o horário ou cancelar pelo WhatsApp.",
+    title: "Organize os compromissos do dia",
+    description: "Diga ao Lucas o assunto, o dia e o horário para marcar um compromisso pessoal ou da empresa. Se a reunião for por vídeo, conecte o Google Agenda e peça um link do Meet. Também dá para remarcar ou cancelar pelo WhatsApp.",
+    outcome: "Ao abrir a agenda da empresa, você encontra a reunião de orçamento com o horário reservado e o link para entrar.",
     request: "Lucas, marca a reunião de orçamento na agenda da empresa. Terça, das 10h às 10h30, com link do Meet.",
     resultTitle: "Reunião de orçamento",
     rows: [
@@ -47,8 +50,9 @@ export const agentExamples: AgentExample[] = [
     key: "task",
     area: "Organização",
     topic: "Tarefas",
-    title: "Organize a entrega da proposta",
-    description: "Conte ao Theo o que precisa fazer e o que tem prioridade. A tarefa entra na lista do espaço escolhido, com o prazo para consultar no painel. Se a entrega mudar, ajuste a data na conversa. Quando enviar a proposta, peça para marcar a tarefa como concluída.",
+    title: "Saiba o que precisa fazer primeiro",
+    description: "Passe as tarefas ao Theo com prazo e prioridade. Quando for organizar o dia, pergunte o que está pendente. Se uma entrega mudar, você pode ajustar a data ou marcar a tarefa como concluída pela conversa.",
+    outcome: "Na lista de sexta, a proposta aparece com prioridade alta até você confirmar a entrega.",
     request: "Theo, preciso enviar a proposta até sexta. Coloca na minha lista com prioridade alta.",
     resultTitle: "Enviar a proposta",
     rows: [
@@ -61,8 +65,9 @@ export const agentExamples: AgentExample[] = [
     key: "reminder",
     area: "Rotina",
     topic: "Lembretes",
-    title: "Receba um aviso no dia de pagar",
-    description: "O seguro vence todo dia 15? Diga à Bia a que horas quer receber o lembrete no WhatsApp. Vale para uma data específica ou para avisos diários, semanais e mensais. Se o vencimento mudar, você pode ajustar ou cancelar o lembrete pela conversa.",
+    title: "Programe avisos pelo WhatsApp",
+    description: "Diga à Bia o que precisa lembrar e a que horas quer receber a mensagem. Pode ser um aviso para uma data específica ou um lembrete que se repete todo dia, semana ou mês. Para mudar o horário, basta pedir na conversa.",
+    outcome: "Todo dia 15, às 9h, o aviso de pagar o seguro chega ao seu WhatsApp.",
     request: "Bia, me lembra de pagar o seguro todo dia 15, às 9h.",
     resultTitle: "Lembrete de pagar o seguro",
     rows: [
@@ -75,8 +80,9 @@ export const agentExamples: AgentExample[] = [
     key: "drive",
     area: "Organização",
     topic: "Arquivos",
-    title: "Ache o contrato pelo assunto",
-    description: "Mande a foto ou o PDF para a Dora guardar no Drive da Zelo. Você pode organizar os arquivos em pastas e pedir um documento pelo nome ou por uma pista, como “reforma da cozinha”. Quando a Dora encontra o contrato, você recebe o próprio arquivo no WhatsApp.",
+    title: "Guarde e encontre seus documentos",
+    description: "Envie uma foto ou um PDF à Dora para guardar no Drive da Zelo. Organize seus arquivos em pastas e, quando precisar de um documento, peça pelo nome ou diga o que lembra do assunto.",
+    outcome: "Mesmo que você só lembre da reforma da cozinha, a Dora pode localizar o contrato e devolver o PDF na conversa.",
     request: "Dora, me mande o contrato da reforma da cozinha.",
     resultTitle: "Contrato encontrado",
     rows: [
@@ -89,8 +95,9 @@ export const agentExamples: AgentExample[] = [
     key: "goal",
     area: "Finanças",
     topic: "Metas",
-    title: "Quanto falta para a viagem?",
-    description: "Diga à Nina quanto quer juntar e até quando. A cada valor que você guarda, registre a quantia na conversa. A Nina mostra o total já reservado, a porcentagem alcançada e quanto ainda falta para a meta, no WhatsApp e no painel.",
+    title: "Acompanhe o dinheiro que já juntou",
+    description: "Defina com a Nina o objetivo, o valor que quer juntar e o prazo. Sempre que guardar dinheiro, registre a quantia e consulte quanto falta para chegar lá.",
+    outcome: "Na simulação da viagem, registrar mais R$ 300 faz a reserva passar de 30% para 35% da meta.",
     request: "Nina, quanto já juntei para a viagem e quanto falta?",
     resultTitle: "Reserva para a viagem",
     rows: [
@@ -104,8 +111,9 @@ export const agentExamples: AgentExample[] = [
     key: "grocery",
     area: "Rotina",
     topic: "Supermercado",
-    title: "Veja quanto pagou no mercado",
-    description: "Monte a lista com a Lia e marque o que já pôs no carrinho. Ao registrar a compra, informe o mercado, os itens, as quantidades e os preços. Na próxima ida, consulte quanto custou o café ou compare o que você pagou em mercados diferentes.",
+    title: "Monte a lista e compare suas compras",
+    description: "Diga à Lia o que precisa comprar e em que quantidade. No mercado, marque o que já pôs no carrinho. Ao registrar o nome da loja e os preços, você cria um histórico para consultar na próxima compra.",
+    outcome: "Na próxima ida ao mercado, dá para comparar o preço do café na prateleira com os R$ 18 que você pagou da última vez.",
     request: "Lia, o que levei na última compra no Mercado do Bairro e quanto custou cada item?",
     resultTitle: "Última compra · R$ 52,00",
     rows: [
@@ -118,8 +126,9 @@ export const agentExamples: AgentExample[] = [
     key: "vehicle",
     area: "Rotina",
     topic: "Veículos",
-    title: "Acompanhe os gastos do carro",
-    description: "Abasteceu? Passe ao Caio o valor, os litros e a quilometragem do painel. Ele reúne o registro com os de manutenção e seguro daquele veículo. Se você usa mais de um carro, indique qual deles quer consultar para ver os gastos do mês.",
+    title: "Veja quanto custa manter seu veículo",
+    description: "Diga ao Caio qual veículo você usou e quanto gastou com combustível, manutenção ou seguro. Ao abastecer, informe também os litros e a quilometragem do painel.",
+    outcome: "No histórico do Onix, você pode recuperar o abastecimento de R$ 180 e consultar as outras despesas daquele carro no mês.",
     request: "Caio, abasteci o Onix com 30 litros por R$ 180. O painel marca 42 mil km.",
     resultTitle: "Abastecimento do Onix",
     rows: [
@@ -132,8 +141,9 @@ export const agentExamples: AgentExample[] = [
     key: "people",
     area: "Empresa",
     topic: "Clientes e contatos",
-    title: "Retome o atendimento de um cliente",
-    description: "Antes de enviar um orçamento, peça à Clara a ficha do cliente. Você encontra o e-mail e as preferências que registrou, como a melhor forma de contato. Também pode atualizar o telefone de um cliente da empresa ou guardar o de um prestador nos seus contatos pessoais.",
+    title: "Encontre clientes e contatos pelo nome",
+    description: "A Clara cuida dos seus contatos pessoais e dos clientes da empresa. Informe telefone, e-mail e observações que ajudem no próximo atendimento. Depois, procure pelo nome ou peça para atualizar a ficha.",
+    outcome: "Na hora de enviar o orçamento da Ana, você encontra o e-mail dela e a anotação de que prefere receber a proposta por lá.",
     request: "Clara, encontre a ficha da cliente Ana Prado.",
     resultTitle: "Ficha de Ana Prado",
     rows: [
@@ -146,8 +156,9 @@ export const agentExamples: AgentExample[] = [
     key: "employee",
     area: "Empresa",
     topic: "Funcionários",
-    title: "Confira cargos e salários da equipe",
-    description: "Escolha a empresa e pergunte ao Hugo quem faz parte da equipe e quanto somam os salários cadastrados. Você pode consultar o cargo de cada pessoa, registrar uma promoção ou desativar a ficha de quem saiu, direto pelo WhatsApp.",
+    title: "Mantenha o cadastro da equipe em dia",
+    description: "Escolha a empresa e informe ao Hugo o nome, o cargo e o salário de cada funcionário. Quando alguém mudar de função ou sair da equipe, peça a atualização da ficha pelo WhatsApp.",
+    outcome: "Você pode consultar a soma dos salários da equipe ou abrir a ficha da Joana para conferir só o cargo e o salário dela.",
     request: "Hugo, quem está na minha equipe e quanto somam os salários?",
     resultTitle: "Equipe ativa · 2 pessoas",
     rows: [
@@ -160,8 +171,9 @@ export const agentExamples: AgentExample[] = [
     key: "nfse",
     area: "Empresa",
     topic: "Notas fiscais",
-    title: "Prepare o rascunho da nota de serviço",
-    description: "Com o cadastro fiscal da empresa preenchido, escolha um serviço ou cadastre um novo. Informe ao Otto quem contratou o serviço, o valor e a data de competência. Ele organiza os dados em um rascunho de NFS-e que você pode revisar no painel.",
+    title: "Prepare um rascunho de nota de serviço",
+    description: "Com o cadastro fiscal da empresa preenchido, escolha um serviço ou cadastre um novo. Diga ao Otto quem contratou o serviço, quanto você cobrou e qual foi a data da prestação.",
+    outcome: "O rascunho da NFS-e fica no painel para você conferir os dados do cliente e os R$ 800 da consultoria.",
     request: "Otto, prepara o rascunho da nota da consultoria para o Ateliê Horizonte. O valor é R$ 800.",
     resultTitle: "Rascunho de NFS-e",
     rows: [
@@ -169,14 +181,15 @@ export const agentExamples: AgentExample[] = [
       { label: "Serviço", value: "Consultoria" },
       { label: "Valor", value: "R$ 800,00" },
     ],
-    note: "Por enquanto, a Zelo prepara rascunhos. A emissão da nota e a geração do PDF oficial aguardam homologação.",
+    note: "A emissão da nota e a geração do PDF oficial pela Zelo ainda aguardam homologação.",
   },
   {
     key: "support",
     area: "Organização",
     topic: "Ajuda e pesquisas",
-    title: "Pesquise por preço e voltagem",
-    description: "Procurando uma cafeteira? Diga à Zoe a voltagem da sua tomada e quanto quer gastar. Ela ajuda a pesquisar informações públicas e a comparar as opções. Você também pode perguntar como guardar um comprovante ou encontrar um arquivo na Zelo.",
+    title: "Tire dúvidas e pesquise opções",
+    description: "Pergunte à Zoe como usar a Zelo, desde guardar um comprovante até encontrar um arquivo. Ela também pesquisa informações públicas. Para comparar produtos, diga o que procura, quanto pode gastar e quais detalhes importam.",
+    outcome: "No caso da cafeteira, você sabe o que conferir na loja para escolher uma opção de 127 V dentro do orçamento de R$ 250.",
     request: "Zoe, quero uma cafeteira de 127 V por até R$ 250. O que devo conferir antes de comprar?",
     resultTitle: "Pesquisa de cafeteira",
     rows: [

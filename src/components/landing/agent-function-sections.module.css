@@ -34,6 +34,7 @@
 }
 .directory > div { padding-inline: clamp(14px, 2.2vw, 36px); border-left: 1px solid #cccfc1; }
 .directory > div:first-child { padding-left: 0; border: 0; }
+.mobileArea { display: none; }
 .directory strong { display: flex; align-items: center; gap: 9px; font-size: 1.02rem; }
 .directory strong svg { width: 19px; height: 19px; }
 .directory ul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 14px; }
@@ -116,11 +117,21 @@
   font-size: clamp(1rem, 1.1vw, 1.21rem);
   line-height: 1.55;
 }
+.outcome {
+  display: grid;
+  gap: 4px;
+  max-width: 52ch;
+  margin-top: 16px;
+  padding-left: 14px;
+  border-left: 3px solid #e9ae00;
+  color: var(--body);
+  line-height: 1.5;
+}
+.outcome strong { color: var(--ink); font-size: .94rem; }
+.guide .outcome p { margin: 0; font-size: 1rem; }
 .guide .note {
   max-width: 53ch;
   margin-top: 12px;
-  padding-left: 12px;
-  border-left: 2px solid #d6ad54;
   color: var(--body);
   font-size: .88rem;
   line-height: 1.5;
@@ -226,10 +237,75 @@
   .guide { padding-block: 55px; }
   .intro { align-items: start; flex-direction: column; gap: 10px; }
   .intro > a { margin-top: 0; }
-  .directory { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px 0; margin-block: 24px 32px; }
-  .directory > div:nth-child(odd) { border: 0; padding-left: 0; }
-  .directory ul { flex-direction: column; align-items: start; gap: 0; }
-  .guide .directory a { padding-block: 6px; }
+  .directory {
+    display: block;
+    padding: 0;
+    margin: 22px 0 32px;
+    border: 1px solid #d7d9cb;
+    border-radius: 18px;
+    background: #fffef8;
+  }
+  .directory > div { padding: 0; border: 0; }
+  .directory > div + div { border-top: 1px solid #e6e5d9; }
+  .desktopArea { display: none; }
+  .mobileArea { display: block; }
+  .mobileArea summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 67px;
+    padding: 9px 16px;
+  }
+  .directory .mobileArea summary:focus-visible,
+  .directory .mobileArea a:focus-visible { outline-offset: -3px; border-radius: 10px; }
+  .mobileArea .chevron {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    margin: -4px 3px 0 auto;
+    border-right: 2px solid #576252;
+    border-bottom: 2px solid #576252;
+    transform: rotate(45deg);
+  }
+  .mobileArea[open] .chevron { margin-top: 4px; transform: rotate(225deg); }
+  .areaIcon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+    background: #ffdb72;
+    color: #293229;
+  }
+  .directory .areaIcon svg { width: 19px; height: 19px; }
+  .areaText { display: grid; gap: 2px; min-width: 0; }
+  .areaText small { color: #536052; font-size: .8rem; line-height: 1.35; }
+  .directory [data-area="Rotina"] .areaIcon { background: #d9eadb; }
+  .directory [data-area="Organização"] .areaIcon { background: #d5e5f2; }
+  .directory [data-area="Empresa"] .areaIcon { background: #f1d6b6; }
+  .mobileArea ul {
+    display: block;
+    margin: 0 12px 10px;
+    padding: 4px 8px;
+    background: #f4f4eb;
+    border-radius: 12px;
+  }
+  .mobileArea li + li { border-top: 1px solid #dedfd3; }
+  .guide .mobileArea a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 5px;
+    color: #263229;
+    font-size: 1rem;
+    font-weight: 650;
+  }
+  .mobileArea a img { flex: none; border-radius: 50%; background: #e5e5d7; }
+  .directory .agentLinkText { display: grid; gap: 1px; color: inherit; font-size: inherit; line-height: 1.2; }
+  .agentLinkText small { font-size: .8rem; font-weight: 450; color: #536052; }
+  .mobileArea a svg { width: 16px; height: 16px; margin-left: auto; color: #526051; }
   .spread, .agent:nth-child(even) .spread {
     grid-template: "art" auto "copy" auto "example" auto / minmax(0,1fr);
     min-height: 0;
