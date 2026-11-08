@@ -9,7 +9,7 @@ export type AgentExample = {
   outcome: string;
   request: string;
   resultTitle: string;
-  rows: { label: string; value: string }[];
+  rows: { label: string; value: string; href?: string }[];
   progress?: { value: number; label: string };
   note?: string;
 };
@@ -187,15 +187,14 @@ export const agentExamples: AgentExample[] = [
     key: "support",
     area: "Organização",
     topic: "Ajuda e pesquisas",
-    title: "Tire dúvidas e pesquise opções",
-    description: "Pergunte à Zoe como usar a Zelo, desde guardar um comprovante até encontrar um arquivo. Ela também pesquisa informações públicas. Para comparar produtos, diga o que procura, quanto pode gastar e quais detalhes importam.",
-    outcome: "No caso da cafeteira, você sabe o que conferir na loja para escolher uma opção de 127 V dentro do orçamento de R$ 250.",
-    request: "Zoe, quero uma cafeteira de 127 V por até R$ 250. O que devo conferir antes de comprar?",
-    resultTitle: "Pesquisa de cafeteira",
+    title: "Descubra onde comprar pelo melhor preço",
+    description: "Diga à Zoe o que você quer comprar. Ela pesquisa nas lojas, compara os preços que encontra e manda os links pelo WhatsApp. Você também pode pedir ajuda para usar a Zelo.",
+    outcome: "Neste exemplo, a mesma TV custa R$ 99,95 a menos no Magalu. Toque no nome da loja para conferir o preço atual e o frete para o seu CEP.",
+    request: "Zoe, quero comprar uma TV de 75 polegadas. Qual o melhor preço que você encontrou e em qual site?",
+    resultTitle: "A TCL 75P7L saiu mais em conta no Magalu",
     rows: [
-      { label: "O que pedir", value: "Cafeteira elétrica de 127 V" },
-      { label: "Faixa de preço", value: "Até R$ 250,00" },
-      { label: "O que conferir na loja", value: "Preço, frete e disponibilidade" },
+      { label: "Magalu", value: "R$ 4.749,05", href: "https://www.magazineluiza.com.br/smart-tv-75-tcl-4k-uhd-qled-75p7l-google-tv-2026/p/241484800/et/elit/?seller_id=magazineluiza" },
+      { label: "Fast Shop", value: "R$ 4.849,00", href: "https://site.fastshop.com.br/smart-tv-4k-tcl-advanced-qled-75%E2%80%9D-polegadas-com-processador-aipq--dolby-vision--hdr10--e-wi-fi---75p7l-tk75p7lpto_prd-170667/p" },
     ],
   },
 ];
