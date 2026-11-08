@@ -9,7 +9,7 @@ const screens = [
     width: 1687,
     height: 932,
     alt: "Painel da Zelo no computador, com saldo de R$ 18.450, entradas e saídas do mês, gráfico e cartões.",
-    sizes: "(max-width: 700px) 86vw, (max-width: 1350px) 63vw, 830px",
+    sizes: "(max-width: 700px) 86vw, (max-width: 1960px) 68vw, 1260px",
   },
   {
     device: "mobile",
@@ -18,7 +18,7 @@ const screens = [
     width: 853,
     height: 1844,
     alt: "Painel da Zelo no celular, com o mesmo saldo de R$ 18.450 e o gráfico de entradas e saídas em uma coluna.",
-    sizes: "(max-width: 700px) 212px, (max-width: 1350px) 18vw, 216px",
+    sizes: "(max-width: 700px) 224px, (max-width: 1960px) 18vw, 345px",
   },
 ] as const;
 

@@ -14,8 +14,6 @@
   grid-template-columns: minmax(0, 3.65fr) minmax(0, 1fr);
   align-items: end;
   gap: clamp(18px, 3vw, 52px);
-  max-width: 1140px;
-  margin-inline: auto;
 }
 
 .preview .device {
@@ -63,7 +61,7 @@
 }
 
 .device[data-device="mobile"] .display {
-  width: min(100%, 216px);
+  width: 94%;
   border-radius: clamp(14px, 2vw, 28px);
   padding: clamp(3px, .45vw, 6px);
 }

@@ -37,7 +37,7 @@ function AgentSection({ example, children }: { example: AgentExample; children?:
         src={`/brand/team/ilustrados/${name.toLowerCase()}.webp`}
         width={512}
         height={512}
-        sizes="(max-width: 600px) 86px, (max-width: 860px) 128px, (max-width: 1200px) 16vw, 210px"
+        sizes="(max-width: 600px) 86px, (max-width: 860px) 128px, (max-width: 1667px) 18vw, 300px"
         alt=""
       />
       <header className={s.identity}>

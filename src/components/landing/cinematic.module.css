@@ -1,4 +1,6 @@
 .page {
+  --landing-gutter: clamp(14px, 2.7vw, 60px);
+  --landing-width: min(1840px, calc(100% - 2 * var(--landing-gutter)));
   --ink: #20241f;
   --muted: #5e6259;
   --paper: #fff3b5;
@@ -61,8 +63,7 @@
   transform: rotate(45deg);
 }
 .wrap {
-  width: calc(100% - 96px);
-  max-width: 1200px;
+  width: var(--landing-width);
   margin-inline: auto;
 }
 .section {
@@ -89,8 +90,8 @@
   backdrop-filter: blur(12px);
 }
 .headerInner {
-  max-width: 1400px;
-  padding: 16px 48px;
+  width: var(--landing-width);
+  padding-block: 16px;
   margin: auto;
   display: flex;
   align-items: center;
@@ -587,7 +588,7 @@
 .sectionHead > p {
   font-size: 14px;
   line-height: 1.85;
-  max-width: 345px;
+  max-width: min(38%, 58ch);
   color: var(--muted);
   padding-bottom: 5px;
 }
@@ -677,6 +678,7 @@
   font-size: 46px;
 }
 .bankIntro > div p {
+  max-width: 65ch;
   font-size: 15px;
   line-height: 1.9;
   color: var(--muted);
@@ -1329,10 +1331,35 @@
   flex-shrink: 0;
 }
 .faq details > p {
+  max-width: 72ch;
   font-size: 16px;
   color: var(--muted);
   padding: 0 30px 27px 0;
   line-height: 1.8;
+}
+@media (min-width: 1100px) {
+  .faqGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  .faqGrid > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .faqGrid > div:first-child a {
+    margin-top: 0;
+  }
+  .faqGrid > div:last-child {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 0 clamp(28px, 4vw, 72px);
+  }
+  .faq details:nth-child(2) {
+    border-top: 1px solid var(--line);
+  }
 }
 .closing {
   background: var(--yellow);
@@ -1428,7 +1455,6 @@
 }
 @media (max-width: 1150px) {
   .headerInner {
-    padding-inline: 30px;
     gap: 22px;
   }
   .brand > span {
@@ -1439,9 +1465,6 @@
   }
   .headerActions {
     gap: 18px;
-  }
-  .wrap {
-    width: calc(100% - 64px);
   }
   .heroGrid {
     gap: 30px;
@@ -1513,7 +1536,7 @@
   }
   .mobileNav {
     display: grid;
-    padding: 12px 30px 20px;
+    padding: 12px var(--landing-gutter) 20px;
     background: var(--paper);
     border-top: 1px solid var(--line);
   }
@@ -1676,12 +1699,9 @@
   }
 }
 @media (max-width: 650px) {
-  .wrap {
-    width: calc(100% - 40px);
-  }
   .headerInner {
     min-height: 70px;
-    padding: 11px 20px;
+    padding-block: 11px;
     gap: 15px;
   }
   .brand img {
@@ -1696,9 +1716,6 @@
   }
   .login {
     font-size: 12px;
-  }
-  .mobileNav {
-    padding-inline: 20px;
   }
   .page :is(section, [id]) {
     scroll-margin-top: 6px;
@@ -2354,10 +2371,6 @@
   border-bottom: 1px solid #fec30715;
   backdrop-filter: blur(18px);
 }
-.headerInner {
-  max-width: 1600px;
-  padding: 16px 48px;
-}
 .brand img {
   filter: none;
 }
@@ -2757,9 +2770,6 @@
   color: #8e9b82;
 }
 @media (max-width: 1100px) {
-  .headerInner {
-    padding-inline: 30px;
-  }
   .sectionHead h2,
   .bankIntro h2 {
     font-size: 42px;
@@ -2805,7 +2815,7 @@
 }
 @media (max-width: 650px) {
   .headerInner {
-    padding: 11px 20px;
+    padding-block: 11px;
   }
   .section {
     padding-block: 76px;
@@ -3190,7 +3200,7 @@
   }
   .headerInner {
     min-height: 72px;
-    padding: 12px 22px;
+    padding-block: 12px;
     gap: 15px;
   }
   .headerActions {
@@ -3226,9 +3236,6 @@
   }
 }
 @media (max-width: 360px) {
-  .headerInner {
-    padding-inline: 18px;
-  }
   .headerActions {
     gap: 8px;
   }
@@ -3660,6 +3667,7 @@
 }
 
 .demoDetails {
+  --landing-width: calc(100% - 2 * clamp(12px, 2vw, 32px));
   overflow: clip;
   border-top: 1px solid #ccd3c8;
   background: #fafaf6;
@@ -3714,7 +3722,6 @@
 
 @media (max-width: 600px) {
   .headerInner {
-    padding-inline: 14px;
     gap: 6px;
   }
   .headerActions {
