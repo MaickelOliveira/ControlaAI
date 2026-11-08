@@ -10,6 +10,14 @@ const PLANS = [
   { id: "annual", name: "Anual", installments: 12, installmentCents: 3072, cashPrice: 297 },
 ] as const;
 
+const INCLUDED_FEATURES = [
+  "Conectar quantos bancos compatíveis quiser pelo Open Finance",
+  "Consultar gastos, faturas, parcelas e metas",
+  "Usar os 12 agentes pelo WhatsApp e abrir o painel no celular ou no computador",
+  "Organizar compromissos, tarefas, lembretes, compras, veículos e arquivos",
+  "No modo Empresa, acompanhar clientes e equipe e preparar rascunhos de notas fiscais de serviço",
+] as const;
+
 const reais = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function PricingSection() {
@@ -18,7 +26,7 @@ export default function PricingSection() {
       <div className={s.wrap}>
         <header className={s.intro}>
           <h2 id="titulo-planos">Escolha seu plano</h2>
-          <p>Escolha por quanto tempo quer assinar. Os três planos incluem a equipe de IA no WhatsApp e o painel da Zelo.</p>
+          <p>Os três planos dão acesso aos mesmos recursos. Escolha o período e a forma de pagamento que funcionam para você.</p>
         </header>
 
         <div className={s.grid}>
@@ -44,6 +52,14 @@ export default function PricingSection() {
                   </>
                 )}
               </p>
+              <div className={s.benefits}>
+                <h4>O que você pode fazer</h4>
+                <ul>
+                  {INCLUDED_FEATURES.map((feature) => (
+                    <li key={feature}><span aria-hidden="true">✓</span>{feature}</li>
+                  ))}
+                </ul>
+              </div>
               <a
                 href={BRAZIL_CHECKOUT.checkoutUrls[plan.id]}
                 onClick={(event) => {
@@ -71,16 +87,16 @@ export default function PricingSection() {
         <div className={s.terms}>
           <div className={s.access}>
             <p>
-              <strong>Pessoal e Empresa.</strong> No Pessoal, você organiza sua rotina. Para gerir
-              uma ou mais empresas em espaços separados, sua conta precisa de acesso Empresa.
+              <strong>Pessoal e Empresa.</strong> No Pessoal ficam seus registros. Com o acesso Empresa habilitado na conta,
+              você acompanha cada negócio em um espaço separado.
             </p>
             <p>
-              <strong>Open Finance.</strong> Com uma assinatura ativa, você pode conectar contas
-              brasileiras elegíveis com autorização do titular. Para contas PJ, é preciso ter acesso Empresa.
+              <strong>Bancos conectados.</strong> Você escolhe quais instituições brasileiras compatíveis conectar
+              e autoriza cada uma no banco. As contas PJ ficam no espaço da empresa.
             </p>
           </div>
           <a className={s.help} href="mailto:contato@zelogestaointeligente.com.br">
-            Consultar acesso e limites para minha empresa <UiIcon name="arrow" />
+            Tirar dúvidas sobre o acesso Empresa <UiIcon name="arrow" />
           </a>
         </div>
 

@@ -16,25 +16,10 @@
   margin-bottom: 55px;
 }
 .eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 9px;
-  letter-spacing: 1.4px;
+  font-size: 12px;
+  letter-spacing: 1.3px;
   font-weight: 650;
-  color: #59654d;
-}
-.eyebrow > span {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #171e16;
-  background: #fec307;
-  flex-shrink: 0;
-  font-size: 9px;
-  letter-spacing: 0;
+  color: #47583d;
 }
 .heading h2 {
   font-size: clamp(44px, 4.6vw, 66px) !important;
@@ -68,27 +53,7 @@
   line-height: 1.8;
   color: #5a6550;
   margin-top: 18px !important;
-  max-width: 420px;
-}
-.rule {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  border-top: 1px solid #bfc5b3;
-  padding-top: 22px;
-  margin-top: 25px;
-  font-size: 12px;
-  line-height: 1.8;
-  color: #526146;
-}
-.rule svg {
-  color: #354d21;
-  width: 26px !important;
-  height: 26px !important;
-}
-.rule strong {
-  color: #1c2b13;
-  font-size: 13px;
+  max-width: 60ch;
 }
 .experienceHeader {
   display: flex;
@@ -391,13 +356,6 @@
   flex-shrink: 0;
   color: #fec307;
 }
-.note {
-  font-size: 10px;
-  line-height: 1.8;
-  color: #647455;
-  margin-top: 16px !important;
-  text-align: center;
-}
 .section button:focus-visible {
   outline: 3px solid #2c57d6 !important;
   outline-offset: 5px;
@@ -532,21 +490,12 @@
     font-size: clamp(39px, 7.6vw, 58px) !important;
     letter-spacing: -2px !important;
   }
-  .eyebrow {
-    font-size: 7px;
-    letter-spacing: 0.7px;
-    gap: 9px;
-  }
   .introduction > p:first-child {
     font-size: 17px;
   }
   .introduction > p:nth-child(2) {
     font-size: 14px;
     max-width: none;
-  }
-  .rule {
-    margin-top: 18px;
-    padding-top: 18px;
   }
   .experienceHeader {
     flex-wrap: wrap;
@@ -598,10 +547,6 @@
   }
   .selectionNote p > span {
     font-size: 12px;
-  }
-  .note {
-    font-size: 10px;
-    text-align: left;
   }
 }
 @media (max-width: 599px) {
@@ -656,10 +601,6 @@
   .heading h2 {
     font-size: 38px !important;
     letter-spacing: -1.8px !important;
-  }
-  .eyebrow {
-    font-size: 6px;
-    letter-spacing: 0.4px;
   }
   .section .space {
     padding: 19px;
