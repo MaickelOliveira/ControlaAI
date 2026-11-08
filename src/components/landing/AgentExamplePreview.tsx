@@ -92,18 +92,24 @@ function ExampleConversation({ example, agentName }: { example: Conversation; ag
           </div>
           {key === "finance" && <ExpenseBreakdown rows={rows} />}
           <dl className={s.rows}>
-            {rows.map(({ label, value }) => (
+            {rows.map(({ label, value, href }) => (
               <div key={label} className={s.row}>
                 <dt>
                   {key === "employee" && label.includes(" · ") && (
                     <span aria-hidden="true" className={s.initial}>{label.charAt(0)}</span>
                   )}
-                  {label}
+                  {href ? (
+                    <a className={s.storeLink} href={href} target="_blank" rel="noopener noreferrer"
+                      aria-label={`Conferir a TV na loja ${label} (abre em nova aba)`}>
+                      {label} <span aria-hidden="true">↗</span>
+                    </a>
+                  ) : label}
                 </dt>
                 <dd>{value}</dd>
               </div>
             ))}
           </dl>
+          {key === "support" && <p className={s.priceNote}>Preços de exemplo no Pix, sem frete.</p>}
           {progress && (
             <div className={s.progress}>
               <span aria-hidden="true">{progress.label}</span>

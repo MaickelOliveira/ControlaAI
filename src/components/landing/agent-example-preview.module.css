@@ -235,10 +235,20 @@
 
 /* Contact card, payroll roster, a working invoice and a comparison checklist. */
 .result[data-kind="people"] .symbol { border-radius: 50%; }
-.result[data-kind="people"] .row:last-child,
-.result[data-kind="support"] .row { grid-template-columns: 1fr; }
-.result[data-kind="people"] .row:last-child dd,
-.result[data-kind="support"] dd { text-align: start; }
+.result[data-kind="people"] .row:last-child { grid-template-columns: 1fr; }
+.result[data-kind="people"] .row:last-child dd { text-align: start; }
+.result .storeLink {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 32px;
+  color: #244c68;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.result[data-kind="support"] .row { align-items: center; }
+.result[data-kind="support"] .row:first-child dd { color: #226445; }
+.priceNote { color: var(--muted); font-size: .78rem; line-height: 1.4; }
 .result[data-kind="employee"] dt { display: flex; align-items: center; gap: 7px; }
 .initial {
   display: inline-grid;
