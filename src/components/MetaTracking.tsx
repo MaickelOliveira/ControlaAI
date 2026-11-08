@@ -11,6 +11,19 @@ import {
 } from "@/lib/meta-tracking-config";
 
 const CONSENT_KEY = "zelo_meta_consent";
+const OPEN_PREFERENCES = "zelo:open-cookie-preferences";
+
+export function CookiePreferencesButton() {
+  return (
+    <button
+      type="button"
+      className="min-h-11 cursor-pointer text-left hover:underline hover:underline-offset-4"
+      onClick={event => event.currentTarget.dispatchEvent(new Event(OPEN_PREFERENCES, { bubbles: true }))}
+    >
+      Preferências de cookies
+    </button>
+  );
+}
 
 type Consent = "granted" | "denied" | null;
 type MetaParameters = Record<string, string | number | boolean | string[]>;
@@ -85,6 +98,9 @@ export default function MetaTracking() {
   const isPublicPage = isMetaPublicPath(pathname);
   const isSpanishPage = isSpanishMetaPath(pathname);
   const [consent, setConsent] = useState<Consent | "loading">("loading");
+  const [reviewing, setReviewing] = useState(false);
+  const trigger = useRef<HTMLElement | null>(null);
+  const firstChoice = useRef<HTMLButtonElement>(null);
   const initialized = useRef(false);
   const previousPath = useRef(pathname);
 
@@ -92,6 +108,19 @@ export default function MetaTracking() {
     const timer = window.setTimeout(() => setConsent(getStoredConsent()), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    function openPreferences(event: Event) {
+      trigger.current = event.target instanceof HTMLElement ? event.target : null;
+      setReviewing(true);
+    }
+    document.addEventListener(OPEN_PREFERENCES, openPreferences);
+    return () => document.removeEventListener(OPEN_PREFERENCES, openPreferences);
+  }, []);
+
+  useEffect(() => {
+    if (reviewing) firstChoice.current?.focus({ preventScroll: true });
+  }, [reviewing]);
 
   useEffect(() => {
     if (!pixelId || consent !== "granted") return;
@@ -146,12 +175,16 @@ export default function MetaTracking() {
 
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
-  }, [consent, isPublicPage, pixelId]);
+  }, [consent, isPublicPage, pathname, pixelId]);
 
   function chooseConsent(value: Exclude<Consent, null>) {
     setStoredConsent(value);
     setConsent(value);
+    setReviewing(false);
+    trigger.current?.focus({ preventScroll: true });
+    trigger.current = null;
     if (value === "denied") {
+      window.fbq?.("consent", "revoke");
       for (const cookie of ["_fbp", "_fbc"]) {
         document.cookie = `${cookie}=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
       }
@@ -170,7 +203,7 @@ export default function MetaTracking() {
         />
       )}
 
-      {consent === null && (
+      {(consent === null || reviewing) && (
         <aside
           aria-label={isSpanishPage ? "Preferencias de privacidad" : "Preferências de privacidade"}
           className="fixed inset-x-4 bottom-4 z-[100] mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl sm:flex sm:items-center sm:gap-5 sm:p-5"
@@ -188,6 +221,7 @@ export default function MetaTracking() {
           <div className="mt-4 flex shrink-0 gap-2 sm:mt-0">
             <button
               type="button"
+              ref={firstChoice}
               onClick={() => chooseConsent("denied")}
               className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
@@ -204,7 +238,7 @@ export default function MetaTracking() {
         </aside>
       )}
 
-      {(consent === "granted" || consent === "denied") && (
+      {pathname !== "/" && !reviewing && (consent === "granted" || consent === "denied") && (
         <button
           type="button"
           onClick={() => setConsent(null)}

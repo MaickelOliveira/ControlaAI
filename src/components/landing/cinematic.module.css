@@ -3653,3 +3653,31 @@
 .page[data-motion="running"] .planGrid[data-scroll-scene] > article {
   opacity: 1;
 }
+
+.teamDetails {
+  background: #20231e;
+  color: #f7f8f1;
+}
+.teamDetails > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: clamp(1.5rem, 5vw, 3rem);
+  font-family: var(--font-heading), sans-serif;
+  font-size: clamp(1.35rem, 3vw, 2.5rem);
+  font-weight: 650;
+  line-height: 1.2;
+}
+.teamDetails > summary > span {
+  color: #fec307;
+}
+.bankCoverage > .textLink {
+  justify-self: start;
+  color: #fec307;
+}
+.bankConsent .privacyLink {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
