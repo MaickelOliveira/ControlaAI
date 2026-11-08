@@ -211,7 +211,15 @@
   .art::before { width: 65%; left: auto; right: -5%; bottom: -55%; }
   .art::after { width: 80%; left: auto; right: -12%; bottom: -73%; }
   .guide .signature { top: 50%; right: auto; left: 18px; transform: translateY(-50%); font-size: clamp(2.8rem, 5.7vw, 4rem); }
-  .portrait { left: auto; right: 0; transform: none; width: min(57%, 250px); }
+  .portrait {
+    left: auto;
+    right: 0;
+    transform: none;
+    width: min(57%, 250px);
+    height: 100%;
+    object-fit: contain;
+    object-position: right bottom;
+  }
   .preview, .agent:nth-child(even) .preview { padding: 18px; }
 }
 @media (max-width: 719px) {
