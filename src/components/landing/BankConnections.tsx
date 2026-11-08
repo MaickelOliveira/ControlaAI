@@ -18,7 +18,7 @@ const QUESTIONS = [
   {
     label: "Meus saldos",
     question: "Rita, quanto tenho nas minhas contas?",
-    title: "Uma visão do seu dinheiro.",
+    title: "Quanto tenho em cada banco?",
     total: "R$ 8.420,00",
     caption: "TOTAL DESTE EXEMPLO",
     detail: "Aqui estão os saldos das três contas deste exemplo:",
@@ -32,29 +32,29 @@ const QUESTIONS = [
   {
     label: "Minhas parcelas",
     question: "O que eu ainda tenho parcelado?",
-    title: "Saiba o que vem pela frente.",
+    title: "Quais parcelas vencem em novembro?",
     total: "R$ 400,00",
     caption: "PRÓXIMAS PARCELAS DO EXEMPLO",
-    detail: "Estas parcelas continuam nos próximos meses:",
+    detail: "Estas são as parcelas previstas para novembro.",
     rows: [
-      ["Notebook · 4/10 · 10/11", "R$ 280,00"],
-      ["Curso · 2/6 · 15/11", "R$ 120,00"],
+      ["Notebook · 4 de 10 · vence em 10/11", "R$ 280,00"],
+      ["Curso · 2 de 6 · vence em 15/11", "R$ 120,00"],
     ],
     note: "Parcelas, valores e vencimentos são mostrados quando informados. Previsão não é confirmação de pagamento.",
   },
   {
     label: "Meus empréstimos",
-    question: "Quanto falta para quitar meu empréstimo?",
-    title: "Entenda o que ainda falta.",
-    total: "R$ 10.009,81",
+    question: "Qual é o saldo devedor do meu financiamento?",
+    title: "Quanto ainda devo ao banco?",
+    total: "R$ 9.600,00",
     caption: "SALDO DEVEDOR ILUSTRATIVO",
     detail: "Encontrei um financiamento neste exemplo:",
     rows: [
       ["Financiamento de veículo", "Sicredi"],
-      ["Saldo devedor", "R$ 10.009,81"],
+      ["Saldo devedor", "R$ 9.600,00"],
       ["Próxima parcela", "Não informada"],
     ],
-    note: "A Zelo apresenta o saldo informado pela instituição. Não inventa valores, parcelas ou condições de quitação.",
+    note: "O banco informou quanto falta pagar. Para saber o valor de quitação antecipada, consulte o banco.",
   },
 ] as const;
 

@@ -11,7 +11,7 @@ const EXAMPLES = [
   {
     label: "Em família",
     space: "Pessoal",
-    title: "A rotina da casa, com todo mundo junto.",
+    title: "Quem registrou cada gasto da casa?",
     description:
       "Compartilhem a organização das despesas, tarefas e planos da família.",
     people: [
@@ -47,7 +47,7 @@ const EXAMPLES = [
   {
     label: "Com sócios e equipe",
     space: "Empresarial",
-    title: "O negócio anda. A organização acompanha.",
+    title: "Quem lançou cada despesa da empresa?",
     description:
       "Sócios e equipe participam pelo próprio WhatsApp, com acesso ao modo Empresarial.",
     people: [
@@ -129,7 +129,7 @@ export default function SharedLife() {
             </h2>
           </div>
           <div className={s.intro}>
-            <p>Inclua quem faz parte da sua vida.</p>
+            <p>Escolha quem pode registrar os gastos da casa ou da empresa.</p>
             <p>
               Cada pessoa conversa com a Zelo pelo{" "}
               <strong>próprio WhatsApp.</strong> Vocês organizam juntos a casa
@@ -297,7 +297,7 @@ export default function SharedLife() {
                   </span>
                 </p>
                 <div className={s.record}>
-                  <span className={s.recordLabel}>NA ORGANIZAÇÃO DE VOCÊS</span>
+                  <span className={s.recordLabel}>COMO A DESPESA APARECE NO EXTRATO</span>
                   <div>
                     <UiIcon name="wallet" />
                     <p>
@@ -341,14 +341,14 @@ export default function SharedLife() {
 
         <div className={s.footer}>
           <p>
-            <strong>Mais mãos para organizar. Mais tempo para viver.</strong>
+            <strong>Como incluir outra pessoa</strong>
             <span>
-              Vincule os números em Configurações → Vincular WhatsApp.
+              Com seu WhatsApp já vinculado, abra Configurações e selecione “Vincular mais um número”.
             </span>
           </p>
           <small>
-            Cada pessoa precisa concluir a vinculação do próprio WhatsApp. Você
-            pode ajustar ou remover os números vinculados nas configurações.
+            A pessoa envia o código pelo próprio WhatsApp para concluir. Você pode
+            ajustar o acesso ou remover o número em Configurações.
           </small>
         </div>
         <PlanLink />
