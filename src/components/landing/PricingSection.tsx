@@ -15,7 +15,7 @@ const INCLUDED_FEATURES = [
   "Consultar gastos, faturas, parcelas e metas",
   "Usar os 12 agentes pelo WhatsApp e abrir o painel no celular ou no computador",
   "Organizar compromissos, tarefas, lembretes, compras, veículos e arquivos",
-  "No modo Empresa, acompanhar clientes e equipe e preparar rascunhos de notas fiscais de serviço",
+  "No modo Empresa, acompanhar clientes e equipe e preparar os dados de notas fiscais de serviço",
 ] as const;
 
 const reais = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
