@@ -37,23 +37,23 @@ const SPACES: Space[] = [
   },
   {
     name: "Estúdio Aurora",
-    kind: "EMPRESA 01",
+    kind: "EMPRESA",
     icon: "business",
     records: [
       {
         icon: "wallet",
-        label: "Finanças do estúdio",
-        example: "Custos dos projetos",
+        label: "Conta PJ",
+        example: "R$ 120 em materiais",
       },
       {
-        icon: "calendar",
-        label: "Agenda do estúdio",
-        example: "Reunião com cliente",
+        icon: "client",
+        label: "Cliente cadastrado",
+        example: "Ateliê Horizonte",
       },
       {
-        icon: "folder",
-        label: "Arquivos do estúdio",
-        example: "Contrato do projeto",
+        icon: "document",
+        label: "Rascunho de NFS-e",
+        example: "Consultoria para o ateliê",
       },
     ],
     explanation:
@@ -63,18 +63,18 @@ const SPACES: Space[] = [
   },
   {
     name: "Loja Central",
-    kind: "EMPRESA 02",
+    kind: "EMPRESA",
     icon: "business",
     records: [
       {
         icon: "wallet",
-        label: "Finanças da loja",
+        label: "Conta PJ",
         example: "Compras de mercadorias",
       },
       {
-        icon: "calendar",
-        label: "Agenda da loja",
-        example: "Visita do fornecedor",
+        icon: "users",
+        label: "Funcionária cadastrada",
+        example: "Júlia · Atendimento",
       },
       {
         icon: "folder",
@@ -135,41 +135,28 @@ export default function WorkspaceJourney() {
 
   return (
     <section
-      id="espacos"
+      id="modo-empresa"
+      aria-labelledby="titulo-modo-empresa"
       ref={root}
       className={s.section}
       data-animate={running && visible}
     >
       <div className={s.wrap}>
-        <div className={s.heading}>
+        <div className={s.heading} id="espacos">
           <div>
-            <p className={s.eyebrow}>
-              PESSOAL E EMPRESA
-            </p>
-            <h2>
-              Sua vida pessoal
-              <br />e sua empresa.
-              <br />
-              <em>Cada uma no seu espaço.</em>
-            </h2>
+            <p className={s.eyebrow}>MODO EMPRESA</p>
+            <h2 id="titulo-modo-empresa">Gerencie as contas e a rotina <em>da sua empresa.</em></h2>
           </div>
           <div className={s.introduction}>
             <p>
-              No painel, escolha <strong>Pessoal</strong> ou <strong>Empresa</strong>.
-              Se tiver mais de uma empresa, selecione o nome dela.
+              No painel, escolha <strong>Empresa</strong> e selecione o nome da
+              empresa. Para consultar suas despesas de casa, volte ao <strong>Pessoal</strong>.
             </p>
             <p>
-              Trocar de espaço muda as finanças, a agenda e os arquivos que você vê.
-              No WhatsApp, indique o espaço na mensagem, como no exemplo abaixo.
+              Em cada empresa, acompanhe as entradas e saídas das contas PJ conectadas,
+              cadastre clientes e consulte sua equipe de funcionários. Para uma
+              prestação de serviço, prepare um rascunho de NFS-e para revisar.
             </p>
-            <div className={s.rule}>
-              <UiIcon name="business" />
-              <span>
-                Mais de uma empresa?
-                <br />
-                <strong>A Zelo pergunta em qual empresa registrar o pedido.</strong>
-              </span>
-            </div>
           </div>
         </div>
 
@@ -197,7 +184,7 @@ export default function WorkspaceJourney() {
               <div className={s.groupHeading}>
                 <UiIcon name="business" />
                 <div>
-                  <h3>Empresarial</h3>
+                  <h3>Empresa</h3>
                   <p>Um espaço para cada empresa.</p>
                 </div>
               </div>
@@ -223,13 +210,10 @@ export default function WorkspaceJourney() {
           <div id="workspace-demonstration" className={s.whatsappExample}>
             <div className={s.exampleIntro}>
               <span>NA MESMA CONVERSA DO WHATSAPP</span>
-              <h3>
-                Você pede.
-                <br />A Zelo separa.
-              </h3>
+              <h3>Registrar uma despesa pelo WhatsApp</h3>
               <p>
-                Se o pedido não indicar qual empresa, a IA pergunta antes de
-                agir.
+                Se você tiver acesso a duas empresas e pedir para lançar uma despesa
+                sem dizer em qual delas, a Zelo pergunta antes de registrar.
               </p>
             </div>
             <div className={s.exampleMessages} key={active}>
@@ -256,11 +240,6 @@ export default function WorkspaceJourney() {
               </p>
             </div>
           </div>
-          <p className={s.note}>
-            Selecione um espaço para ver o exemplo. Dados fictícios. Recursos
-            empresariais conforme o acesso contratado; integrações exigem
-            autorização.
-          </p>
         </div>
         <PlanLink />
       </div>

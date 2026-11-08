@@ -63,11 +63,11 @@ const FAQS = [
   ],
   [
     "Posso usar no pessoal e em mais de uma empresa?",
-    "Sua conta tem um espaço Pessoal. Com acesso empresarial, cada empresa habilitada tem seu próprio espaço. Os registros, acessos e conexões Google seguem o espaço escolhido. Quando houver mais de uma empresa, escolha em qual delas realizar o pedido.",
+    "O período da assinatura não muda os recursos. No painel, selecione Pessoal ou, com acesso Empresa habilitado na conta, escolha qual empresa consultar. Cada espaço tem seus próprios registros, permissões e conexões Google.",
   ],
   [
     "Como conecto meus bancos?",
-    "Com o recurso disponível na sua conta, abra Contas → Conectar banco, escolha a instituição e conclua a autorização no banco. A conexão utiliza a Celcoin. Você não fornece sua senha bancária à Zelo. O Open Finance atende contas brasileiras e depende do plano, do acesso ao espaço e dos dados disponibilizados pela instituição.",
+    "Em qualquer um dos três planos, você pode conectar quantos bancos brasileiros compatíveis quiser. No painel, abra Contas e selecione Conectar banco. O titular autoriza o compartilhamento em cada banco. Para uma conta PJ, faça a conexão no espaço da empresa em que você tem permissão.",
   ],
   [
     "Posso incluir minha família, sócios ou equipe?",
@@ -115,7 +115,7 @@ function FinanceExamples() {
             <div className={s.bankCoverage}>
               <div className={s.bankCoverageDetails}>
                 <h3>Quais bancos posso conectar?</h3>
-                <p>Consulte as instituições disponíveis para contas pessoais e empresariais.</p>
+                <p>Nos três planos, você pode conectar quantos bancos brasileiros compatíveis quiser. Para contas PJ, abra o espaço da empresa em que você tem permissão.</p>
               </div>
               <Link href="/bancos" className={s.textLink}>
                 Consultar bancos <Arrow />
@@ -138,10 +138,9 @@ function FinanceExamples() {
                 <UiIcon name="person" />
               </div>
               <p>
-                <strong>A autorização é sua.</strong> A conexão é feita pela
-                Celcoin, com autorização no banco. A Zelo não pede sua senha
-                bancária. Disponível para contas brasileiras, conforme plano,
-                acesso e dados compartilhados pela instituição.{" "}
+                <strong>O titular autoriza cada conexão no próprio banco.</strong>{" "}
+                A conexão é feita pela Celcoin. A Zelo recebe os dados que a
+                instituição disponibiliza e que o titular autorizou compartilhar.{" "}
                 <Link href="/privacidade#open-finance" className={s.privacyLink}>Como a Zelo usa seus dados bancários</Link>
               </p>
             </div>
@@ -181,6 +180,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
   const nav = [
     ["como-funciona", "Como funciona"],
     ["equipe", "Agentes e funções"],
+    ["modo-empresa", "Modo Empresa"],
     ["duvidas", "Dúvidas"],
   ];
   return (
@@ -283,10 +283,6 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             support: (
               <div className={s.extraExamples}>
                 <details className={s.demoDetails}>
-                  <summary>Como alternar entre o Pessoal e a Empresa <span aria-hidden="true">+</span></summary>
-                  <WorkspaceJourney />
-                </details>
-                <details className={s.demoDetails}>
                   <summary>Como compartilhar o acesso com a família ou a equipe <span aria-hidden="true">+</span></summary>
                   <SharedLife />
                 </details>
@@ -294,6 +290,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             ),
           }}
         />
+        <WorkspaceJourney />
         <PricingSection />
         <section className={`${s.section} ${s.faq}`} id="duvidas">
           <div className={`${s.wrap} ${s.faqGrid}`} data-scroll-scene="faq">
@@ -348,6 +345,7 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             <nav aria-label="Links do rodapé">
               <a href="#como-funciona">Como funciona</a>
               <a href="#equipe">Agentes e funções</a>
+              <a href="#modo-empresa">Modo Empresa</a>
               <Link href="/bancos">Bancos disponíveis</Link>
               <a href="#planos">Planos</a>
               <Link href="/login">Entrar na Zelo</Link>
