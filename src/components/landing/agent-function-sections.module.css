@@ -234,6 +234,8 @@
   .preview, .agent:nth-child(even) .preview { padding: 18px; }
 }
 @media (max-width: 719px) {
+  /* Focus and fragment navigation should reach the same section immediately. */
+  html:has(.guide) { scroll-behavior: auto; }
   .guide { padding-block: 55px; }
   .intro { align-items: start; flex-direction: column; gap: 10px; }
   .intro > a { margin-top: 0; }
