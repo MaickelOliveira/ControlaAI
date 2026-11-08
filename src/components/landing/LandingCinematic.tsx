@@ -89,67 +89,59 @@ const FAQS = [
 function Arrow() {
   return <UiIcon name="arrow" />;
 }
-function FinanceExamples() {
+function BankSection() {
   return (
-    <div className={s.extraExamples}>
-      <details className={s.demoDetails}>
-        <summary>Como a Rita consulta seus bancos <span aria-hidden="true">+</span></summary>
-        <section className={`${s.section} ${s.openFinance}`} id="open-finance">
-          <div className={s.wrap}>
-            <p className={s.sectionLabel}>OPEN FINANCE</p>
-            <div className={s.bankIntro} data-scroll-scene="title">
-              <h2>
-                Consulte suas contas pelo WhatsApp
-              </h2>
-              <div>
-                <p>
-                  No painel, abra Contas e escolha <strong>Conectar banco</strong>.
-                  Selecione a instituição e autorize o compartilhamento no banco.
-                  Depois, pergunte à Rita pelo WhatsApp “Qual é o saldo das minhas contas?”.
-                </p>
-                <a href="#dados-bancarios" className={s.textLink}>
-                  O que posso acompanhar?<span aria-hidden="true">↓</span>
-                </a>
-              </div>
-            </div>
-            <div className={s.bankCoverage}>
-              <div className={s.bankCoverageDetails}>
-                <h3>Quais bancos posso conectar?</h3>
-                <p>Nos três planos, você pode conectar quantos bancos brasileiros compatíveis quiser. Para contas PJ, abra o espaço da empresa em que você tem permissão.</p>
-              </div>
-              <Link href="/bancos" className={s.textLink}>
-                Consultar bancos <Arrow />
-              </Link>
-            </div>
-            <BankConnections />
-            <div className={s.bankGrid} id="dados-bancarios">
-              {BANK_DATA.map((item) => (
-                <article key={item.title}>
-                  <UiIcon name={item.icon} />
-                  <div>
-                    <h3>{item.title}</h3>
-                    <p>{item.copy}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-            <div className={s.bankConsent}>
-              <div className={s.consentIcon}>
-                <UiIcon name="person" />
-              </div>
-              <p>
-                <strong>O titular autoriza cada conexão no próprio banco.</strong>{" "}
-                A conexão é feita pela Celcoin. A Zelo recebe os dados que a
-                instituição disponibiliza e que o titular autorizou compartilhar.{" "}
-                <Link href="/privacidade#open-finance" className={s.privacyLink}>Como a Zelo usa seus dados bancários</Link>
-              </p>
-            </div>
-            <PlanLink />
+    <section className={`${s.section} ${s.openFinance}`} id="open-finance" aria-labelledby="titulo-open-finance">
+      <div className={s.wrap}>
+        <p className={s.sectionLabel}>OPEN FINANCE</p>
+        <div className={s.bankIntro} data-scroll-scene="title">
+          <h2 id="titulo-open-finance">Consulte suas contas pelo WhatsApp</h2>
+          <div>
+            <p>
+              No painel, abra Contas e escolha <strong>Conectar banco</strong>.
+              Selecione a instituição e autorize o compartilhamento no banco.
+              Depois, pergunte à Rita pelo WhatsApp “Qual é o saldo das minhas contas?”.
+            </p>
+            <a href="#dados-bancarios" className={s.textLink}>
+              O que posso acompanhar?<span aria-hidden="true">↓</span>
+            </a>
           </div>
-        </section>
-      </details>
-      <Link href="/bancos" className={s.catalogLink}>Consultar bancos disponíveis <Arrow /></Link>
-    </div>
+        </div>
+        <div className={s.bankCoverage}>
+          <div className={s.bankCoverageDetails}>
+            <h3>Quais bancos posso conectar?</h3>
+            <p>Nos três planos, você pode conectar quantos bancos brasileiros compatíveis quiser. Para contas PJ, abra o espaço da empresa em que você tem permissão.</p>
+          </div>
+          <Link href="/bancos" className={s.textLink}>
+            Consultar bancos <Arrow />
+          </Link>
+        </div>
+        <BankConnections />
+        <div className={s.bankGrid} id="dados-bancarios">
+          {BANK_DATA.map((item) => (
+            <article key={item.title}>
+              <UiIcon name={item.icon} />
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.copy}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className={s.bankConsent}>
+          <div className={s.consentIcon}>
+            <UiIcon name="person" />
+          </div>
+          <p>
+            <strong>O titular autoriza cada conexão no próprio banco.</strong>{" "}
+            A conexão é feita pela Celcoin. A Zelo recebe os dados que a
+            instituição disponibiliza e que o titular autorizou compartilhar.{" "}
+            <Link href="/privacidade#open-finance" className={s.privacyLink}>Como a Zelo usa seus dados bancários</Link>
+          </p>
+        </div>
+        <PlanLink />
+      </div>
+    </section>
   );
 }
 export default function LandingCinematic({ fontClass }: { fontClass: string }) {
@@ -179,6 +171,8 @@ function LandingContent({ fontClass }: { fontClass: string }) {
   }, [menuOpen]);
   const nav = [
     ["como-funciona", "Como funciona"],
+    ["open-finance", "Open Finance"],
+    ["compartilhar", "Família e equipe"],
     ["equipe", "Agentes e funções"],
     ["modo-empresa", "Modo Empresa"],
     ["duvidas", "Dúvidas"],
@@ -277,17 +271,12 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             <PlanLink />
           </div>
         </section>
+        <BankSection />
+        <SharedLife />
         <AgentFunctionSections
           detailsByAgent={{
-            finance: <FinanceExamples />,
-            support: (
-              <div className={s.extraExamples}>
-                <details className={s.demoDetails}>
-                  <summary>Como compartilhar o acesso com a família ou a equipe <span aria-hidden="true">+</span></summary>
-                  <SharedLife />
-                </details>
-              </div>
-            ),
+            finance: <a href="#open-finance" className={s.sectionLink}>Ver como a Rita consulta seus bancos <Arrow /></a>,
+            support: <a href="#compartilhar" className={s.sectionLink}>Ver como compartilhar o acesso <Arrow /></a>,
           }}
         />
         <WorkspaceJourney />
@@ -344,6 +333,8 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             </div>
             <nav aria-label="Links do rodapé">
               <a href="#como-funciona">Como funciona</a>
+              <a href="#open-finance">Open Finance</a>
+              <a href="#compartilhar">Família e equipe</a>
               <a href="#equipe">Agentes e funções</a>
               <a href="#modo-empresa">Modo Empresa</a>
               <Link href="/bancos">Bancos disponíveis</Link>
