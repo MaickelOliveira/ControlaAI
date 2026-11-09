@@ -8,6 +8,8 @@ import s from "./cinematic-hero.module.css";
 
 const QUESTION = "Rita, quanto tenho no Nubank, Inter e Santander?";
 const TYPING_MS = 720;
+const REVEAL_MS = 2000; // Includes the staggered arrival of all three balances.
+const READING_MS = 5000;
 
 const DEMO_ACCOUNTS = [
   { id: "nubank", name: "Nubank", value: "R$ 3.250,00" },
@@ -43,18 +45,18 @@ export default function CinematicHero() {
   const { running } = usePresentationMotion();
   const chat = useRef<HTMLDivElement>(null);
   const typedText = useRef<HTMLSpanElement>(null);
-  const played = useRef(false);
 
   useEffect(() => {
     const body = chat.current;
     const letters = typedText.current;
-    if (!running || played.current || !body || !letters || !("IntersectionObserver" in window)) return;
+    if (!running || !body || !letters || !("IntersectionObserver" in window)) return;
 
     let frame = 0;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.intersectionRatio < 0.5) return;
-      observer.disconnect();
-      played.current = true;
+    let timer = 0;
+    let visible = false;
+    let playing = false;
+    const cycle = () => {
+      letters.textContent = "";
       body.dataset.typing = "true";
       const start = performance.now();
       const type = (now: number) => {
@@ -64,13 +66,39 @@ export default function CinematicHero() {
         if (length < QUESTION.length) frame = requestAnimationFrame(type);
       };
       frame = requestAnimationFrame(type);
+      timer = window.setTimeout(() => {
+        delete body.dataset.typing;
+        timer = window.setTimeout(cycle, READING_MS);
+      }, REVEAL_MS);
+    };
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      delete body.dataset.typing;
+      letters.textContent = "";
+      playing = false;
+    };
+    const syncPlayback = () => {
+      const shouldPlay = visible && !document.hidden;
+      if (shouldPlay === playing) return;
+      if (shouldPlay) {
+        playing = true;
+        cycle();
+      } else {
+        stop();
+      }
+    };
+    const observer = new IntersectionObserver((entries) => {
+      visible = entries[entries.length - 1].intersectionRatio >= 0.5;
+      syncPlayback();
     }, { threshold: 0.5 });
+    document.addEventListener("visibilitychange", syncPlayback);
     observer.observe(body);
     return () => {
       observer.disconnect();
-      cancelAnimationFrame(frame);
-      delete body.dataset.typing;
-      letters.textContent = "";
+      observer.takeRecords();
+      document.removeEventListener("visibilitychange", syncPlayback);
+      stop();
     };
   }, [running]);
 
