@@ -43,14 +43,7 @@ export default function PricingSection() {
                 {plan.installments === 1 && <span> / mês</span>}
               </p>
               <p className={s.total}>
-                {plan.installments === 1 ? (
-                  "Cobrança mensal"
-                ) : (
-                  <>
-                    Total parcelado de {reais.format(plan.installments * plan.installmentCents / 100)}
-                    <br />ou {reais.format(plan.cashPrice)} à vista
-                  </>
-                )}
+                {plan.installments === 1 ? "Cobrança mensal" : `ou ${reais.format(plan.cashPrice)} à vista`}
               </p>
               <div className={s.benefits}>
                 <h4>O que você pode fazer</h4>
