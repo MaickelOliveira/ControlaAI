@@ -80,8 +80,8 @@ export default function PricingSection() {
         <div className={s.terms}>
           <div className={s.access}>
             <p>
-              <strong>Pessoal e Empresa.</strong> No Pessoal ficam seus registros. Com o acesso Empresa habilitado na conta,
-              você acompanha cada negócio em um espaço separado.
+              <strong>Pessoal e Empresa.</strong> Você pode assinar qualquer plano sem ter empresa e usar só o modo Pessoal.
+              Se tiver um negócio, o modo Empresa permite acompanhar cada empresa em um espaço separado.
             </p>
             <p>
               <strong>Bancos conectados.</strong> Você escolhe quais instituições brasileiras compatíveis conectar
