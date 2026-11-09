@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import PlanLink from "./PlanLink";
 import UiIcon from "@/components/UiIcon";
-import { usePresentationMotion, useVisible } from "./PresentationMotion";
+import { usePresentationMotion } from "./PresentationMotion";
 import s from "./shared-life.module.css";
 
 const EXAMPLES = [
@@ -83,31 +83,46 @@ const EXAMPLES = [
 ] as const;
 
 export default function SharedLife() {
-  const root = useRef<HTMLElement>(null);
-  const visible = useVisible(root);
-  const { running, reduced } = usePresentationMotion();
-  const [group, setGroup] = useState(0);
-  const [person, setPerson] = useState(0);
-  const [manual, setManual] = useState(false);
+  const demonstration = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const { running } = usePresentationMotion();
+  const [selection, setSelection] = useState({ group: 0, person: 0 });
+  const { group, person } = selection;
   const [focused, setFocused] = useState(false);
   const animate = running && visible;
-  const cycling = animate && !manual && !focused;
+  const cycling = animate && !focused;
   const example = EXAMPLES[group];
   const selected = example.people[person];
 
   useEffect(() => {
+    const element = demonstration.current;
+    if (!element || !("IntersectionObserver" in window)) return;
+    let inView = false;
+    const update = () => setVisible(inView && !document.hidden);
+    const observer = new IntersectionObserver((entries) => {
+      inView = entries[entries.length - 1].isIntersecting;
+      update();
+    });
+    observer.observe(element);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      observer.disconnect();
+      observer.takeRecords();
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!cycling) return;
-    const timer = window.setInterval(
-      () => setPerson((value) => (value + 1) % 3),
-      5500,
-    );
-    return () => window.clearInterval(timer);
-  }, [cycling, group]);
+    const timer = window.setTimeout(() => {
+      setSelection({ group: selection.group, person: (selection.person + 1) % example.people.length });
+    }, 5500);
+    return () => window.clearTimeout(timer);
+  }, [cycling, selection, example.people.length]);
 
   return (
     <section
       id="compartilhar"
-      ref={root}
       className={s.section}
       data-animate={animate}
       aria-labelledby="sharing-title"
@@ -147,7 +162,9 @@ export default function SharedLife() {
         </div>
 
         <div
+          ref={demonstration}
           className={s.demonstration}
+          onPointerDownCapture={() => setFocused(false)}
           onFocusCapture={(event) =>
             setFocused(event.target.matches(":focus-visible"))
           }
@@ -170,11 +187,7 @@ export default function SharedLife() {
                   type="button"
                   aria-pressed={group === index}
                   aria-controls="sharing-example"
-                  onClick={() => {
-                    setGroup(index);
-                    setPerson(0);
-                    setManual(true);
-                  }}
+                  onClick={() => setSelection({ group: index, person: 0 })}
                 >
                   <UiIcon name={index === 0 ? "home" : "business"} />
                   {item.label}
@@ -206,10 +219,7 @@ export default function SharedLife() {
                     aria-label={`Ver exemplo de ${item.name}`}
                     aria-controls="sharing-message"
                     data-active={person === index}
-                    onClick={() => {
-                      setPerson(index);
-                      setManual(true);
-                    }}
+                    onClick={() => setSelection({ group, person: index })}
                   >
                     <span className={s.avatar}>
                       {item.initials}
@@ -268,7 +278,7 @@ export default function SharedLife() {
             <div
               className={s.conversation}
               id="sharing-message"
-              aria-live={manual ? "polite" : "off"}
+              aria-live={cycling ? "off" : "polite"}
               aria-atomic="true"
             >
               <div className={s.conversationTop}>
@@ -313,30 +323,10 @@ export default function SharedLife() {
             </div>
           </div>
 
-          <div className={s.demoBottom}>
-            <span>
-              <i aria-hidden="true" />
-              {!running
-                ? "Escolha uma pessoa para ver o exemplo"
-                : manual
-                  ? "Exemplo escolhido por você"
-                  : "Veja cada pessoa participar"}
-            </span>
-            <button
-              type="button"
-              aria-pressed={!running || manual}
-              disabled={!running}
-              onClick={() => setManual((value) => !value)}
-            >
-              {!running
-                ? reduced
-                  ? "Movimento reduzido ativo"
-                  : "Animações pausadas no site"
-                : manual
-                  ? "▶ Trocar pessoas automaticamente"
-                  : "Ⅱ Pausar troca de pessoas"}
-            </button>
-          </div>
+          <p className={s.demoBottom}>
+            <i aria-hidden="true" />
+            Escolha uma pessoa para ver o exemplo
+          </p>
         </div>
 
         <div className={s.footer}>
