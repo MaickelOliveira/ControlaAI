@@ -117,6 +117,19 @@
   font-size: clamp(1rem, 1.1vw, 1.21rem);
   line-height: 1.55;
 }
+.googleAgenda {
+  white-space: nowrap;
+  font-weight: 650;
+}
+.googleAgenda::before {
+  content: "";
+  display: inline-block;
+  width: 1.05em;
+  height: 1.05em;
+  margin-inline-end: .26em;
+  vertical-align: -.14em;
+  background: url("/brand/google-g.png") center / contain no-repeat;
+}
 .outcome {
   display: grid;
   gap: 4px;

@@ -1,11 +1,13 @@
+import type { ReactNode } from "react";
 import type { VIRTUAL_TEAM } from "@/lib/virtual-team";
+import s from "./agent-function-sections.module.css";
 
 export type AgentExample = {
   key: keyof typeof VIRTUAL_TEAM;
   area: "Finanças" | "Rotina" | "Empresa" | "Organização";
   topic: string;
   title: string;
-  description: string;
+  description: ReactNode;
   outcome: string;
   request: string;
   resultTitle: string;
@@ -36,7 +38,13 @@ export const agentExamples: AgentExample[] = [
     area: "Rotina",
     topic: "Agenda",
     title: "Organize os compromissos do dia",
-    description: "Diga ao Lucas o assunto, o dia e o horário para marcar um compromisso pessoal ou da empresa. Se a reunião for por vídeo, conecte o Google Agenda e peça um link do Meet. Também dá para remarcar ou cancelar pelo WhatsApp.",
+    description: (
+      <>
+        Diga ao Lucas o assunto, o dia e o horário para marcar um compromisso pessoal ou da empresa.
+        Se a reunião for por vídeo, conecte o <span className={s.googleAgenda}>Google Agenda</span> e peça um link do Meet.
+        Também dá para remarcar ou cancelar pelo WhatsApp.
+      </>
+    ),
     outcome: "Ao abrir a agenda da empresa, você encontra a reunião de orçamento com o horário reservado e o link para entrar.",
     request: "Lucas, marca a reunião de orçamento na agenda da empresa. Terça, das 10h às 10h30, com link do Meet.",
     resultTitle: "Reunião de orçamento",
