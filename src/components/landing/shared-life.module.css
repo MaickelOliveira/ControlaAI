@@ -470,14 +470,9 @@
 .demoBottom {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 28px 0;
-}
-.demoBottom > span {
-  display: flex;
-  align-items: center;
   gap: 9px;
+  margin: 0;
+  padding: 28px 0;
   color: #bed0ae;
   font-size: 11px;
   line-height: 1.8;
@@ -487,20 +482,6 @@
   height: 6px;
   background: #fec307;
   border-radius: 50%;
-}
-.section .demoBottom button {
-  color: #e4ebda;
-  border: 1px solid #78936270;
-  border-radius: 7px;
-  background: transparent;
-  min-height: 44px;
-  padding: 10px 15px;
-  font-size: 11px;
-  line-height: 1.7;
-}
-.section .demoBottom button:hover {
-  color: #fec307;
-  border-color: #fec307;
 }
 .footer {
   display: flex;
@@ -789,15 +770,7 @@
     font-size: 11px;
   }
   .demoBottom {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 13px;
     padding: 23px 0;
-  }
-  .section .demoBottom button {
-    min-height: 46px;
-    font-size: 11px;
-    padding: 10px 12px;
   }
   .footer {
     flex-direction: column;
