@@ -31,10 +31,16 @@ describe("real provider normalization", () => {
   it("classifies clear card-bill settlement descriptions even without a provider category",()=>{
     const rows=normalizeMovements("accounts","account",[
       {id:"bill",account_id:"account",transaction_name:"DEBITO AUT. FAT.CARTAO MASTER CARD FINAL 6129",transaction_amount:amount("90"),credit_debit_type:"DEBITO"},
+      {id:"sicredi-bill",account_id:"account",transaction_name:"PAGTO FATURA MASTER 0000 COOPERATIVA TESTE",transaction_amount:amount("90"),credit_debit_type:"DEBITO"},
       {id:"utility",account_id:"account",transaction_name:"Pagamento de fatura de energia",transaction_amount:amount("10"),credit_debit_type:"DEBITO"},
     ]);
     expect(rows[0]).toMatchObject({classification:"bill_payment"});
-    expect(rows[1]).toMatchObject({classification:"unknown"});
+    expect(rows[1]).toMatchObject({classification:"bill_payment"});
+    expect(rows[2]).toMatchObject({classification:"unknown"});
+    const [cardPayment]=normalizeMovements("credit-cards","card",[
+      {id:"realize-bill",credit_card_id:"card",transaction_name:"A00000 - Pagamento Fatura Pix",brazilian_amount:amount("90"),credit_debit_type:"DEBITO"},
+    ]);
+    expect(cardPayment).toMatchObject({classification:"bill_payment"});
   });
   it("distinguishes a supplied merchant name from a sparse generic fallback",()=>{
     const source={id:"fixture",credit_card_id:"card",transaction_type:"COMPRA"};
