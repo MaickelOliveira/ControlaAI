@@ -37,6 +37,10 @@ describe("real provider normalization", () => {
     expect(rows[0]).toMatchObject({classification:"bill_payment"});
     expect(rows[1]).toMatchObject({classification:"bill_payment"});
     expect(rows[2]).toMatchObject({classification:"unknown"});
+    const [cardPayment]=normalizeMovements("credit-cards","card",[
+      {id:"realize-bill",credit_card_id:"card",transaction_name:"A00000 - Pagamento Fatura Pix",brazilian_amount:amount("90"),credit_debit_type:"DEBITO"},
+    ]);
+    expect(cardPayment).toMatchObject({classification:"bill_payment"});
   });
   it("distinguishes a supplied merchant name from a sparse generic fallback",()=>{
     const source={id:"fixture",credit_card_id:"card",transaction_type:"COMPRA"};

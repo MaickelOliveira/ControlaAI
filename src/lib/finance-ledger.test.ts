@@ -19,11 +19,13 @@ it("does not count unmistakable card-bill settlement descriptions when the provi
   {...bank,id:"account",description:"DEBITO AUT. FAT.CARTAO MASTER CARD FINAL 6129",amount:"90.00"},
   {...bank,id:"card",resource_type:"card",direction:"credit",kind:"credits",description:"DEB. AUTOM. DE FATURA EM C/C",amount:"90.00"},
   {...bank,id:"sicredi-bill",institution_name:"Sicredi",description:"PAGTO FATURA MASTER 0000 COOPERATIVA TESTE",amount:"90.00"},
+  {...bank,id:"realize-bill",institution_name:"Realize",resource_type:"card",kind:"card_purchases",description:"A00000 - Pagamento Fatura Pix",date:"2026-09-14",amount:"90.00"},
   {...bank,id:"purchase",resource_type:"card",kind:"card_purchases",classification:"purchase",description:"Compra de mercado",amount:"90.00"},
   {...bank,id:"utility",description:"Pagamento de fatura de energia",amount:"10.00"},
  ],"personal");
- expect(entries.filter(e=>!e.included)).toHaveLength(4);
+ expect(entries.filter(e=>!e.included)).toHaveLength(5);
  expect(entries.find(e=>e.id==="bank:sicredi-bill")).toMatchObject({included:false,category:"Transferências e pagamentos",categorySource:"excluded"});
+ expect(entries.find(e=>e.id==="bank:realize-bill")).toMatchObject({included:false,category:"Transferências e pagamentos",categorySource:"excluded"});
  expect(entries.find(e=>e.id==="bank:purchase")?.included).toBe(true);
  expect(ledgerBalance(entries).expense).toBe(100);
  expect(ledgerCategoryGroups(entries,"expense").reduce((total,group)=>total+group.value,0)).toBe(100);
