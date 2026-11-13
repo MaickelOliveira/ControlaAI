@@ -732,10 +732,22 @@ describe("getExplicitUpcomingFinanceQueryResult", () => {
       .toMatchObject({ intent: "finance_upcoming", confidence: 1, financeType: "income" });
   });
 
-  it("keeps mutations and specific relative periods in the full classifier", () => {
-    expect(getExplicitUpcomingFinanceQueryResult("registre uma conta para pagar")).toBeNull();
-    expect(getExplicitUpcomingFinanceQueryResult("que contas tenho para pagar na semana que vem?")).toBeNull();
+  it.each([
+    ["zelo quanto tenho pra pagar mes que vem?", "2026-12-01", "2026-12-31"],
+    ["quanto já está comprometido em janeiro?", "2027-01-01", "2027-01-31"],
+    ["o que vence amanhã?", "2026-11-14", "2026-11-14"],
+    ["que contas tenho para pagar na semana que vem?", "2026-11-16", "2026-11-22"],
+    ["quanto vou pagar no próximo mês?", "2026-12-01", "2026-12-31"],
+    ["quanto falta pagar na próxima semana?", "2026-11-16", "2026-11-22"],
+  ])("resolves the exact expense planning period for %s", (message, from, to) => {
+    expect(getExplicitUpcomingFinanceQueryResult(message, new Date(2026,10,13,12)))
+      .toMatchObject({intent:"finance_upcoming",financeType:"expense",period:{from,to}});
   });
+
+  it.each(["registre uma conta para pagar","Quanto paguei no mês passado?","Quais faturas vencem amanhã?","Quanto tenho para pagar no Nubank mês que vem?"])
+    ("does not turn a specialized or unrelated request into an unfiltered forecast: %s", message => {
+      expect(getExplicitUpcomingFinanceQueryResult(message)).toBeNull();
+    });
 });
 
 describe("finance detail conversation context", () => {

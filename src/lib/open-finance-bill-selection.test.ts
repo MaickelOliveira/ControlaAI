@@ -1,5 +1,10 @@
 import {expect,it} from "vitest";
 import {parseBillRequest,selectBankBill} from "./open-finance-bill-selection";
+
+it("keeps the bank filter when next month crosses the year",()=>{
+  expect(parseBillRequest("Zelo, me manda a fatura do Nubank mês que vem","2026-12-11"))
+    .toMatchObject({month:"2027-01",bankWords:["nubank"]});
+});
 import type {BankOverview} from "./open-finance-display";
 const data={connections:[{id:"c",institution_name:"Banco Inter PJ",status:"active"}],resources:[{id:"card",connection_id:"c",resource_type:"card",name:"MEI"}],bills:[{id:"oct",resource_id:"card",due_date:"2026-10-15"},{id:"sep",resource_id:"card",due_date:"2026-09-15"}]} as BankOverview;
 it("recognizes a request to send a card statement and selects the requested bank and month",()=>{

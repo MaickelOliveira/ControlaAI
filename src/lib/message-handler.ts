@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {saveWorkspaceCategories} from "./workspace-categories";
-import {getExplicitSpendingSummaryResult} from "./ai-processor";
+import {getExplicitSpendingSummaryResult,getExplicitUpcomingFinanceQueryResult} from "./ai-processor";
+import {answerCardInstallments,answerFinancePlanning,parseCardInstallmentsQuestion} from "./finance-planning-whatsapp";
 import {parseInstallmentDetailQuestion} from "./installment-detail";
 import {connectedInstallmentDetailAnswer} from "./connected-installment-detail";
 import {saveChosenCategory} from "./save-chosen-category";
@@ -60,7 +61,7 @@ import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring,
 import { collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import {readBankAgenda,readFinancialAgenda} from "@/lib/financial-agenda";
-import {formatBankAgenda,formatUpcomingBankAgenda} from "@/lib/open-finance-schedules";
+import {formatBankAgenda} from "@/lib/open-finance-schedules";
 import { replyAdvisorSummary } from "@/lib/advisor-summary";
 import type { Appointment } from "@/lib/agenda";
 import {googleWhatsAppConfirmation,googleWhatsAppReadyMeetLink,type GoogleWhatsAppRecord} from "./google-whatsapp-consumer";
@@ -2963,6 +2964,16 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }catch{await wppSend(from,"Não consegui consultar as faturas recebidas agora. Tente novamente em Contas.");}
       return;
     }
+    const cardInstallments=parseCardInstallmentsQuestion(messageText,todayStrBR());
+    if(cardInstallments){
+      const requestedMode=cardInstallments.mode??mode;
+      if(cardInstallments.compareModes){await wppSend(from,"Escolha Pessoal ou Empresa para conferir os parcelamentos.");return;}
+      if(!allowsFinanceMode(requestedMode)){await wppSend(from,replyModeAccessDenied(mode,user.locale));return;}
+      const answer=await answerCardInstallments(user,requestedMode,cardInstallments,todayStrBR());
+      const [freshAccess,freshUser]=await Promise.all([getPhoneAccess(user.id,from),getUserById(user.id)]);
+      if(freshUser&&hasAccess(freshUser)&&(freshAccess==="both"||freshAccess===requestedMode))await wppSendLong(from,answer,3500,true);
+      return;
+    }
     const installmentDetail=parseInstallmentDetailQuestion(messageText);
     if(installmentDetail){
       const requestedMode=/\b(?:empresa|empresarial|pj)\b/i.test(messageText)?"business":/\b(?:pessoal|pf)\b/i.test(messageText)?"personal":mode;
@@ -2997,7 +3008,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           `No encontré una foto verificable de *${imageRequest.subject}* para enviar. Dime el modelo y el color/material para intentarlo de nuevo.`));
       return;
     }
-    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
+    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? getExplicitUpcomingFinanceQueryResult(messageText) ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = withExplicitFinanceCategoryEdit(messageText, getScopedModeReadResult(messageText) ?? (actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi));
@@ -4001,26 +4012,33 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           break;
         }
 
-        // Quem tem acesso aos dois modos vê a visão completa quando não
-        // especifica "pessoal" ou "empresa". Em número restrito, a consulta
-        // nunca atravessa a permissão daquele WhatsApp.
-        const queryMode = phoneAccess === "both" ? requestedMode : mode;
         const [defaultFrom, defaultTo] = monthBounds(year, month);
         const periodFrom = ai.period?.from || defaultFrom;
         const periodTo = ai.period?.to || defaultTo;
         const today = todayStrBR();
+        if(ai.financeType!=="income"){
+          if(/\b(?:empresa|empresarial|pj)\b/i.test(messageText)&&/\b(?:pessoal|pf)\b/i.test(messageText)){
+            await wppSend(from,"Escolha Pessoal ou Empresa para conferir as despesas.");break;
+          }
+          const workspace=requestedMode??mode;
+          const answer=await answerFinancePlanning(user,workspace,periodFrom,periodTo,today);
+          const [freshAccess,freshUser]=await Promise.all([getPhoneAccess(user.id,from),getUserById(user.id)]);
+          if(freshUser&&hasAccess(freshUser)&&(freshAccess==="both"||freshAccess===workspace))await wppSendLong(from,answer,3500,true);
+          break;
+        }
 
+        const queryMode = phoneAccess === "both" ? requestedMode : mode;
         const financialAgenda=await readFinancialAgenda(user,queryMode,{from:periodFrom,to:periodTo,today,includeUndated:true,includeBank:process.env.OPEN_FINANCE_WHATSAPP_ENABLED==="true"});
         const upcomingItems=financialAgenda.commitments;
         const forecasts=financialAgenda.forecasts;
         await wppSendLong(from, replyUpcomingFinances(
           upcomingItems,
-          ai.financeType === "income" ? "income" : "expense",
+          "income",
           forecasts,
           periodLabelFor(ai.period, now, user.locale),
           today,
           user.locale,
-        )+(ai.financeType==="income"?"":formatUpcomingBankAgenda(financialAgenda.bank.items,today,financialAgenda.bank.incomplete))+financialAgenda.coverage,3500,true);
+        )+financialAgenda.coverage,3500,true);
         break;
       }
 
