@@ -1,4 +1,5 @@
 import type {BankMovement,CreditReconciliation} from "./open-finance-report";
+import {isBankBillPayment} from "./bank-bill-payment";
 
 /** These BRL snapshots must be whole cents; never round a mismatch into a match. */
 export function creditPixCents(value:unknown):bigint|null {
@@ -12,13 +13,13 @@ export function isCardCreditOperation(movement:BankMovement):boolean {
  const cents=creditPixCents(movement.amount);
  return movement.resource_type==="card"&&movement.direction==="debit"&&movement.currency==="BRL"
   &&movement.source_type==="OPERACOES_CREDITO_CONTRATADAS_CARTAO"&&movement.kind!=="excluded"
-  &&!['bill_payment','transfer','investment'].includes(movement.classification)&&cents!==null&&cents>BigInt(0);
+  &&!isBankBillPayment(movement)&&!['transfer','investment'].includes(movement.classification)&&cents!==null&&cents>BigInt(0);
 }
 export function isPixPayment(movement:BankMovement):boolean {
  const cents=creditPixCents(movement.amount);
  return movement.resource_type==="account"&&movement.direction==="debit"&&movement.currency==="BRL"
   &&movement.source_type==="PIX"&&movement.kind!=="excluded"
-  &&!['bill_payment','transfer','investment'].includes(movement.classification)&&cents!==null&&cents>BigInt(0);
+  &&!isBankBillPayment(movement)&&!['transfer','investment'].includes(movement.classification)&&cents!==null&&cents>BigInt(0);
 }
 export function creditPaymentAdjustment(movement:BankMovement):CreditReconciliation|null {
  const link=movement.credit_reconciliation;

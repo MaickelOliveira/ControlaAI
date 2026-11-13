@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), accounts: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn(), imported: vi.fn(), finances: vi.fn() }));
+const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), accounts: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn(), imported: vi.fn(), finances: vi.fn(), pending:vi.fn(), setPending:vi.fn(), clearPending:vi.fn() }));
 vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner }));
 vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: vi.fn().mockResolvedValue("holder"), getPhoneAccess: vi.fn().mockResolvedValue("both"), getPhonesForUser: vi.fn().mockResolvedValue([{ phone: "5511999990000", name: "Ana Teste", relation: "Titular" }]) }));
-vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: vi.fn().mockResolvedValue(null) }));
+vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction:m.pending,setPendingAction:m.setPending,clearPendingAction:m.clearPending }));
 vi.mock("./conversations", async original => ({ ...await original<typeof import("./conversations")>(), addMessage: vi.fn(), getAiPaused: vi.fn().mockResolvedValue(false), getAiHistory: vi.fn().mockResolvedValue([]) }));
 vi.mock("./whatsapp", () => ({ sendText: m.send, sendFile: vi.fn() }));
 vi.mock("./ai-processor", async original => ({ ...await original<typeof import("./ai-processor")>(), processMessage: m.process }));
@@ -23,10 +23,40 @@ beforeEach(() => {
   m.owner.mockResolvedValue(user); m.send.mockResolvedValue(true); m.process.mockRejectedValue(Error("Generic classifier must not handle a bank position"));
   m.recurring.mockResolvedValue([]); m.due.mockResolvedValue([{ id: "due-rent", description: "Aluguel", nextDueDate: "2026-10-01" }]);
   m.imported.mockResolvedValue([]);
+  m.pending.mockResolvedValue(null);
   m.finances.mockResolvedValue([]);
   m.access.mockResolvedValue({ userId: "holder", mode: "personal", environment: "production" });
   m.accounts.mockResolvedValue([]);
   m.rpc.mockResolvedValue({ connections: [{ id: "nu", institution_name: "Nubank", status: "active" }], resources: [{ id: "loan", connection_id: "nu", resource_type: "loan", name: "Crédito pessoal", synced_at: "2026-10-11" }, { id: "card", connection_id: "nu", resource_type: "card", name: "Platinum", synced_at: "2026-10-11" }], credit: [{ resource_id: "loan", currency: "BRL", outstanding_amount: "1200.10", contract_amount: "5000" }], limits: [{ resource_id: "card", line_name: "Crédito à vista", currency: "BRL", available_amount: "1245.92", total_amount: "2000", used_amount: "754.08" }], bills: [], sync: [] });
+});
+it("lets Rita confirm exactly one ambiguous bank debit without registering, editing or deleting a purchase",async()=>{
+ const day="2026-11-13",id="00000000-0000-4000-8000-000000000001";
+ const row={id,date:day,amount:"2801.72",currency:"BRL",resource_type:"account",direction:"debit",kind:"account_debits",institution_name:"Banco Santander Pessoa Física",description:"DÉBITO AUTOMÁTICO"};
+ m.rpc.mockImplementation(async(_scope,name)=>name==="zelo_of_set_movement_category"?true:{movements:[
+  row,{...row,id:"00000000-0000-4000-8000-000000000002",resource_type:"card",direction:"debit",description:"Compra legítima"},
+  {...row,id:"00000000-0000-4000-8000-000000000003",institution_name:"Nubank",description:"Outro banco"},
+ ],next:null});
+ await handleIncomingMessage({from:"5511999990000",text:"Rita, marque o pagamento de R$ 2.801,72 de 13/11/2026 no Santander como pagamento de fatura."});
+ const draft=m.setPending.mock.calls[0]?.[1];
+ expect(draft).toMatchObject({type:"finance_bill_payment",mode:"personal",day,amount:2801.72,movementIds:[id]});
+ const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
+ expect(reply).toContain("DÉBITO AUTOMÁTICO");
+ expect(reply).not.toContain("Compra legítima");
+ expect(reply).not.toContain("Outro banco");
+ expect(m.rpc.mock.calls.some(call=>call[1]==="zelo_of_set_movement_category")).toBe(false);
+ m.pending.mockResolvedValue(draft);
+ await handleIncomingMessage({from:"5511999990000",text:"1"});
+ expect(m.rpc).toHaveBeenLastCalledWith(expect.objectContaining({userId:"holder",mode:"personal"}),"zelo_of_set_movement_category",{p_movement:id,p_category:"Pagamento de fatura"});
+ expect(m.send.mock.calls.at(-1)?.[1]).toContain("continua no extrato e fica fora das despesas");
+ expect(m.send.mock.calls.every(call=>call[2]?.privateFinancial)).toBe(true);
+ expect(m.process).not.toHaveBeenCalled();
+ expect(m.confirm).not.toHaveBeenCalled();
+});
+it("keeps a manually corrected payment out of expenses but still lists it for a WhatsApp audit",async()=>{
+ const date=todayStrBR();
+ m.read.mockResolvedValue({entries:[{id:"bank:payment",mode:"personal",source:"bank",status:"posted",type:"expense",date,category:"Pagamento de fatura",included:false,amount:100,description:"DÉBITO AUTOMÁTICO",bank:{resource_type:"account",direction:"debit",user_category:"Pagamento de fatura",description:"DÉBITO AUTOMÁTICO",amount:"100",currency:"BRL"}}],bank:{overview:{connections:[{}]},report:{sync_pending:false,missing_dates:0}}});
+ await handleIncomingMessage({from:"5511999990000",text:"Mostre pagamentos de fatura fora dos gastos."});
+ expect(m.send.mock.calls.map(call=>call[1]).join("\n")).toContain("DÉBITO AUTOMÁTICO");
 });
 function planningFixture(incomplete=false){
   vi.useFakeTimers({toFake:["Date"]});

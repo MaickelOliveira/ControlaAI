@@ -24,11 +24,26 @@ it("does not count unmistakable card-bill settlement descriptions when the provi
   {...bank,id:"utility",description:"Pagamento de fatura de energia",amount:"10.00"},
  ],"personal");
  expect(entries.filter(e=>!e.included)).toHaveLength(5);
- expect(entries.find(e=>e.id==="bank:sicredi-bill")).toMatchObject({included:false,category:"Transferências e pagamentos",categorySource:"excluded"});
- expect(entries.find(e=>e.id==="bank:realize-bill")).toMatchObject({included:false,category:"Transferências e pagamentos",categorySource:"excluded"});
+ expect(entries.find(e=>e.id==="bank:sicredi-bill")).toMatchObject({included:false,category:"Pagamento de fatura",categorySource:"excluded"});
+ expect(entries.find(e=>e.id==="bank:realize-bill")).toMatchObject({included:false,category:"Pagamento de fatura",categorySource:"excluded"});
  expect(entries.find(e=>e.id==="bank:purchase")?.included).toBe(true);
  expect(ledgerBalance(entries).expense).toBe(100);
  expect(ledgerCategoryGroups(entries,"expense").reduce((total,group)=>total+group.value,0)).toBe(100);
+});
+it("keeps the exact Santander debit in the statement and counts only the other expenses",()=>{
+ const entries=createFinanceLedger([],[
+  {...bank,id:"santander",description:"PAGAMENTO CARTAO CREDITO BCE 13/11 11:10 CARTAO MASTER",amount:"2801.72",date:"2026-11-13",user_category:"Outros"},
+  {...bank,id:"other",description:"Compra",amount:"303.10",date:"2026-11-13"},
+ ],"personal");
+ expect(entries.find(e=>e.id==="bank:santander")).toMatchObject({amount:2801.72,included:false,category:"Pagamento de fatura"});
+ expect(ledgerBalance(entries).expense).toBe(303.10);
+ expect(ledgerCategoryGroups(entries,"expense")).toEqual([{name:"Outros",value:303.10}]);
+});
+it("excludes the selected ambiguous payment and restores it when the manual marker is removed",()=>{
+ const marked={...bank,user_category:"Pagamento de fatura"};
+ expect(createFinanceLedger([],[marked],"personal")[0]).toMatchObject({included:false,amount:40.1,category:"Pagamento de fatura"});
+ expect(createFinanceLedger([],[bank],"personal")[0].included).toBe(true);
+ expect(createFinanceLedger([],[{...marked,resource_type:"card",classification:"purchase"}],"personal")[0].included).toBe(true);
 });
 it("excludes only the bank movement explicitly marked as a transfer between own accounts",()=>{
  const description="Transferência enviada pelo Pix|SAMIRA";

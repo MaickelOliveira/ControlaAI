@@ -3,7 +3,6 @@ import type {BankFinancialData} from "./open-finance-report";
 import type {BankInstallmentAnchor,ScheduledBankInstallment} from "./bank-installment-projections";
 import {bankCategory,type BankCategory} from "./bank-category";
 import {creditPaymentAdjustment} from "./credit-funded-payment";
-import {isBankBillPaymentDescription} from "./bank-bill-payment";
 export type FinanceLedgerData={mode?:"personal"|"business";finances:LedgerEntry[];balance:{income:number;expense:number;balance:number};totalBalance:{income:number;expense:number;balance:number};bank:BankFinancialData|null;installmentAnchors?:{items:BankInstallmentAnchor[];scheduled?:ScheduledBankInstallment[];incomplete:boolean};accounts?:Array<{id:string;name:string;type:"bank"|"credit_card"}>};
 export type RecordedFinance = {id:string;type:string;amount:number;category:string;description:string;date:string;mode:string;source?:"whatsapp"|"web";status?:string;createdAt?:string;registeredByName?:string;accountId?:string};
 export type LedgerEntry = Omit<RecordedFinance,"source"> & {source:"whatsapp"|"web"|"bank";included:boolean;possibleDuplicate:boolean;bank?:BankMovement;categorySource?:BankCategory["source"]};
@@ -21,9 +20,8 @@ export function createFinanceLedger(records:readonly RecordedFinance[],movements
     const adjustment=creditPaymentAdjustment(bank);
     const amount=ledgerAmount(adjustment?adjustment.charges_amount:bank.amount);
     const refund=bank.resource_type==="card"&&bank.direction==="credit";
-    const billPayment=isBankBillPaymentDescription(bank.description);
     const selectedCategory=bankCategory(bank);
-    const category:BankCategory=selectedCategory.source==="excluded"?selectedCategory:billPayment?{name:"Transferências e pagamentos",source:"excluded"}:adjustment?{name:"Encargos bancários",source:"user"}:selectedCategory;
+    const category:BankCategory=selectedCategory.source==="excluded"?selectedCategory:adjustment?{name:"Encargos bancários",source:"user"}:selectedCategory;
     const included=amount!==null&&amount>=0&&bank.currency==="BRL"&&bank.kind!=="excluded"&&category.source!=="excluded"&&(bank.direction==="debit"||bank.direction==="credit");
     entries.push({id:`bank:${bank.id}`,type:refund||bank.direction!=="credit"?"expense":"income",amount:(amount??0)*(refund?-1:1),category:category.name,categorySource:category.source,description:bank.description,date:bank.date,mode,source:"bank",status:"posted",included,possibleDuplicate:false,bank});
   }

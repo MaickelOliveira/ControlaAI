@@ -1,6 +1,7 @@
 import {bankDebtCategory} from "./bank-debt";
 import type {BankMovement} from "./open-finance-report";
 import {descriptionExpenseCategory,descriptionIncomeCategory,isNonFoodDeliveryDescription} from "./expense-category";
+import {BILL_PAYMENT_CATEGORY,isBankBillPayment} from "./bank-bill-payment";
 
 export type BankCategory={name:string;source:"user"|"provider"|"description"|"default"|"excluded"};
 export const OWN_ACCOUNT_TRANSFER_CATEGORY="Transferência entre contas próprias";
@@ -10,9 +11,10 @@ const specific:Record<string,string>={FOOD_AND_DRINK_FAST_FOOD:"Delivery",GENERA
 const incomeCategories:Record<string,string>={INCOME_SALARY:"Salário",INCOME_CONTRACTOR:"Freelance",INCOME_GIG_ECONOMY:"Serviços",INCOME_RENTAL:"Aluguel",INCOME_DIVIDENDS:"Rendimentos",INCOME_INTEREST_EARNED:"Rendimentos",INCOME_TAX_REFUND:"Reembolso"};
 
 export function bankCategory(movement:BankMovement):BankCategory {
+  if(isBankBillPayment(movement))return {name:BILL_PAYMENT_CATEGORY,source:"excluded"};
   if(movement.kind==="excluded")return {name:"Transferências e pagamentos",source:"excluded"};
   if(movement.resource_type==="account"&&movement.user_category?.trim()===OWN_ACCOUNT_TRANSFER_CATEGORY)return {name:OWN_ACCOUNT_TRANSFER_CATEGORY,source:"excluded"};
-  if(movement.user_category?.trim())return {name:movement.user_category.trim(),source:"user"};
+  if(movement.user_category?.trim()&&movement.user_category!==BILL_PAYMENT_CATEGORY)return {name:movement.user_category.trim(),source:"user"};
   if(movement.credit_category)return {name:movement.credit_category,source:"provider"};
   if(movement.resource_type==="loan"||movement.resource_type==="financing")return {name:bankDebtCategory({name:movement.resource_name}),source:"provider"};
   const income=movement.resource_type!=="card"&&movement.direction==="credit";

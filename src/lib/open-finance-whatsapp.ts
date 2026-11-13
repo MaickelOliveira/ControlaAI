@@ -16,7 +16,7 @@ import {BANK_STATUSES,bankAmountWithoutCurrency,bankDate,bankMoney,type BankOver
 import {openFinanceRpc} from "./open-finance-http";
 import {readBankLedger} from "./finance-ledger-storage";
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
-import {isBankBillPaymentDescription} from "./bank-bill-payment";
+import {isBankBillPayment,isBankBillPaymentDescription} from "./bank-bill-payment";
 import {todayStrBR} from "./date-br";
 import {missingHistoricalLedgerNotice} from "./finance-history";
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
@@ -161,7 +161,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const coverage=bank?.report.sync_pending?"Há sincronização bancária pendente ou com falha.":"O histórico bancário recebido pode estar incompleto.";
       if(individualCategory){
         const purchases=scoped.filter(e=>e.type==="expense"&&e.amount>0&&normalize(e.category)===individualCategory
-          &&!isBankBillPaymentDescription(e.description)
+          &&(!e.bank||!isBankBillPayment(e.bank,e.description))
           &&(e.source!=="bank"||e.bank?.resource_type==="card"||e.bank?.classification==="purchase"));
         const largest=purchases.sort((a,b)=>b.amount-a.amount||b.date.localeCompare(a.date))[0];
         return `Maior compra individual em ${safeSummary(largest?.category??individualCategory)} · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${largest?`${safeSummary(largest.description)} · ${bankMoney(largest.amount,"BRL")} · ${bankDate(largest.date)} · ${safeSummary(financeOrigin(largest))}`:"Nenhuma compra individual dessa categoria identificada nos dados recebidos."}\n${largest?"O valor é de uma compra, não o total da categoria. ":""}${coverage}`;
@@ -205,7 +205,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const label=requested==="personal"?"Pessoal":"Empresa";
       const amount=(e:LedgerEntry)=>e.bank?bankMoney(e.bank.amount,e.bank.currency):bankMoney(e.amount,"BRL");
       if(billInOthers){
-        const found=scoped.filter(e=>isBankBillPaymentDescription(e.description)&&normalize(e.category)==="outros");
+        const found=scoped.filter(e=>normalize(e.category)==="outros"&&(e.bank?isBankBillPayment(e.bank,e.description):isBankBillPaymentDescription(e.description)));
         const lines=found.slice(0,5).map(e=>`• ${bankDate(e.date)} · ${safeSummary(e.description)} · ${amount(e)} · ${safeSummary(financeOrigin(e))}`);
         return `${found.length?"Sim":"Nenhum identificado"}: pagamentos de fatura classificados como Outros · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${lines.join("\n")||"Nenhum pagamento identificado nessa categoria nos registros consultados."}${found.length>5?`\nMais ${found.length-5} em Finanças.`:""}\nPagamentos com descrição diferente podem não ser reconhecidos; a ausência aqui não comprova que todos foram classificados corretamente.${bank?.report.sync_pending?" Há sincronização bancária pendente ou com falha.":""}`;
       }
@@ -217,7 +217,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       if(topMerchant){
         const purchases=scoped.filter(e=>e.included&&e.type==="expense"&&e.amount>0&&e.description.trim()
           &&(e.source!=="bank"||e.bank?.classification==="purchase"||e.bank?.resource_type==="card")
-          &&!isBankBillPaymentDescription(e.description));
+          &&(!e.bank||!isBankBillPayment(e.bank,e.description)));
         const merchants=new Map<string,{name:string;count:number;cents:number}>();
         for(const purchase of purchases){
           const key=normalize(purchase.description).replace(/[^a-z0-9]+/g," ").trim();
@@ -231,7 +231,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
         return `Estabelecimento com mais compras identificadas · ${label} · ${bankDate(from)} a ${bankDate(today)}\n${lines.join("\n")||"Nenhuma compra com estabelecimento identificável nos dados recebidos."}\nComparei a quantidade de compras, não o total da categoria. Nomes diferentes para a mesma loja podem aparecer separados; ${bank?.report.sync_pending?"há sincronização bancária pendente ou com falha.":"o histórico bancário recebido pode estar incompleto."}`;
       }
       if(!bank?.overview.connections.length)return "Não recebi compras de cartão de um banco conectado neste modo. Confira Contas; não vou estimar gastos por categoria.";
-      const card=scoped.filter(e=>e.source==="bank"&&e.bank?.resource_type==="card"&&e.type==="expense"&&e.included&&!isBankBillPaymentDescription(e.description));
+      const card=scoped.filter(e=>e.source==="bank"&&e.bank?.resource_type==="card"&&e.type==="expense"&&e.included&&!isBankBillPayment(e.bank,e.description));
       const groups=ledgerExpenseGroups(card,"category").sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name));
       const total=groups.reduce((cents,group)=>cents+Math.round(group.value*100),0)/100;
       const lines=groups.slice(0,15).map(group=>`• ${safeSummary(group.name)}: ${bankMoney(group.value,"BRL")}`);
@@ -344,7 +344,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
       const {entries,bank}=await readUnifiedFinances(user,requested,from,today);
       if(!bank?.overview.connections.length)return "Não tenho dados de um banco conectado neste modo para identificar estornos. Confira Contas; não vou estimar valores.";
       const scoped=entries.filter(e=>e.mode===requested&&e.status!=="pending"&&e.date>=from&&e.date<=today);
-      const cardCredits=scoped.filter(e=>e.source==="bank"&&e.bank?.resource_type==="card"&&e.bank.direction==="credit"&&!isBankBillPaymentDescription(e.description));
+      const cardCredits=scoped.filter(e=>e.source==="bank"&&e.bank?.resource_type==="card"&&e.bank.direction==="credit"&&!isBankBillPayment(e.bank,e.description));
       const refunds=cardCredits.filter(e=>/^(?:refund|reversal)$/.test(normalize(e.bank?.classification??""))||/\b(?:estorno|reembolso|restituicao|refund|reversal|devolucao|compra cancelada)\b/.test(normalize(e.description)));
       const unclassified=cardCredits.length-refunds.length;
       const income=scoped.filter(e=>e.included&&e.type==="income");
@@ -371,7 +371,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
   const splitSources=/^separe movimentacoes de conta e de cartao nos ultimos sete dias(?:\. quero as duas secoes sem misturar os totais)?$/.test(wording);
   const cardPurchases=/^mostre compras de cartao (?:do|deste) mes sem pagamentos de fatura(?:\. liste no maximo cinco exemplos e diga quantas compras foram encontradas)?$/.test(wording);
   const fiveCardExamples=cardPurchases&&wording.includes("liste no maximo cinco exemplos");
-  const billPayments=wording==="encontre pagamentos de fatura do mes e diga se ficaram fora dos gastos";
+  const billPayments=/^(?:(?:rita|zelo)[ ,:]+)?(?:encontre|liste|mostre|quais(?: foram)?) (?:os )?pagamentos? (?:de|da) fatura\b/.test(wording)&&/\b(?:do mes|fora dos gastos|fora das despesas)\b/.test(wording);
   const currentMonth=/\b(?:neste|deste|no) mes\b/.test(text)&&!/\bmes (?:passado|anterior)\b/.test(text);
   const listing=/^(?:encontre|identifique|liste|mostre|quais)\b/.test(wording);
   const ownTransfers=currentMonth&&listing&&/\btransferencias?\b/.test(text)
@@ -406,8 +406,8 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
         return `Movimentações recebidas · ${bankDate(from)} a ${bankDate(today)}\n\n${section("Contas bancárias",account)}\n\n${section("Cartões",card)}\nTotais excluem transferências e pagamentos confirmados; esses movimentos seguem listados como fora dos totais.${coverage}`;
       }
       let label:string,selected:LedgerEntry[];
-      if(cardPurchases){label="Compras de cartão";selected=card.filter(e=>e.bank?.direction==="debit"&&e.included&&!isBankBillPaymentDescription(e.description)&&!isCardCharge(e));}
-      else if(billPayments){label="Pagamentos de fatura identificados no extrato";selected=scoped.filter(e=>isBankBillPaymentDescription(e.description));}
+      if(cardPurchases){label="Compras de cartão";selected=card.filter(e=>e.bank?.direction==="debit"&&e.included&&!isBankBillPayment(e.bank,e.description)&&!isCardCharge(e));}
+      else if(billPayments){label="Pagamentos de fatura identificados no extrato";selected=scoped.filter(e=>e.bank&&isBankBillPayment(e.bank,e.description));}
       else if(ownTransfers){label="Transferências entre contas próprias confirmadas";selected=account.filter(e=>normalize(e.category)==="transferencia entre contas proprias");}
       else if(pixDirection){label=`Pix ${pixDirection}`;selected=account.filter(e=>/\bpix\b/.test(normalize(e.description))&&e.bank?.direction===(pixDirection==="enviados"?"debit":"credit"));}
       else {label="Lançamentos com valor não informado";selected=scoped.filter(e=>bankMoney(e.bank?.amount,e.bank?.currency)==="Não informado");}

@@ -32,7 +32,7 @@ export async function readBankOverview(scope:OpenFinanceScope):Promise<BankOverv
   }
   return structuredClone(await pending);
 }
-async function readBankReport(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankReport> {
+export async function readBankReport(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankReport> {
     if(process.env.OPEN_FINANCE_BATCH_REPORT_ENABLED==="true"){
       const report=await openFinanceRpc(scope,"zelo_of_ledger_report",{p_from:period.from,p_to:period.to}) as BankReport;
       if(!report||!Array.isArray(report.movements))throw Error("OF_LEDGER_INVALID");

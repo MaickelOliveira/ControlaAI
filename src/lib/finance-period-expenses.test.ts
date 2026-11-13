@@ -46,3 +46,12 @@ it("includes a card installment in the selected month with the same category as 
  const result=financePeriodExpenses(ledger,[],{...filters,categories:["Outros"]},"2026-11-03");
  expect(result.projectedInstallments).toHaveLength(1);expect(result.expensePlan).toMatchObject({total:20,forecast:20,recorded:0});
 });
+it("does not forecast a bill payment mislabeled as a recurring charge",()=>{
+ const ledger=data();
+ ledger.bank!.overview={...overview,agenda:{items:[...overview.agenda!.items,
+  {...overview.agenda!.items[0],id:"bill-as-recurring",description:"PAGTO CARTÃO CRÉDITO MASTER",amount:"2801.72"},
+ ],incomplete:false}};
+ const {expensePlan,bankSchedules}=financePeriodExpenses(ledger,[],filters,"2026-11-03");
+ expect(expensePlan.total).toBe(1210);
+ expect(bankSchedules.map(item=>item.id)).toEqual(["subscription"]);
+});

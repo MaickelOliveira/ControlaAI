@@ -50,3 +50,22 @@ it("does not claim success on a storage failure or expose the error",async()=>{
 it("rejects oversized bodies",async()=>{
  expect((await PATCH(request({movementId:id,category:"x".repeat(10000)}))).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
 });
+it("marks and undoes an account payment through the existing scoped category writer",async()=>{
+ vi.stubEnv("OPEN_FINANCE_BATCH_REPORT_ENABLED","false");
+ const date="2026-11-13",category="Pagamento de fatura";
+ const row={id,date,resource_type:"account",direction:"debit",description:"DÉBITO IDENTIFICADO",kind:"account_debits"};
+ rpc.mockResolvedValueOnce({movements:[row],next:null});
+ expect((await PATCH(request({movementId:id,date,category,billPayment:true}))).status).toBe(200);
+ expect(rpc).toHaveBeenLastCalledWith(expect.objectContaining({userId:"owner",mode:"business"}),"zelo_of_set_movement_category",{p_movement:id,p_category:category});
+ rpc.mockResolvedValueOnce({movements:[{...row,user_category:category}],next:null});
+ expect((await PATCH(request({movementId:id,date,category:null,billPayment:false}))).status).toBe(200);
+ expect(rpc).toHaveBeenLastCalledWith(expect.objectContaining({userId:"owner"}),"zelo_of_set_movement_category",{p_movement:id,p_category:null});
+});
+it("rejects marking a card purchase or passing the special marker as an ordinary category",async()=>{
+ vi.stubEnv("OPEN_FINANCE_BATCH_REPORT_ENABLED","false");
+ const date="2026-11-13",category="Pagamento de fatura";
+ expect((await PATCH(request({movementId:id,date,category}))).status).toBe(400);
+ rpc.mockResolvedValueOnce({movements:[{id,date,resource_type:"card",direction:"debit",description:"Compra legítima"}],next:null});
+ expect((await PATCH(request({movementId:id,date,category,billPayment:true}))).status).toBe(404);
+ expect(rpc.mock.calls.map(call=>call[1])).toEqual(["zelo_of_report"]);
+});
