@@ -895,19 +895,19 @@ function withExplicitRelativePeriod(message: string, result: AIResult, anchor: D
  * pede uma lista de vencimentos, não quanto já entrou e saiu. Inclui as
  * formas equivalentes em espanhol porque o mesmo classificador atende os
  * três idiomas da plataforma. */
-export function getExplicitUpcomingFinanceQueryResult(message: string): AIResult | null {
+export function getExplicitUpcomingFinanceQueryResult(message: string, anchor = nowBR()): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
   const hasFinancialSubject = /\b(contas?|despesas?|gastos?|boletos?|parcelas?|pagamentos?|receitas?|recebimentos?|cobrancas?|cuentas?|facturas?|cuotas?|pagos?|ingresos?|cobros?)\b/.test(normalized);
-  const hasUpcomingSignal = /\bproxim[oa]s?\b|\b(a|por)\s+pagar\b|\b(a\s+receber|por\s+cobrar)\b|\bpendentes?\b|\bpendientes?\b|\bvenc\w*/.test(normalized);
+  const hasUpcomingSignal = /\bproxim[oa]s?\b|\b(a|por|pra|para|vou|tenho que|falta)\s+pagar\b|\b(a\s+receber|por\s+cobrar)\b|\bpendentes?\b|\bpendientes?\b|\bvenc\w*/.test(normalized);
   const hasQuerySignal = /\b(quais?|quanto|quantas?|o\s+que|liste|listar|mostre|mostrar|tenho|minhas?|meus?|cuales?|cuanto|cuantas?|que|lista|listar|muestra|mostrar|tengo|mis)\b/.test(normalized);
   const isMutation = /\b(registr|cadastr|agend|anot|cri[ae]|adicion|inclu|cancel|apag|exclu|delet|edit|alter|corrig|paguei|recebi|recibi)\w*/.test(normalized);
-  // Períodos mais específicos precisam passar pelo classificador completo,
-  // que recebe do sistema as datas exatas de "semana que vem", "amanhã",
-  // "mês passado" etc. O atalho cobre o caso comum do mês atual sem inventar
-  // datas por conta própria.
-  const hasSpecificPeriod = /\b(hoje|amanha|ontem|semana|proximo\s+mes|mes\s+que\s+vem|mes\s+passado|ano|hoy|manana|ayer|proximo\s+mes|mes\s+pasado)\b/.test(normalized);
-
-  if (!hasFinancialSubject || !hasUpcomingSignal || !hasQuerySignal || isMutation || hasSpecificPeriod) return null;
+  const implicitSubject = /\b(?:quanto|o que|cuanto|que)\s+(?:eu\s+)?(?:(?:ainda )?(?:tenho|tengo)(?:\s+(?:a|pra|para|que))?\s+pagar|(?:vou|falta) pagar|vencem?)\b/.test(normalized)
+    || /\bquanto\b.*\bcomprometido\b/.test(normalized);
+  const specificSubject = /\b(?:cartao|cartoes|faturas?|facturas?|tarjetas?|emprestimos?|financiamentos?|parcelad[oa]s?|parcelamentos?|limite|saldo|assinaturas?|tarefas?|lembretes?)\b/.test(normalized);
+  const tutorial = /\b(?:como|onde|por que|porque)\b/.test(normalized);
+  if ((!hasFinancialSubject && !implicitSubject) || (!hasUpcomingSignal && !implicitSubject) || !hasQuerySignal || isMutation || specificSubject || tutorial) return null;
+  if (/\b(?:quanto|quais?|o que)\b.*\b(?:pagar|vencem?)\b.*\b(?:no|na|do|da)\s+(?!(?:proxim[oa]\s+)?(?:mes|semana|ano|dia)\b|empresa\b|pessoal\b|modo\b|zelo\b)\w+/.test(normalized)) return null;
+  const period = explicitFinanceCalendarPeriod(message, anchor);
 
   const financeType: "income" | "expense" = /\b(receitas?|recebimentos?|ingresos?|cobros?)\b|\ba\s+receber\b|\bpor\s+cobrar\b/.test(normalized)
     ? "income"
@@ -922,6 +922,7 @@ export function getExplicitUpcomingFinanceQueryResult(message: string): AIResult
     intent: "finance_upcoming",
     confidence: 1,
     financeType,
+    ...(period ? { period } : {}),
     ...(mode ? { mode } : {}),
   };
 }
@@ -1239,6 +1240,10 @@ function explicitPurchaseCalendarPeriod(message: string, anchor: Date, future = 
   return null;
 }
 
+export function explicitFinanceCalendarPeriod(message: string, anchor = nowBR(), future = true): DatePeriod | null {
+  return explicitPurchaseCalendarPeriod(message, anchor, future) ?? getExplicitRelativePeriod(message, anchor);
+}
+
 function extractGroceryStoreFromHistory(message: string): string | undefined {
   const normalized = normalizeCapabilityText(message.trim()).replace(/[?!.,;:]+$/, "");
   const subject = normalized.match(/\b(?:compras?|comprei|compre)\b/);
@@ -1461,7 +1466,7 @@ export function getExplicitSpendingSummaryResult(message:string,anchor:Date=nowB
 /** Protege consultas de assinaturas/parcelas recorrentes em espanhol para
  * que "consulta" não seja confundido com pesquisa na internet. */
 export function getExplicitRecurringQueryResult(message: string, anchor: Date = nowBR()): AIResult | null {
-  const normalized = normalizeCapabilityText(message.trim());
+  const normalized = normalizeCapabilityText(message.trim()).replace(/^(?:zelo|rita)[\s,:]+/,"");
   const mode:UserMode|undefined=/\b(?:empresa|empresarial|negocio)\b/.test(normalized)?"business":/\b(?:pessoal|personal)\b/.test(normalized)?"personal":undefined;
   const throughMonth=normalized.match(new RegExp(`\\b(?:ate|hasta)\\s+(${Object.keys(PURCHASE_MONTHS).join("|")})(?:\\s+(?:de\\s+)?(20\\d{2}))?\\b`));
   const throughPeriod=throughMonth?(()=>{

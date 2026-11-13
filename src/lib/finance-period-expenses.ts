@@ -13,7 +13,7 @@ export function matchesPeriodFilters(entry:Pick<LedgerEntry,"type"|"category"|"d
 }
 /** Dashboard and Finanças share the statement's reconciliation and forecasts.
  * A recorded installment replaces its prediction before either chart sums it. */
-export function financePeriodExpenses<T extends PeriodRecurring>(ledger:FinanceLedgerData|null,recurring:readonly T[],filters:FinanceFilters,today:string){
+export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<FinanceLedgerData,"finances"|"bank"|"installmentAnchors">|null,recurring:readonly T[],filters:FinanceFilters,today:string){
  const finances=ledger?.finances??[];
  const filteredFinances=finances.filter(entry=>matchesFinanceAccount(entry,filters.account)&&matchesPeriodFilters(entry,filters));
  const pendingFinances=filteredFinances.filter(entry=>entry.status==="pending");

@@ -11,11 +11,12 @@ export function parseBillRequest(message:string,today:string):BillRequest|null {
   const named=months.findIndex(name=>new RegExp(`\\b${name}\\b`).test(text));
   if(explicit)month=`${explicit[2]}-${explicit[1].padStart(2,"0")}`;
   else if(named>=0)month=`${text.match(/\b20\d{2}\b/)?.[0]??today.slice(0,4)}-${String(named+1).padStart(2,"0")}`;
-  else if(/mes (?:passado|anterior)/.test(text)){const [y,m]=today.split("-").map(Number);month=new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,7);}
+  else if(/\bmes (?:passado|anterior)\b/.test(text)){const [y,m]=today.split("-").map(Number);month=new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,7);}
+  else if(/\b(?:proximo mes|mes (?:que vem|seguinte))\b/.test(text)){const [y,m]=today.split("-").map(Number);month=new Date(Date.UTC(y,m,1)).toISOString().slice(0,7);}
   else if(/(?:este|esse|nesse|neste) mes|mes atual/.test(text))month=today.slice(0,7);
   const last4=text.match(/\bfinal\s*(\d{4})\b/)?.[1]??null;
   const ignored=new Set(["pra","para","mim","em","arquivo","documento","mande-me","me","a","o","as","os","minha","meu","minhas","meus","eu","voce","pode","poderia","por","favor","envia","envie","enviar","mande","manda","mandar","quero","preciso","mostre","mostrar","ver","pdf","baixe","baixar","fatura","cartao","cartoes","credito","do","de","da","dos","das","banco","bancaria","pessoal","empresa","empresarial","pf","pj","mes","passado","anterior","atual","este","esse","nesse","neste","final",...months]);
-  const bankWords=text.split(/[^a-z0-9]+/).filter(word=>word.length>1&&!/^\d+$/.test(word)&&!ignored.has(word));
+  const bankWords=text.replace(/^\s*(?:zelo|rita)[\s,:]+/,"").replace(/\b(?:proximo mes|mes (?:que vem|seguinte))\b/g,"").split(/[^a-z0-9]+/).filter(word=>word.length>1&&!/^\d+$/.test(word)&&!ignored.has(word));
   const personal=/\b(pessoal|pf)\b/.test(text),business=/\b(empresa|empresarial|pj)\b/.test(text);
   return {month,bankWords,last4,today,mode:personal&&business?"both":personal?"personal":business?"business":null};
 }

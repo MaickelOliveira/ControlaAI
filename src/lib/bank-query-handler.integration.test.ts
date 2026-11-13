@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), accounts: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn(), imported: vi.fn() }));
+const m = vi.hoisted(() => ({ owner: vi.fn(), send: vi.fn(), process: vi.fn(), rpc: vi.fn(), access: vi.fn(), accounts: vi.fn(), recurring: vi.fn(), due: vi.fn(), confirm: vi.fn(), read: vi.fn(), imported: vi.fn(), finances: vi.fn() }));
 vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner }));
 vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: vi.fn().mockResolvedValue("holder"), getPhoneAccess: vi.fn().mockResolvedValue("both"), getPhonesForUser: vi.fn().mockResolvedValue([{ phone: "5511999990000", name: "Ana Teste", relation: "Titular" }]) }));
 vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: vi.fn().mockResolvedValue(null) }));
@@ -11,7 +11,7 @@ vi.mock("./open-finance-access", () => ({ getOpenFinanceAccess: m.access, canEnr
 vi.mock("./open-finance-http", () => ({ openFinanceRpc: m.rpc }));
 vi.mock("./recurring", async original => ({ ...await original<typeof import("./recurring")>(), getRecurringByUser: m.recurring, findDueRecurringMatches: m.due, confirmRecurring: m.confirm }));
 vi.mock("./accounts", async original => ({ ...await original<typeof import("./accounts")>(), getManualAccountsByUser: m.accounts }));
-vi.mock("./finances", async original => ({ ...await original<typeof import("./finances")>(), getImportedInstallmentStatuses: m.imported }));
+vi.mock("./finances", async original => ({ ...await original<typeof import("./finances")>(), getImportedInstallmentStatuses: m.imported, getFinancesInRangeStrict: m.finances }));
 vi.mock("./unified-finances", () => ({ readUnifiedFinances: m.read }));
 import { handleIncomingMessage } from "./message-handler";
 import { bankMoney } from "./open-finance-display";
@@ -23,9 +23,90 @@ beforeEach(() => {
   m.owner.mockResolvedValue(user); m.send.mockResolvedValue(true); m.process.mockRejectedValue(Error("Generic classifier must not handle a bank position"));
   m.recurring.mockResolvedValue([]); m.due.mockResolvedValue([{ id: "due-rent", description: "Aluguel", nextDueDate: "2026-10-01" }]);
   m.imported.mockResolvedValue([]);
+  m.finances.mockResolvedValue([]);
   m.access.mockResolvedValue({ userId: "holder", mode: "personal", environment: "production" });
   m.accounts.mockResolvedValue([]);
   m.rpc.mockResolvedValue({ connections: [{ id: "nu", institution_name: "Nubank", status: "active" }], resources: [{ id: "loan", connection_id: "nu", resource_type: "loan", name: "Crédito pessoal", synced_at: "2026-10-11" }, { id: "card", connection_id: "nu", resource_type: "card", name: "Platinum", synced_at: "2026-10-11" }], credit: [{ resource_id: "loan", currency: "BRL", outstanding_amount: "1200.10", contract_amount: "5000" }], limits: [{ resource_id: "card", line_name: "Crédito à vista", currency: "BRL", available_amount: "1245.92", total_amount: "2000", used_amount: "754.08" }], bills: [], sync: [] });
+});
+function planningFixture(incomplete=false){
+  vi.useFakeTimers({toFake:["Date"]});
+  vi.setSystemTime(new Date("2026-11-13T15:00:00Z"));
+  m.rpc.mockImplementation(async (_scope, name) => {
+    if(name==="zelo_of_overview")return {
+      connections:[{id:"nu",institution_name:"Nubank",status:"active"},{id:"san",institution_name:"Santander",status:"active"}],
+      resources:[
+        {id:"nu-card",connection_id:"nu",resource_type:"card",name:"Platinum",identification_last4:"1234",currency:"BRL"},
+        {id:"san-card",connection_id:"san",resource_type:"card",name:"Free Mastercard",identification_last4:"5678",currency:"BRL"},
+        {id:"loan",connection_id:"nu",resource_type:"loan",name:"Crédito pessoal"},
+      ],
+      credit:[{resource_id:"loan",currency:"BRL",outstanding_amount:"1000",next_installment_amount:"300",due_date:"2027-01-20",total_installments:3,first_due_date:"2026-11-20",periodicity:"MENSAL"}],
+      agenda:{items:[{id:"subscription",kind:"recurring",resource_id:"nu-card",institution_name:"Nubank",resource_name:"Platinum",description:"Netflix",due_date:"2026-12-05",amount:"20",currency:"BRL"}],incomplete},
+      bills:[],limits:[],sync:[],
+    };
+    if(name==="zelo_of_installment_anchors")return {incomplete,items:[
+      {id:"desk",resource_id:"nu-card",description:"Mesa",institution_name:"Nubank",resource_name:"Platinum",amount:"100",currency:"BRL",bill_month:"2026-11",synced_at:"2026-11-12",observed_installments:1,total_installments:3},
+      {id:"books",resource_id:"san-card",description:"Livraria",institution_name:"Santander",resource_name:"Free Mastercard",amount:"50",currency:"BRL",bill_month:"2026-11",synced_at:"2026-11-12",observed_installments:2,total_installments:3},
+    ]};
+    if(name==="zelo_of_report"||name==="zelo_of_ledger_report")return {movements:[
+      {id:"bill",resource_id:"cash",resource_type:"account",institution_name:"Nubank",description:"Pagamento de fatura",amount:"100",currency:"BRL",date:"2026-12-03",direction:"debit",classification:"bill_payment",kind:"excluded"},
+    ],next:null,sync_pending:incomplete};
+    return {payments:[],plans:[],progress:[]};
+  });
+}
+it("answers the reported WhatsApp prompt with the Finanças forecast and excludes bill payments",async()=>{
+  planningFixture();
+  try{
+    await handleIncomingMessage({from:"5511999990000",text:"zelo quanto tenho pra pagar mes que vem?"});
+    const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
+    expect(reply).toContain("01/12/2026 a 31/12/2026");
+    expect(reply).toContain(`A pagar (previsto): ${bankMoney(470,"BRL")}`);
+    expect(reply).toContain(`Registradas: ${bankMoney(0,"BRL")}`);
+    expect(reply).toContain("Empréstimos");
+    expect(m.access.mock.calls.every(call=>call[1]==="personal")).toBe(true);
+    expect(m.process).not.toHaveBeenCalled();
+    expect(m.confirm).not.toHaveBeenCalled();
+  }finally{vi.useRealTimers();}
+});
+it.each([
+ ["O que tenho parcelado em todos os cartos?",true],
+ ["Quais compras parceladas tenho no cartão do Nubank mês que vem?",false],
+ ["O que tenho parcelado no cartão Nubank?",false],
+ ["O que tenho parcelado só no Nubank?",false],
+ ["O que tenho parcelado no cartão final 1234?",false],
+])("lists purchases without losing the card scope for %s",async(text,allCards)=>{
+  planningFixture();
+  try{
+    await handleIncomingMessage({from:"5511999990000",text});
+    const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
+    expect(reply).toContain("Mesa");
+    expect(reply.includes("Livraria")).toBe(allCards);
+    expect(reply).not.toContain("Netflix");
+    expect(m.process).not.toHaveBeenCalled();
+  }finally{vi.useRealTimers();}
+});
+it("does not turn a bank read error into zero upcoming expenses",async()=>{
+  planningFixture();
+  m.rpc.mockRejectedValue(Error("database unavailable"));
+  try{
+    await handleIncomingMessage({from:"5511999990000",text:"quanto vou pagar no mês seguinte?"});
+    const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
+    expect(reply).toContain("Não consegui conferir");
+    expect(reply).not.toContain(bankMoney(0,"BRL"));
+  }finally{vi.useRealTimers();}
+});
+it("labels the result partial when a bank is still syncing",async()=>{
+  planningFixture(true);
+  try{
+    await handleIncomingMessage({from:"5511999990000",text:"Quanto vou pagar no próximo mês?"});
+    const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
+    expect(reply).toContain(bankMoney(470,"BRL"));
+    expect(reply).toContain("Total com os valores disponíveis");
+    expect(reply).toContain("A atualização dos bancos está incompleta");
+  }finally{vi.useRealTimers();}
+});
+it("recognizes recurring questions addressed directly to Rita",()=>{
+  expect(getExplicitRecurringQueryResult("Rita, quais são minhas assinaturas mês que vem?",new Date(2026,10,13,12)))
+    .toMatchObject({intent:"recurring_query",period:{from:"2026-12-01",to:"2026-12-31"}});
 });
 it("answers the exact subscriptions-versus-installments request in short, separate groups",async()=>{
   const today=todayStrBR();

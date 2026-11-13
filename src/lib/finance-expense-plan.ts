@@ -6,6 +6,15 @@ import {bankForecastCategory} from "./finance-bank-schedules";
 
 type RecurringExpense={id:string;type:string;amount:number;category:string;status:string};
 type Inputs={categoryHistory?:readonly LedgerEntry[];posted:readonly LedgerEntry[];pending:readonly LedgerEntry[];recurring:readonly RecurringExpense[];loans:readonly LoanInstallment[];installments:readonly BankInstallmentProjection[];schedules:readonly BankAgendaItem[];from:string;to:string};
+export function bankScheduleInExpensePeriod(row:BankAgendaItem,from:string,to:string):boolean {
+ if(row.due_date)return row.due_date>=from&&row.due_date<=to;
+ if(row.kind!=="installment"||!row.last_observed_month||!row.last_observed_installment)return false;
+ const monthIndex=(date:string)=>Number(date.slice(0,4))*12+Number(date.slice(5,7));
+ const position=row.last_observed_installment+monthIndex(from)-monthIndex(row.last_observed_month);
+ const [year,month]=from.slice(0,7).split("-").map(Number);
+ const monthEnd=`${from.slice(0,7)}-${String(new Date(Date.UTC(year,month,0)).getUTCDate()).padStart(2,"0")}`;
+ return from.endsWith("-01")&&to===monthEnd&&position>=1&&position<=(row.total_installments??0);
+}
 /** The caller supplies the same filtered, reconciled rows shown in the statement.
  * Forecasts never become ledger entries or change the realized cash balance. */
 export function financeExpensePlan(input:Inputs){
@@ -29,13 +38,7 @@ export function financeExpensePlan(input:Inputs){
  for(const row of input.schedules){
   if(row.kind==="bill"||row.payment_evidence)continue;
   // An observation with no month cannot be charged to every selected month.
-  const month=row.last_observed_month?.slice(0,7);
-  const position=month&&row.last_observed_installment?row.last_observed_installment+(Number(input.from.slice(0,4))*12+Number(input.from.slice(5,7)))-(Number(month.slice(0,4))*12+Number(month.slice(5,7))):null;
-  const [year,monthNumber]=input.from.slice(0,7).split("-").map(Number);
-  const monthEnd=`${input.from.slice(0,7)}-${String(new Date(Date.UTC(year,monthNumber,0)).getUTCDate()).padStart(2,"0")}`;
-  const wholeMonth=input.from.endsWith("-01")&&input.to===monthEnd;
-  const inPeriod=row.due_date?row.due_date>=input.from&&row.due_date<=input.to:row.kind==="installment"&&wholeMonth&&position!==null&&position>=1&&position<=(row.total_installments??0);
-  if(!inPeriod){unquantified++;continue;}
+  if(!bankScheduleInExpensePeriod(row,input.from,input.to)){unquantified++;continue;}
   add(`schedule:${row.kind}:${row.id}`,bankForecastCategory(row,input.categoryHistory??input.posted),ledgerAmount(row.amount),row.currency);
  }
  const forecast=forecastCents/100;
