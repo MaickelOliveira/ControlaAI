@@ -1532,7 +1532,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             const actionable=candidates.filter(row=>!isBankBillPayment(row)&&row.kind!=="excluded");
             if(!actionable.length){
               if(billConfirmation)await clearPendingAction(from);
-              await wppSend(from,candidates.some(isBankBillPayment)?"Esse pagamento de fatura já aparece no extrato e fica fora das despesas.":"Não encontrei um lançamento com esse valor e data. Confira o banco e o dia no extrato.",true);return;
+              await wppSend(from,candidates.some(row=>isBankBillPayment(row))?"Esse pagamento de fatura já aparece no extrato e fica fora das despesas.":"Não encontrei um lançamento com esse valor e data. Confira o banco e o dia no extrato.",true);return;
             }
             if(actionable.length>6){await wppSend(from,"Há vários lançamentos com esse valor e data. Informe também o banco ou escolha o lançamento em Finanças.",true);return;}
             await setPendingAction(from,{type:"finance_bill_payment",userId:user.id,mode:target,day,amount,movementIds:actionable.map(row=>row.id)});
