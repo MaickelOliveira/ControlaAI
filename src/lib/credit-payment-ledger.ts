@@ -2,6 +2,7 @@ import type {BankMovement} from "./open-finance-report";
 import {ledgerAmount} from "./finance-ledger";
 import {bankDebtCategory} from "./bank-debt";
 import {normalizeMerchantText} from "./merchant-text";
+import {isBankBillPayment} from "./bank-bill-payment";
 // Provider loan-payment categories identify debits whose descriptions contain
 // only an installment label or the customer's nickname for the loan.
 const loanPaymentCategories=new Set([
@@ -23,7 +24,7 @@ export function mergeCreditPayments(movements:readonly BankMovement[],payments:r
  const signature=(m:BankMovement)=>`${m.institution_id??m.institution_name}|${m.date}|${m.currency}|${ledgerAmount(m.amount)}`;
  for(const payment of payments){
   if(result.some(m=>m.id===payment.id))continue;
-  const candidates=result.filter(m=>!used.has(m.id)&&m.resource_type==="account"&&m.direction==="debit"&&m.kind!=="excluded"&&signature(m)===signature(payment)&&isExplicitLoanPayment(m));
+  const candidates=result.filter(m=>!used.has(m.id)&&m.resource_type==="account"&&m.direction==="debit"&&m.kind!=="excluded"&&signature(m)===signature(payment)&&!isBankBillPayment(m)&&isExplicitLoanPayment(m));
   const unique=payments.filter(p=>signature(p)===signature(payment)).length===1;
   if(candidates.length===1&&unique){
    const match=candidates[0];used.add(match.id);

@@ -1,6 +1,6 @@
 import {bankDate,bankMoney,type BankBill,type BankConnection,type BankOverview,type BankResource} from "./open-finance-display";
 import {normalizeBankText} from "./bank-question-parser";
-import {isBankBillPaymentDescription} from "./bank-bill-payment";
+import {isBankBillPayment} from "./bank-bill-payment";
 import type {LedgerEntry} from "./finance-ledger";
 
 export type BillQuestion = {kind:"overdue"|"latest"|"total"|"minimum"|"next"|"undated"|"separate"|"confirmed-payment"|"partial-payment"|"missing";bankName?:string;requestedCurrent?:boolean};
@@ -89,7 +89,7 @@ export function answerBillQuestion(overview:BankOverview,question:BillQuestion,t
    result=overview.resources.filter(card=>card.resource_type==="card"&&active.has(card.connection_id)).map(card=>{
     const bank=active.get(card.connection_id)!;
     const row=latestByCard.get(card.id);
-    const purchases=entries.filter(entry=>entry.source==="bank"&&entry.bank?.resource_id===card.id&&entry.bank.resource_type==="card"&&entry.bank.direction==="debit"&&entry.included&&entry.status!=="pending"&&entry.date>=monthStart&&entry.date<=today&&!isBankBillPaymentDescription(entry.description));
+    const purchases=entries.filter(entry=>entry.source==="bank"&&entry.bank?.resource_id===card.id&&entry.bank.resource_type==="card"&&entry.bank.direction==="debit"&&entry.included&&entry.status!=="pending"&&entry.date>=monthStart&&entry.date<=today&&!isBankBillPayment(entry.bank,entry.description));
     const cents=purchases.reduce((sum,entry)=>sum+Math.round(entry.amount*100),0);
     return `• ${safe(bank.institution_name)} · ${safe(card.name)}${card.identification_last4?` final ${card.identification_last4}`:""}\n  ${row?`Última fatura recebida: ${amount(row,"total_amount")} · vencimento ${bankDate(row.bill.due_date)}`:"Fatura não informada pelo banco"}\n  Compras recebidas no extrato deste mês: ${purchases.length?`${bankMoney(cents/100,"BRL")} em ${purchases.length} compra(s)`:"nenhuma compra em BRL contabilizável recebida"}`;
    });

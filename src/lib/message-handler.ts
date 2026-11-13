@@ -73,6 +73,9 @@ import {getOpenFinanceAccess} from "./open-finance-access";
 import {openFinanceRpc} from "./open-finance-http";
 import type {BankOverview} from "./open-finance-display";
 import {answerBillQuestion,parseBillQuestion,paidBillHistoryAnswer,closedBillAnswer} from "./bank-bill-answers";
+import {billPaymentCandidates,parseMarkBillPayment,setBankBillPayment} from "./mark-bank-bill-payment";
+import {isBankBillPayment} from "./bank-bill-payment";
+import {bankDate,bankMoney} from "./open-finance-display";
 import {formatBankInstallmentFocus,parseBankInstallmentFocus} from "./bank-installment-focus";
 import {readUnifiedFinances} from "./unified-finances";
 import {currentCompanyContext} from "./company-context";
@@ -1019,7 +1022,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     let messageText = msg.text;
 
     if (from) {
-      await addMessage(from, { role: "user", content: messageText || (msg.isFileMessage ? "[Arquivo]" : ""), ts:msg.receivedAt??Date.now(),...(msg.channel?{channel:msg.channel}:{}) }, { contactName: msg.contactName });
+      await addMessage(from, { role: "user", content: messageText || (msg.isFileMessage ? "[Arquivo]" : ""), ts:msg.receivedAt??Date.now(),...(msg.channel?{channel:msg.channel}:{}),...(parseMarkBillPayment(messageText,todayStrBR())?{privateFinancial:true}:{}) }, { contactName: msg.contactName });
     }
 
     // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──
@@ -1495,6 +1498,58 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
     // ── Verifica ação pendente (ex: seleção de veículo) ──
     let pending = await getPendingAction(from);
+    const billCorrection=parseMarkBillPayment(messageText,todayStrBR());
+    const billConfirmation=pending?.type==="finance_bill_payment"&&pending.userId===user.id?pending:null;
+    if(billCorrection||billConfirmation){
+      setVirtualAgentIntent("finance_edit");
+      const target=billCorrection?.mode??billConfirmation?.mode??mode;
+      if(billCorrection?.both||!allowsFinanceMode(target)){
+        await wppSend(from,billCorrection?.both?"Escolha o modo Pessoal ou Empresa.":replyModeAccessDenied(mode,user.locale));return;
+      }
+      if(!billCorrection&&billConfirmation&&(BARE_CANCEL_RE.test(messageText.trim())||parseYesNo(messageText)===false)){
+        await clearPendingAction(from);await wppSend(from,"Marcação cancelada.");return;
+      }
+      if(!billCorrection&&billConfirmation&&looksLikeNewCommand(messageText)){
+        await clearPendingAction(from);pending=null;
+      }else{
+        try{
+          if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true"){
+            await wppSend(from,"A correção pelo WhatsApp está indisponível. Use Finanças → Extrato → Alterar categoria.");return;
+          }
+          if(billCorrection&&(!billCorrection.day||!billCorrection.amount)){
+            await wppSend(from,"Para localizar a movimentação, diga o valor, a data e, se souber, o banco. Exemplo: *Rita, marque o pagamento de R$ 120,00 de 13/11 no Santander como pagamento de fatura.*",true);return;
+          }
+          const selectedCompany=currentCompanyContext()?.companyId;
+          const [freshAccess,freshUser]=await Promise.all([getPhoneAccess(user.id,from),getUserById(user.id)]);
+          if(!freshUser||!hasAccess(freshUser)||(freshAccess!=="both"&&freshAccess!==target))return;
+          const scope=await getOpenFinanceAccess(freshUser,target,{throwOnStorageError:true,companyId:selectedCompany});
+          if(!scope||(target==="business"&&selectedCompany&&scope.companyId!==selectedCompany)){
+            await wppSend(from,"Não consegui consultar esse modo. Confira o lançamento em Finanças.",true);return;
+          }
+          if(billCorrection){
+            const day=billCorrection.day!,amount=billCorrection.amount!;
+            const candidates=await billPaymentCandidates(scope,day,amount,billCorrection.bank);
+            const actionable=candidates.filter(row=>!isBankBillPayment(row)&&row.kind!=="excluded");
+            if(!actionable.length){
+              if(billConfirmation)await clearPendingAction(from);
+              await wppSend(from,candidates.some(isBankBillPayment)?"Esse pagamento de fatura já aparece no extrato e fica fora das despesas.":"Não encontrei um lançamento com esse valor e data. Confira o banco e o dia no extrato.",true);return;
+            }
+            if(actionable.length>6){await wppSend(from,"Há vários lançamentos com esse valor e data. Informe também o banco ou escolha o lançamento em Finanças.",true);return;}
+            await setPendingAction(from,{type:"finance_bill_payment",userId:user.id,mode:target,day,amount,movementIds:actionable.map(row=>row.id)});
+            const safe=(value:string)=>value.replace(/[\r\n*`_~<>]/g," ").slice(0,110);
+            const lines=actionable.map((row,index)=>`${index+1}. ${safe(row.description)} · ${safe(row.institution_name)} · ${bankDate(day)} · ${bankMoney(row.amount,row.currency)}`);
+            await wppSend(from,`Qual lançamento você quer marcar como pagamento de fatura? Ele continuará no extrato e sairá da soma das despesas.\n\n${lines.join("\n")}\n\nResponda com o número ou escreva *cancelar*.`,true);return;
+          }
+          if(billConfirmation){
+            const choice=/^[1-6]$/.test(messageText.trim())?billConfirmation.movementIds[Number(messageText.trim())-1]:undefined;
+            if(!choice){await wppSend(from,"Responda com o número do lançamento ou escreva *cancelar*.",true);return;}
+            const saved=await setBankBillPayment(scope,choice,billConfirmation.day,true,billConfirmation.amount);
+            await clearPendingAction(from);
+            await wppSend(from,saved?"Pagamento de fatura marcado. O valor continua no extrato e fica fora das despesas.":"O lançamento mudou ou saiu deste modo. Confira o extrato e repita o pedido.",true);return;
+          }
+        }catch{await wppSend(from,"Não consegui conferir a marcação agora. Tente de novo ou confira o lançamento em Finanças.",true);return;}
+      }
+    }
     const categoryRequest=categoryCreateRequest(messageText);
     const categoryCandidates=pending?.type==="finance_select"&&pending.userId===user.id&&pending.action==="edit"&&pending.awaitingPatch&&!Object.keys(pending.patch??{}).length?pending.candidates:undefined;
     if(asksCategoryChoices(messageText)){

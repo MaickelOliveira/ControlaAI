@@ -47,6 +47,27 @@ describe("real provider normalization", () => {
     expect(normalizeMovements("credit-cards","card",[{...source,transaction_name:"Mercado fictício"}])[0]).toMatchObject({description:"Mercado fictício",description_present:true});
     expect(normalizeMovements("credit-cards","card",[{...source,transaction_name:"  "}])[0]).toMatchObject({description:"COMPRA",description_present:false});
   });
+  it.each([
+    ["PAGAMENTO CARTAO CREDITO BCE 13/11 11:10 CARTAO MASTER",null,"bill_payment"],
+    ["PGTO. CART. CRED. FINAL 1234",null,"bill_payment"],
+    ["PAGAMENTO MÍNIMO DA FATURA DO CARTÃO",null,"bill_payment"],
+    ["PIX PAGAMENTO FATURA VISA",null,"bill_payment"],
+    ["QUITAÇÃO FATURA ELO",null,"bill_payment"],
+    ["LIQUIDAÇÃO DE FATURA HIPERCARD",null,"bill_payment"],
+    ["DÉBITO AUTOMÁTICO DE FATURA CARTÃO",null,"bill_payment"],
+    ["PGTO. FATURA FINAL 4321",null,"bill_payment"],
+    ["Pagamento efetuado","LOAN_PAYMENTS_CREDIT_CARD_PAYMENT","bill_payment"],
+    ["Pagamento de fatura de energia",null,"unknown"],
+    ["Pagamento com cartão de crédito",null,"unknown"],
+    ["Tarifa pagamento fatura cartão",null,"unknown"],
+    ["Pagamento cartão de crédito juros",null,"unknown"],
+    ["Parcelamento de fatura cartão",null,"unknown"],
+    ["Pagamento de parcela do empréstimo",null,"unknown"],
+    ["PIX enviado sem identificação",null,"unknown"],
+  ])("classifies bank description %s without conflating charges or purchases",(description,category,classification)=>{
+    const [movement]=normalizeMovements("accounts","account",[{id:"movement",account_id:"account",transaction_name:description,category_ref:category,transaction_amount:amount("2801.72"),credit_debit_type:"DEBITO"}]);
+    expect(movement.classification).toBe(classification);
+  });
   it("uses fund conversion date and never labels investment redemption as consumer income", () => {
     const [tx] = normalizeMovements("funds", "fund", [{ id: "fundtx", fund_id: "fund", transaction_conversion_date: "2026-10-01", type: "SAIDA", transaction_type: "RESGATE", transaction_net_value: amount("90"), transaction_gross_value: amount("100") }]);
     expect(tx).toMatchObject({ transaction_date: "2026-10-01", amount: "90", classification: "investment", direction: "unknown" });
