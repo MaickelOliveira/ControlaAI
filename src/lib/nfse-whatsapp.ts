@@ -30,6 +30,18 @@ export async function handleFiscalWhatsApp(user: User, mode: "personal" | "busin
   if (!overview.profile) { await say("Primeiro, salve o cadastro fiscal desta empresa na plataforma → Notas fiscais → Cadastro fiscal. Depois eu preparo sua nota por aqui. Não envie certificado ou senha pelo WhatsApp."); return true; }
   if (!pending && !/\b(?:emita|emitir|emite|tire|tirar|gerar|gere|preparar|prepare)\b/.test(text) && /\b(?:consultar|consulte|listar|liste|ver|veja|pdf|envie|enviar|manda|mandar)\b/.test(text)) { await say(overview.drafts.length ? `Rascunhos de *${overview.companyName}* (ainda não emitidos):\n\n${overview.drafts.slice(0, 10).map(item => `• ${item.draft.recipientName} — ${item.draft.service.title} — R$ ${item.draft.service.amount.toFixed(2)} — ${item.status === "draft" ? "rascunho" : item.status}`).join("\n")}\n\nA emissão e o PDF oficial aguardam homologação. Veja os detalhes em Notas fiscais.` : "Esta empresa ainda não tem notas emitidas. Posso preparar um rascunho: peça ‘prepare uma nota fiscal’."); return true; }
   const save = async (data: Omit<PendingFiscalDraft, "phone" | "expiresAt" | "type" | "userId">, question: string) => { await setPendingAction(phone, { type: "nfse_draft", userId: user.id, ...data }); await say(question); };
+  const namedService = /\b(?:para|do|de|com o)\s+(?:o\s+)?servico\s+(.+?)[.!?]*$/.exec(text)?.[1];
+  if (!pending && overview.services.length === 1
+   && (!namedService || namedService === normalize(overview.services[0].service.title))
+   && !/\bnovo servico\b/.test(text)) {
+   const service = overview.services[0];
+   await save({ stage: "recipient", serviceId: service.id }, `Vou preparar o rascunho de *${service.service.title}*. Qual o nome ou razão social do tomador?`);
+   return true;
+  }
+  if (!pending && (!overview.services.length || /\bnovo servico\b/.test(text))) {
+   await save({ stage: "new_service", newService: {}, newField: "title" }, questions.title);
+   return true;
+  }
   if (!pending) { await save({ stage: "service" }, `Vou preparar um *rascunho* para ${overview.companyName}. A emissão ainda aguarda homologação.\n\nQual serviço?\n${overview.services.slice(0, 10).map((item, index) => `${index + 1}. ${item.service.title} — R$ ${item.service.amount.toFixed(2)}`).join("\n")}\n\nOs 10 primeiros aparecem acima; qualquer outro pode ser escolhido pelo nome exato. Responda o nome/número ou *novo serviço* para informar os dados na conversa.`); return true; }
   const { serviceId, newService, recipientName, recipientDocument, amount } = pending;
   const partial = { serviceId, newService, recipientName, recipientDocument, amount };

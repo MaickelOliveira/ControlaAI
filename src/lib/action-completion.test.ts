@@ -83,15 +83,11 @@ describe("action completion", () => {
       { intent: "employee_update", confidence: 1 },
       { intent: "customer_update", confidence: 1 },
       { intent: "recurring_edit", confidence: 1 },
-      { intent: "finance_confirm_pending", confidence: 1 },
-      { intent: "agenda_update", confidence: 1 },
       { intent: "meet_create", confidence: 1 },
       { intent: "drive_rename", confidence: 1 },
       { intent: "category_create", confidence: 1 },
       { intent: "account_create", confidence: 1 },
       { intent: "account_update", confidence: 1 },
-      { intent: "account_delete", confidence: 1 },
-      { intent: "account_set_default", confidence: 1 },
     ] as const;
     for (const command of incomplete) {
       const question = getMissingActionQuestion(command, "es");

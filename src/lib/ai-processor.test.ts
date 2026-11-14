@@ -47,7 +47,7 @@ import {
   withExplicitFinanceDestinationMode,
   withExplicitFinanceAccount,
   withExplicitFinanceCategoryEdit,
-  financeEditNeedsChoice,
+  financeEditTargetFilters,
   withExplicitFinanceType,
 } from "./ai-processor";
 
@@ -115,6 +115,17 @@ describe("natural pending finance registration", () => {
   it("does not turn pending queries into new records", () => {
     expect(getExplicitPendingFinanceRegisterResult("Quanto tenho a receber esta semana?", anchor)).toBeNull();
     expect(getExplicitPendingFinanceRegisterResult("Quais contas tenho a pagar?", anchor)).toBeNull();
+  });
+
+  it("parses dated receivables in one batch, including dates already passed in the stated year", () => {
+    const text = "Preciso colocar na conta empresarial\nPagamentos a cair\nCliente Alfa valor 348,21 pagamento dia 09/09\nCliente Beta valor 1.664,47 pagamento dia 20/10";
+    expect(getExplicitPendingFinanceRegisterResult(text, anchor)).toMatchObject({
+      intent: "finance_register", mode: "business", finances: [
+        { description: "Alfa", amount: 348.21, date: "2026-09-09", pending: true },
+        { description: "Beta", amount: 1664.47, date: "2026-10-20", pending: true },
+      ],
+    });
+    expect(getExplicitPendingFinanceRegisterResult(text + "\nCliente Gama sem valor", anchor)).toBeNull();
   });
 
   it("keeps a receivable without a date pending instead of inventing today", () => {
@@ -1193,8 +1204,8 @@ describe("manual account commands", () => {
       .toMatchObject({ keyword: "TESTE AUDITORIA", finance: { category: "Serviços" } });
     expect(withExplicitFinanceCategoryEdit("Altere a categoria da despesa Casa de Carne para Alimentação.", classified))
       .toMatchObject({ keyword: "Casa de Carne", finance: { category: "Alimentação" } });
-    expect(financeEditNeedsChoice("Altere a categoria da despesa TESTE AUDITORIA de R$ 1,00 registrada em 15/10 para Serviços.")).toBe(true);
-    expect(financeEditNeedsChoice("Altere a categoria da despesa Casa de Carne para Alimentação.")).toBe(false);
+    expect(financeEditTargetFilters("Altere a categoria da despesa TESTE AUDITORIA de R$ 1,00 registrada em 15/10 para Serviços.")).toEqual({ amount: 1, date: "-10-15" });
+    expect(financeEditTargetFilters("Altere a categoria da despesa Casa de Carne para Alimentação.")).toEqual({ amount: undefined, date: undefined });
   });
 
   it.each([

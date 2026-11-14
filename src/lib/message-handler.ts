@@ -26,15 +26,15 @@ import {recurringQueryKind,isUnregisteredBankRecurringRequest,isUnreliableRecurr
 import {formatRemainingKnownInstallments} from "@/lib/remaining-installments-answer";
 import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
-import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, getScopedModeReadResult, withExplicitFinanceCategoryEdit, financeEditNeedsChoice, type AIResult, type FinanceData } from "@/lib/ai-processor";
+import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, getScopedModeReadResult, withExplicitFinanceCategoryEdit, financeEditTargetFilters, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
 import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createdDayBoundsBR, isFinanceCreatedTodayQuery, replyFinancesCreatedToday } from "@/lib/finance-created-query";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
-import { createTask, createTasks, getPendingTasks, getTasksByUser, updateTask, findTaskByNumber, findTaskByTitle, deleteTask } from "@/lib/tasks";
+import { createTask, createTasks, getPendingTasks, getTasksByUser, updateTask, findTaskByNumber, deleteTask } from "@/lib/tasks";
 import { parseTaskQueryScope, replyScopedTaskList, selectTasksForQuery } from "@/lib/task-query";
-import { getRemindersByUser, findReminderByKeyword, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
+import { getRemindersByUser, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { filterRemindersForNextWeek, reminderListScope } from "@/lib/reminder-query";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
 import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
@@ -45,10 +45,10 @@ import {
   removeShoppingItem, updateShoppingItem,
   type GroceryPurchaseItem, type GroceryCategory,
 } from "@/lib/grocery";
-import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeeByName, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
-import { getCustomersByUser, findCustomerByName, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
-import { getContactsByUser, findContactByName, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
+import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
+import { getCustomersByUser, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
+import { getContactsByUser, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels, choicesByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, beginReminderRecipientCorrection, hasMissingSlotFields, isReminderRecipientCorrection, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
@@ -57,7 +57,7 @@ import {
   isClearlyNewActionDuringContinuation,
   mergeActionContinuation,
 } from "@/lib/action-completion";
-import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findRecurringByDescription, findDueRecurringMatches, descriptionsLikelyMatch, upsertImportedInstallmentSchedules, type RecurringTransaction } from "@/lib/recurring";
+import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findDueRecurringMatches, descriptionsLikelyMatch, upsertImportedInstallmentSchedules, type RecurringTransaction } from "@/lib/recurring";
 import { collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import {readBankAgenda,readFinancialAgenda} from "@/lib/financial-agenda";
@@ -842,8 +842,15 @@ async function resolveAccountFields(
   return { accountId: resolved.accountId, cardInvoiceId: resolved.cardInvoiceId };
 }
 
-export function accountSelectionMessage(accounts: Account[], locale?: string, mode?: FinanceMode): string {
+export function accountSelectionMessage(accounts: Account[], locale?: string, mode?: FinanceMode, missingName?: string): string {
   const modeLabel = mode ? `_Modo ${mode === "business" ? "Empresa" : locale === "es" ? "Personal" : "Pessoal"}_` : "";
+  if (accounts.length <= 1) {
+    if (!missingName) return locale === "es" ? "No hay una cuenta disponible para este pedido." : "Não há uma conta disponível para esse pedido.";
+    const available = accounts[0]?.name;
+    return localized(locale,
+      `Não encontrei a conta *${missingName}* neste modo. ${available ? `Para usar *${available}*, responda com o nome. ` : ""}Para criar a conta solicitada, responda *cadastrar conta ${missingName}*.`,
+      `No encontré la cuenta *${missingName}* en este modo. ${available ? `Para usar *${available}*, responde con su nombre. ` : ""}Para crear la cuenta solicitada, responde *registrar cuenta ${missingName}*.`);
+  }
   const heading = locale === "es" ? "🏦 ¿Qué cuenta quieres usar?" : "🏦 Qual conta deseja usar?";
   const instruction = locale === "es" ? "Responde con el número o el nombre." : "Responda com o número ou nome.";
   const createHint = locale === "es"
@@ -946,12 +953,14 @@ async function resolveAccountForAi(
   mode: FinanceMode,
   ai: AIResult,
   history: Array<{ role: string; content: string }>,
-): Promise<{ account?: Account; choices?: Account[] }> {
+): Promise<{ account?: Account; choices?: Account[]; missingName?: string }> {
   const accounts = await getManualAccountsByUser(userId, mode);
-  const requested = ai.account?.name;
+  const requested = ai.account?.name?.trim();
   if (requested) {
-    const matches = await findAccountByName(userId, mode, requested, "bank");
-    return matches.length === 1 ? { account: matches[0] } : { choices: matches.length ? matches : accounts };
+    const exact = accounts.filter(account => account.name.trim().toLowerCase() === requested.toLowerCase());
+    const matches = exact.length ? exact : await findAccountByName(userId, mode, requested, "bank");
+    return matches.length === 1 ? { account: matches[0] }
+      : matches.length > 1 ? { choices: matches } : { choices: accounts, missingName: requested };
   }
   if (ai.account?.useContext) {
     const contextual = accountFromConversation(accounts, history);
@@ -972,7 +981,8 @@ async function resolveFinanceEditAccount(
   const accounts = await getManualAccountsByUser(userId, mode);
   const hint = preferredHint?.trim() || getFinanceAccountDestinationHint(message)?.trim();
   if (hint) {
-    const matches = await findAccountByName(userId, mode, hint, "bank");
+    const exact = accounts.filter(account => account.name.trim().toLowerCase() === hint.toLowerCase());
+    const matches = exact.length ? exact : await findAccountByName(userId, mode, hint, "bank");
     if (matches.length === 1) return { requested: true, account: matches[0] };
     if (matches.length === 0) return { requested: true, notFound: hint, choices: accounts };
     return { requested: true, choices: matches };
@@ -1535,6 +1545,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               await wppSend(from,candidates.some(row=>isBankBillPayment(row))?"Esse pagamento de fatura já aparece no extrato e fica fora das despesas.":"Não encontrei um lançamento com esse valor e data. Confira o banco e o dia no extrato.",true);return;
             }
             if(actionable.length>6){await wppSend(from,"Há vários lançamentos com esse valor e data. Informe também o banco ou escolha o lançamento em Finanças.",true);return;}
+            if(actionable.length===1){
+              const saved=await setBankBillPayment(scope,actionable[0].id,day,true,amount);
+              if(billConfirmation)await clearPendingAction(from);
+              await wppSend(from,saved?"Pagamento de fatura marcado. O valor continua no extrato e fica fora das despesas.":"O lançamento mudou ou saiu deste modo. Confira o extrato e repita o pedido.",true);return;
+            }
             await setPendingAction(from,{type:"finance_bill_payment",userId:user.id,mode:target,day,amount,movementIds:actionable.map(row=>row.id)});
             const safe=(value:string)=>value.replace(/[\r\n*`_~<>]/g," ").slice(0,110);
             const lines=actionable.map((row,index)=>`${index+1}. ${safe(row.description)} · ${safe(row.institution_name)} · ${bankDate(day)} · ${bankMoney(row.amount,row.currency)}`);
@@ -1598,6 +1613,30 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
     let accountSelectionResume: AIResult | null = null;
     let employeeSelectionResume: AIResult | null = null;
+    let recordSelection: { id: string; ai: AIResult } | undefined;
+    if (pending?.type === "record_selection" && pending.userId === user.id) {
+      if (!allowsFinanceMode(pending.mode) || pending.mode !== mode) {
+        await clearPendingAction(from);
+        await wppSend(from, replyModeAccessDenied(mode, user.locale));
+        return;
+      }
+      if (BARE_CANCEL_RE.test(messageText.trim())) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale, "Escolha cancelada.", "Selección cancelada."));
+        return;
+      }
+      const choice = choiceIndexByLabels(messageText, pending.candidates, item => [item.label]);
+      if (choice >= 0) {
+        recordSelection = { id: pending.candidates[choice].id, ai: pending.ai };
+        messageText = pending.originalText;
+        await clearPendingAction(from);
+      } else if (looksLikeNewCommand(messageText)) {
+        await clearPendingAction(from);
+      } else {
+        await wppSend(from, localized(user.locale, "Responda com o número da opção ou escreva *cancelar*.", "Responde con el número de la opción o escribe *cancelar*."));
+        return;
+      }
+    }
 
     if (pending?.type === "account_selection" && pending.userId === user.id) {
       if (BARE_CANCEL_RE.test(messageText.trim())) {
@@ -1636,7 +1675,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           await setPendingAction(from, {
             type: "account_selection", userId: user.id, mode: pending.mode,
             action: "resume_ai", ai: pending.ai, originalText: pending.originalText,
-            accounts: pending.accounts,
+            accounts: pending.accounts, missingName: pending.missingName,
           });
           await wppSend(from, localized(user.locale,
             `❌ Não consegui cadastrar a conta *${requestedAccountName}*. Tente outro nome ou escolha uma conta da lista.`,
@@ -1672,9 +1711,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             await setPendingAction(from, {
               type: "account_selection", userId: user.id, mode: pending.mode,
               action: "resume_ai", ai: pending.ai, originalText: pending.originalText,
-              accounts: pending.accounts,
+              accounts: pending.accounts, missingName: pending.missingName,
             });
-            await wppSend(from, accountSelectionMessage(pending.accounts as Account[], user.locale, pending.mode as FinanceMode));
+            await wppSend(from, accountSelectionMessage(pending.accounts as Account[], user.locale, pending.mode as FinanceMode, pending.missingName));
             return;
           }
         } else {
@@ -3063,11 +3102,27 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           `No encontré una foto verificable de *${imageRequest.subject}* para enviar. Dime el modelo y el color/material para intentarlo de nuevo.`));
       return;
     }
-    const classifiedAi = accountSelectionResume ?? employeeSelectionResume ?? getExplicitUpcomingFinanceQueryResult(messageText) ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
+    const selectedRecordId = recordSelection?.id;
+    const classifiedAi = recordSelection?.ai ?? accountSelectionResume ?? employeeSelectionResume ?? getExplicitUpcomingFinanceQueryResult(messageText) ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = withExplicitFinanceCategoryEdit(messageText, getScopedModeReadResult(messageText) ?? (actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi));
     setVirtualAgentIntent(ai.intent);
+    const selectRecord = async <T extends { id: string }>(
+      rows: T[], label: (item: T) => string, keyword: string,
+    ): Promise<T | undefined> => {
+      const candidates = selectedRecordId ? rows.filter(item => item.id === selectedRecordId)
+        : keyword ? choicesByLabels(keyword, rows, item => [label(item)]).map(index => rows[index]) : rows;
+      if (candidates.length === 1) return candidates[0];
+      if (!candidates.length) {
+        await wppSend(from, localized(user.locale, "Não encontrei um registro que corresponda ao pedido.", "No encontré un registro que coincida con el pedido."));
+      } else {
+        const options = candidates.map(item => ({ id: item.id, label: label(item) }));
+        await setPendingAction(from, { type: "record_selection", userId: user.id, mode, ai, originalText: messageText, candidates: options });
+        const list = options.map((item, index) => `${listNumberLabel(index)} ${item.label}`).join("\n");
+        await wppSend(from, localized(user.locale, `Encontrei mais de uma opção. Responda com o número.\n\n${list}`, `Encontré más de una opción. Responde con el número.\n\n${list}`));
+      }
+    };
 
     // Read-only banking requests terminate before payment reconciliation and all mutations.
     const structuredBankReply = await answerStructuredBankQuery(user, mode, phoneAccess, ai, todayStrBR());
@@ -3110,14 +3165,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const resolved = ai.account ? await resolveAccountForAi(user.id, queryMode, ai, recentHistory) : null;
         if (ai.account && !resolved?.account) {
           const choices = resolved?.choices ?? [];
-          if (choices.length) {
+          if (choices.length || resolved?.missingName) {
             await setPendingAction(from, {
               type: "account_selection", userId: user.id, mode: queryMode,
               action: "resume_ai", ai, originalText: messageText,
-              accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
+              accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })), missingName: resolved?.missingName,
             });
-            await wppSend(from, accountSelectionMessage(choices, user.locale, queryMode));
-          } else await wppSend(from, user.locale === "es" ? "No encontré esa cuenta." : "Não encontrei essa conta.");
+          }
+          await wppSend(from, accountSelectionMessage(choices, user.locale, queryMode, resolved?.missingName));
           return;
         }
         const { from: createdFrom, to: createdTo } = createdDayBoundsBR(todayStrBR());
@@ -3310,14 +3365,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const resolved = await resolveAccountForAi(user.id, accountMode, ai, recentHistory);
         if (!resolved.account) {
           const choices = resolved.choices ?? [];
-          if (choices.length) {
+          if (choices.length || resolved.missingName) {
             await setPendingAction(from, {
               type: "account_selection", userId: user.id, mode: accountMode,
               action: "resume_ai", ai, originalText: messageText,
-              accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
+              accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })), missingName: resolved.missingName,
             });
-            await wppSend(from, accountSelectionMessage(choices, user.locale, accountMode));
           }
+          await wppSend(from, accountSelectionMessage(choices, user.locale, accountMode, resolved.missingName));
           break;
         }
         const account = resolved.account;
@@ -3354,7 +3409,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (!financeItems.length) { await wppSend(from, replyUnknown(messageText, user.locale)); break; }
 
         const unauthorizedMode = phoneAccess !== "both"
-          ? financeItems.find(item => item.mode && item.mode !== mode)?.mode
+          ? financeItems.map(item => item.mode ?? ai.mode ?? mode).find(itemMode => itemMode !== mode)
           : undefined;
         if (unauthorizedMode) {
           await wppSend(from, replyModeAccessDenied(mode, user.locale));
@@ -3386,10 +3441,16 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
                 return;
               }
             }
-            if (activeEmployees.length === 1) {
+            if (!fd.employeeName && activeEmployees.length === 1) {
               fd.employeeId = activeEmployees[0].id;
               fd.employeeName = activeEmployees[0].name;
               continue;
+            }
+            if (fd.employeeName && activeEmployees.length) {
+              await wppSend(from, localized(user.locale,
+                `Não encontrei o funcionário *${fd.employeeName}*. Confira o nome e envie o lançamento novamente.`,
+                `No encontré al empleado *${fd.employeeName}*. Revisa el nombre y vuelve a enviar el movimiento.`));
+              return;
             }
             if (activeEmployees.length > 1) {
               await setPendingAction(from, {
@@ -3410,8 +3471,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         // escolhida automaticamente; com várias, o cliente escolhe. O lote
         // inteiro só começa a ser gravado depois de todas as escolhas, para
         // evitar registros parciais.
+        const selectedAccounts: Account[] = [];
         for (const fd of financeItems) {
-          const financeMode = (fd.mode || mode) as FinanceMode;
+          const financeMode = fd.mode ?? ai.mode ?? mode;
           const requestAi: AIResult = {
             ...ai,
             account: fd.accountHint
@@ -3420,42 +3482,40 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           };
           const resolved = await resolveAccountForAi(user.id, financeMode, requestAi, recentHistory);
           if (resolved.account) {
-            fd.accountHint = resolved.account.name;
+            selectedAccounts.push(resolved.account);
             continue;
           }
           const choices = resolved.choices ?? [];
-          if (choices.length) {
+          if (choices.length || resolved.missingName) {
             await setPendingAction(from, {
               type: "account_selection", userId: user.id, mode: financeMode,
               action: "resume_ai", ai, originalText: messageText,
-              accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
+              accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })), missingName: resolved.missingName,
             });
-            await wppSend(from, accountSelectionMessage(choices, user.locale, financeMode));
-            return;
           }
+          await wppSend(from, accountSelectionMessage(choices, user.locale, financeMode, resolved.missingName));
+          return;
         }
 
         const today = todayStrBR();
+        const awaitingReceipt = /^\s*pagamentos? a cair\s*:?\s*$/im.test(messageText);
+        const inputs = financeItems.map((fd, index) => {
+          const date = fd.date || today;
+          return {
+            userId: user.id, type: fd.type, amount: fd.amount, category: cap(fd.category) || "Outros",
+            description: cap(fd.description), date, mode: fd.mode ?? ai.mode ?? mode, source: "whatsapp" as const,
+            status: fd.pending || date > today ? "pending" as const : "posted" as const,
+            autoPost: !(fd.pending && (!fd.date || awaitingReceipt)),
+            registeredBy: from, accountId: selectedAccounts[index].id, employeeId: fd.employeeId ?? undefined,
+          };
+        });
 
         if (financeItems.length === 1) {
-          // Lançamento único
           const fd = financeItems[0];
-          const financeMode = (fd.mode || mode) as "personal" | "business";
-          const hasExplicitDate = !!fd.date;
-          const financeDate = fd.date || today;
-          const isPending = fd.pending === true || financeDate > today;
-          // autoPost=false só quando a IA marcou "pending" (ex: "a receber") sem
-          // nenhuma data — sem isso o cron posta sozinho no próximo tick, já que
-          // financeDate cai em "hoje" (ver migração 20260830000000).
-          const autoPost = !(fd.pending === true && !hasExplicitDate);
-          const { accountId, cardInvoiceId } = await resolveAccountFields(user.id, financeMode, fd.accountHint);
-          const f = await addFinance({
-            userId: user.id, type: fd.type, amount: fd.amount,
-            category: cap(fd.category) || "Outros", description: cap(fd.description),
-            date: financeDate, mode: financeMode, source: "whatsapp",
-            status: isPending ? "pending" : "posted", autoPost,
-            registeredBy: from, accountId, cardInvoiceId, employeeId: fd.employeeId ?? undefined,
-          });
+          const { mode: financeMode, date: financeDate, status, autoPost } = inputs[0];
+          const isPending = status === "pending";
+          const accountName = selectedAccounts[0].name;
+          const f = await addFinance(inputs[0]);
           await setLastFinanceBatch(from, [{ id: f.id, description: f.description, amount: f.amount, type: f.type }], financeMode);
           const bal = await getBalance(user.id, financeMode, year, month);
           const modeSuffix = ` _(${financeMode === "business" ? "🏢 Empresa" : "👤 Pessoal"})_`;
@@ -3463,33 +3523,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const typeEmoji = fd.type === "income" ? "💰" : "💸";
           if (isPending && autoPost) {
             const dtFormatted = new Date(financeDate + "T12:00:00").toLocaleDateString("pt-BR");
-            await wppSend(from, `⏳ *${typeLabel} agendada!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n🏦 Conta: *${fd.accountHint}*\n📅 Será contabilizada em *${dtFormatted}*\n\n_Lançamentos futuros não entram no saldo até a data chegar._`);
+            await wppSend(from, `⏳ *${typeLabel} agendada!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n🏦 Conta: *${accountName}*\n📅 Será contabilizada em *${dtFormatted}*\n\n_Lançamentos futuros não entram no saldo até a data chegar._`);
           } else if (isPending) {
             const label = fd.type === "income" ? "a receber" : "a pagar";
-            await wppSend(from, `⏳ *Marcado como ${label}!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n🏦 Conta: *${fd.accountHint}*\n\n_Não entra no saldo. Quando ${fd.type === "income" ? "cair" : "for pago"}, me avisa (ex: "recebi o ${f.description}") que eu confirmo._`);
+            await wppSend(from, `⏳ *Marcado como ${label}!*${modeSuffix}\n\n${typeEmoji} ${f.description} — ${formatCurrency(f.amount)}\n🏷️ ${f.category}\n🏦 Conta: *${accountName}*\n\n_Não entra no saldo. Quando ${fd.type === "income" ? "cair" : "for pago"}, me avisa (ex: "recebi o ${f.description}") que eu confirmo._`);
           } else {
-            await wppSend(from, `${replyFinanceRegistered(f, bal.balance, user.locale)}\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${fd.accountHint}*${employeeLinkLabel(fd.employeeName, fd.employeeId === null, user.locale)}`);
+            await wppSend(from, `${replyFinanceRegistered(f, bal.balance, user.locale)}\n🏦 ${user.locale === "es" ? "Cuenta" : "Conta"}: *${accountName}*${employeeLinkLabel(fd.employeeName, fd.employeeId === null, user.locale)}`);
           }
         } else {
           // Múltiplos lançamentos — registra todos e exibe resumo
-          const registered: Array<Awaited<ReturnType<typeof addFinance>> & { pending: boolean; autoPost: boolean; accountName: string; employeeName?: string }> = [];
-          for (const fd of financeItems) {
-            const financeMode = (fd.mode || mode) as "personal" | "business";
-            const hasExplicitDate = !!fd.date;
-            const financeDate = fd.date || today;
-            const isPending = fd.pending === true || financeDate > today;
-            const autoPost = !(fd.pending === true && !hasExplicitDate);
-            const { accountId, cardInvoiceId } = await resolveAccountFields(user.id, financeMode, fd.accountHint);
-            const f = await addFinance({
-              userId: user.id, type: fd.type, amount: fd.amount,
-              category: cap(fd.category) || "Outros", description: cap(fd.description),
-              date: financeDate, mode: financeMode, source: "whatsapp",
-              status: isPending ? "pending" : "posted", autoPost,
-              registeredBy: from, accountId, cardInvoiceId, employeeId: fd.employeeId ?? undefined,
-            });
-            registered.push({ ...f, pending: isPending, autoPost, accountName: fd.accountHint ?? "Dinheiro", employeeName: fd.employeeName });
-          }
-          const primaryMode = (financeItems[0].mode || mode) as "personal" | "business";
+          const registered = (await addFinances(inputs)).map((item, index) => ({
+            ...item, pending: item.status === "pending", hasExplicitDate: !!financeItems[index].date,
+            accountName: selectedAccounts[index].name, employeeName: financeItems[index].employeeName,
+          }));
+          const primaryMode = inputs[0].mode;
           await setLastFinanceBatch(from, registered.map(f => ({ id: f.id, description: f.description, amount: f.amount, type: f.type })), primaryMode);
           const bal = await getBalance(user.id, primaryMode, year, month);
           const posted = registered.filter(f => !f.pending);
@@ -3512,10 +3559,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             }
           }
           if (receivable.length > 0) {
-            msg += `\n⏳ *A receber/a pagar (sem previsão, não entra no saldo):*\n`;
+            msg += `\n⏳ *A receber/a pagar:*\n`;
             for (const f of receivable) {
               const emoji = f.type === "income" ? "💰" : "💸";
-              msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)}\n`;
+              const date = f.hasExplicitDate ? f.date : "";
+              msg += `${emoji} ${f.description} — ${formatCurrency(f.amount)}${date ? ` · ${date.split("-").reverse().join("/")}` : ""} · 🏦 ${f.accountName}\n`;
             }
             msg += `_Me avisa quando cada um cair/for pago que eu confirmo._\n`;
           }
@@ -3704,8 +3752,21 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
         console.log("[bot] Consulta de alteração financeira");
 
-        // Achou exatamente 1 pela palavra-chave e já sabemos o que mudar → aplica direto
-        if (keyword && editCandidates.length === 1 && Object.keys(editPatch).length > 0 && !financeEditNeedsChoice(messageText)) {
+        const target = financeEditTargetFilters(messageText);
+        if (!keyword && target.amount === undefined && !target.date) {
+          const [fromDate, toDate] = monthBounds(year, month);
+          editCandidates = await getFinancesInRange(user.id, ai.mode ?? mode, fromDate, toDate);
+        }
+        if (target.amount !== undefined || target.date) {
+          editCandidates = editCandidates.filter(item =>
+            (target.amount === undefined || item.amount === target.amount) && (!target.date || item.date.endsWith(target.date))
+          );
+          if (!editCandidates.length) {
+            await wppSend(from, localized(user.locale, "Não encontrei um lançamento com os dados informados.", "No encontré un movimiento con los datos indicados."));
+            break;
+          }
+        }
+        if (editCandidates.length === 1 && Object.keys(editPatch).length > 0) {
           const editTarget = editCandidates[0];
           const updated = await updateFinance(editTarget.id, user.id, editPatch as Parameters<typeof updateFinance>[2], financeSearchMode ?? undefined);
           if (updated) {
@@ -3717,7 +3778,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
 
         // Achou exatamente 1 pela palavra-chave mas ainda não sabemos o que mudar
-        if (keyword && editCandidates.length === 1 && Object.keys(editPatch).length === 0) {
+        if (editCandidates.length === 1 && Object.keys(editPatch).length === 0) {
           const editTarget = editCandidates[0];
           await setPendingAction(from, {
             type: "finance_select", userId: user.id,
@@ -3730,7 +3791,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
 
         // Palavra-chave achou vários → deixa escolher entre eles
-        if (editCandidates.length > 1 || (editCandidates.length === 1 && financeEditNeedsChoice(messageText))) {
+        if (editCandidates.length > 1) {
           const list = editCandidates.map((c, i) =>
             `${listNumberLabel(i)} ${c.type === "income" ? "💰 Receita" : "💸 Despesa"} · *${c.description}* — ${formatCurrency(c.amount)} · ${c.category} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
           ).join("\n");
@@ -3740,28 +3801,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             candidates: editCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode, type: c.type })),
             patch: editPatch,
           });
-          await wppSend(from, `✏️ Encontrei *${editCandidates.length} ${editCandidates.length === 1 ? "lançamento" : "lançamentos"}* com *"${keyword}"*:\n\n${list}\n\nQual deles deseja alterar? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
+          await wppSend(from, `✏️ Encontrei *${editCandidates.length} lançamentos*${keyword ? ` com *"${keyword}"*` : ""}:\n\n${list}\n\nQual deles deseja alterar? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*) ou *todos*.`);
           break;
         }
 
-        // Sem palavra-chave, ou palavra-chave não achou nada → lista todos os
-        // lançamentos do mês vigente pra escolher, em vez de um beco sem saída
-        const [editMonthFrom, editMonthTo] = monthBounds(year, month);
-        const recentCandidates = (await getFinancesInRange(user.id, financeSearchMode ?? undefined, editMonthFrom, editMonthTo)).filter(item => allowsFinanceMode(item.mode));
-        if (!recentCandidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento esse mês${keyword ? ` com *"${keyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
-          break;
-        }
-        const recentList = recentCandidates.map((c, i) =>
-          `${listNumberLabel(i)} ${c.type === "income" ? "💰 Receita" : "💸 Despesa"} · *${c.description}* — ${formatCurrency(c.amount)} · ${c.category} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
-        ).join("\n");
-        await setPendingAction(from, {
-          type: "finance_select", userId: user.id,
-          action: "edit",
-          candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode, type: c.type })),
-          patch: editPatch,
-        });
-        await wppSend(from, `✏️ ${keyword ? `Não encontrei nada com *"${keyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja alterar? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
+        await wppSend(from, localized(user.locale, "Não encontrei um lançamento compatível. Digite *extrato* para conferir.", "No encontré un movimiento que coincida. Escribe *extracto* para revisar."));
         break;
       }
 
@@ -3797,11 +3841,15 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           // fluxo normal abaixo (busca por keyword / lista do mês).
         }
 
-        const delCandidates = delKeyword ? (await findFinanceByDescription(user.id, financeSearchMode, delKeyword)).filter(item => allowsFinanceMode(item.mode)) : [];
+        const [fromDate, toDate] = monthBounds(year, month);
+        const delCandidates = (delKeyword
+          ? await findFinanceByDescription(user.id, financeSearchMode, delKeyword)
+          : await getFinancesInRange(user.id, ai.mode ?? mode, fromDate, toDate)
+        ).filter(item => allowsFinanceMode(item.mode));
         console.log("[bot] Consulta de exclusão financeira");
 
         // Achou exatamente 1 pela palavra-chave → exclui direto (fluxo rápido)
-        if (delKeyword && delCandidates.length === 1) {
+        if (delCandidates.length === 1) {
           const delTarget = delCandidates[0];
           const delOk = await deleteFinance(delTarget.id, user.id, financeSearchMode ?? undefined);
           if (delOk) {
@@ -3821,27 +3869,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             action: "delete",
             candidates: delCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode, type: c.type })),
           });
-          await wppSend(from, `🗑️ Encontrei *${delCandidates.length} lançamentos* com *"${delKeyword}"*:\n\n${delList}\n\nQual deles deseja excluir? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
+          await wppSend(from, `🗑️ Encontrei *${delCandidates.length} lançamentos*${delKeyword ? ` com *"${delKeyword}"*` : ""}:\n\n${delList}\n\nQual deles deseja excluir? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*) ou *todos*.`);
           break;
         }
 
-        // Sem palavra-chave, ou palavra-chave não achou nada → lista todos os
-        // lançamentos do mês vigente pra escolher, em vez de um beco sem saída
-        const [delMonthFrom, delMonthTo] = monthBounds(year, month);
-        const recentCandidates = (await getFinancesInRange(user.id, financeSearchMode ?? undefined, delMonthFrom, delMonthTo)).filter(item => allowsFinanceMode(item.mode));
-        if (!recentCandidates.length) {
-          await wppSend(from, `❓ Não encontrei nenhum lançamento esse mês${delKeyword ? ` com *"${delKeyword}"*` : ""}.\n\nDigite *extrato* para ver os lançamentos.`);
-          break;
-        }
-        const recentList = recentCandidates.map((c, i) =>
-          `${listNumberLabel(i)} ${c.type === "income" ? "💰 Receita" : "💸 Despesa"} · *${c.description}* — ${formatCurrency(c.amount)} · ${c.category} · 📅 ${new Date(c.date + "T12:00:00").toLocaleDateString("pt-BR")} · ${modeLabelFull(c.mode)}`
-        ).join("\n");
-        await setPendingAction(from, {
-          type: "finance_select", userId: user.id,
-          action: "delete",
-          candidates: recentCandidates.map(c => ({ id: c.id, description: c.description, amount: c.amount, date: c.date, category: c.category, mode: c.mode, type: c.type })),
-        });
-        await wppSend(from, `🗑️ ${delKeyword ? `Não encontrei nada com *"${delKeyword}"*, mas aqui` : "Aqui"} estão os lançamentos desse mês:\n\n${recentList}\n\nQual deles deseja excluir? Responda com o número, um intervalo (ex: *1 a 10*), vários (ex: *1, 2 e 5*), *todos*, ou a data (ex: *04/07*).`);
+        await wppSend(from, localized(user.locale, "Não encontrei um lançamento compatível. Digite *extrato* para conferir.", "No encontré un movimiento que coincida. Escribe *extracto* para revisar."));
         break;
       }
 
@@ -3870,26 +3902,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "finance_confirm_pending": {
         const pendKeyword = ai.keyword || "";
-        if (!pendKeyword) {
-          await wppSend(from, localized(user.locale, "❓ Qual lançamento agendado deseja confirmar?", "❓ ¿Qué movimiento programado quieres confirmar?"));
-          break;
-        }
-
-        const requestedMode = phoneAccess === "both"
-          ? ai.mode as "personal" | "business" | undefined
-          : mode;
+        const requestedMode = ai.mode ?? mode;
+        if (!allowsFinanceMode(requestedMode)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
         const [allPendingItems, dueRecurringItems] = await Promise.all([
           getPendingFinances(user.id, requestedMode),
-          findDueRecurringMatches(user.id, {
+          pendKeyword ? findDueRecurringMatches(user.id, {
             keyword: pendKeyword,
             mode: requestedMode,
             type: ai.financeType,
             today: todayStrBR(),
-          }),
+          }) : Promise.resolve([]),
         ]);
         const pendingItems = allPendingItems.filter(item =>
           (!ai.financeType || item.type === ai.financeType)
-          && descriptionsLikelyMatch(pendKeyword, item.description)
+          && (!pendKeyword || descriptionsLikelyMatch(pendKeyword, item.description))
         );
 
         // A ocorrência recorrente vencida vem primeiro porque é ela que gera
@@ -3929,6 +3955,19 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             `❓ No encontré ningún movimiento programado o recurrente vencido con *"${pendKeyword}"*.`));
           break;
         }
+        if (pendingItems.length > 1) {
+          await setPendingAction(from, {
+            type: "finance_select", userId: user.id, action: "edit", patch: { status: "posted" },
+            candidates: pendingItems.map(({ id, description, amount, date, category, mode, type }) => ({ id, description, amount, date, category, mode, type })),
+          });
+          const list = pendingItems.map((item, index) =>
+            `${listNumberLabel(index)} *${item.description}* — ${formatCurrency(item.amount)} · ${item.date.split("-").reverse().join("/")}`
+          ).join("\n");
+          await wppSend(from, localized(user.locale,
+            `Encontrei vários lançamentos pendentes. Responda com o número do lançamento que deseja confirmar.\n\n${list}`,
+            `Encontré varios movimientos pendientes. Responde con el número del movimiento que quieres confirmar.\n\n${list}`));
+          break;
+        }
         const target = pendingItems[0];
         const confirmed = await updateFinance(target.id, user.id, { status: "posted" }, financeSearchMode ?? undefined);
         if (confirmed) {
@@ -3955,14 +3994,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             const resolved = await resolveAccountForAi(user.id, detailMode, ai, recentHistory);
             if (!resolved.account) {
               const choices = resolved.choices ?? [];
-              if (choices.length) {
+              if (choices.length || resolved.missingName) {
                 await setPendingAction(from, {
                   type: "account_selection", userId: user.id, mode: detailMode,
                   action: "resume_ai", ai, originalText: messageText,
-                  accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
+                  accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })), missingName: resolved.missingName,
                 });
-                await wppSend(from, accountSelectionMessage(choices, user.locale, detailMode));
               }
+              await wppSend(from, accountSelectionMessage(choices, user.locale, detailMode, resolved.missingName));
               break;
             }
             accountFilter = resolved.account;
@@ -4111,14 +4150,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const resolved = await resolveAccountForAi(user.id, queryMode, ai, recentHistory);
           if (!resolved.account) {
             const choices = resolved.choices ?? [];
-            if (choices.length) {
+            if (choices.length || resolved.missingName) {
               await setPendingAction(from, {
                 type: "account_selection", userId: user.id, mode: queryMode,
                 action: "resume_ai", ai, originalText: messageText,
-                accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })),
+                accounts: choices.map(account => ({ id: account.id, name: account.name, type: account.type })), missingName: resolved.missingName,
               });
-              await wppSend(from, accountSelectionMessage(choices, user.locale, queryMode));
             }
+            await wppSend(from, accountSelectionMessage(choices, user.locale, queryMode, resolved.missingName));
             break;
           }
           accountFilter = resolved.account;
@@ -4216,11 +4255,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "task_update": {
-        let taskToUpdate = null;
-        if (ai.task?.taskNumber) taskToUpdate = await findTaskByNumber(user.id, ai.task.taskNumber, mode);
-        else if (ai.task?.title) taskToUpdate = await findTaskByTitle(user.id, ai.task.title, mode);
-        const numMatch = messageText.match(/(\d+)/);
-        if (!taskToUpdate && numMatch) taskToUpdate = await findTaskByNumber(user.id, parseInt(numMatch[1]), mode);
+        const number = ai.task?.taskNumber ?? Number(messageText.match(/\btarefa\s+(\d+)\b/i)?.[1]);
+        const taskToUpdate = number && !selectedRecordId
+          ? await findTaskByNumber(user.id, number, mode)
+          : await selectRecord(ai.task?.title ? await getTasksByUser(user.id, mode) : await getPendingTasks(user.id, mode), item => item.title, ai.task?.title ?? ai.keyword ?? "");
+        if (!taskToUpdate && (!number || selectedRecordId)) break;
         if (taskToUpdate) {
           const hasFieldChanges = Boolean(ai.task?.newTitle || ai.task?.newDueDate || ai.task?.newPriority || ai.task?.clearDueDate);
           const updated = await updateTask(taskToUpdate.id, user.id, {
@@ -4246,11 +4285,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "task_delete": {
-        let taskToDelete = null;
-        if (ai.task?.taskNumber) taskToDelete = await findTaskByNumber(user.id, ai.task.taskNumber, mode);
-        else if (ai.task?.title) taskToDelete = await findTaskByTitle(user.id, ai.task.title, mode);
-        const delNumMatch = messageText.match(/(\d+)/);
-        if (!taskToDelete && delNumMatch) taskToDelete = await findTaskByNumber(user.id, parseInt(delNumMatch[1]), mode);
+        const number = ai.task?.taskNumber ?? Number(messageText.match(/\btarefa\s+(\d+)\b/i)?.[1]);
+        const taskToDelete = number && !selectedRecordId
+          ? await findTaskByNumber(user.id, number, mode)
+          : await selectRecord(ai.task?.title ? await getTasksByUser(user.id, mode) : await getPendingTasks(user.id, mode), item => item.title, ai.task?.title ?? ai.keyword ?? "");
+        if (!taskToDelete && (!number || selectedRecordId)) break;
         if (taskToDelete && await deleteTask(taskToDelete.id, user.id)) {
           await wppSend(from, user.locale === "es" ? `🗑️ Tarea eliminada.\n\n📌 ${taskToDelete.title}` : `🗑️ Tarefa excluída.\n\n📌 ${taskToDelete.title}`);
         } else {
@@ -4278,9 +4317,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       case "reminder_update": {
         const keyword = ai.keyword || "";
         const reminderNumber = Number(keyword.match(/^\s*(?:lembrete|recordatorio)?\s*(\d+)\s*$/i)?.[1] || messageText.match(/(?:lembrete|recordatorio)\s+(\d+)/i)?.[1] || 0);
-        const target = reminderNumber > 0
-          ? (await getRemindersByUser(user.id, mode))[reminderNumber - 1] ?? null
-          : keyword ? await findReminderByKeyword(user.id, keyword, mode) : null;
+        const reminders = await getRemindersByUser(user.id, mode);
+        const target = reminderNumber > 0 && !selectedRecordId
+          ? reminders[reminderNumber - 1]
+          : await selectRecord(reminders, item => item.message, keyword);
+        if (!target && (reminderNumber === 0 || selectedRecordId)) break;
         if (!target) { await wppSend(from, user.locale === "es" ? "❓ No encontré ese recordatorio. Escribe *mis recordatorios* para ver la lista." : "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         const patch: Partial<Pick<Reminder, "message" | "scheduledAt" | "repeat">> = {};
         if (ai.reminder?.message) patch.message = cap(ai.reminder.message);
@@ -4295,9 +4336,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       case "reminder_delete": {
         const delKeyword = ai.keyword || "";
         const reminderNumber = Number(delKeyword.match(/^\s*(?:lembrete|recordatorio)?\s*(\d+)\s*$/i)?.[1] || messageText.match(/(?:lembrete|recordatorio)\s+(\d+)/i)?.[1] || 0);
-        const delTarget = reminderNumber > 0
-          ? (await getRemindersByUser(user.id, mode))[reminderNumber - 1] ?? null
-          : delKeyword ? await findReminderByKeyword(user.id, delKeyword, mode) : null;
+        const reminders = await getRemindersByUser(user.id, mode);
+        const delTarget = reminderNumber > 0 && !selectedRecordId
+          ? reminders[reminderNumber - 1]
+          : await selectRecord(reminders, item => item.message, delKeyword);
+        if (!delTarget && (reminderNumber === 0 || selectedRecordId)) break;
         if (!delTarget) { await wppSend(from, user.locale === "es" ? "❓ No encontré ese recordatorio. Escribe *mis recordatorios* para ver la lista." : "❓ Não encontrei esse lembrete. Digite *meus lembretes* para ver a lista."); break; }
         const deleted = await deleteReminder(delTarget.id, user.id);
         await wppSend(from, deleted ? replyReminderDeleted(delTarget.message, user.locale) : user.locale === "es" ? "❌ No pude eliminar este recordatorio. Inténtalo de nuevo." : "❌ Não consegui excluir esse lembrete agora. Tente novamente.");
@@ -4325,9 +4368,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         // metas "viagem"), nesse caso não dá pra escolher sozinho.
         const titleMatches = addTitle ? await findGoalsByTitle(user.id, addTitle, mode) : [];
         const addGoal = titleMatches.length === 1 ? titleMatches[0]
-          : titleMatches.length === 0 && activeGoals.length === 1 ? activeGoals[0]
+          : !addTitle && activeGoals.length === 1 ? activeGoals[0]
           : null;
-        const candidates = titleMatches.length > 1 ? titleMatches : activeGoals;
+        const candidates = addTitle ? titleMatches : activeGoals;
 
         if (addGoal) {
           const updated = await updateGoalAmount(addGoal.id, user.id, addAmt);
@@ -4337,7 +4380,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             await wppSend(from, `${emoji} *${formatCurrency(addAmt)} adicionado!*\n\n🎯 ${updated.title}\n📊 ${formatCurrency(updated.currentAmount)} / ${formatCurrency(updated.targetAmount)} (${p}%)${updated.status === "completed" ? "\n\n🏆 *Meta concluída! Parabéns!*" : ""}`);
           } else await wppSend(from, "❌ Não consegui atualizar essa meta agora. Nada foi modificado; tente novamente.");
         } else if (candidates.length === 0) {
-          await wppSend(from, "❓ Você não tem metas ativas. Crie uma primeiro!\n\nEx: _\"Meta: guardar 3000 para viagem\"_");
+          await wppSend(from, addTitle ? "❓ Meta não encontrada. Digite *minhas metas* para ver a lista." : "❓ Você não tem metas ativas. Crie uma primeiro!\n\nEx: _\"Meta: guardar 3000 para viagem\"_");
         } else {
           // Múltiplas metas (candidatas pelo título, ou todas se o título não
           // ajudou a filtrar) — pergunta qual.
@@ -4371,8 +4414,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "goal_complete": {
-        const titleStr = ai.goal?.title || messageText;
-        const matches = await findGoalsByTitle(user.id, titleStr, mode);
+        const titleStr = ai.goal?.title || ai.keyword || "";
+        const matches = titleStr ? await findGoalsByTitle(user.id, titleStr, mode) : await getActiveGoals(user.id, mode);
         if (matches.length === 1) {
           const updated = await updateGoalStatus(matches[0].id, user.id, "completed");
           await wppSend(from, updated ? `🏆 *Meta concluída!*\n\n🎯 ${matches[0].title}\n\nParabéns! Você atingiu seu objetivo! 🎉` : "❌ Não consegui concluir essa meta agora. Tente novamente.");
@@ -4381,7 +4424,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         } else {
           const goalList = matches.map(g => ({ id: g.id, title: g.title, currentAmount: g.currentAmount, targetAmount: g.targetAmount }));
           await setPendingAction(from, { type: "goal_selection", userId: user.id, mode, action: "complete", goals: goalList });
-          let msg = `🎯 Encontrei ${matches.length} metas com "${titleStr}". Qual concluir?\n\n`;
+          let msg = `🎯 Encontrei ${matches.length} metas${titleStr ? ` com "${titleStr}"` : " ativas"}. Qual concluir?\n\n`;
           matches.forEach((g, i) => { msg += `*${i + 1}.* ${g.title} (${getGoalProgress(g)}%)\n`; });
           msg += `\nResponda com o número ou nome da meta. ⏱ _Válido por 5 min._`;
           await wppSend(from, msg);
@@ -4390,8 +4433,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "goal_cancel": {
-        const cancelTitle = ai.keyword || ai.goal?.title || messageText;
-        const cancelMatches = await findGoalsByTitle(user.id, cancelTitle, mode);
+        const cancelTitle = ai.keyword || ai.goal?.title || "";
+        const cancelMatches = cancelTitle ? await findGoalsByTitle(user.id, cancelTitle, mode) : await getActiveGoals(user.id, mode);
         if (cancelMatches.length === 1) {
           const updated = await updateGoalStatus(cancelMatches[0].id, user.id, "cancelled");
           await wppSend(from, updated ? `🗑️ Meta cancelada.\n\n🎯 ${cancelMatches[0].title}` : "❌ Não consegui cancelar essa meta agora. Tente novamente.");
@@ -4400,7 +4443,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         } else {
           const goalList = cancelMatches.map(g => ({ id: g.id, title: g.title, currentAmount: g.currentAmount, targetAmount: g.targetAmount }));
           await setPendingAction(from, { type: "goal_selection", userId: user.id, mode, action: "cancel", goals: goalList });
-          let msg = `🎯 Encontrei ${cancelMatches.length} metas com "${cancelTitle}". Qual cancelar?\n\n`;
+          let msg = `🎯 Encontrei ${cancelMatches.length} metas${cancelTitle ? ` com "${cancelTitle}"` : " ativas"}. Qual cancelar?\n\n`;
           cancelMatches.forEach((g, i) => { msg += `*${i + 1}.* ${g.title} (${getGoalProgress(g)}%)\n`; });
           msg += `\nResponda com o número ou nome da meta. ⏱ _Válido por 5 min._`;
           await wppSend(from, msg);
@@ -4651,11 +4694,15 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "grocery_list_remove": {
         const requestedNames = ai.grocery?.itemNames?.filter(Boolean) ?? [];
-        if (!requestedNames.length) {
-          await wppSend(from, user.locale === "es" ? "❓ ¿Qué artículo quieres eliminar de la lista?" : "❓ Qual item deseja remover da lista?");
+        const available = (await getShoppingList(user.id)).filter(item => !item.checked);
+        if (selectedRecordId || requestedNames.length <= 1) {
+          const item = await selectRecord(available, item => item.name, requestedNames[0] ?? "");
+          if (!item) break;
+          await removeShoppingItem(item.id, user.id);
+          const note = localized(user.locale, `🗑️ Removi da lista: ${item.name}.`, `🗑️ Eliminé de la lista: ${item.name}.`);
+          await wppSend(from, `${note}\n\n${replyGroceryList(await getShoppingList(user.id), user.locale)}`);
           break;
         }
-        const available = (await getShoppingList(user.id)).filter(item => !item.checked);
         const normalizeName = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
         const removedNames: string[] = [];
         const notFound: string[] = [];
@@ -4691,31 +4738,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "grocery_list_edit": {
-        const targetName = ai.grocery?.itemNames?.[0];
-        if (!targetName) {
-          await wppSend(from, user.locale === "es" ? "❓ ¿Qué artículo de la lista quieres cambiar?" : "❓ Qual item da lista deseja alterar?");
-          break;
-        }
-        const normalizeName = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-        const needle = normalizeName(targetName);
         const list = (await getShoppingList(user.id)).filter(item => !item.checked);
-        const candidates = list.filter(item => {
-          const itemName = normalizeName(item.name);
-          return itemName === needle || itemName.includes(needle) || needle.includes(itemName);
-        });
-        const exact = candidates.find(item => normalizeName(item.name) === needle);
-        if (!exact && candidates.length > 1) {
-          const names = candidates.map(item => `• ${item.name}`).join("\n");
-          await wppSend(from, user.locale === "es"
-            ? `Encontré más de un artículo parecido. Dime el nombre exacto:\n${names}`
-            : `Encontrei mais de um item parecido. Diga o nome exato:\n${names}`);
-          break;
-        }
-        const target = exact || candidates[0];
-        if (!target) {
-          await wppSend(from, user.locale === "es" ? `❓ No encontré *${targetName}* en tu lista.` : `❓ Não encontrei *${targetName}* na sua lista.`);
-          break;
-        }
+        const target = await selectRecord(list, item => item.name, ai.grocery?.itemNames?.[0] ?? "");
+        if (!target) break;
         const updated = await updateShoppingItem(target.id, user.id, {
           name: ai.grocery?.newProductName ? cap(ai.grocery.newProductName) : undefined,
           quantity: ai.grocery?.newQuantity,
@@ -4734,13 +4759,19 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "grocery_list_check": {
         const names = ai.grocery?.itemNames ?? [];
-        if (!names.length) { await wppSend(from, user.locale === "es" ? "❓ ¿Qué artículo quieres marcar como comprado?" : "❓ Qual item deseja marcar como comprado?"); break; }
-        const pendingItems = (await getShoppingList(user.id)).filter(i => !i.checked);
+        const pendingItems = (await getShoppingList(user.id)).filter(item => !item.checked);
+        if (selectedRecordId || names.length <= 1) {
+          const item = await selectRecord(pendingItems, item => item.name, names[0] ?? "");
+          if (!item) break;
+          const checked = await toggleShoppingItem(item.id, user.id);
+          await wppSend(from, replyGroceryItemChecked(checked ? [item.name] : [], checked ? [] : [item.name], user.locale));
+          break;
+        }
         const checked: string[] = [];
         const notFound: string[] = [];
         for (const name of names) {
-          const lower = name.toLowerCase();
-          const found = pendingItems.find(i => i.name.toLowerCase().includes(lower) || lower.includes(i.name.toLowerCase()));
+          const matches = choicesByLabels(name, pendingItems, item => [item.name]);
+          const found = matches.length === 1 ? pendingItems[matches[0]] : undefined;
           if (found && await toggleShoppingItem(found.id, user.id)) checked.push(found.name);
           else notFound.push(name);
         }
@@ -4976,9 +5007,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "employee_update": {
-        const empKeyword = ai.keyword || ai.employee?.name || "";
-        const empTarget = empKeyword ? await findEmployeeByName(user.id, empKeyword) : null;
-        if (!empTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista.", "❓ No encontré a ese empleado. Escribe *mis empleados* para ver la lista.")); break; }
+        const keyword = ai.keyword || ai.employee?.name || "";
+        const empTarget = await selectRecord(await getEmployeesByUser(user.id, "active"), item => item.name, keyword);
+        if (!empTarget) break;
         const empPatch: Partial<Employee> = {};
         if (ai.employee?.newName) empPatch.name = cap(ai.employee.newName);
         if (ai.employee?.role) empPatch.role = cap(ai.employee.role);
@@ -4994,9 +5025,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "employee_deactivate": {
-        const deactKeyword = ai.keyword || ai.employee?.name || "";
-        const deactTarget = deactKeyword ? await findEmployeeByName(user.id, deactKeyword) : null;
-        if (!deactTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse funcionário. Digite *meus funcionários* para ver a lista.", "❓ No encontré a ese empleado. Escribe *mis empleados* para ver la lista.")); break; }
+        const keyword = ai.keyword || ai.employee?.name || "";
+        const deactTarget = await selectRecord(await getEmployeesByUser(user.id, "active"), item => item.name, keyword);
+        if (!deactTarget) break;
         const deactivated = await updateEmployee(deactTarget.id, user.id, { status: "inactive" });
         await wppSend(from, deactivated ? replyEmployeeDeactivated(deactivated, user.locale) : localized(user.locale, "❌ Não consegui desativar esse funcionário agora. Tente novamente.", "❌ No pude desactivar a este empleado. Inténtalo de nuevo."));
         break;
@@ -5017,15 +5048,15 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "customer_query": {
         const custQueryKeyword = ai.keyword || ai.customer?.name || "";
-        const custMatches = custQueryKeyword ? await findCustomersByName(user.id, custQueryKeyword) : [];
+        const custMatches = custQueryKeyword ? await findCustomersByName(user.id, custQueryKeyword) : await getCustomersByUser(user.id, "active");
         await wppSend(from, replyCustomerInfo(custMatches, custQueryKeyword, user.locale));
         break;
       }
 
       case "customer_update": {
-        const custKeyword = ai.keyword || ai.customer?.name || "";
-        const custTarget = custKeyword ? await findCustomerByName(user.id, custKeyword) : null;
-        if (!custTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista.", "❓ No encontré a ese cliente. Escribe *mis clientes* para ver la lista.")); break; }
+        const keyword = ai.keyword || ai.customer?.name || "";
+        const custTarget = await selectRecord(await getCustomersByUser(user.id, "active"), item => item.name, keyword);
+        if (!custTarget) break;
         const custPatch: Partial<Customer> = {};
         if (ai.customer?.phone) custPatch.phone = normalizePhoneInput(ai.customer.phone, user.locale);
         if (ai.customer?.email) custPatch.email = ai.customer.email;
@@ -5039,9 +5070,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "customer_deactivate": {
-        const custDeactKeyword = ai.keyword || ai.customer?.name || "";
-        const custDeactTarget = custDeactKeyword ? await findCustomerByName(user.id, custDeactKeyword) : null;
-        if (!custDeactTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse cliente. Digite *meus clientes* para ver a lista.", "❓ No encontré a ese cliente. Escribe *mis clientes* para ver la lista.")); break; }
+        const keyword = ai.keyword || ai.customer?.name || "";
+        const custDeactTarget = await selectRecord(await getCustomersByUser(user.id, "active"), item => item.name, keyword);
+        if (!custDeactTarget) break;
         const custDeactivated = await updateCustomer(custDeactTarget.id, user.id, { status: "inactive" });
         await wppSend(from, custDeactivated ? replyCustomerDeactivated(custDeactivated, user.locale) : localized(user.locale, "❌ Não consegui desativar esse cliente agora. Tente novamente.", "❌ No pude desactivar a este cliente. Inténtalo de nuevo."));
         break;
@@ -5062,15 +5093,15 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "contact_query": {
         const contQueryKeyword = ai.keyword || ai.contact?.name || "";
-        const contMatches = contQueryKeyword ? await findContactsByName(user.id, contQueryKeyword) : [];
+        const contMatches = contQueryKeyword ? await findContactsByName(user.id, contQueryKeyword) : await getContactsByUser(user.id, "active");
         await wppSend(from, replyContactInfo(contMatches, contQueryKeyword, user.locale));
         break;
       }
 
       case "contact_update": {
-        const contKeyword = ai.keyword || ai.contact?.name || "";
-        const contTarget = contKeyword ? await findContactByName(user.id, contKeyword) : null;
-        if (!contTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse contato. Digite *meus contatos* para ver a lista.", "❓ No encontré a ese contacto. Escribe *mis contactos* para ver la lista.")); break; }
+        const keyword = ai.keyword || ai.contact?.name || "";
+        const contTarget = await selectRecord(await getContactsByUser(user.id, "active"), item => item.name, keyword);
+        if (!contTarget) break;
         const contPatch: Partial<Contact> = {};
         if (ai.contact?.phone) contPatch.phone = normalizePhoneInput(ai.contact.phone, user.locale);
         if (ai.contact?.email) contPatch.email = ai.contact.email;
@@ -5083,9 +5114,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "contact_deactivate": {
-        const contDeactKeyword = ai.keyword || ai.contact?.name || "";
-        const contDeactTarget = contDeactKeyword ? await findContactByName(user.id, contDeactKeyword) : null;
-        if (!contDeactTarget) { await wppSend(from, localized(user.locale, "❓ Não encontrei esse contato. Digite *meus contatos* para ver a lista.", "❓ No encontré a ese contacto. Escribe *mis contactos* para ver la lista.")); break; }
+        const keyword = ai.keyword || ai.contact?.name || "";
+        const contDeactTarget = await selectRecord(await getContactsByUser(user.id, "active"), item => item.name, keyword);
+        if (!contDeactTarget) break;
         const contDeactivated = await updateContact(contDeactTarget.id, user.id, { status: "inactive" });
         await wppSend(from, contDeactivated ? replyContactDeactivated(contDeactivated, user.locale) : localized(user.locale, "❌ Não consegui apagar esse contato agora. Tente novamente.", "❌ No pude borrar a este contacto. Inténtalo de nuevo."));
         break;
@@ -5232,9 +5263,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "recurring_cancel": {
         const keyword = ai.keyword || "";
-        if (!keyword) { await wppSend(from, localized(user.locale, "❓ Qual recorrente ou parcela deseja cancelar?", "❓ ¿Qué movimiento recurrente o cuota quieres cancelar?")); break; }
-        const found = await findRecurringByDescription(user.id, keyword);
-        if (!found) { await wppSend(from, localized(user.locale, `❓ Não encontrei recorrente com *"${keyword}"*.\n\nDigite *minhas parcelas* para ver a lista.`, `❓ No encontré ningún movimiento recurrente con *"${keyword}"*.\n\nEscribe *mis cuotas* para ver la lista.`)); break; }
+        const found = await selectRecord(await getRecurringByUser(user.id, mode, "active"), item => item.description, keyword);
+        if (!found) break;
         await cancelRecurring(found.id, user.id);
         await wppSend(from, localized(user.locale, `✅ *${found.description}* cancelado(a)!\n\nSe quiser reativar, acesse *Recorrentes* no dashboard.`, `✅ *${found.description}* se canceló.\n\nSi quieres reactivarlo, entra en *Recurrentes* en el panel.`));
         break;
@@ -5242,9 +5272,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "recurring_edit": {
         const editKw = ai.keyword || ai.recurring?.description || "";
-        if (!editKw) { await wppSend(from, localized(user.locale, "❓ Qual recorrente ou parcela deseja editar?", "❓ ¿Qué movimiento recurrente o cuota quieres editar?")); break; }
-        const editFound = await findRecurringByDescription(user.id, editKw);
-        if (!editFound) { await wppSend(from, localized(user.locale, `❓ Não encontrei recorrente com *"${editKw}"*.\n\nDigite *minhas parcelas* para ver a lista.`, `❓ No encontré ningún movimiento recurrente con *"${editKw}"*.\n\nEscribe *mis cuotas* para ver la lista.`)); break; }
+        const editFound = await selectRecord(await getRecurringByUser(user.id, mode, "active"), item => item.description, editKw);
+        if (!editFound) break;
         const patch: Parameters<typeof updateRecurring>[2] = {};
         if (ai.recurring?.amount) patch.amount = ai.recurring.amount;
         if (ai.recurring?.description) patch.description = cap(ai.recurring.description);
@@ -5314,8 +5343,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "agenda_update": {
         const keyword = ai.keyword || "";
-        if (!keyword) { await wppSend(from, localized(user.locale, "❓ Qual compromisso deseja alterar?", "❓ ¿Qué cita quieres cambiar?")); break; }
-        const matches = await findAppointmentsByKeyword(user.id, keyword);
+        const matches = keyword ? await findAppointmentsByKeyword(user.id, keyword) : await getUpcomingAppointments(user.id, 14);
         if (matches.length === 0) {
           await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${keyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
@@ -5339,8 +5367,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "agenda_delete": {
         const keyword = ai.keyword || "";
-        if (!keyword) { await wppSend(from, localized(user.locale, "❓ Qual compromisso deseja cancelar?", "❓ ¿Qué cita quieres cancelar?")); break; }
-        const matches = await findAppointmentsByKeyword(user.id, keyword);
+        const matches = keyword ? await findAppointmentsByKeyword(user.id, keyword) : await getUpcomingAppointments(user.id, 14);
         if (matches.length === 0) {
           await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${keyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${keyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
@@ -5353,8 +5380,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
       case "agenda_done": {
         const doneKeyword = ai.keyword || "";
-        if (!doneKeyword) { await wppSend(from, localized(user.locale, "❓ Qual compromisso deseja marcar como feito?", "❓ ¿Qué cita quieres marcar como realizada?")); break; }
-        const matches = await findAppointmentsByKeyword(user.id, doneKeyword);
+        const matches = doneKeyword ? await findAppointmentsByKeyword(user.id, doneKeyword) : await getUpcomingAppointments(user.id, 14);
         if (matches.length === 0) {
           await wppSend(from, localized(user.locale, `❓ Não encontrei nenhum compromisso com *"${doneKeyword}"*.\n\nDigite *meus compromissos* para ver a lista.`, `❓ No encontré ninguna cita con *"${doneKeyword}"*.\n\nEscribe *mis citas* para ver la lista.`));
         } else if (matches.length === 1) {
@@ -5370,7 +5396,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const addMeetKeyword = ai.keyword || "";
         const addMeetMatches = addMeetKeyword
           ? await findAppointmentsByKeyword(user.id, addMeetKeyword)
-          : (await getUpcomingAppointments(user.id, 1));
+          : (await getUpcomingAppointments(user.id, 14));
         if (addMeetMatches.length === 0) {
           await wppSend(from, localized(user.locale,
             `❓ Não encontrei o compromisso${addMeetKeyword ? ` com *"${addMeetKeyword}"*` : ""}.\n\nDigite *meus compromissos* para ver a lista.`,

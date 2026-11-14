@@ -1,15 +1,20 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m = vi.hoisted(() => ({ owner: vi.fn(), userUpdate: vi.fn(), send: vi.fn(), process: vi.fn(), access: vi.fn(), find: vi.fn(), range: vi.fn(), remove: vi.fn(), update: vi.fn(), pending: vi.fn(), clear: vi.fn(), setPending: vi.fn(), batch: vi.fn(), code: vi.fn(), count: vi.fn(), financeCount: vi.fn(), removeAll: vi.fn(), balance: vi.fn(), rangeBalance: vi.fn(), accounts: vi.fn(), due: vi.fn(), confirm: vi.fn() }));
+const m = vi.hoisted(() => ({ owner: vi.fn(), userUpdate: vi.fn(), send: vi.fn(), process: vi.fn(), access: vi.fn(), find: vi.fn(), range: vi.fn(), remove: vi.fn(), update: vi.fn(), pending: vi.fn(), clear: vi.fn(), setPending: vi.fn(), batch: vi.fn(), code: vi.fn(), count: vi.fn(), financeCount: vi.fn(), removeAll: vi.fn(), balance: vi.fn(), rangeBalance: vi.fn(), accounts: vi.fn(), due: vi.fn(), confirm: vi.fn(), add: vi.fn(), addBatch: vi.fn(), accountByName: vi.fn(), financePending: vi.fn() }));
+const tasks = vi.hoisted(() => ({ pending: vi.fn(), update: vi.fn() }));
+vi.mock("./tasks", async original => ({ ...await original<typeof import("./tasks")>(), getPendingTasks: tasks.pending, updateTask: tasks.update }));
 vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner, updateUser: m.userUpdate, generateWppVerifyCode: m.code }));
 vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: async () => "fixture-owner", getPhoneAccess: m.access, getPhonesForUser: async () => [{ userId: "fixture-owner", phone: "5511999990000", name: "Fixture", relation: "Titular" }], countPhonesForUser: m.count, findPhoneByName: async () => "5511999990002", findPhoneByRelation: async () => null }));
 vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: m.pending, clearPendingAction: m.clear, setPendingAction: m.setPending }));
-vi.mock("./conversations", async original => ({ ...await original<typeof import("./conversations")>(), addMessage: vi.fn(), getAiPaused: async () => false, getAiHistory: async () => [], getLastFinanceBatch: m.batch }));
+vi.mock("./conversations", async original => ({ ...await original<typeof import("./conversations")>(), addMessage: vi.fn(), getAiPaused: async () => false, getAiHistory: async () => [], getLastFinanceBatch: m.batch, setLastFinanceBatch: vi.fn() }));
 vi.mock("./whatsapp", () => ({ sendText: m.send, sendFile: vi.fn() }));
 vi.mock("./whatsapp-config", () => ({ getConfig: async () => ({}) }));
-vi.mock("./ai-processor", async original => ({ ...await original<typeof import("./ai-processor")>(), processMessage: m.process }));
-vi.mock("./finances", async original => ({ ...await original<typeof import("./finances")>(), findFinanceByDescription: m.find, getFinancesInRange: m.range, deleteFinance: m.remove, updateFinance: m.update, countFinances: m.financeCount, deleteAllFinances: m.removeAll, getBalance: m.balance, getBalanceInRange: m.rangeBalance }));
-vi.mock("./accounts", async original => ({ ...await original<typeof import("./accounts")>(), getManualAccountsByUser: m.accounts }));
+vi.mock("./ai-processor", async original => {
+  const actual = await original<typeof import("./ai-processor")>();
+  return { ...actual, processMessage: (text: string) => actual.getExplicitPendingFinanceRegisterResult(text, new Date(2026, 10, 14, 12)) ?? m.process(text) };
+});
+vi.mock("./finances", async original => ({ ...await original<typeof import("./finances")>(), findFinanceByDescription: m.find, getFinancesInRange: m.range, deleteFinance: m.remove, updateFinance: m.update, countFinances: m.financeCount, deleteAllFinances: m.removeAll, getBalance: m.balance, getBalanceInRange: m.rangeBalance, addFinance: m.add, addFinances: m.addBatch, getPendingFinances: m.financePending }));
+vi.mock("./accounts", async original => ({ ...await original<typeof import("./accounts")>(), getManualAccountsByUser: m.accounts, findAccountByName: m.accountByName }));
 vi.mock("./recurring", async original => ({ ...await original<typeof import("./recurring")>(), findDueRecurringMatches: m.due, confirmRecurring: m.confirm }));
 import { handleIncomingMessage } from "./message-handler";
 type Mode = "personal" | "business";
@@ -29,6 +34,9 @@ beforeEach(() => {
   m.financeCount.mockResolvedValue(2); m.removeAll.mockResolvedValue(2);
   m.balance.mockResolvedValue({ income: 80, expense: 10, balance: 70 }); m.rangeBalance.mockResolvedValue({ income: 80, expense: 10, balance: 70 });
   m.accounts.mockResolvedValue([]); m.due.mockResolvedValue([]); m.confirm.mockResolvedValue(null);
+  m.add.mockImplementation(async input => ({ ...input, id: "new-finance" }));
+  m.addBatch.mockImplementation(async inputs => inputs.map((input: object, index: number) => ({ ...input, id: `new-finance-${index}` })));
+  m.accountByName.mockResolvedValue([]); m.financePending.mockResolvedValue([]);
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -62,16 +70,84 @@ it("rejects moving a business record into a restricted personal mode", async () 
   await receive("mude o lançamento private entry para pessoal");
   expect(m.update).not.toHaveBeenCalled();
 });
-it("finds a qualified category edit by name but asks before changing the dated amount", async () => {
+it("changes a single category edit only when the stated date and amount match", async () => {
   m.access.mockResolvedValue("personal");
   rows = [{ ...entry("personal"), description: "TESTE AUDITORIA", amount: 1, date: "2026-10-15" }];
   m.process.mockResolvedValue({ intent: "finance_edit", confidence: .99, keyword: "TESTE AUDITORIA de R$ 1,00 registrada em 15/10", finance: { category: "Serviços" } });
   m.find.mockImplementation(async (_owner, _mode, keyword) => keyword === "TESTE AUDITORIA" ? rows : []);
   await receive("Altere a categoria da despesa TESTE AUDITORIA de R$ 1,00 registrada em 15/10 para Serviços.");
   expect(m.find).toHaveBeenCalledWith("fixture-owner", "personal", "TESTE AUDITORIA");
+  expect(m.update).toHaveBeenCalledExactlyOnceWith("fixture-personal", "fixture-owner", { category: "Serviços" }, "personal");
+  expect(m.setPending).not.toHaveBeenCalled();
+  await receive("Altere a categoria da despesa TESTE AUDITORIA de R$ 9,00 registrada em 15/10 para Serviços.");
+  expect(m.update).toHaveBeenCalledOnce();
+  expect(reply()).toContain("Não encontrei um lançamento com os dados informados.");
+});
+
+const cash = { id: "business-cash", name: "Dinheiro", mode: "business", type: "bank", isDefault: true };
+const receivables = "Preciso colocar na conta empresarial\nPagamentos a cair\nCliente Alfa valor 348,21 pagamento dia 11/11\nCliente Beta valor 1.664,47 pagamento dia 20/11\nCliente Gama valor 45,00 pagamento dia 03/12";
+
+it("registers the business receivables together with the only available account and keeps the dates pending", async () => {
+  m.accounts.mockResolvedValue([cash]);
+  await receive(receivables);
+  expect(m.setPending).not.toHaveBeenCalled();
+  expect(m.process).not.toHaveBeenCalled();
+  expect(m.addBatch).toHaveBeenCalledExactlyOnceWith([
+    expect.objectContaining({ accountId: cash.id, mode: "business", type: "income", status: "pending", autoPost: false, amount: 348.21, date: "2026-11-11" }),
+    expect.objectContaining({ accountId: cash.id, amount: 1664.47, date: "2026-11-20" }),
+    expect.objectContaining({ accountId: cash.id, amount: 45, date: "2026-12-03" }),
+  ]);
+  expect(reply()).toContain("3 lançamentos registrados");
+  expect(reply()).toContain("Dinheiro");
+});
+
+it("waits for a choice between two business accounts before writing any of a batch", async () => {
+  m.accounts.mockResolvedValue([cash, { ...cash, id: "inter", name: "Inter" }]);
+  await receive(receivables);
+  expect(m.addBatch).not.toHaveBeenCalled();
+  expect(m.setPending).toHaveBeenCalledWith("5511999990000", expect.objectContaining({ type: "account_selection", mode: "business" }));
+  expect(reply()).toContain("Qual conta deseja usar?");
+});
+
+it("does not substitute the sole account when an expressly named account is missing", async () => {
+  m.accounts.mockResolvedValue([cash]);
+  m.process.mockResolvedValue({ intent: "finance_register", confidence: 1,
+    finance: { type: "expense", description: "Material", amount: 50, accountHint: "Inter" } });
+  await receive("Registre 50 reais de material na conta Inter");
+  expect(m.add).not.toHaveBeenCalled();
+  expect(reply()).toContain("Não encontrei a conta *Inter*");
+  expect(reply()).not.toContain("Qual conta deseja usar?");
+});
+
+it("asks for a number when more than one pending payment matches the request", async () => {
+  const first = { ...entry("business"), status: "pending", description: "Aluguel" };
+  m.financePending.mockResolvedValue([first, { ...first, id: "next", date: "2026-11-12" }]);
+  m.process.mockResolvedValue({ intent: "finance_confirm_pending", confidence: 1, keyword: "aluguel" });
+  await receive("Já paguei o aluguel que estava pendente");
   expect(m.update).not.toHaveBeenCalled();
-  expect(reply()).toContain("Encontrei *1 lançamento*");
-  expect(reply()).not.toContain("Não encontrei nada");
+  expect(m.setPending).toHaveBeenCalledWith("5511999990000", expect.objectContaining({ type: "finance_select", patch: { status: "posted" } }));
+});
+
+it("uses the only task directly and resumes the original change by number when tasks share a name", async () => {
+  const task = { id: "task-a", title: "Conferir notas", mode: "business" };
+  const other = { ...task, id: "task-b" };
+  m.process.mockResolvedValue({ intent: "task_update", confidence: 1, task: { newPriority: "high" } });
+  tasks.pending.mockResolvedValue([task]);
+  tasks.update.mockResolvedValue(task);
+  await receive("Mude a prioridade da tarefa para alta");
+  expect(tasks.update).toHaveBeenCalledExactlyOnceWith(task.id, "fixture-owner", expect.objectContaining({ priority: "high" }));
+  expect(m.setPending).not.toHaveBeenCalled();
+  tasks.update.mockClear();
+  tasks.pending.mockResolvedValue([task, other]);
+  await receive("Mude a prioridade da tarefa para alta");
+  expect(tasks.update).not.toHaveBeenCalled();
+  const draft = m.setPending.mock.calls.at(-1)?.[1];
+  expect(draft).toMatchObject({ type: "record_selection", candidates: [{ id: task.id }, { id: other.id }] });
+  m.pending.mockResolvedValue(draft);
+  await receive("Conferir notas");
+  expect(tasks.update).not.toHaveBeenCalled();
+  await receive("2");
+  expect(tasks.update).toHaveBeenCalledExactlyOnceWith(other.id, "fixture-owner", expect.objectContaining({ priority: "high" }));
 });
 it("rejects a generic delete batch from a different permitted mode", async () => {
   m.batch.mockResolvedValue({ mode: "personal", items: [entry("personal")] });

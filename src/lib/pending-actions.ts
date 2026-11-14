@@ -389,6 +389,7 @@ export type PendingAccountSelection = {
   ai: AIResult;
   originalText: string;
   accounts: Array<{ id: string; name: string; type: string }>;
+  missingName?: string;
   expiresAt: string;
 };
 
@@ -443,7 +444,12 @@ export type PendingFiscalDraft = {
 };
 
 type PendingBillPayment={type:"finance_bill_payment";phone:string;userId:string;expiresAt:string;mode:"personal"|"business";day:string;amount:number;movementIds:string[]};
-export type PendingAction = (PendingBillPayment | PendingCategoryName | PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft | PendingGoogleAgendaCommit) & {companyId?:string;workspaceMode?:"personal"|"business"};
+export type PendingRecordSelection = {
+  type: "record_selection"; phone: string; userId: string; expiresAt: string;
+  mode: "personal" | "business"; ai: AIResult; originalText: string;
+  candidates: Array<{ id: string; label: string }>;
+};
+export type PendingAction = (PendingRecordSelection | PendingBillPayment | PendingCategoryName | PendingVehicleSelection | PendingGoalSelection | PendingAppointmentSelection | PendingRecurringConfirmation | PendingRecurringSelection | PendingMeetAta | PendingMeetConfirm | PendingFinanceSelect | PendingWppName | PendingWppLinkInfo | PendingReceiptSave | PendingInvoiceImport | PendingFinancialDocumentImport | PendingImageAction | PendingSlotFill | PendingActionContinuation | PendingEmployeePaymentSelect | PendingFinanceEmployeeSelect | PendingFinanceEmployeeCreate | PendingAccountSelection | PendingAccountCreateName | PendingAccountCreateConfirm | PendingAccountDefaultConfirm | PendingClearHistory | PendingSlotCorrection | PendingCompanySelection | PendingFiscalDraft | PendingGoogleAgendaCommit) & {companyId?:string;workspaceMode?:"personal"|"business"};
 
 // Cada telefone é sua própria linha (chave primária) — sem precisar mais
 // varrer/limpar expirados de um blob único a cada escrita.
@@ -456,6 +462,7 @@ const TTL_SLOT_FILL_MS = 10 * 60 * 1000;
 const TTL_SLOT_CORRECTION_MS = 30 * 60 * 1000;
 
 type PendingActionInput = (
+  | Omit<PendingRecordSelection, "phone" | "expiresAt">
   | Omit<PendingBillPayment,"phone"|"expiresAt">
   | Omit<PendingCategoryName,"phone"|"expiresAt">
   | Omit<PendingVehicleSelection, "phone" | "expiresAt">
@@ -535,15 +542,20 @@ export async function clearPendingAction(phone: string): Promise<void> {
  *  Usada por parseGoalChoice, parseVehicleChoice e pelo slotChoice do motor
  *  de slot-filling — um único algoritmo de "escolha por número ou nome" no
  *  produto todo. Retorna -1 se não reconhecer. */
+export function choicesByLabels<T>(text: string, items: T[], getLabels: (item: T) => string[]): number[] {
+  const normalize = (value: string) => value.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  const answer = normalize(text);
+  if (!answer) return [];
+  const labels = items.map(item => getLabels(item).map(normalize).filter(Boolean));
+  const exact = labels.flatMap((item, index) => item.includes(answer) ? [index] : []);
+  return exact.length ? exact : labels.flatMap((item, index) => item.some(label => label.includes(answer) || answer.includes(label)) ? [index] : []);
+}
+
 export function choiceIndexByLabels<T>(text: string, items: T[], getLabels: (item: T) => string[]): number {
-  const t = text.trim().toLowerCase();
-  const num = parseInt(t);
-  if (!isNaN(num) && num >= 1 && num <= items.length) return num - 1;
-  for (let i = 0; i < items.length; i++) {
-    const labels = getLabels(items[i]).map(l => l.toLowerCase());
-    if (labels.some(l => l.includes(t) || t.includes(l))) return i;
-  }
-  return -1;
+  const number = /^(\d+)\.?$/.exec(text.trim());
+  if (number) return Number(number[1]) >= 1 && Number(number[1]) <= items.length ? Number(number[1]) - 1 : -1;
+  const matches = choicesByLabels(text, items, getLabels);
+  return matches.length === 1 ? matches[0] : -1;
 }
 
 /** Interpreta a resposta do usuário como escolha de meta.

@@ -154,7 +154,7 @@ export type FinanceData = {
   mode?: "personal" | "business"; // modo atual/contexto do lançamento
   /** Modo de destino solicitado em finance_edit; nunca confundir com `mode`. */
   newMode?: "personal" | "business";
-  accountHint?: string; // nome da conta/cartão mencionado, ex: "no Nubank", "cartão Inter" — ausente = usa a conta padrão
+  accountHint?: string; // nome da conta manual mencionada, ex: "no Nubank" — ausente = resolve pelas contas disponíveis
   /** Nome citado pelo usuário para vincular um pagamento à ficha do funcionário. */
   employeeName?: string;
   /** ID interno resolvido pelo handler. null significa escolha explícita "sem funcionário". */
@@ -625,6 +625,22 @@ function categoryForNaturalFinance(description: string, type: "income" | "expens
 export function getExplicitPendingFinanceRegisterResult(message: string, anchor: Date = nowBR()): AIResult | null {
   const text = message.trim();
   const normalized = normalizeCapabilityText(text);
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const heading = lines.findIndex(line => /^pagamentos? a cair\s*:?$/i.test(line));
+  if (heading >= 0 && heading <= 1 && lines.length > heading + 1) {
+    const mode = parseFinanceDestinationMode(lines.slice(0, heading).join(" ")) ?? undefined;
+    if (heading === 0 || mode) {
+      const finances: FinanceData[] = [];
+      for (const line of lines.slice(heading + 1)) {
+        const item = /^cliente\s+(.+?)\s+valor\s+(?:R\$\s*)?(\d[\d.,]*)\s+(?:pagamento\s+)?(?:dia\s+)?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*\.?$/i.exec(line);
+        const amount = item && parseNaturalMoney(item[2]);
+        const date = item && financeDateFromNaturalText(`dia ${item[3]}`, anchor, false);
+        if (!item || !amount || !date) return null;
+        finances.push({ type: "income", category: "Vendas", description: item[1], amount, date, pending: true, mode });
+      }
+      return { intent: "finance_register", confidence: 1, finances, mode };
+    }
+  }
   const incomePending = /\b(?:contas?\s+a\s+receber|a\s+receber|pra\s+(?:eu\s+)?receber|para\s+(?:eu\s+)?receber|vou\s+receber|falta\s+receber|me\s+deve|cliente\s+.+\s+(?:me\s+)?(?:deve|paga|vai\s+(?:me\s+)?pagar|ficou\s+de\s+pagar)|por\s+cobrar|cuentas?\s+por\s+cobrar|voy\s+a\s+(?:recibir|cobrar)|tengo\s+que\s+cobrar|cliente\s+.+\s+(?:me\s+)?(?:debe|pagara|va\s+a\s+(?:pagarme|pagar)))\b/.test(normalized);
   let expensePending = /\b(?:contas?\s+a\s+pagar|a\s+pagar|pra\s+(?:eu\s+)?pagar|para\s+(?:eu\s+)?pagar|vou\s+pagar|preciso\s+pagar|devo\s+pagar|tenho\s+que\s+pagar|por\s+pagar|cuentas?\s+por\s+pagar|voy\s+a\s+pagar|tengo\s+que\s+pagar|debo\s+pagar|necesito\s+pagar)\b/.test(normalized);
   // "O cliente vai pagar" é dinheiro que entra. O trecho "a pagar" não
@@ -2298,6 +2314,7 @@ PRIORIDADE DE INTERPRETAÇÃO:
 3. Nunca troque um comando atual por outro apenas porque o histórico estava falando de um assunto relacionado.
 4. Escolha a intenção mais específica disponível. Por exemplo, valores ainda a pagar/receber são finance_upcoming, não um resumo genérico finance_query.
 5. Se o usuário pediu uma AÇÃO, mas não informou todos os dados necessários, mantenha a intenção dessa ação e retorne os campos que conseguiu extrair. NÃO transforme em "unknown", consulta ou lista e NÃO invente o que faltou: o sistema perguntará somente os campos ausentes e continuará a mesma ação na resposta seguinte.
+6. Deixe a escolha de registros cadastrados para o sistema. Se o pedido está claro, retorne a ação mesmo sem nome de conta ou de outro registro. O sistema usa a única opção compatível e pede escolha quando houver várias. “Conta empresarial”, “conta da empresa” e “conta pessoal” indicam o modo, sem preencher account.name nem accountHint com essas expressões.
 
 REGISTROS EM LOTE: sempre que a pessoa pedir dois ou mais registros da mesma função, extraia TODOS, sem pedir novamente os dados que já foram ditos. Use estes arrays: finances, tasks, reminders, goals, vehicles, vehicleExpenses, recurrings, agendaItems, meetItems, groceryPurchases, employees, customers ou categoryNames. Use o campo singular equivalente somente para um registro. Esta regra vale igualmente em português brasileiro, espanhol neutro e português de Portugal.
 
@@ -2436,7 +2453,7 @@ Exemplo: "vendas do mês foram 2000" → type: "income", category: "Vendas"
 Exemplo: "gastei 500 com vendedor" → type: "expense", category: "Outros"
 
 ⚠️ REGRA CRÍTICA — "a receber"/"a pagar" (pending), NÃO confundir com já recebido/pago:
-Se a mensagem disser explicitamente que o valor está "a receber", "à receber", "contas a receber", "recebimento futuro", "ainda vou receber", "falta receber", "a pagar" (ainda não pago) — inclua "pending": true nesse(s) item(ns) de "finances"/"finance". Isso é DIFERENTE de "recebi"/"paguei" (que é o oposto: já aconteceu, não é pending) e também diferente de uma data futura já preenchida no campo "date" (que o sistema já trata como agendado automaticamente, sem precisar de "pending"). Uma lista colada com cabeçalho "À Receber"/"A Receber" ANTES dos itens significa que TODOS os itens daquela lista são "pending": true, mesmo que cada linha individual não repita a palavra.
+Se a mensagem disser explicitamente que o valor está "a receber", "à receber", "contas a receber", "pagamentos a cair", "recebimento futuro", "ainda vou receber", "falta receber", "a pagar" (ainda não pago) — inclua "pending": true nesse(s) item(ns) de "finances"/"finance". Isso é DIFERENTE de "recebi"/"paguei" (que é o oposto: já aconteceu, não é pending) e também diferente de uma data futura já preenchida no campo "date" (que o sistema já trata como agendado automaticamente, sem precisar de "pending"). Uma lista com cabeçalho "À Receber"/"A Receber" ou "Pagamentos a cair" contém receitas pendentes, mesmo que cada linha não repita o cabeçalho.
 Exemplo: "À Receber:\n10.119,00 Geo ch\n43.796,00 Rafael mcv" → dois finances, ambos com type: "income", pending: true.
 Exemplo: "recebi 500 do cliente" → type: "income", SEM "pending" (já recebido).
 Exemplo: "vou receber 2000 do aluguel semana que vem" → type: "income", pending: true.
@@ -3539,6 +3556,12 @@ function accountModeFromText(normalized: string): UserMode | undefined {
   return undefined;
 }
 
+function modeFromAccountHint(hint: string | undefined): UserMode | undefined {
+  const normalized = normalizeCapabilityText(hint ?? "").trim();
+  if (/^(?:(?:conta|cuenta|modo)\s+)?(?:empresa|empresarial|da empresa|de la empresa|negocio)$/.test(normalized)) return "business";
+  if (/^(?:(?:conta|cuenta|modo)\s+)?(?:pessoal|personal)$/.test(normalized)) return "personal";
+}
+
 /** Extrai a conta de DESTINO numa edição de lançamento. A palavra "conta"
  * pode estar implícita quando a referência ao lançamento é inequívoca, como
  * em "altere esse último para Inter". Não trata valores, categorias nem os
@@ -3768,7 +3791,7 @@ export function getExplicitAccountCommandResult(message: string): AIResult | nul
   const contextual = /\b(?:nessa|nesta|dessa|desta|essa|esta|esa)\s+(?:conta|cuenta)\b/.test(normalized);
   const namedMatch = text.match(/(?:na|da|pela|nesta|nessa|desta|dessa|en\s+la|de\s+la|por\s+la)\s+(?:conta|cuenta)\s+["“”']?([^"“”'?!,]+?)["“”']?(?=\s+(?:na|da|de|do|com|con|semana|m[eê]s|mes|ano|hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana)\b|[?!,.]|$)/i)
     ?? text.match(/(?:conta|cuenta)\s+["“”']?([^"“”'?!,]+?)["“”']?(?=\s+(?:semana|m[eê]s|mes|ano|hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana)\b|[?!,.]|$)/i);
-  const name = namedMatch && !/^(?:pessoal|personal|da empresa|de la empresa|empresarial)$/i.test(namedMatch[1].trim())
+  const name = namedMatch && !modeFromAccountHint(namedMatch[1])
     ? cleanManualAccountName(namedMatch[1])
     : undefined;
   if (!name && !contextual) return null;
@@ -3793,17 +3816,29 @@ export function withExplicitFinanceAccount(message: string, result: AIResult): A
   const normalized = normalizeCapabilityText(message);
   const contextual = /\b(?:nessa|nesta|dessa|desta|essa|esta|esa)\s+(?:conta|cuenta)\b/.test(normalized);
   const destinationHint = result.intent === "finance_edit" ? getFinanceAccountDestinationHint(message) : null;
-  const match = message.match(/(?:na|pela|nesta|nessa|en\s+la|por\s+la)\s+(?:conta|cuenta)\s+["“”']?([^"“”'?!,]+?)["“”']?(?=\s+(?:hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana|dia)\b|[?!,.]|$)/i);
-  const name = destinationHint ?? (match && !/^(?:pessoal|personal|da empresa|de la empresa|empresarial)$/i.test(match[1].trim())
+  const match = message.match(/(?:na|pela|nesta|nessa|en\s+la|por\s+la)\s+(?:conta|cuenta)[ \t]+["“”']?([^"“”'?!,\r\n]+?)["“”']?(?=\s+(?:hoje|ontem|amanh[ãa]|hoy|ayer|mañana|manana|dia)\b|[?!,.\r\n]|$)/i);
+  const name = destinationHint ?? (match && !modeFromAccountHint(match[1])
     ? cleanManualAccountName(match[1])
     : undefined);
-  if (!name && !contextual) return result;
-  const patchFinance = (finance: FinanceData): FinanceData => name ? { ...finance, accountHint: name } : finance;
+  const registerMode = result.intent === "finance_register" ? parseFinanceDestinationMode(message) : null;
+  const scopeOnly = !!registerMode && !name;
+  const pendingIncome = result.intent === "finance_register" && /^\s*pagamentos?\s+a\s+cair\s*:?\s*$/m.test(normalized);
+  const patchFinance = (finance: FinanceData): FinanceData => ({
+    ...finance,
+    ...(registerMode ? { mode: registerMode } : {}),
+    ...(pendingIncome ? { type: "income", pending: true } : {}),
+    accountHint: name || (contextual || (scopeOnly && modeFromAccountHint(finance.accountHint)) ? undefined : finance.accountHint),
+  });
+  if (!name && !contextual && !registerMode && !pendingIncome) return result;
   return {
     ...result,
+    ...(registerMode ? { mode: registerMode } : {}),
     ...(result.finance ? { finance: patchFinance(result.finance) } : {}),
     ...(result.finances ? { finances: result.finances.map(patchFinance) } : {}),
-    account: { ...(result.account ?? {}), name, useContext: contextual && !name },
+    account: name || contextual
+      ? { ...(result.account ?? {}), name, useContext: contextual && !name }
+      : scopeOnly && modeFromAccountHint(result.account?.name)
+        ? undefined : result.account,
   };
 }
 
@@ -3832,10 +3867,16 @@ export function withExplicitFinanceCategoryEdit(message: string, result: AIResul
   };
 }
 
-/** Sem validar valor/data do alvo, exigir escolha humana antes de alterar. */
-export function financeEditNeedsChoice(message: string): boolean {
-  return /\bregistrad[oa]s?\s+em\s+\d{1,2}\/\d{1,2}\b/i.test(message)
-    || /\bde\s+R\$\s*[\d.,]+/i.test(message);
+/** Valor e data antes da alteração qualificam o alvo, inclusive quando só há um candidato pelo nome. */
+export function financeEditTargetFilters(message: string) {
+  const change = [...message.matchAll(/\s+(?:para|pra|como)\s+/gi)].at(-1);
+  const target = message.slice(0, change?.index ?? message.length);
+  const date = /\bregistrad[oa]s?\s+em\s+(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\b/i.exec(target);
+  const value = /\bde\s+R\$\s*(\d+(?:[.,]\d+)*)/i.exec(target);
+  return {
+    amount: value ? parseNaturalMoney(value[1]) : undefined,
+    date: date ? `${date[3] ?? ""}-${date[2].padStart(2, "0")}-${date[1].padStart(2, "0")}` : undefined,
+  };
 }
 
 export function withExplicitAgendaAllDay(message: string, result: AIResult): AIResult {
@@ -4181,6 +4222,10 @@ export function preserveOtherReminderRecipient(message: string, result: AIResult
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
   const scopedRead = getScopedModeReadResult(message);
   if (scopedRead) return scopedRead;
+  if (/^\s*pagamentos? a cair\s*:?\s*$/im.test(message)) {
+    const batch = getExplicitPendingFinanceRegisterResult(message);
+    if (batch?.finances?.length) return batch;
+  }
   const aiFirstForThisPhone = shouldUseWhatsAppAiFirst(
     ctx?.user?.id, ctx?.phone,
     process.env.AI_FIRST_INTENT_ENABLED, process.env.AI_FIRST_INTENT_TEST_PHONES,
