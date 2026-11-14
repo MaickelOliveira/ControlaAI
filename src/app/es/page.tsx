@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { clsx } from "clsx";
 import localFont from "next/font/local";
+import { hasMetaConsent } from "@/components/MetaTracking";
 import { SPANISH_CHECKOUT, checkoutUrlWithLandingParams } from "@/lib/checkout-markets";
 
 const heading = localFont({ src: "../fonts/plus-jakarta-sans-latin.woff2", weight: "600 800", style: "normal", display: "swap", variable: "--font-heading", fallback: ["Arial", "sans-serif"] });
@@ -1225,7 +1226,11 @@ function PlanChoice() {
               <a
                 href={option.checkoutUrl}
                 onClick={event => {
-                  event.currentTarget.href = checkoutUrlWithLandingParams(option.checkoutUrl, window.location.search);
+                  event.currentTarget.href = checkoutUrlWithLandingParams(
+                    option.checkoutUrl,
+                    window.location.search,
+                    hasMetaConsent(),
+                  );
                 }}
                 data-meta-plan={option.id}
                 data-meta-value={option.totalValue}

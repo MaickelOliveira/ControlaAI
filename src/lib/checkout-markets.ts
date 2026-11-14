@@ -3,7 +3,6 @@ import type { UserLocale } from "./users";
 export type CheckoutPlanId = "monthly" | "semiannual" | "annual";
 
 const FORWARDED_LANDING_PARAMS = [
-  "fbclid",
   "utm_source",
   "utm_medium",
   "utm_campaign",
@@ -59,14 +58,16 @@ export const SPANISH_CHECKOUT: CheckoutMarket = {
   },
 };
 
-/**
- * Mantém a identificação do clique e as UTMs quando a landing page envia o
- * visitante para o checkout hospedado na Hotmart. Sem o fbclid no checkout,
- * o Pixel não consegue associar a sessão à origem do anúncio.
- */
-export function checkoutUrlWithLandingParams(checkoutUrl: string, landingSearch: string): string {
+export function checkoutUrlWithLandingParams(
+  checkoutUrl: string,
+  landingSearch: string,
+  allowMetaClickId = false,
+): string {
   const checkout = new URL(checkoutUrl);
   const landingParams = new URLSearchParams(landingSearch);
+  const metaClickId = allowMetaClickId ? landingParams.get("fbclid") : null;
+
+  if (metaClickId) checkout.searchParams.set("fbclid", metaClickId);
 
   for (const param of FORWARDED_LANDING_PARAMS) {
     const value = landingParams.get(param);
