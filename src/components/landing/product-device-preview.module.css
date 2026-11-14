@@ -11,7 +11,7 @@
 
 .devices {
   display: grid;
-  grid-template-columns: minmax(0, 3.65fr) minmax(200px, 1fr);
+  grid-template-columns: minmax(0, 5.5fr) minmax(0, 1fr);
   align-items: end;
   gap: clamp(18px, 3vw, 52px);
 }
@@ -62,7 +62,7 @@
 
 .device[data-device="mobile"] .display {
   container-type: inline-size;
-  width: min(100%, 350px);
+  width: 100%;
   padding: clamp(8px, .76vw, 12px);
   border: 1px solid #494d50;
   border-radius: 15% / 6.8%;
