@@ -2,28 +2,15 @@
 
 import Script from "next/script";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   isMetaPublicPath,
   isMetaRegistrationPath,
-  isSpanishMetaPath,
   metaCheckoutCurrency,
 } from "@/lib/meta-tracking-config";
 
 const CONSENT_KEY = "zelo_meta_consent";
-const OPEN_PREFERENCES = "zelo:open-cookie-preferences";
-
-export function CookiePreferencesButton() {
-  return (
-    <button
-      type="button"
-      className="min-h-11 cursor-pointer text-left hover:underline hover:underline-offset-4"
-      onClick={event => event.currentTarget.dispatchEvent(new Event(OPEN_PREFERENCES, { bubbles: true }))}
-    >
-      Preferências de cookies
-    </button>
-  );
-}
+const CONSENT_CHANGED = "zelo:meta-consent-changed";
 
 type Consent = "granted" | "denied" | null;
 type MetaParameters = Record<string, string | number | boolean | string[]>;
@@ -45,13 +32,81 @@ declare global {
 
 function getStoredConsent(): Consent {
   if (typeof window === "undefined") return null;
-  const value = window.localStorage.getItem(CONSENT_KEY);
-  return value === "granted" || value === "denied" ? value : null;
+  try {
+    const value = window.localStorage.getItem(CONSENT_KEY);
+    return value === "granted" || value === "denied" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function subscribeToConsent(listener: () => void) {
+  window.addEventListener(CONSENT_CHANGED, listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    window.removeEventListener(CONSENT_CHANGED, listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+function useMetaConsent() {
+  return useSyncExternalStore(subscribeToConsent, getStoredConsent, () => null);
 }
 
 function setStoredConsent(value: Exclude<Consent, null>) {
-  window.localStorage.setItem(CONSENT_KEY, value);
+  try {
+    window.localStorage.setItem(CONSENT_KEY, value);
+  } catch {
+    return;
+  }
   document.cookie = `${CONSENT_KEY}=${value}; Max-Age=15552000; Path=/; SameSite=Lax; Secure`;
+  if (value === "denied") {
+    window.fbq?.("consent", "revoke");
+    for (const cookie of ["_fbp", "_fbc"]) {
+      document.cookie = `${cookie}=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
+    }
+  }
+  window.dispatchEvent(new Event(CONSENT_CHANGED));
+}
+
+const consentCopy = {
+  "pt-BR": {
+    title: "Medição de anúncios",
+    description: "Se você permitir, o Pixel da Meta poderá medir visitas e cliques para assinar nas páginas públicas da Zelo. A escolha também controla o envio do identificador de clique da Meta ao checkout da Hotmart. Você pode desativar essa medição a qualquer momento. O site continua usando cookies de sessão para manter seu acesso.",
+    allow: "Permitir medição de anúncios",
+    disable: "Desativar medição de anúncios",
+  },
+  "pt-PT": {
+    title: "Medição de anúncios",
+    description: "Se autorizares, o Pixel da Meta pode medir visitas e cliques para subscrever nas páginas públicas da Zelo. A escolha também controla o envio do identificador de clique da Meta para a página de pagamento da Hotmart. Podes desativar esta medição a qualquer momento. O site continua a utilizar cookies de sessão para manter o teu acesso.",
+    allow: "Permitir medição de anúncios",
+    disable: "Desativar medição de anúncios",
+  },
+  es: {
+    title: "Medición de anuncios",
+    description: "Si lo permites, el píxel de Meta podrá medir visitas y clics para suscribirse en las páginas públicas de Zelo. Tu elección también controla el envío del identificador de clic de Meta a la página de pago de Hotmart. Puedes desactivar esta medición en cualquier momento. El sitio sigue usando cookies de sesión para mantener tu acceso.",
+    allow: "Permitir la medición de anuncios",
+    disable: "Desactivar la medición de anuncios",
+  },
+};
+
+export function CookiePreferences({ locale }: { locale: keyof typeof consentCopy }) {
+  const enabled = useMetaConsent() === "granted";
+  const copy = consentCopy[locale];
+
+  return (
+    <section id="cookies" aria-labelledby="cookies-title">
+      <h2 id="cookies-title" className="text-xl font-bold text-slate-900">{copy.title}</h2>
+      <p className="mt-3 leading-7 text-slate-600">{copy.description}</p>
+      <button
+        type="button"
+        className="mt-4 min-h-11 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+        onClick={() => setStoredConsent(enabled ? "denied" : "granted")}
+      >
+        {enabled ? copy.disable : copy.allow}
+      </button>
+    </section>
+  );
 }
 
 function installMetaQueue(): MetaPixel {
@@ -74,13 +129,6 @@ export function hasMetaConsent() {
   return getStoredConsent() === "granted";
 }
 
-export function readBrowserCookie(name: string) {
-  if (typeof document === "undefined") return undefined;
-  const prefix = `${name}=`;
-  const value = document.cookie.split("; ").find(cookie => cookie.startsWith(prefix));
-  return value ? decodeURIComponent(value.slice(prefix.length)) : undefined;
-}
-
 export function trackMetaEvent(
   name: string,
   parameters: MetaParameters = {},
@@ -96,36 +144,12 @@ export default function MetaTracking() {
   const pathname = usePathname();
   const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID || "1673074203783828";
   const isPublicPage = isMetaPublicPath(pathname);
-  const isSpanishPage = isSpanishMetaPath(pathname);
-  const [consent, setConsent] = useState<Consent | "loading">("loading");
-  const [reviewing, setReviewing] = useState(false);
-  const trigger = useRef<HTMLElement | null>(null);
-  const firstChoice = useRef<HTMLButtonElement>(null);
+  const consent = useMetaConsent();
   const initialized = useRef(false);
   const previousPath = useRef(pathname);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setConsent(getStoredConsent()), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    function openPreferences(event: Event) {
-      trigger.current = event.target instanceof HTMLElement ? event.target : null;
-      setReviewing(true);
-    }
-    document.addEventListener(OPEN_PREFERENCES, openPreferences);
-    return () => document.removeEventListener(OPEN_PREFERENCES, openPreferences);
-  }, []);
-
-  useEffect(() => {
-    if (reviewing) firstChoice.current?.focus({ preventScroll: true });
-  }, [reviewing]);
-
-  useEffect(() => {
-    if (!pixelId || consent !== "granted") return;
-
-    if (!isPublicPage) {
+    if (!pixelId || consent !== "granted" || !isPublicPage) {
       window.fbq?.("consent", "revoke");
       return;
     }
@@ -177,77 +201,13 @@ export default function MetaTracking() {
     return () => document.removeEventListener("click", handleClick);
   }, [consent, isPublicPage, pathname, pixelId]);
 
-  function chooseConsent(value: Exclude<Consent, null>) {
-    setStoredConsent(value);
-    setConsent(value);
-    setReviewing(false);
-    trigger.current?.focus({ preventScroll: true });
-    trigger.current = null;
-    if (value === "denied") {
-      window.fbq?.("consent", "revoke");
-      for (const cookie of ["_fbp", "_fbc"]) {
-        document.cookie = `${cookie}=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
-      }
-    }
-  }
-
-  if (!pixelId || !isPublicPage) return null;
+  if (!pixelId || !isPublicPage || consent !== "granted") return null;
 
   return (
-    <>
-      {consent === "granted" && (
-        <Script
-          id="meta-pixel"
-          src="https://connect.facebook.net/en_US/fbevents.js"
-          strategy="afterInteractive"
-        />
-      )}
-
-      {(consent === null || reviewing) && (
-        <aside
-          aria-label={isSpanishPage ? "Preferencias de privacidad" : "Preferências de privacidade"}
-          className="fixed inset-x-4 bottom-4 z-[100] mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl sm:flex sm:items-center sm:gap-5 sm:p-5"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-slate-950">
-              {isSpanishPage ? "Tu privacidad es importante" : "Sua privacidade importa"}
-            </p>
-            <p className="mt-1 text-sm leading-5 text-slate-600">
-              {isSpanishPage
-                ? "Con tu permiso, usamos cookies de Meta para medir anuncios y mejorar nuestras campañas. Puedes rechazarlos y seguir usando el sitio normalmente."
-                : "Com sua permissão, usamos cookies da Meta para medir anúncios e melhorar nossas campanhas. Você pode recusar e continuar usando o site normalmente."}
-            </p>
-          </div>
-          <div className="mt-4 flex shrink-0 gap-2 sm:mt-0">
-            <button
-              type="button"
-              ref={firstChoice}
-              onClick={() => chooseConsent("denied")}
-              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              {isSpanishPage ? "Rechazar" : "Recusar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => chooseConsent("granted")}
-              className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
-            >
-              {isSpanishPage ? "Aceptar" : "Aceitar"}
-            </button>
-          </div>
-        </aside>
-      )}
-
-      {pathname !== "/" && !reviewing && (consent === "granted" || consent === "denied") && (
-        <button
-          type="button"
-          onClick={() => setConsent(null)}
-          className="fixed bottom-3 left-3 z-[90] rounded-full border border-slate-200 bg-white/95 px-3 py-2 text-xs font-semibold text-slate-600 shadow-lg backdrop-blur transition hover:border-amber-300 hover:text-slate-950"
-          aria-label={isSpanishPage ? "Cambiar las preferencias de cookies" : "Alterar preferências de cookies"}
-        >
-          Cookies
-        </button>
-      )}
-    </>
+    <Script
+      id="meta-pixel"
+      src="https://connect.facebook.net/en_US/fbevents.js"
+      strategy="afterInteractive"
+    />
   );
 }

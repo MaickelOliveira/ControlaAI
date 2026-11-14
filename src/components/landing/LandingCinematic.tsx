@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import UiIcon, { type UiIconName } from "@/components/UiIcon";
 import s from "./cinematic.module.css";
-import { CookiePreferencesButton } from "@/components/MetaTracking";
 import CinematicHero from "./CinematicHero";
 import BankConnections from "./BankConnections";
 import { usePageScrollMotion } from "./PageScrollMotion";
@@ -344,7 +343,6 @@ function LandingContent({ fontClass }: { fontClass: string }) {
             <nav aria-label="Informações legais">
               <Link href="/privacidade">Privacidade</Link>
               <Link href="/termos">Termos de uso</Link>
-              <CookiePreferencesButton />
               <a href="mailto:contato@zelogestaointeligente.com.br">
                 Fale com a Zelo
                 <Arrow />

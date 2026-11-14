@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CookiePreferences } from "@/components/MetaTracking";
 
 type Locale = "pt-BR" | "es" | "pt-PT";
 type Kind = "privacy" | "terms";
@@ -284,6 +285,7 @@ export default function LegalDocument({ locale, kind }: { locale: Locale; kind: 
           </div>
 
           <div className="space-y-9 pt-8">
+            {kind === "privacy" && <CookiePreferences locale={locale} />}
             {document.sections.map(section => (
               <section key={section.title} id={section.id}>
                 <h2 className="text-xl font-bold text-slate-900">{section.title}</h2>

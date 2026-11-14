@@ -50,15 +50,16 @@ describe("checkout por mercado", () => {
     )).toBe("pt-BR");
   });
 
-  it("mantém o identificador do clique da Meta e UTMs no checkout", () => {
+  it.each([false, true])("mantém UTMs e só envia o identificador Meta com autorização (%s)", allowMetaClickId => {
     const url = new URL(checkoutUrlWithLandingParams(
       BRAZIL_CHECKOUT.checkoutUrls.monthly,
-      "?fbclid=IwZXh0bgNhZW0CMTEAARteste&utm_source=facebook&utm_campaign=chile",
+      "?fbclid=clique-teste&utm_source=facebook&utm_campaign=chile",
+      allowMetaClickId,
     ));
 
     expect(url.searchParams.get("off")).toBe(BRAZIL_CHECKOUT.offerCodes.monthly);
     expect(url.searchParams.get("src")).toBe(BRAZIL_CHECKOUT.sourceCode);
-    expect(url.searchParams.get("fbclid")).toBe("IwZXh0bgNhZW0CMTEAARteste");
+    expect(url.searchParams.get("fbclid")).toBe(allowMetaClickId ? "clique-teste" : null);
     expect(url.searchParams.get("utm_source")).toBe("facebook");
     expect(url.searchParams.get("utm_campaign")).toBe("chile");
   });
