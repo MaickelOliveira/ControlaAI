@@ -18,7 +18,7 @@ const screens = [
     width: 853,
     height: 1844,
     alt: "Painel da Zelo no celular, com o mesmo saldo de R$ 18.450 e o gráfico de entradas e saídas em uma coluna.",
-    sizes: "(max-width: 360px) 75vw, (max-width: 900px) 270px, (max-width: 1960px) 13vw, 240px",
+    sizes: "(max-width: 900px) min(22vw, 160px), (max-width: 1960px) 13vw, 240px",
   },
 ] as const;
 

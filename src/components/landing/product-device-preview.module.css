@@ -174,5 +174,8 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 22px;
   }
-  .device[data-device="mobile"] .display { width: min(85%, 282px); }
+  .device[data-device="mobile"] .display {
+    width: min(22%, 160px);
+    padding: clamp(5px, .8vw, 8px);
+  }
 }
