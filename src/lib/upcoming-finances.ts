@@ -11,6 +11,7 @@ export type UpcomingFinanceItem = {
   dueDate?: string;
   mode: FinanceMode;
   origin: UpcomingFinanceOrigin;
+  registeredByName?: string;
 };
 
 export type BalanceForecast = {
@@ -57,6 +58,7 @@ export function collectUpcomingFinanceItems(
         dueDate: hasKnownDate ? item.date : undefined,
         mode: item.mode,
         origin: hasKnownDate ? "scheduled" as const : "undated" as const,
+        ...(item.registeredByName ? { registeredByName: item.registeredByName } : {}),
       }];
     });
 

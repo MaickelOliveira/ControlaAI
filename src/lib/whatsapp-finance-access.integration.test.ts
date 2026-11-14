@@ -1,21 +1,25 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const m = vi.hoisted(() => ({ owner: vi.fn(), userUpdate: vi.fn(), send: vi.fn(), process: vi.fn(), access: vi.fn(), find: vi.fn(), range: vi.fn(), remove: vi.fn(), update: vi.fn(), pending: vi.fn(), clear: vi.fn(), setPending: vi.fn(), batch: vi.fn(), code: vi.fn(), count: vi.fn(), financeCount: vi.fn(), removeAll: vi.fn(), balance: vi.fn(), rangeBalance: vi.fn(), accounts: vi.fn(), due: vi.fn(), confirm: vi.fn(), add: vi.fn(), addBatch: vi.fn(), accountByName: vi.fn(), financePending: vi.fn() }));
+const vehicle = vi.hoisted(() => ({ list: vi.fn(), addExpense: vi.fn(), linkFinance: vi.fn() }));
+vi.mock("./vehicles", async original => ({ ...await original<typeof import("./vehicles")>(), getVehiclesByUser: vehicle.list, addVehicleExpense: vehicle.addExpense, setExpenseFinanceId: vehicle.linkFinance }));
 const tasks = vi.hoisted(() => ({ pending: vi.fn(), update: vi.fn() }));
 vi.mock("./tasks", async original => ({ ...await original<typeof import("./tasks")>(), getPendingTasks: tasks.pending, updateTask: tasks.update }));
 vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner, updateUser: m.userUpdate, generateWppVerifyCode: m.code }));
-vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: async () => "fixture-owner", getPhoneAccess: m.access, getPhonesForUser: async () => [{ userId: "fixture-owner", phone: "5511999990000", name: "Fixture", relation: "Titular" }], countPhonesForUser: m.count, findPhoneByName: async () => "5511999990002", findPhoneByRelation: async () => null }));
+vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: async () => "fixture-owner", getPhoneAccess: m.access, getPhonesForUser: async () => [{ userId: "fixture-owner", phone: "5511999990000", name: "Fixture", relation: "Titular" }, { userId: "fixture-owner", phone: "5511999990002", name: "Ana", relation: "Equipe" }], countPhonesForUser: m.count, findPhoneByName: async () => "5511999990002", findPhoneByRelation: async () => null }));
 vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: m.pending, clearPendingAction: m.clear, setPendingAction: m.setPending }));
 vi.mock("./conversations", async original => ({ ...await original<typeof import("./conversations")>(), addMessage: vi.fn(), getAiPaused: async () => false, getAiHistory: async () => [], getLastFinanceBatch: m.batch, setLastFinanceBatch: vi.fn() }));
 vi.mock("./whatsapp", () => ({ sendText: m.send, sendFile: vi.fn() }));
 vi.mock("./whatsapp-config", () => ({ getConfig: async () => ({}) }));
 vi.mock("./ai-processor", async original => {
   const actual = await original<typeof import("./ai-processor")>();
-  return { ...actual, processMessage: (text: string) => actual.getExplicitPendingFinanceRegisterResult(text, new Date(2026, 10, 14, 12)) ?? m.process(text) };
+  return { ...actual, processMessage: (text: string) => /^(?:Caio,|Quem registrou)/i.test(text)
+    ? actual.processMessage(text)
+    : actual.getExplicitPendingFinanceRegisterResult(text, new Date(2026, 10, 14, 12)) ?? m.process(text) };
 });
-vi.mock("./finances", async original => ({ ...await original<typeof import("./finances")>(), findFinanceByDescription: m.find, getFinancesInRange: m.range, deleteFinance: m.remove, updateFinance: m.update, countFinances: m.financeCount, deleteAllFinances: m.removeAll, getBalance: m.balance, getBalanceInRange: m.rangeBalance, addFinance: m.add, addFinances: m.addBatch, getPendingFinances: m.financePending }));
+vi.mock("./finances", async original => ({ ...await original<typeof import("./finances")>(), findFinanceByDescription: m.find, getFinancesInRange: m.range, getTransactionsInRange: m.range, getKeywordFinances: m.range, deleteFinance: m.remove, updateFinance: m.update, countFinances: m.financeCount, deleteAllFinances: m.removeAll, getBalance: m.balance, getBalanceInRange: m.rangeBalance, addFinance: m.add, addFinances: m.addBatch, getPendingFinances: m.financePending }));
 vi.mock("./accounts", async original => ({ ...await original<typeof import("./accounts")>(), getManualAccountsByUser: m.accounts, findAccountByName: m.accountByName }));
-vi.mock("./recurring", async original => ({ ...await original<typeof import("./recurring")>(), findDueRecurringMatches: m.due, confirmRecurring: m.confirm }));
+vi.mock("./recurring", async original => ({ ...await original<typeof import("./recurring")>(), findDueRecurringMatches: m.due, confirmRecurring: m.confirm, getRecurringByUser: async () => [] }));
 import { handleIncomingMessage } from "./message-handler";
 type Mode = "personal" | "business";
 const entry = (mode: Mode) => ({ id: `fixture-${mode}`, userId: "fixture-owner", type: "expense", description: `${mode} private entry`, amount: 50, category: "Outros", mode, date: "2026-10-12", source: "web", status: "confirmed", createdAt: "2026-10-12" });
@@ -217,4 +221,52 @@ it("does not include business data in a personal-only financial overview", async
   await receive("Mostre o resumo financeiro do modo Pessoal.");
   expect(m.rangeBalance).toHaveBeenCalledExactlyOnceWith("fixture-owner", "personal", expect.any(String), expect.any(String));
   expect(reply()).not.toContain("*Empresa*");
+});
+
+
+it("returns the registered author when the participant asks about a recorded expense", async () => {
+  m.range.mockResolvedValueOnce([
+    { ...entry("business"), source: "whatsapp", registeredBy: "11999990002", description: "Combustível", status: "posted" },
+  ]);
+  await receive("Quem registrou a despesa de combustível em outubro de 2026?");
+  expect(reply()).toContain("Registrado por Ana");
+  expect(reply()).not.toContain("5511999990002");
+});
+
+it("registers the advertised fuel example and reads the saved volume, odometer and value back in WhatsApp", async () => {
+  const onix = { id: "onix", brand: "Chevrolet", model: "Onix", year: 2020, plate: "", currentKm: 40000, mode: "business", expenses: [] as Array<Record<string, unknown>> };
+  vehicle.list.mockResolvedValue([onix]);
+  vehicle.addExpense.mockImplementation(async (_id, _owner, expense) => {
+    onix.expenses.push({ id: "fill-up", ...expense });
+    return onix;
+  });
+  await receive("Caio, abasteci o Onix com 30 litros por R$ 180. O painel marca 42 mil km.");
+  expect(vehicle.addExpense).toHaveBeenCalledExactlyOnceWith("onix", "fixture-owner", expect.objectContaining({
+    amount: 180, liters: 30, km: 42000, type: "fuel",
+  }));
+  expect(vehicle.linkFinance).toHaveBeenCalledWith("onix", "fill-up", "new-finance");
+  expect(reply()).toContain("30 litros · 42.000 km");
+  m.send.mockClear();
+  await receive("Caio, qual foi o último abastecimento do Onix?");
+  expect(reply()).toContain("R$ 180,00 · 30 litros · 42.000 km");
+  expect(vehicle.addExpense).toHaveBeenCalledTimes(1);
+});
+
+it("does not attribute a named fuel expense to a different vehicle even when there is only one", async () => {
+  vehicle.list.mockResolvedValue([{ id: "gol", brand: "Volkswagen", model: "Gol", year: 2020, plate: "", mode: "business", expenses: [] }]);
+  await receive("Caio, abasteci o Onix com 30 litros por R$ 180. O painel marca 42 mil km.");
+  expect(vehicle.addExpense).not.toHaveBeenCalled();
+  expect(m.add).not.toHaveBeenCalled();
+  expect(reply()).toMatch(/Não encontrei .*onix/i);
+});
+
+
+it("names the author of a specific expense in the answer to a spending question", async () => {
+  m.process.mockResolvedValue({ intent: "finance_query", confidence: 1, keyword: "Combustível" });
+  m.range.mockResolvedValueOnce([
+    { ...entry("business"), source: "whatsapp", registeredBy: "5511999990002", description: "Combustível", status: "posted" },
+  ]);
+  await receive("Quanto gastei com combustível?");
+  expect(reply()).toContain("R$ 50,00");
+  expect(reply()).toContain("Registrado por Ana");
 });

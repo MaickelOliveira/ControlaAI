@@ -358,23 +358,23 @@ export function expandMerchantAliases(term: string): string[] {
 }
 
 
-/** Soma os lançamentos cuja descrição bate com algum dos termos (busca OR,
- *  case-insensitive) dentro de um intervalo de datas — usado em perguntas
- *  sobre um comerciante/app específico ("quanto gastei com ifood"). */
 export function merchantPurchaseDate(finance: Pick<Finance, "date" | "description">): string {
   const match = finance.description.match(/\bcompra\s+(?:em|el)\s+(\d{2})\/(\d{2})\/(\d{4})\b/i);
   return match ? `${match[3]}-${match[2]}-${match[1]}` : finance.date;
 }
 
-export async function getKeywordTotal(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string, accountId?: string): Promise<number> {
+export async function getKeywordFinances(userId: string, mode: FinanceMode, type: FinanceType, terms: string[], from?: string, to?: string, registeredBy?: string, accountId?: string): Promise<Finance[]> {
   return (await getFinancesByUser(userId, mode, registeredBy))
     .filter(f => isPostedFinance(f) && f.type === type && (!accountId || f.accountId === accountId))
     // Perguntas como "quanto gastei este mês" seguem a competência em que a
     // fatura foi contabilizada. A data original da compra continua preservada
     // na descrição para auditoria e deduplicação, mas não muda o mês da soma.
     .filter(f => (!from || f.date >= from) && (!to || f.date <= to))
-    .filter(f => merchantDescriptionMatchesTerms(f.description, terms))
-    .reduce((s, f) => s + f.amount, 0);
+    .filter(f => merchantDescriptionMatchesTerms(f.description, terms));
+}
+
+export async function getKeywordTotal(...args: Parameters<typeof getKeywordFinances>): Promise<number> {
+  return (await getKeywordFinances(...args)).reduce((sum, item) => sum + item.amount, 0);
 }
 
 /** Lançamentos crus de um intervalo de datas, mais recente primeiro — usado

@@ -9,6 +9,7 @@ export type VehicleExpense = {
   id: string;
   date: string;
   km?: number;
+  liters?: number;
   type: VehicleExpenseType;
   amount: number;
   description: string;
@@ -181,7 +182,10 @@ function normalizeVehicleSearch(value: string): string {
  * essencial para alterações/exclusões: nunca escolher silenciosamente o
  * primeiro veículo quando dois cadastros combinam com o mesmo texto. */
 export async function findVehiclesByName(userId: string, name: string, mode?: VehicleMode): Promise<Vehicle[]> {
-  const vehicles = await getVehiclesByUser(userId, mode);
+  return matchingVehicles(await getVehiclesByUser(userId, mode), name);
+}
+
+export function matchingVehicles(vehicles: Vehicle[], name: string): Vehicle[] {
   const query = normalizeVehicleSearch(name);
   if (!query) return vehicles;
   const compactQuery = query.replace(/\s+/g, "");

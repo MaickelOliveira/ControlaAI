@@ -141,6 +141,7 @@ export type VehicleData = {
   expenseType?: "fuel" | "maintenance" | "insurance" | "tax" | "other";
   amount?: number;
   km?: number;
+  liters?: number;
   description?: string;
   mode?: "personal" | "business"; // detectado automaticamente
 };
@@ -2389,8 +2390,8 @@ INTENÇÕES POSSÍVEIS:
 - vehicle_create: cadastrar um ou vários veículos novos. Use "vehicle" para um e "vehicles" para vários. Inclua brand, model, year, plate, fuelType e currentKm quando informados. Marca, modelo e ano serão perguntados item por item se faltarem.
 - vehicle_update: alterar os dados de um veículo existente ("altere a placa do Gol para ABC1D23", "muda o km da moto para 35000", "quero alterar meu veículo"). Use "keyword" com marca, modelo ou placa do veículo original e em "vehicle" SOMENTE os novos campos. Para mudar entre pessoal e empresa, use "vehicle.newMode". Se a pessoa só disser que quer alterar, sem dizer o campo, deixe os novos campos vazios: o sistema perguntará.
 - vehicle_delete: excluir um veículo ("exclua o Gol", "remova minha moto"). Use "keyword" com marca, modelo ou placa quando houver. Se não identificar qual, o sistema mostrará a lista.
-- vehicle_expense: registrar um ou vários gastos com veículo, carro, moto ou caminhão. Use "vehicle" para um e "vehicleExpenses" para vários; em cada item inclua amount, expenseType, description, km, name e mode quando informados. Se mencionar veículo, use vehicle_expense. NÃO confunda com vehicle_create/update/delete.
-- vehicle_query: ver gastos de veículos ("gastos do carro", "meus veículos")
+- vehicle_expense: registrar um ou vários gastos com veículo, carro, moto ou caminhão. Use "vehicle" para um e "vehicleExpenses" para vários; em cada item inclua amount, expenseType, description, km, liters, name e mode quando informados. O volume em litros vai em "liters" e a quilometragem em "km" (42 mil km = 42000). Se mencionar veículo, use vehicle_expense. NÃO confunda com vehicle_create/update/delete.
+- vehicle_query: consultar os veículos cadastrados ou o histórico de gastos ("gastos do carro", "último abastecimento do Onix", "meus veículos"). Para consultar um veículo específico, informe somente o nome/modelo/placa em "vehicle.name". Se pedir abastecimentos, use "vehicle.expenseType": "fuel". Para datas/períodos, preencha "period".
 - grocery_list_add: adicionar item(ns) à lista de compras de mercado ("põe arroz na lista", "adiciona leite e ovos na lista de compras", "preciso comprar detergente"). Use "grocery.items" com productName (e category se der pra inferir). ⚠️ Se pedir uma lista PRONTA por categoria ("põe a lista de mercearia", "quero a lista de carnes", "adiciona os itens de limpeza"), use "grocery.template" com a chave em minúsculo sem acento (mercearia, carnes, hortifruti, laticinios, padaria, bebidas, higiene, limpeza) em vez de "items".
 - grocery_list_show: ver a lista de compras ("o que tem na lista de compras", "minha lista do mercado", "o que falta comprar")
 - grocery_list_check: marcar item(ns) da lista como já comprado(s) ("comprei o arroz", "já peguei leite e ovos", "risca o detergente da lista"). Use "grocery.itemNames" com os nomes mencionados.
@@ -4217,9 +4218,44 @@ export function preserveOtherReminderRecipient(message: string, result: AIResult
   };
 }
 
+function explicitFinanceAuthorQuestion(message: string): AIResult | null {
+  const authorQuestion = message.trim().match(/^(?:(?:rita|zelo)[, ]+)?quem\s+(?:registrou|cadastrou|lançou|anotou)\s+(?:a |o |esse |essa )?(?:(conta|despesa|gasto|receita|recebimento|lançamento)\s+)?(.+?)\s*[?.!]*$/i);
+  if (authorQuestion) {
+    const keyword = authorQuestion[2].split(/\s+(?:ontem|hoje|(?:no|do) mês|(?:neste|nesse) mês|em (?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)|(?:no|do) (?:pessoal|modo empresa))\b/i)[0].replace(/^de\s+/i, "").trim();
+    const mode = /\b(?:empresa|empresarial|pj)\b/i.test(message) ? "business" : /\bpessoal\b/i.test(message) ? "personal" : undefined;
+    if (!keyword) return null;
+    return withExplicitRelativePeriod(message, {intent:"finance_detail",confidence:1,keyword,mode,financeType:/^(receita|recebimento)$/i.test(authorQuestion[1]??"")?"income":"expense"});
+  }
+  return null;
+}
+
+function explicitFuelOrHistory(message: string): AIResult | null {
+  const text = normalizeCapabilityText(message.trim()).replace(/^caio[, :]+/, "").trim();
+  const mode = /\b(?:empresa|empresarial|pj)\b/.test(text) ? "business" : /\b(?:pessoal|pf)\b/.test(text) ? "personal" : undefined;
+  const fuel = text.match(/^abasteci\s+(?:(?:o|a|meu|minha)\s+)?(.+?)\s+com\s+([\d.,]+)\s+litros?\s+(?:por|e (?:paguei|gastei))\s+(?:r\$\s*)?([\d.,]+)(?:\s+reais)?(?=\s|[.!?;,]|$)/);
+  const fuelDetails = fuel ? text.slice(fuel[0].length) : "";
+  if (fuel && /^\s*(?:[.,;]\s*)?(?:(?:(?:o\s+)?painel\s+marca|(?:a\s+)?quilometragem(?:\s+era)?|(?:o\s+)?hodometro(?:\s+marca)?|com|aos?)\s+)?(?:[\d.,]+\s*(?:mil\s+)?(?:km|quilometros))?\s*(?:(?:no|na)\s+(?:modo\s+)?(?:empresa|pessoal|pj|pf))?[.!\s]*$/.test(fuelDetails)) {
+    const amount = parseNaturalMoney(fuel[3]);
+    const liters = parseNaturalMoney(fuel[2]);
+    const kmMatch = fuelDetails.match(/\b([\d.,]+)\s*(mil\s+)?(?:km|quilometros)\b/);
+    const kmValue = kmMatch ? parseNaturalMoney(kmMatch[1]) : null;
+    const km = kmValue == null ? undefined : kmValue * (kmMatch?.[2] ? 1000 : 1);
+    if (amount && liters) return { intent: "vehicle_expense", confidence: 1, vehicle: { name: fuel[1], amount, liters, km, expenseType: "fuel", description: "Abastecimento", mode } };
+  }
+
+  const history = text.match(/^(?:(?:me\s+)?(?:mostre|mostra|liste|listar|ver|consulte|qual foi|quanto gastei (?:com|no|na))\s+)?(?:o\s+|os\s+|as\s+)?(historico(?: de gastos)?|gastos|despesas|ultimo abastecimento|abastecimentos?)\s+(?:do|da|de|no|na)\s+(.+?)[.!?]*$/);
+  if (!history) return null;
+  const period = explicitFinanceCalendarPeriod(message, nowBR(), false) ?? undefined;
+  const name = history[2].split(/\s+(?:este mes|esse mes|neste mes|nesse mes|(?:no )?mes (?:passado|anterior)|esta semana|semana passada|hoje|ontem|(?:no modo|modo) (?:pessoal|empresa)|em (?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)|de \d|em \d)\b/)[0].trim();
+  if (!/abastecimento/.test(history[1]) && !text.startsWith("historico") && !/^caio\b/i.test(message) && !VEHICLE_NOUN_RE.test(text)) return null;
+  return { intent: "vehicle_query", confidence: 1, mode, period, vehicle: { name, expenseType: /abastecimento/.test(history[1]) ? "fuel" : undefined } };
+}
+
 /** A IA interpreta primeiro para todos os usuários reais após o rollout.
  * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  const explicitQuery = explicitFuelOrHistory(message) ?? explicitFinanceAuthorQuestion(message);
+  if (explicitQuery) return explicitQuery;
   const scopedRead = getScopedModeReadResult(message);
   if (scopedRead) return scopedRead;
   if (/^\s*pagamentos? a cair\s*:?\s*$/im.test(message)) {

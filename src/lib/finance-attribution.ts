@@ -7,6 +7,11 @@ export function participantDisplayName(ownerName:string,person:Participant):stri
   return (isAccountHolderRelation(person.relation)?ownerName:person.name)?.trim()||undefined;
 }
 
+export function financeAuthorLabel(record: {registeredByName?: string}): string {
+  const name = record.registeredByName?.replace(/[\r\n*`_~<>]/g, " ").trim().slice(0, 120);
+  return name ? `Registrado por ${name}` : "";
+}
+
 /** Resolve only identities already registered inside this account; never guess bank authors. */
 export function identifyFinanceAuthors<T extends {source?:string;registeredBy?:string}>(records:readonly T[],owner:Owner,participants:readonly Participant[]):Array<T&{registeredByName?:string}> {
   const names=new Map<string,string>();

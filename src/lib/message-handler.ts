@@ -28,7 +28,7 @@ import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, getScopedModeReadResult, withExplicitFinanceCategoryEdit, financeEditTargetFilters, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, getKeywordFinances, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createdDayBoundsBR, isFinanceCreatedTodayQuery, replyFinancesCreatedToday } from "@/lib/finance-created-query";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
@@ -37,7 +37,7 @@ import { parseTaskQueryScope, replyScopedTaskList, selectTasksForQuery } from "@
 import { getRemindersByUser, updateReminder, deleteReminder, type Reminder } from "@/lib/reminders";
 import { filterRemindersForNextWeek, reminderListScope } from "@/lib/reminder-query";
 import { getActiveGoals, updateGoalAmount, updateGoalStatus, findGoalsByTitle, getGoalProgress } from "@/lib/goals";
-import { getVehiclesByUser, addVehicleExpense, findVehicleByName, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleUpdateInput } from "@/lib/vehicles";
+import { getVehiclesByUser, addVehicleExpense, matchingVehicles, findVehiclesByName, updateVehicle, deleteVehicle, getVehicleTotalExpenses, setExpenseFinanceId, VEHICLE_FINANCE_CATEGORY, FUEL_TYPE_LABEL, type Vehicle, type VehicleExpense, type VehicleUpdateInput } from "@/lib/vehicles";
 import {
   addFromTemplate, addToShoppingList, getShoppingList, toggleShoppingItem, getSpendByStore,
   findOrCreateStore, saveGroceryPurchase, getPriceComparison, getStorePriceRanking,
@@ -59,6 +59,7 @@ import {
 } from "@/lib/action-completion";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findDueRecurringMatches, descriptionsLikelyMatch, upsertImportedInstallmentSchedules, type RecurringTransaction } from "@/lib/recurring";
 import { collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
+import { financeAuthorLabel, identifyFinanceAuthors } from "@/lib/finance-attribution";
 import { replyFinanceDetail } from "@/lib/finance-detail";
 import {readBankAgenda,readFinancialAgenda} from "@/lib/financial-agenda";
 import {formatBankAgenda} from "@/lib/open-finance-schedules";
@@ -811,6 +812,14 @@ function replyModeAccessDenied(access: FinanceMode, locale?: string): string {
 
 // Intervalo YYYY-MM-DD do mês informado — usado como período padrão quando a
 // IA não identifica um período relativo ("mês passado" etc.) na pergunta.
+function vehicleExpenseMeasures(expense: Pick<VehicleExpense, "liters" | "km">, locale?: string): string {
+  const language = locale === "es" ? "es-419" : locale === "pt-PT" ? "pt-PT" : "pt-BR";
+  return [
+    expense.liters ? `${expense.liters.toLocaleString(language)} ${expense.liters === 1 ? "litro" : "litros"}` : "",
+    expense.km ? `${expense.km.toLocaleString(language)} km` : "",
+  ].filter(Boolean).map(value => ` · ${value}`).join("");
+}
+
 function monthBounds(year: number, month: number): [string, string] {
   const pad = (n: number) => String(n).padStart(2, "0");
   const from = `${year}-${pad(month)}-01`;
@@ -1446,7 +1455,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // compartilhado de sempre.
     const phoneAccess = await getPhoneAccess(user.id, from);
     if(!phoneAccess){await wppSend(from,replyPhoneNotLinked(from));return;}
-    const speaker=(await getPhonesForUser(user.id)).find(person=>phoneMatches(person.phone,from));
+    const participants = await getPhonesForUser(user.id);
+    const speaker = participants.find(person => phoneMatches(person.phone, from));
     if(speaker)setVirtualAgentIdentity(isAccountHolderRelation(speaker.relation)?user.name:(speaker.name||""),user.locale);
     const mode: "personal" | "business" = phoneAccess === "both" ? user.activeMode : phoneAccess;
     const allowsFinanceMode = (target: unknown) => phoneAccess === "both" || target === mode;
@@ -2376,6 +2386,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     }
 
     if (pending?.type === "vehicle_selection" && pending.userId === user.id) {
+      if (!allowsFinanceMode(pending.mode)) {
+        await clearPendingAction(from);
+        await wppSend(from, replyModeAccessDenied(mode, user.locale));
+        return;
+      }
       const vehicleAction = pending.action || "expense";
 
       if (vehicleAction === "update" && pending.awaitingPatch && pending.vehicles.length === 1) {
@@ -2422,13 +2437,18 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             return;
           }
           const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
-          const exp = await addVehicleExpense(chosen.id, user.id, { date: pending.expenseData.date, km: pending.expenseData.km, type: pending.expenseData.expenseType, amount: pending.expenseData.amount, description: pending.expenseData.description });
+          const scopedVehicle = (await getVehiclesByUser(user.id, pending.mode as FinanceMode)).find(vehicle => vehicle.id === chosen.id);
+          if (!scopedVehicle) {
+            await wppSend(from, localized(user.locale, "Não encontrei esse veículo no modo selecionado.", "No encontré ese vehículo en el modo seleccionado."));
+            return;
+          }
+          const exp = await addVehicleExpense(chosen.id, user.id, { date: pending.expenseData.date, km: pending.expenseData.km, liters: pending.expenseData.liters, type: pending.expenseData.expenseType, amount: pending.expenseData.amount, description: pending.expenseData.description });
           if (exp) {
             const newExp = exp.expenses[exp.expenses.length - 1];
             const f = await addFinance({ userId: user.id, type: "expense", amount: pending.expenseData.amount, category: VEHICLE_FINANCE_CATEGORY[pending.expenseData.expenseType] || "Transporte", description: `${pending.expenseData.description} — ${chosen.brand} ${chosen.model}`, date: pending.expenseData.date, mode: pending.mode as "personal" | "business", source: "whatsapp", registeredBy: from });
             await setExpenseFinanceId(chosen.id, newExp.id, f.id);
             const total = getVehicleTotalExpenses(exp);
-            await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}\n📊 Total do veículo: ${formatCurrency(total)}`);
+            await wppSend(from, `${typeEmoji[pending.expenseData.expenseType] || "📌"} *Registrado no ${chosen.brand} ${chosen.model}!*\n\n💰 ${formatCurrency(pending.expenseData.amount)} — ${pending.expenseData.description}${vehicleExpenseMeasures(newExp, user.locale)}\n📊 Total do veículo: ${formatCurrency(total)}`);
           } else {
             await wppSend(from, "❌ Não consegui registrar o gasto no veículo agora. Nada foi lançado; tente novamente.");
           }
@@ -3181,7 +3201,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const keyword = ai.keyword?.trim();
         const matched = created.filter(item => (!resolved?.account || item.accountId === resolved.account.id)
           && (!keyword || normalize(item.description).includes(normalize(keyword))));
-        await wppSendLong(from, replyFinancesCreatedToday(matched, queryMode, keyword, user.locale), 3500, true);
+        await wppSendLong(from, replyFinancesCreatedToday(identifyFinanceAuthors(matched, user, participants), queryMode, keyword, user.locale), 3500, true);
       } catch {
         await wppSend(from, user.locale === "es" ? "No pude consultar los movimientos creados hoy. Inténtalo de nuevo." : "Não consegui consultar os lançamentos criados hoje. Tente novamente.");
       }
@@ -3291,7 +3311,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       return;
     }
 
-    const connectedReply=await answerConnectedFinanceQuery(user,mode,phoneAccess,ai,monthBounds(year,month),messageText);
+    const connectedReply=await answerConnectedFinanceQuery(user,mode,phoneAccess,ai,monthBounds(year,month),messageText,participants);
     if(connectedReply){await wppSendLong(from,connectedReply,3500,true);return;}
 
     switch (ai.intent) {
@@ -4022,17 +4042,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             && Number.isFinite(item.amount)
             && item.amount > 0
             && matchesKeyword(item.description, item.category)
+            && (!ai.category || normalize(item.category) === normalize(ai.category))
           );
           const upcoming = collectUpcomingFinanceItems(
-            accountFilter ? pendingFinances.filter(item => item.accountId === accountFilter.id) : pendingFinances,
-            accountFilter ? [] : recurringTransactions,
+            identifyFinanceAuthors(pendingFinances.filter(item =>
+              (!accountFilter || item.accountId === accountFilter.id) && (!ai.category || normalize(item.category) === normalize(ai.category)),
+            ), user, participants),
+            accountFilter ? [] : recurringTransactions.filter(item => !ai.category || normalize(item.category) === normalize(ai.category)),
             {
             from: dFrom,
             to: dTo,
             mode: detailMode,
             includeUndated: true,
           }).filter(item => item.type === targetType && matchesKeyword(item.description));
-          const finalMsg = replyFinanceDetail(txList, upcoming, {
+          const finalMsg = replyFinanceDetail(identifyFinanceAuthors(txList, user, participants), upcoming, {
             type: targetType,
             mode: detailMode,
             periodLabel: periodLabelFor(ai.period, now, user.locale),
@@ -4115,7 +4138,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             await wppSend(from,"Escolha Pessoal ou Empresa para conferir as despesas.");break;
           }
           const workspace=requestedMode??mode;
-          const answer=await answerFinancePlanning(user,workspace,periodFrom,periodTo,today);
+          const details = /\b(?:quais|mostre|mostra|liste|lista|detalhe|descreva|o que entra|o que compoe)\b/i.test(messageText.normalize("NFD").replace(/\p{Diacritic}/gu, ""));
+          const answer=await answerFinancePlanning(user,workspace,periodFrom,periodTo,today,details?{name:user.name,participants}:undefined);
           const [freshAccess,freshUser]=await Promise.all([getPhoneAccess(user.id,from),getUserById(user.id)]);
           if(freshUser&&hasAccess(freshUser)&&(freshAccess==="both"||freshAccess===workspace))await wppSendLong(from,answer,3500,true);
           break;
@@ -4184,11 +4208,19 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const kwMode = queryMode;
           const kwType: "income" | "expense" = ai.financeType === "income" ? "income" : "expense";
           const terms = expandMerchantAliases(ai.keyword);
-          const total = await getKeywordTotal(user.id, kwMode, kwType, terms, pFrom, pTo, undefined, accountFilter?.id);
+          const records = await getKeywordFinances(user.id, kwMode, kwType, terms, pFrom, pTo, undefined, accountFilter?.id);
+          const total = records.reduce((sum, record) => sum + record.amount, 0);
+          const authors = identifyFinanceAuthors(records.filter(record => record.source === "whatsapp"), user, participants)
+            .filter(record => record.registeredByName);
+          const lines = authors.slice(0, 20).map(record =>
+            `• ${record.description} · ${formatCurrency(record.amount)} · ${financeAuthorLabel(record)}`);
+          if (authors.length > 20) lines.push(localized(user.locale, "Confira os demais lançamentos em Finanças.", "Consulta los demás movimientos en Finanzas."));
           const kwModeLabel = kwMode === "business" ? "Empresa" : "Pessoal";
           const verb = user.locale === "es" ? (kwType === "income" ? "recibiste" : "gastaste") : (kwType === "income" ? "recebeu" : "gastou");
           const accountLabel = accountFilter ? ` — 🏦 ${accountFilter.name}` : "";
-          await wppSend(from, `${kwType === "income" ? "💰" : "💸"} ${user.locale === "es" ? "Tú" : "Você"} ${verb} *${formatCurrency(total)}* ${user.locale === "es" ? "en" : "com"} *${ai.keyword}* ${user.locale === "es" ? "en" : "em"} ${periodLabel} (${kwModeLabel}${accountLabel}).`);
+          const summary = `${kwType === "income" ? "💰" : "💸"} ${user.locale === "es" ? "Tú" : "Você"} ${verb} *${formatCurrency(total)}* ${user.locale === "es" ? "en" : "com"} *${ai.keyword}* ${user.locale === "es" ? "en" : "em"} ${periodLabel} (${kwModeLabel}${accountLabel}).`;
+          if (lines.length) await wppSendLong(from, `${summary}\n\n${lines.join("\n")}`, 3500, true);
+          else await wppSend(from, summary);
           break;
         }
 
@@ -4518,11 +4550,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       case "vehicle_expense": {
         if (ai.vehicleExpenses?.length) {
           const expenses = ai.vehicleExpenses.slice(0, 30);
-          if (phoneAccess !== "both" && expenses.some(item => item.mode && item.mode !== mode)) {
+          if (expenses.some(item => !allowsFinanceMode(item.mode ?? ai.mode ?? mode))) {
             await wppSend(from, replyModeAccessDenied(mode, user.locale));
             break;
           }
-          const missingAmount = expenses.findIndex(item => !(item.amount && item.amount > 0));
+          const missingAmount = expenses.findIndex(item => typeof item.amount !== "number" || !Number.isFinite(item.amount) || item.amount <= 0);
           if (missingAmount >= 0) {
             await wppSend(from, user.locale === "es"
               ? `💰 ¿Cuál fue el importe del gasto ${missingAmount + 1} del vehículo?`
@@ -4532,12 +4564,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const prepared: Array<{ item: typeof expenses[number]; target: Vehicle | null; mode: "personal" | "business" }> = [];
           let unresolved = "";
           for (const item of expenses) {
-            const expenseMode = item.mode || mode;
+            const expenseMode = item.mode ?? ai.mode ?? mode;
             const vehicles = await getVehiclesByUser(user.id, expenseMode);
-            const target = item.name
-              ? await findVehicleByName(user.id, item.name, expenseMode)
-              : vehicles.length === 1 ? vehicles[0] : null;
-            if (!target && vehicles.length > 1) {
+            const matches = item.name ? matchingVehicles(vehicles, item.name) : vehicles;
+            const target = matches.length === 1 ? matches[0] : null;
+            if (!target && vehicles.length) {
               unresolved = item.description || item.name || String(prepared.length + 1);
               break;
             }
@@ -4553,6 +4584,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           for (const { item, target, mode: expenseMode } of prepared) {
             const amount = item.amount!;
             const expenseType = item.expenseType || "other";
+            const { liters } = item;
             const description = cap(item.description || expenseType);
             const date = todayStrBR();
             if (!target) {
@@ -4560,12 +4592,12 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
               registered.push(`${description} — ${formatCurrency(amount)}`);
               continue;
             }
-            const updatedVehicle = await addVehicleExpense(target.id, user.id, { date, km: item.km, type: expenseType, amount, description });
+            const updatedVehicle = await addVehicleExpense(target.id, user.id, { date, km: item.km, liters: expenseType === "fuel" && typeof liters === "number" && Number.isFinite(liters) && liters > 0 ? liters : undefined, type: expenseType, amount, description });
             if (!updatedVehicle) throw new Error(`[vehicle_expense] falha no lote para ${target.id}`);
             const createdExpense = updatedVehicle.expenses[updatedVehicle.expenses.length - 1];
             const finance = await addFinance({ userId: user.id, type: "expense", amount, category: VEHICLE_FINANCE_CATEGORY[expenseType] || "Transporte", description: `${description} — ${target.brand} ${target.model}`, date, mode: expenseMode, source: "whatsapp", registeredBy: from });
             await setExpenseFinanceId(target.id, createdExpense.id, finance.id);
-            registered.push(`${description} — ${target.brand} ${target.model} — ${formatCurrency(amount)}`);
+            registered.push(`${description} — ${target.brand} ${target.model} — ${formatCurrency(amount)}${vehicleExpenseMeasures(createdExpense, user.locale)}`);
           }
           const heading = user.locale === "es"
             ? `✅ Registré *${registered.length} gastos de vehículos*:`
@@ -4577,17 +4609,24 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const vType = ai.vehicle?.expenseType || "other";
         const vDesc = cap(ai.vehicle?.description || ai.finance?.description || vType);
 
-        if (!vAmount || vAmount <= 0) {
+        if (!Number.isFinite(vAmount) || vAmount <= 0) {
           await wppSend(from, user.locale === "es"
             ? `❓ No pude identificar el importe del gasto.\n\nPrueba así:\n_"Gasté 50 en combustible"_\n_"Pagué 300 de mantenimiento del auto"_`
             : `❓ Não consegui identificar o valor do gasto.\n\nTente assim:\n_"Gastei 50 reais de combustível"_\n_"Paguei 300 de manutenção no carro"_`);
           break;
         }
-        const vKm = ai.vehicle?.km;
-        const vDate = now.toISOString().slice(0, 10);
+        const km = ai.vehicle?.km;
+        const vKm = typeof km === "number" && Number.isFinite(km) && km >= 0 ? km : undefined;
+        const liters = ai.vehicle?.liters;
+        const vLiters = vType === "fuel" && typeof liters === "number" && Number.isFinite(liters) && liters > 0 ? liters : undefined;
+        const vDate = todayStrBR();
         const typeEmoji: Record<string, string> = { fuel: "⛽", maintenance: "🔧", insurance: "🛡️", tax: "📋", other: "📌" };
 
-        const vehicleMode = ai.vehicle?.mode || mode;
+        const vehicleMode = ai.vehicle?.mode ?? ai.mode ?? mode;
+        if (!allowsFinanceMode(vehicleMode)) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          break;
+        }
         const allVehicles = await getVehiclesByUser(user.id, vehicleMode);
 
         // Sem veículos → registra como despesa financeira
@@ -4598,42 +4637,74 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           break;
         }
 
-        // Identifica veículo pelo nome mencionado na mensagem
-        let targetVehicle = ai.vehicle?.name
-          ? await findVehicleByName(user.id, ai.vehicle.name, vehicleMode)
-          : null;
-
-        // Um único veículo → registra direto
-        if (!targetVehicle && allVehicles.length === 1) {
-          targetVehicle = allVehicles[0];
+        const matches = ai.vehicle?.name ? matchingVehicles(allVehicles, ai.vehicle.name) : allVehicles;
+        if (!matches.length) {
+          await wppSend(from, localized(user.locale, `Não encontrei *${ai.vehicle?.name}* nesse modo. Confira o modelo ou a placa cadastrada e envie o gasto novamente.`, `No encontré *${ai.vehicle?.name}* en este modo. Revisa el modelo o la matrícula y vuelve a enviar el gasto.`));
+          break;
         }
-
+        const targetVehicle = matches.length === 1 ? matches[0] : undefined;
         if (targetVehicle) {
-          const exp = await addVehicleExpense(targetVehicle.id, user.id, { date: vDate, km: vKm, type: vType, amount: vAmount, description: vDesc });
+          const exp = await addVehicleExpense(targetVehicle.id, user.id, { date: vDate, km: vKm, liters: vLiters, type: vType, amount: vAmount, description: vDesc });
           if (exp) {
             const newExp = exp.expenses[exp.expenses.length - 1];
             const f = await addFinance({ userId: user.id, type: "expense", amount: vAmount, category: VEHICLE_FINANCE_CATEGORY[vType] || "Transporte", description: `${vDesc} — ${targetVehicle.brand} ${targetVehicle.model}`, date: vDate, mode: vehicleMode, source: "whatsapp", registeredBy: from });
             await setExpenseFinanceId(targetVehicle.id, newExp.id, f.id);
             const total = getVehicleTotalExpenses(exp);
-            await wppSend(from, user.locale === "es" ? `${typeEmoji[vType]} *¡Registrado en ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total del vehículo: ${formatCurrency(total)}` : `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}\n📊 Total do veículo: ${formatCurrency(total)}`);
+            await wppSend(from, user.locale === "es" ? `${typeEmoji[vType]} *¡Registrado en ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}${vehicleExpenseMeasures(newExp, user.locale)}\n📊 Total del vehículo: ${formatCurrency(total)}` : `${typeEmoji[vType]} *Registrado no ${targetVehicle.brand} ${targetVehicle.model}!*\n\n💰 ${formatCurrency(vAmount)} — ${vDesc}${vehicleExpenseMeasures(newExp, user.locale)}\n📊 Total do veículo: ${formatCurrency(total)}`);
           } else await wppSend(from, user.locale === "es" ? "❌ No pude registrar el gasto del vehículo. No se guardó nada; inténtalo de nuevo." : "❌ Não consegui registrar o gasto no veículo agora. Nada foi lançado; tente novamente.");
           break;
         }
 
         // Múltiplos veículos → pergunta qual
-        const expenseData = { amount: vAmount, expenseType: vType, description: vDesc, km: vKm, date: vDate };
-        const vehicleList = pendingVehicleRows(allVehicles);
+        const expenseData = { amount: vAmount, expenseType: vType, description: vDesc, km: vKm, liters: vLiters, date: vDate };
+        const vehicleList = pendingVehicleRows(matches);
         await setPendingAction(from, { type: "vehicle_selection", userId: user.id, mode: vehicleMode, action: "expense", expenseData, vehicles: vehicleList });
 
-        let msg = user.locale === "es" ? `🚗 Tienes ${allVehicles.length} vehículos registrados. ¿En cuál registro *${formatCurrency(vAmount)}* de ${vDesc}?\n\n` : `🚗 Você tem ${allVehicles.length} veículos cadastrados. Em qual registrar *${formatCurrency(vAmount)}* de ${vDesc}?\n\n`;
-        allVehicles.forEach((v, i) => { msg += `*${i + 1}.* ${v.brand} ${v.model} (${v.year})${v.plate ? ` — ${v.plate}` : ""}\n`; });
+        let msg = user.locale === "es" ? `🚗 Encontré ${matches.length} vehículos. ¿En cuál registro *${formatCurrency(vAmount)}* de ${vDesc}?\n\n` : `🚗 Encontrei ${matches.length} veículos. Em qual registrar *${formatCurrency(vAmount)}* de ${vDesc}?\n\n`;
+        matches.forEach((v, i) => { msg += `*${i + 1}.* ${v.brand} ${v.model} (${v.year})${v.plate ? ` — ${v.plate}` : ""}\n`; });
         msg += user.locale === "es" ? `\nResponde con el número o nombre del vehículo. ⏱ _Válido durante 5 minutos._` : `\nResponda com o número ou nome do veículo. ⏱ _Válido por 5 min._`;
         await wppSend(from, msg);
         break;
       }
 
       case "vehicle_query": {
-        const vehicles = await getVehiclesByUser(user.id, mode);
+        const queryMode = ai.vehicle?.mode ?? ai.mode ?? mode;
+        if (!allowsFinanceMode(queryMode)) {
+          await wppSend(from, replyModeAccessDenied(mode, user.locale));
+          break;
+        }
+        const vehicles = await getVehiclesByUser(user.id, queryMode);
+        const name = ai.vehicle?.name ?? ai.keyword;
+        const detailed = Boolean(name || ai.period || ai.vehicle?.expenseType || /\b(?:histórico|historico|gastos?|despesas?|abastecimentos?)\b/i.test(messageText));
+        if (detailed && vehicles.length) {
+          const selected = name ? matchingVehicles(vehicles, name) : vehicles;
+          if (!selected.length) {
+            await wppSend(from, localized(user.locale, `Não encontrei *${name}* nesse modo.`, `No encontré *${name}* en este modo.`));
+            break;
+          }
+          const [monthFrom, monthTo] = monthBounds(year, month);
+          const latest = /\b(?:último|ultimo|mais recente)\b/i.test(messageText);
+          const fromDate = ai.period?.from ?? (latest ? "" : monthFrom);
+          const toDate = ai.period?.to ?? (latest ? todayStrBR() : monthTo);
+          const fmtDate = (date: string) => date.split("-").reverse().join("/");
+          const sections = selected.map(vehicle => {
+            const expenses = vehicle.expenses.slice().reverse().filter(expense => expense.date >= fromDate && expense.date <= toDate
+              && (!ai.vehicle?.expenseType || expense.type === ai.vehicle.expenseType))
+              .sort((a, b) => b.date.localeCompare(a.date));
+            const title = `🚗 *${vehicleIdentity(vehicle)}*`;
+            if (!expenses.length) return `${title}\n${localized(user.locale, "Nenhum gasto encontrado no período.", "No encontré gastos en el período.")}`;
+            const lines = expenses.slice(0, latest ? 1 : 20).map(expense =>
+              `• ${fmtDate(expense.date)} · ${expense.description} · ${formatCurrency(expense.amount)}${vehicleExpenseMeasures(expense, user.locale)}`);
+            const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            return [title, ...lines, ...(!latest ? [
+              `${localized(user.locale, "Total do período", "Total del período")}: ${formatCurrency(total)}`,
+              ...(expenses.length > 20 ? [localized(user.locale, `Mostrei os 20 mais recentes de ${expenses.length} gastos.`, `Mostré los 20 más recientes de ${expenses.length} gastos.`)] : []),
+            ] : [])].join("\n");
+          });
+          const heading = latest ? "" : `📅 ${fmtDate(fromDate)} a ${fmtDate(toDate)}\n\n`;
+          await wppSendLong(from, heading + sections.join("\n\n"));
+          break;
+        }
         if (!vehicles.length) {
           await wppSend(from, user.locale === "es" ? `🚗 No hay vehículos registrados.\n\nPuedes registrar uno así: _"registra un Volkswagen Gol 2020"_.` : `🚗 Sem veículos cadastrados.\n\nCadastre por aqui, por exemplo: _"cadastre um Volkswagen Gol 2020"_.`);
         } else {

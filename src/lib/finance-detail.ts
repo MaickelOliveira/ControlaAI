@@ -1,4 +1,5 @@
 import { formatCurrency, translateCategory, type Finance, type FinanceMode, type FinanceType } from "./finances";
+import { financeAuthorLabel } from "./finance-attribution";
 import type { UpcomingFinanceItem } from "./upcoming-finances";
 
 type DetailOptions = {
@@ -74,7 +75,8 @@ export function replyFinanceDetail(
     for (const [category, group] of [...byCategory.entries()].sort((a, b) => b[1].total - a[1].total)) {
       message += `${options.type === "income" ? "🟢" : "🔴"} *${category}* — ${formatCurrency(group.total)}\n`;
       for (const item of group.items) {
-        message += `   • ${item.description} — ${formatCurrency(item.amount)} _(${dateLabel(item.date, options.locale)})_\n`;
+        const author = financeAuthorLabel(item);
+        message += `   • ${item.description} — ${formatCurrency(item.amount)} _(${dateLabel(item.date, options.locale)})_${author ? ` · ${author}` : ""}\n`;
       }
       message += "\n";
     }
@@ -92,7 +94,8 @@ export function replyFinanceDetail(
       : `\n\n⏳ *Programadas / ${text.scheduled}*\n`;
     for (const item of upcoming) {
       message += `• *${item.description}* — ${formatCurrency(item.amount)}\n`;
-      message += `  📅 ${dateLabel(item.dueDate, options.locale)} · ${originLabel(item.origin, options.locale)}\n`;
+      const author = financeAuthorLabel(item);
+      message += `  📅 ${dateLabel(item.dueDate, options.locale)} · ${originLabel(item.origin, options.locale)}${author ? ` · ${author}` : ""}\n`;
     }
     const upcomingTotal = upcoming.reduce((sum, item) => sum + item.amount, 0);
     message += `\n${options.type === "income" ? "💰" : "💸"} *${options.locale === "es" ? "Total" : "Total"} ${text.scheduled}: ${formatCurrency(upcomingTotal)}*`;

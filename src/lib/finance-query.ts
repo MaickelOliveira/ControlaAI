@@ -1,6 +1,7 @@
 import {financeOrigin,ledgerBalance,ledgerExpenseGroups,type LedgerEntry} from "./finance-ledger";
 import {bankDate,bankMoney} from "./open-finance-display";
 import type {BankFinancialData} from "./open-finance-report";
+import {financeAuthorLabel} from "./finance-attribution";
 import {merchantDescriptionMatchesTerms} from "./merchant-text";
 export type FinanceQuery={from:string;to:string;type:"expense"|"income"|"result";source?:"card"|"account";category?:string;keywords?:string[];analysis?:boolean;detail?:boolean;groupDetails?:boolean;byBank?:boolean};
 const normalize=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
@@ -27,7 +28,10 @@ export function summarizeFinanceQuery(entries:readonly LedgerEntry[],query:Finan
     if(groups.length)answer=`🏆 *Maior categoria de ${query.type==="income"?"receitas":"gastos"}: ${safe(groups[0].name)}*\n*${money(groups[0].value)}*\n\n${answer}`;
     const categoryLines=query.groupDetails?groups.map((group,index)=>{
       const items=selected.filter(entry=>entry.category===group.name).sort((a,b)=>b.amount-a.amount||b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
-      return `*${index+1}. ${safe(group.name)}: ${money(group.value)}*\n${items.map(entry=>`• ${safe(entry.description)} — ${money(entry.amount)} · ${bankDate(entry.date)}`).join("\n")}`;
+      return `*${index+1}. ${safe(group.name)}: ${money(group.value)}*\n${items.map(entry=>{
+        const author = financeAuthorLabel(entry);
+        return `• ${safe(entry.description)} — ${money(entry.amount)} · ${bankDate(entry.date)}${author ? ` · ${author}` : ""}`;
+      }).join("\n")}`;
     }).join("\n\n"):groups.map(group=>`• ${safe(group.name)}: ${money(group.value)}`).join("\n");
     answer+=`\n\n*${query.type==="income"?"Receitas":"Gastos"} por categoria${query.groupDetails?" · maior para menor":""}*\n${categoryLines||`Nenhuma ${query.type==="income"?"receita":"despesa"} realizada no período.`}`;
   }

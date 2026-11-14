@@ -20,6 +20,7 @@ export type PendingVehicleSelection = {
     expenseType: VehicleExpenseType;
     description: string;
     km?: number;
+    liters?: number;
     date: string;
   };
   patch?: VehicleUpdateInput;

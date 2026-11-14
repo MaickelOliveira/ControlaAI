@@ -1,3 +1,4 @@
+import { financeAuthorLabel } from "./finance-attribution";
 import { formatCurrency, type Finance, type FinanceMode } from "./finances";
 
 export function isFinanceCreatedTodayQuery(message: string): boolean {
@@ -33,7 +34,8 @@ export function replyFinancesCreatedToday(items: Finance[], mode: FinanceMode, k
     const lines = matching.slice(0, 30).map(item => {
       const date = item.date.split("-").reverse().join("/");
       const status = item.status === "pending" ? (spanish ? "pendiente" : "pendente") : (spanish ? "realizado" : "realizado");
-      return `• ${item.description} — ${formatCurrency(item.amount)} · ${item.category} · ${date} (${status})`;
+      const author = financeAuthorLabel(item);
+      return `• ${item.description} — ${formatCurrency(item.amount)} · ${item.category} · ${date} (${status})${author ? ` · ${author}` : ""}`;
     });
     if (matching.length > 30) lines.push(spanish ? `• Y ${matching.length - 30} más.` : `• E mais ${matching.length - 30}.`);
     parts.push(`${type === "expense" ? "💸" : "💰"} *${title} (${matching.length})*\n${lines.join("\n")}`);

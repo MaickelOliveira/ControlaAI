@@ -2,6 +2,8 @@ import "server-only";
 import type {User} from "./users";
 import type {AIResult} from "./ai-processor";
 import {getOpenFinanceAccess,canEnrollOpenFinance,type OpenFinanceIdentity} from "./open-finance-access";
+import {financeAuthorLabel,identifyFinanceAuthors} from "./finance-attribution";
+import type {WppPhoneLink} from "./wpp-phone-links";
 import {readUnifiedFinances} from "./unified-finances";
 import {summarizeFinanceQuery,financeCoverageNotice,type FinanceQuery} from "./finance-query";
 import {answerBankQuestion,parseBankQuestion} from "./open-finance-question";
@@ -478,7 +480,7 @@ export async function answerBankWhatsAppMessage(user:User,mode:"personal"|"busin
 }
 
 /** The model supplies filters only. Financial rows and totals never enter its prompt. */
-export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:"personal"|"business",phoneAccess:string,ai:AIResult,defaultPeriod:[string,string],message=""):Promise<string|null>{
+export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity & {name?:string},mode:"personal"|"business",phoneAccess:string,ai:AIResult,defaultPeriod:[string,string],message="",participants?:readonly WppPhoneLink[]):Promise<string|null>{
   if(process.env.OPEN_FINANCE_WHATSAPP_ENABLED!=="true"||!["finance_query","balance_query","finance_detail","finance_analysis"].includes(ai.intent))return null;
   const messageMode=normalize(message);
   const explicitBusiness=/\b(?:empresa|empresarial|pj)\b/.test(messageMode)&&!excludedMode(messageMode,"empresa"),explicitPersonal=/\b(?:pessoal|pf)\b/.test(messageMode)&&!excludedMode(messageMode,"pessoal");
@@ -526,7 +528,11 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
       const label=type==="income"?"entradas":"saídas";
       return `Comparação de ${label} · ${requested==="personal"?"Pessoal":"Empresa"}\nPeríodo atual até hoje (${bankDate(currentFrom)} a ${bankDate(today)}): ${bankMoney(currentTotal,"BRL")}\nMesmo intervalo anterior (${bankDate(previousFrom)} a ${bankDate(comparableTo)}): ${bankMoney(comparableTotal,"BRL")}\nPeríodo anterior completo (${bankDate(previousFrom)} a ${bankDate(previousTo)}): ${bankMoney(previousTotal,"BRL")}\nDiferença entre intervalos comparáveis: ${bankMoney(Math.abs(difference),"BRL")} ${difference>0?"a mais":difference<0?"a menos":"de diferença"}. O período atual ainda está em andamento; totais representam os lançamentos recebidos.${financeCoverageNotice(current.bank,[...current.entries,...previous.entries])}`;
     }
-    const {entries,bank}=await readUnifiedFinances(user,requested,from,to);
+    if(ai.account && ai.intent==="finance_detail") return null;
+    const authors=participants&&user.name?{name:user.name,participants}:undefined;
+    const {entries,bank}=authors
+      ?await readUnifiedFinances(user,requested,from,to,authors)
+      :await readUnifiedFinances(user,requested,from,to);
     if(!bank?.overview.connections.length)return null;
     const missingHistory=missingHistoricalLedgerNotice(bank,entries.length,todayStrBR());
     if(missingHistory)return missingHistory+financeCoverageNotice(bank,entries);
@@ -578,8 +584,9 @@ export async function answerConnectedFinanceQuery(user:OpenFinanceIdentity,mode:
     if(ai.intent==="finance_detail"&&!categoryBreakdown&&!plainSpendingSummary&&!query.source){
       const [pending,recurring]=await Promise.all([getPendingFinances(user.id,requested),getRecurringByUser(user.id,requested,"active")]);
       const categoryMatches=(e:{category:string})=>!query.category||normalize(e.category)===normalize(query.category);
-      const upcoming=collectUpcomingFinanceItems(pending.filter(categoryMatches),recurring.filter(categoryMatches),{from,to,mode:requested,includeUndated:true}).filter(e=>e.type===query.type&&(!query.keywords?.length||query.keywords.some(k=>normalize(e.description).includes(normalize(k)))));
-      if(upcoming.length)answer+=`\n\nValores ainda a ${query.type==="income"?"receber":"pagar"} (fora do total realizado):\n${upcoming.slice(0,20).map(e=>`${bankDate(e.dueDate)} · ${e.description.replace(/[\r\n*`_~<>]/g," ").slice(0,160)} · ${bankMoney(e.amount,"BRL")}`).join("\n")}${upcoming.length>20?"\nConsulte as demais pendências em Finanças.":""}`;
+      const namedPending=authors?identifyFinanceAuthors(pending,{id:user.id,name:authors.name},authors.participants):pending;
+      const upcoming=collectUpcomingFinanceItems(namedPending.filter(categoryMatches),recurring.filter(categoryMatches),{from,to,mode:requested,includeUndated:true}).filter(e=>e.type===query.type&&(!query.keywords?.length||query.keywords.some(k=>normalize(e.description).includes(normalize(k)))));
+      if(upcoming.length)answer+=`\n\nValores ainda a ${query.type==="income"?"receber":"pagar"} (fora do total realizado):\n${upcoming.slice(0,20).map(e=>`${bankDate(e.dueDate)} · ${e.description.replace(/[\r\n*`_~<>]/g," ").slice(0,160)} · ${bankMoney(e.amount,"BRL")}${e.registeredByName?` · ${financeAuthorLabel(e)}`:""}`).join("\n")}${upcoming.length>20?"\nConsulte as demais pendências em Finanças.":""}`;
     }
     if(ai.intent==="finance_detail"&&!categoryBreakdown&&!plainSpendingSummary&&query.type==="expense"&&!query.category&&query.source!=="account"){
       const agenda=await readBankAgenda(user,requested,{from,to,includeUndated:true});
