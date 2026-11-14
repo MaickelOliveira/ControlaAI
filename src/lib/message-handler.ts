@@ -45,7 +45,7 @@ import {
   removeShoppingItem, updateShoppingItem,
   type GroceryPurchaseItem, type GroceryCategory,
 } from "@/lib/grocery";
-import { createEmployee, getEmployeesByUser, getTotalPayroll, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
+import { createEmployee, getEmployeesByUser, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { getContactsByUser, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels, choicesByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
@@ -4430,15 +4430,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "goal_query": {
-        const goals = await getActiveGoals(user.id, mode);
-        if (!goals.length) {
+        const queryMode = ai.mode ?? mode;
+        if (!allowsFinanceMode(queryMode)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); break; }
+        const title = ai.keyword ?? ai.goal?.title;
+        const goals = title ? await findGoalsByTitle(user.id, title, queryMode) : await getActiveGoals(user.id, queryMode);
+        if (!goals.length && title) {
+          await wppSend(from, localized(user.locale, `🎯 Não encontrei uma meta ativa com esse nome.`, `🎯 No encontré una meta activa con ese nombre.`));
+        } else if (!goals.length) {
           await wppSend(from, `🎯 Nenhuma meta ativa.\n\nCrie uma: _"Meta: guardar 5000 para viagem até dezembro"_`);
         } else {
           let msg = `🎯 *Suas metas ativas (${goals.length}):*\n\n`;
           goals.forEach((g, i) => {
             const pct = getGoalProgress(g);
             const bar = "█".repeat(Math.floor(pct / 10)) + "░".repeat(10 - Math.floor(pct / 10));
-            msg += `${i + 1}. *${g.title}*\n   ${bar} ${pct}%\n   ${formatCurrency(g.currentAmount)} / ${formatCurrency(g.targetAmount)}\n\n`;
+            msg += `${i + 1}. *${g.title}*\n   ${bar} ${pct}%\n   ${formatCurrency(g.currentAmount)} / ${formatCurrency(g.targetAmount)}${title ? `\n   ${localized(user.locale, "Falta juntar", "Falta ahorrar")}: ${formatCurrency(Math.max(0, g.targetAmount - g.currentAmount))}` : ""}\n\n`;
           });
           await wppSend(from, msg.trim());
         }
@@ -5071,8 +5076,16 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "employee_list": {
+        const name = ai.keyword ?? ai.employee?.name;
+        if (name) {
+          const employees = await findEmployeesByName(user.id, name);
+          await wppSendLong(from, employees.length
+            ? employees.map(employee => `• *${employee.name}* — ${employee.role} — ${formatCurrency(employee.salary)}`).join("\n")
+            : localized(user.locale, "Não encontrei um funcionário ativo com esse nome.", "No encontré un empleado activo con ese nombre."));
+          break;
+        }
         const employees = await getEmployeesByUser(user.id, "active");
-        const totalPayroll = await getTotalPayroll(user.id);
+        const totalPayroll = employees.reduce((sum, employee) => sum + employee.salary, 0);
         await wppSend(from, replyEmployeeList(employees, totalPayroll, user.locale));
         break;
       }

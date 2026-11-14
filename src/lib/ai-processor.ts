@@ -1118,6 +1118,11 @@ export function getExplicitGroceryListAddResult(message: string): AIResult | nul
 export function getExplicitGroceryListManagementResult(message: string): AIResult | null {
   const text = message.trim().replace(/[\\]+$/, "").trim();
   const normalized = normalizeCapabilityText(text);
+  const picked = text.match(/^lia[, :]+(?:j[áa]\s+)?peguei\s+(.+?)[.!]*$/i)?.[1];
+  if (picked) {
+    const itemNames = picked.split(/\s*,\s*|\s+e\s+/i).map(item => item.replace(/^(?:o|a|os|as)\s+/i, "").trim()).filter(Boolean);
+    if (itemNames.length) return { intent: "grocery_list_check", confidence: 1, grocery: { itemNames } };
+  }
   const mentionsList = /\blista\b.*\b(compras?|supermercado|mercado|whatsapp)\b|\b(?:minha|mi)\s+lista\b|\blista\s+(?:inteira|completa)\b|\blista\s*$/.test(normalized);
   if (!mentionsList) return null;
 
@@ -1543,7 +1548,7 @@ export function getExplicitDriveRenameResult(message: string): AIResult | null {
 export function getExplicitDriveSearchResult(message: string): AIResult | null {
   const normalized = normalizeCapabilityText(message.trim());
   const fileSubject = /\b(?:arquivos?|archivos?|ficheiros?|drive|pdf|documentos?|comprovantes?|comprobantes?|facturas?|faturas?|contrato)\b/.test(normalized);
-  const query = /\b(?:busca|buscar|busque|encontra|encontrar|encuentra|encontrar|procura|procurar|mostra|mostrar|muestra|muestrame|lista|listar)\b/.test(normalized);
+  const query = /\b(?:busca|buscar|busque|encontra|encontre|encontrar|encuentra|procura|procurar|mostra|mostrar|muestra|muestrame|lista|listar)\b/.test(normalized) || /^(?:dora[, :]+)?(?:me (?:manda|mande|envia|envie)|(?:manda|mande|envia|envie)-me)\b/.test(normalized);
   const mutation = /\b(?:renomeia|renomear|renombra|renombrar|cambia|cambiar|muda|mudar|pon|poner|elimina|eliminar|apaga|apagar)\b/.test(normalized);
   if (!fileSubject || !query || mutation) return null;
   return { intent: "drive_search", confidence: 1, keyword: message.trim().replace(/[.!?]+$/, "") };
@@ -1843,7 +1848,9 @@ export function getExplicitEmployeeCrudResult(message: string): AIResult | null 
     return { intent: "employee_create", confidence: 1, employee };
   }
 
-  const list = hasEmployeeWord && /\b(?:mostr(?:a|ar|e)|list(?:a|ar|e)|ver|consult(?:a|ar|e)|quantos?|cuantos?|meus|minhas|mis|todos?|todas?)\b/.test(normalized);
+  const person = text.match(/^(?:hugo[, :]+)?(?:qual (?:é |e )?(?:o )?(?:sal[aá]rio|cargo)|(?:mostre|abra|consulte) (?:a )?ficha)\s+(?:do|da|de)\s+(?:(?:funcionári[oa]|funcionari[oa]|colaborador[ae]?)\s+)?(.+?)[?.!]*$/i)?.[1];
+  if (person && (hasEmployeeWord || /^hugo\b/i.test(normalized))) return { intent: "employee_list", confidence: 1, keyword: person.trim() };
+  const list = hasEmployeeWord && /\b(?:mostr(?:a|ar|e)|list(?:a|ar|e)|ver|consult(?:a|ar|e)|quantos?|cuantos?|quanto somam|quem (?:esta|faz parte)|meus|minhas|mis|todos?|todas?)\b/.test(normalized);
   return list ? { intent: "employee_list", confidence: 1 } : null;
 }
 
@@ -1895,7 +1902,7 @@ export function getExplicitCustomerCrudResult(message: string): AIResult | null 
     && !/\b(?:busca|buscar|procura|procurar|datos|dados)\b/.test(normalized);
   if (list) return { intent: "customer_list", confidence: 1 };
 
-  const query = /\b(?:busca|buscar|procura|procurar|encontra|encontrar|dados|datos|informacoes|informaciones|mostr(?:a|ar|e)|ver|consulta|consultar)\b/.test(normalized);
+  const query = /\b(?:busca|busque|buscar|procura|procure|procurar|encontra|encontre|encontrar|ficha|dados|datos|informacoes|informaciones|mostr(?:a|ar|e)|ver|consulta|consultar)\b/.test(normalized);
   return query ? { intent: "customer_query", confidence: 1, ...(name ? { keyword: name, customer } : {}) } : null;
 }
 
@@ -2365,7 +2372,7 @@ INTENÇÕES POSSÍVEIS:
 - reminder_delete: cancelar/apagar um lembrete ("cancela o lembrete do remédio", "apaga o lembrete da reunião", "não precisa mais me lembrar disso"). Use "keyword" com o termo de busca.
 - goal_create: criar uma ou várias metas financeiras. Use "goal" para uma e "goals" para várias. Em cada item inclua title e targetAmount; inclua currentAmount quando informado.
 - goal_add: adicionar valor a uma meta EXISTENTE ("adicionei X na meta", "coloquei X para X", "juntei mais X")
-- goal_query: ver metas ("minhas metas", "metas", "quais são meus objetivos")
+- goal_query: ver metas ("minhas metas", "quais são meus objetivos", "quanto já juntei para a viagem e quanto falta?"). Quando citar uma meta, use "keyword" com o nome da meta.
 - goal_complete: concluir uma meta ("concluí meta", "meta atingida", "atingi o objetivo", "meta viagem concluída"). SEMPRE inclua "title" com o nome da meta.
 - goal_cancel: cancelar/desistir de uma meta ("cancela a meta da viagem", "desisti de juntar pra isso", "apaga essa meta"). Use "keyword" com o nome da meta.
 - recurring_create: cadastrar uma ou várias despesas/receitas parceladas ou recorrentes. Use "recurring" para uma e "recurrings" para várias. Use recurrenceType: "installment" para parcelamentos e "recurring" para recorrentes contínuos. Campos que ajudam MUITO se a mensagem trouxer (extraia sempre que possível, mas não invente se não tiver pista):
@@ -4255,6 +4262,10 @@ function explicitFuelOrHistory(message: string): AIResult | null {
  * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
   const explicitQuery = explicitFuelOrHistory(message) ?? explicitFinanceAuthorQuestion(message);
+  const goalProgress = message.trim().match(/^(?:nina[, :]+)?quanto (?:já |ja )?(?:juntei|guardei) (?:para|pra) (?:a |o )?(.+?)(?: e quanto falta)?[?.!]*$/i);
+  if (goalProgress && (/^nina\b/i.test(message) || /\bmeta\b/i.test(goalProgress[1]) || /\be quanto falta\b/i.test(message))) {
+    return { intent: "goal_query", confidence: 1, keyword: goalProgress[1].replace(/^meta (?:da |do |de )?/i, "") };
+  }
   if (explicitQuery) return explicitQuery;
   const scopedRead = getScopedModeReadResult(message);
   if (scopedRead) return scopedRead;
