@@ -80,9 +80,9 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
       activate(user.id,personal,"personal",link.access,archivedCompanyIds);
       await sendText(msg.from,replyModeSwitch("personal",user.locale));return;
     }
-    if (mode==="business" && link.activeCompanyId && !selected) {
+    if (mode==="business" && link.activeCompanyId && !selected && !companyCommand) {
       await clearPendingAction(msg.from);
-      await sendText(msg.from,es?"La empresa seleccionada ya no está activa. Elige otra empresa antes de repetir el pedido.":"A empresa selecionada não está mais ativa. Escolha outra antes de repetir o pedido.");return;
+      await sendText(msg.from,es?"La empresa seleccionada ya no está activa. Usa *cambiar empresa* antes de repetir el pedido.":"A empresa selecionada não está mais ativa. Use *trocar empresa* antes de repetir o pedido.");return;
     }
     const pendingMode=pending?.workspaceMode??(pending&&"mode" in pending&&(pending.mode==="personal"||pending.mode==="business")?pending.mode:undefined);
     if(pendingMode&&pendingMode!==mode&&!companyCommand){
@@ -114,10 +114,20 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
       }
       await clearPendingAction(msg.from);await sendText(msg.from,es?"No hay empresas activas. Registra o restaura una en Zelo antes de hacer pedidos empresariales.":"Você não tem empresas ativas. Cadastre ou restaure uma na Zelo antes de fazer pedidos empresariais.");return;
     }
+    if (listCommand && companies.length === 1) {
+      await sendText(msg.from, es ? `Tu empresa: *${companies[0].name}*.` : `Sua empresa: *${companies[0].name}*.`);
+      return;
+    }
     if (listCommand) { await ask(); return; }
     if (switchCommand || pending?.type === "company_selection") {
       if (link.access === "personal") { await clearPendingAction(msg.from); const personal=await requireCompany(user.id);activate(user.id,personal,"personal",link.access,archivedCompanyIds);return next(msg); }
-      const choice = companyChoice(switchCommand?.[1] ?? text, companies);
+      const choice = switchCommand && !switchCommand[1] && companies.length === 1
+        ? companies[0].id
+        : companyChoice(switchCommand?.[1] ?? text, companies);
+      if (!choice && companies.length === 1) {
+        await sendText(msg.from, es ? `La empresa activa es *${companies[0].name}*. Escribe su nombre para seleccionarla.` : `A empresa ativa é *${companies[0].name}*. Digite o nome para selecionar.`);
+        return;
+      }
       if (!choice) { await ask(pending?.type === "company_selection" && pending.resume ? {
         from: msg.from, ...pending.resume, fileBuffer: pending.resume.fileBase64 ? Buffer.from(pending.resume.fileBase64, "base64") : undefined,
       } : undefined); return; }
@@ -138,7 +148,7 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
       && (mode === "business" || asksForBusinessWorkspace(text))) {
       await ask(msg); return;
     }
-    if (!selected && mode === "business" && companies.length > 0) { await ask(msg); return; }
+    if (!selected && mode === "business" && companies.length > 1) { await ask(msg); return; }
     selected ??= companies.find(company => company.isDefault)??companies[0];
     if (!selected) throw Error("COMPANY_NOT_FOUND");
     if (!link.activeCompanyId || !link.activeWorkspaceMode) await setPhoneWorkspace(user.id, link.phone, selected.id, mode);

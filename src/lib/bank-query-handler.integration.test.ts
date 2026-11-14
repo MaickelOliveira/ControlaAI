@@ -29,7 +29,7 @@ beforeEach(() => {
   m.accounts.mockResolvedValue([]);
   m.rpc.mockResolvedValue({ connections: [{ id: "nu", institution_name: "Nubank", status: "active" }], resources: [{ id: "loan", connection_id: "nu", resource_type: "loan", name: "Crédito pessoal", synced_at: "2026-10-11" }, { id: "card", connection_id: "nu", resource_type: "card", name: "Platinum", synced_at: "2026-10-11" }], credit: [{ resource_id: "loan", currency: "BRL", outstanding_amount: "1200.10", contract_amount: "5000" }], limits: [{ resource_id: "card", line_name: "Crédito à vista", currency: "BRL", available_amount: "1245.92", total_amount: "2000", used_amount: "754.08" }], bills: [], sync: [] });
 });
-it("lets Rita confirm exactly one ambiguous bank debit without registering, editing or deleting a purchase",async()=>{
+it("classifies the one matching bank debit directly when the user supplied date, amount and bank",async()=>{
  const day="2026-11-13",id="00000000-0000-4000-8000-000000000001";
  const row={id,date:day,amount:"2801.72",currency:"BRL",resource_type:"account",direction:"debit",kind:"account_debits",institution_name:"Banco Santander Pessoa Física",description:"DÉBITO AUTOMÁTICO"};
  m.rpc.mockImplementation(async(_scope,name)=>name==="zelo_of_set_movement_category"?true:{movements:[
@@ -37,15 +37,10 @@ it("lets Rita confirm exactly one ambiguous bank debit without registering, edit
   {...row,id:"00000000-0000-4000-8000-000000000003",institution_name:"Nubank",description:"Outro banco"},
  ],next:null});
  await handleIncomingMessage({from:"5511999990000",text:"Rita, marque o pagamento de R$ 2.801,72 de 13/11/2026 no Santander como pagamento de fatura."});
- const draft=m.setPending.mock.calls[0]?.[1];
- expect(draft).toMatchObject({type:"finance_bill_payment",mode:"personal",day,amount:2801.72,movementIds:[id]});
+ expect(m.setPending).not.toHaveBeenCalled();
  const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
- expect(reply).toContain("DÉBITO AUTOMÁTICO");
  expect(reply).not.toContain("Compra legítima");
  expect(reply).not.toContain("Outro banco");
- expect(m.rpc.mock.calls.some(call=>call[1]==="zelo_of_set_movement_category")).toBe(false);
- m.pending.mockResolvedValue(draft);
- await handleIncomingMessage({from:"5511999990000",text:"1"});
  expect(m.rpc).toHaveBeenLastCalledWith(expect.objectContaining({userId:"holder",mode:"personal"}),"zelo_of_set_movement_category",{p_movement:id,p_category:"Pagamento de fatura"});
  expect(m.send.mock.calls.at(-1)?.[1]).toContain("continua no extrato e fica fora das despesas");
  expect(m.send.mock.calls.every(call=>call[2]?.privateFinancial)).toBe(true);

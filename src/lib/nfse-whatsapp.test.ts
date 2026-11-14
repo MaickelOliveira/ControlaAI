@@ -18,9 +18,9 @@ it("blocks personal/unlinked numbers before any fiscal lookup", async () => {
  expect(await handleFiscalWhatsApp(user, "business", "phone", "emita uma nota fiscal", null)).toBe(true);
  expect(mocks.overview).not.toHaveBeenCalled();
 });
-it("starts a company-bound draft and never announces a fiscal document as issued", async () => {
+it("uses the only registered service and starts collecting the recipient for a draft", async () => {
  expect(await handleFiscalWhatsApp(user, "business", "phone", "emita uma nota fiscal", null)).toBe(true);
- expect(mocks.pending).toHaveBeenCalledWith("phone", expect.objectContaining({ type: "nfse_draft", userId: "owner", stage: "service" }));
+ expect(mocks.pending).toHaveBeenCalledWith("phone", expect.objectContaining({ type: "nfse_draft", userId: "owner", stage: "recipient", serviceId: "service" }));
  expect(mocks.send.mock.calls[0][1]).toContain("rascunho");
  expect(mocks.create).not.toHaveBeenCalled();
 });

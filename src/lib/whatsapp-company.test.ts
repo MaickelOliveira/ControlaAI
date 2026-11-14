@@ -114,10 +114,19 @@ it("leaves a paused conversation and a disabled feature untouched", async () => 
 it("does not guess similar company names", () => {
   expect(companyChoice("Empresa", companies)).toBeUndefined(); expect(companyChoice("2", companies)).toBe("b"); expect(companyChoice("empresa a", companies)).toBe("a");
 });
-it("does not silently move a participant to another company after removal",async()=>{
+it("uses the sole active company for a participant who has no company selected",async()=>{
  m.links.mockResolvedValue([{phone:"5511",access:"both"}]);m.list.mockResolvedValue([{id:"a",name:"Old",isDefault:false,archivedAt:"2026-10-11"},companies[1]]);
  const next=vi.fn();await withWhatsAppCompany({from:"5511",text:"gastei 20"},next);
- expect(next).not.toHaveBeenCalled();expect(m.savePending).toHaveBeenCalledWith("5511",expect.objectContaining({type:"company_selection"}));expect(m.send).toHaveBeenCalledWith("5511",expect.not.stringContaining("Old"));
+ expect(next).toHaveBeenCalledOnce();expect(m.savePending).not.toHaveBeenCalled();expect(m.scope).toHaveBeenCalledWith(expect.objectContaining({companyId:"b", mode:"business", archivedCompanyIds:["a"]}));
+});
+it("switches directly to the only company and respects an explicitly different name", async () => {
+  m.list.mockResolvedValue([companies[0]]);
+  const next = vi.fn();
+  await withWhatsAppCompany({ from: "5511", text: "trocar empresa Outra" }, next);
+  expect(m.workspace).not.toHaveBeenCalled();
+  await withWhatsAppCompany({ from: "5511", text: "trocar empresa" }, next);
+  expect(m.workspace).toHaveBeenCalledExactlyOnceWith("owner", "5511", "a", "business");
+  expect(m.savePending).not.toHaveBeenCalled();
 });
 it("keeps personal requests working when every enterprise is archived and refuses business requests",async()=>{
  m.list.mockResolvedValue([{...companies[0],archivedAt:"2026-10-11"}]);m.links.mockResolvedValue([{phone:"5511",access:"both",activeWorkspaceMode:"personal"}]);

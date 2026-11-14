@@ -2,7 +2,7 @@ import { describe, it, expect,vi } from "vitest";
 vi.mock("server-only",()=>({}));
 import { accountSelectionMessage, appointmentPatchFromAi, buildFirstUseGuideMessages, documentAccountHintFromCaption, getSettledFinanceReference, hasSettledFinanceSignal, listNumberLabel, parseImageAction, parseLinkedPhoneAccess, phoneMatches, replyPhoneNotLinked, replyProcessingError, replyWppLinkStep, shouldTryItemizedInvoice, splitWhatsAppMessage } from "./message-handler";
 import { parseFinanceDestinationMode } from "./finances";
-import { parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
+import { choiceIndexByLabels, parseAccountDefaultChoice, parseFinanceChoiceMulti, parseFinancePatchFromText } from "./pending-actions";
 import { replyHelp } from "./bot-replies";
 
 describe("phoneMatches", () => {
@@ -170,6 +170,16 @@ describe("account selection guidance", () => {
   const accounts = [
     { id: "cash", userId: "u1", mode: "personal" as const, name: "Dinheiro", type: "bank" as const, isDefault: true, createdAt: "2026-09-10" },
   ];
+
+  accounts.push({ ...accounts[0], id: "inter", name: "Inter", isDefault: false });
+
+  it("asks for the specific option when partial names are ambiguous", () => {
+    const options = ["Banco Inter", "Inter Empresa", "Itaú"];
+    expect(choiceIndexByLabels("Inter", options, item => [item])).toBe(-1);
+    expect(choiceIndexByLabels("2", options, item => [item])).toBe(1);
+    expect(choiceIndexByLabels("itau", options, item => [item])).toBe(2);
+    expect(choiceIndexByLabels("", options, item => [item])).toBe(-1);
+  });
 
   it("explains how to register a new account in Portuguese", () => {
     const message = accountSelectionMessage(accounts, "pt-BR");

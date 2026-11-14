@@ -32,11 +32,6 @@ function hasReminderChange(ai: AIResult): boolean {
   return !!(ai.reminder?.message || ai.reminder?.scheduledAt || ai.reminder?.repeat);
 }
 
-function hasAgendaChange(ai: AIResult): boolean {
-  const agenda = ai.agendaData;
-  return !!(agenda?.title || agenda?.description || agenda?.location || agenda?.startDate || agenda?.startTime || agenda?.endDate || agenda?.endTime || agenda?.allDay !== undefined || agenda?.reminderMinutesBefore !== undefined);
-}
-
 function hasEmployeeChange(ai: AIResult): boolean {
   const employee = ai.employee;
   return !!(employee?.newName || employee?.role || employee?.salary || employee?.startDate || employee?.phone || employee?.email || employee?.notes);
@@ -90,12 +85,7 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
     case "account_create":
       return hasText(ai.account?.name) ? null : say(locale, "🏦 Qual nome deseja dar à conta?", "🏦 ¿Qué nombre quieres darle a la cuenta?");
     case "account_update":
-      if (!hasText(ai.account?.name)) return say(locale, "🏦 Qual conta deseja renomear?", "🏦 ¿Qué cuenta quieres renombrar?");
       return hasText(ai.account?.newName) ? null : say(locale, "✏️ Qual será o novo nome da conta?", "✏️ ¿Cuál será el nuevo nombre de la cuenta?");
-    case "account_delete":
-      return hasText(ai.account?.name) ? null : say(locale, "🗑️ Qual conta deseja excluir?", "🗑️ ¿Qué cuenta quieres eliminar?");
-    case "account_set_default":
-      return hasText(ai.account?.name) ? null : say(locale, "⭐ Qual conta deseja definir como padrão?", "⭐ ¿Qué cuenta quieres establecer como predeterminada?");
 
     case "task_create": {
       const tasks = ai.tasks?.length ? ai.tasks : ai.task ? [ai.task] : [];
@@ -108,27 +98,18 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
           `📌 ¿Cuál es la tarea${tasks.length > 1 ? ` del elemento ${missing + 1}` : ""}?`);
     }
     case "task_update":
-      if (!ai.task?.taskNumber && !hasText(ai.task?.title)) return say(locale, "📌 Qual tarefa deseja alterar ou concluir?", "📌 ¿Qué tarea quieres cambiar o completar?");
       if (!hasTaskChange(ai) && !/\b(conclu|concluir|complete|completar|finaliz|termin|feito|hecho)\w*/i.test(sourceText)) {
         return say(locale, "✏️ O que deseja alterar nessa tarefa?", "✏️ ¿Qué quieres cambiar en esa tarea?");
       }
       return null;
-    case "task_delete":
-      return ai.task?.taskNumber || hasText(ai.task?.title) ? null : say(locale, "🗑️ Qual tarefa deseja excluir?", "🗑️ ¿Qué tarea quieres eliminar?");
 
     case "reminder_update":
-      if (!hasText(ai.keyword)) return say(locale, "🔔 Qual lembrete deseja alterar?", "🔔 ¿Qué recordatorio quieres cambiar?");
       return hasReminderChange(ai) ? null : say(locale, "✏️ O que deseja alterar nesse lembrete: mensagem, data, horário ou repetição?", "✏️ ¿Qué quieres cambiar en ese recordatorio: mensaje, fecha, hora o repetición?");
-    case "reminder_delete":
-      return hasText(ai.keyword) ? null : say(locale, "🗑️ Qual lembrete deseja excluir?", "🗑️ ¿Qué recordatorio quieres eliminar?");
 
     case "goal_add": {
       const amount = ai.goal?.targetAmount ?? (ai.goal as unknown as Record<string, number> | undefined)?.amount ?? ai.finance?.amount;
       return typeof amount === "number" && amount > 0 ? null : say(locale, "💰 Qual valor deseja adicionar à meta?", "💰 ¿Qué importe quieres añadir a la meta?");
     }
-    case "goal_complete":
-    case "goal_cancel":
-      return hasText(ai.keyword) || hasText(ai.goal?.title) ? null : say(locale, "🎯 Qual meta?", "🎯 ¿Qué meta?");
 
     case "vehicle_expense": {
       const amount = ai.vehicle?.amount ?? ai.finance?.amount;
@@ -137,60 +118,29 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
 
     case "grocery_list_add":
       return ai.grocery?.template || ai.grocery?.items?.length ? null : say(locale, "🛒 Quais produtos deseja adicionar à lista?", "🛒 ¿Qué productos quieres añadir a la lista?");
-    case "grocery_list_remove":
-      return ai.grocery?.itemNames?.length ? null : say(locale, "🗑️ Qual produto deseja remover da lista?", "🗑️ ¿Qué producto quieres eliminar de la lista?");
-    case "grocery_list_check":
-      return ai.grocery?.itemNames?.length ? null : say(locale, "✅ Qual produto deseja marcar como comprado?", "✅ ¿Qué producto quieres marcar como comprado?");
     case "grocery_list_edit":
-      if (!ai.grocery?.itemNames?.length) return say(locale, "✏️ Qual produto da lista deseja alterar?", "✏️ ¿Qué producto de la lista quieres cambiar?");
-      return ai.grocery.newProductName || ai.grocery.newQuantity || ai.grocery.newCategory
+      return ai.grocery?.newProductName || ai.grocery?.newQuantity || ai.grocery?.newCategory
         ? null
         : say(locale, "✏️ O que deseja alterar nesse produto: nome, quantidade ou categoria?", "✏️ ¿Qué quieres cambiar en ese producto: nombre, cantidad o categoría?");
     case "grocery_price_compare":
       return hasText(ai.grocery?.productName) ? null : say(locale, "💲 De qual produto deseja comparar o preço?", "💲 ¿De qué producto quieres comparar el precio?");
 
     case "employee_update":
-      if (!hasText(ai.keyword) && !hasText(ai.employee?.name)) return say(locale, "👤 Qual funcionário deseja alterar?", "👤 ¿Qué empleado quieres cambiar?");
       return hasEmployeeChange(ai) ? null : say(locale, "✏️ O que deseja alterar nesse funcionário?", "✏️ ¿Qué quieres cambiar en ese empleado?");
-    case "employee_deactivate":
-      return hasText(ai.keyword) || hasText(ai.employee?.name) ? null : say(locale, "👤 Qual funcionário deseja desativar?", "👤 ¿Qué empleado quieres desactivar?");
 
-    case "customer_query":
-      return hasText(ai.keyword) || hasText(ai.customer?.name) ? null : say(locale, "🧾 De qual cliente deseja consultar os dados?", "🧾 ¿De qué cliente quieres consultar los datos?");
     case "customer_update":
-      if (!hasText(ai.keyword) && !hasText(ai.customer?.name)) return say(locale, "🧾 Qual cliente deseja alterar?", "🧾 ¿Qué cliente quieres cambiar?");
       return hasCustomerChange(ai) ? null : say(locale, "✏️ O que deseja alterar nesse cliente?", "✏️ ¿Qué quieres cambiar en ese cliente?");
-    case "customer_deactivate":
-      return hasText(ai.keyword) || hasText(ai.customer?.name) ? null : say(locale, "🧾 Qual cliente deseja desativar?", "🧾 ¿Qué cliente quieres desactivar?");
 
-    case "contact_query":
-      return hasText(ai.keyword) || hasText(ai.contact?.name) ? null : say(locale, "📇 De qual contato deseja consultar os dados?", "📇 ¿De qué contacto quieres consultar los datos?");
     case "contact_update":
-      if (!hasText(ai.keyword) && !hasText(ai.contact?.name)) return say(locale, "📇 Qual contato deseja alterar?", "📇 ¿Qué contacto quieres cambiar?");
       return hasContactChange(ai) ? null : say(locale, "✏️ O que deseja alterar nesse contato?", "✏️ ¿Qué quieres cambiar en ese contacto?");
-    case "contact_deactivate":
-      return hasText(ai.keyword) || hasText(ai.contact?.name) ? null : say(locale, "📇 Qual contato deseja apagar?", "📇 ¿Qué contacto quieres borrar?");
 
     case "finance_transfer":
       if (!ai.transfer?.toMode) return say(locale, "🔄 Transferir para qual conta: pessoal ou empresarial?", "🔄 ¿Transferir a qué cuenta: personal o empresarial?");
       return ai.transfer?.amount ? null : say(locale, "🔄 Qual o valor da transferência?", "🔄 ¿Cuál es el monto de la transferencia?");
 
-    case "recurring_cancel":
-      return hasText(ai.keyword) ? null : say(locale, "🔁 Qual recorrente ou parcela deseja cancelar?", "🔁 ¿Qué movimiento recurrente o cuota quieres cancelar?");
     case "recurring_edit":
-      if (!hasText(ai.keyword) && !hasText(ai.recurring?.description)) return say(locale, "🔁 Qual recorrente ou parcela deseja alterar?", "🔁 ¿Qué movimiento recurrente o cuota quieres cambiar?");
       return hasRecurringChange(ai) ? null : say(locale, "✏️ O que deseja alterar nesse recorrente?", "✏️ ¿Qué quieres cambiar en ese movimiento recurrente?");
 
-    case "finance_confirm_pending":
-      return hasText(ai.keyword) ? null : say(locale, "⏳ Qual lançamento agendado deseja confirmar?", "⏳ ¿Qué movimiento programado quieres confirmar?");
-
-    case "agenda_update":
-      if (!hasText(ai.keyword)) return say(locale, "📅 Qual compromisso deseja alterar?", "📅 ¿Qué cita quieres cambiar?");
-      return hasAgendaChange(ai) ? null : say(locale, "✏️ O que deseja alterar nesse compromisso?", "✏️ ¿Qué quieres cambiar en esa cita?");
-    case "agenda_delete":
-      return hasText(ai.keyword) ? null : say(locale, "🗑️ Qual compromisso deseja cancelar?", "🗑️ ¿Qué cita quieres cancelar?");
-    case "agenda_done":
-      return hasText(ai.keyword) ? null : say(locale, "✅ Qual compromisso deseja marcar como realizado?", "✅ ¿Qué cita quieres marcar como realizada?");
 
     case "meet_create":
       {
