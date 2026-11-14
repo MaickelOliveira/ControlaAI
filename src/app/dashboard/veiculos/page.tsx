@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { fetchDashboardMe } from "@/lib/dashboard-me-client";
 
-type VehicleExpense = { id: string; date: string; km?: number; type: string; amount: number; description: string; financeId?: string };
+type VehicleExpense = { id: string; date: string; km?: number; liters?: number; type: string; amount: number; description: string; financeId?: string };
 type Vehicle = { id: string; plate: string; brand: string; model: string; year: number; fuelType: string; currentKm: number; mode: string; expenses: VehicleExpense[] };
 
 function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -159,7 +159,7 @@ export default function VeiculosPage() {
                             <span>{TYPE_EMOJI[e.type] || "📌"}</span>
                             <div>
                               <p className="text-sm text-ink">{e.description || TYPE_LABEL[e.type]}</p>
-                              <p className="text-xs text-subtle">{new Date(e.date + "T12:00:00").toLocaleDateString("pt-BR")}{e.km ? ` · ${e.km.toLocaleString()} km` : ""}</p>
+                              <p className="text-xs text-subtle">{new Date(e.date + "T12:00:00").toLocaleDateString("pt-BR")}{e.liters ? ` · ${e.liters.toLocaleString("pt-BR")} ${e.liters === 1 ? "litro" : "litros"}` : ""}{e.km ? ` · ${e.km.toLocaleString("pt-BR")} km` : ""}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">

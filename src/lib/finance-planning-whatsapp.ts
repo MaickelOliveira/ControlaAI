@@ -6,6 +6,8 @@ import {monthRange} from "./calendar-range";
 import {bankScheduleInExpensePeriod} from "./finance-expense-plan";
 import {createFinanceLedger} from "./finance-ledger";
 import {readBankInstallmentAnchors,readBankLedger} from "./finance-ledger-storage";
+import {financeAuthorLabel,identifyFinanceAuthors} from "./finance-attribution";
+import type {WppPhoneLink} from "./wpp-phone-links";
 import {financePeriodExpenses} from "./finance-period-expenses";
 import {getFinancesInRangeStrict,type FinanceMode} from "./finances";
 import {getOpenFinanceAccess,type OpenFinanceIdentity} from "./open-finance-access";
@@ -42,7 +44,7 @@ export function parseCardInstallmentsQuestion(message:string,today:string){
  return {period,last4,target,mode,compareModes:/\b(?:empresa|empresarial|pj)\b/.test(text)&&/\b(?:pessoal|pf)\b/.test(text)};
 }
 
-async function readPlanning(user:OpenFinanceIdentity,mode:FinanceMode,period:Period,cardOnly=false){
+async function readPlanning(user:OpenFinanceIdentity,mode:FinanceMode,period:Period,cardOnly=false,authors?:{name:string;participants:readonly WppPhoneLink[]}){
  const bankEnabled=process.env.OPEN_FINANCE_WHATSAPP_ENABLED==="true";
  const scope=bankEnabled?await getOpenFinanceAccess(user,mode,{throwOnStorageError:true}):null;
  const [records,recurring,bank,installmentAnchors]=await Promise.all([
@@ -51,19 +53,20 @@ async function readPlanning(user:OpenFinanceIdentity,mode:FinanceMode,period:Per
   scope?readBankLedger(scope,period):null,
   scope?readBankInstallmentAnchors(scope):undefined,
  ]);
- const finances=createFinanceLedger(records,bank?.report.movements??[],mode);
+ const named=authors?identifyFinanceAuthors(records,{id:user.id,name:authors.name},authors.participants):records;
+ const finances=createFinanceLedger(named,bank?.report.movements??[],mode);
  const label=mode==="personal"?"Pessoal":`Empresa${scope?.companyName?` · ${safe(scope.companyName)}`:""}`;
  const incomplete=!!(bank?.report.sync_pending||bank?.overview.truncated||bank?.overview.agenda?.incomplete||installmentAnchors?.incomplete);
  return {ledger:{finances,bank,installmentAnchors},recurring,label,incomplete,bankEnabled};
 }
 
-export async function answerFinancePlanning(user:OpenFinanceIdentity,mode:FinanceMode,from:string,to:string,today:string){
+export async function answerFinancePlanning(user:OpenFinanceIdentity,mode:FinanceMode,from:string,to:string,today:string,details?:{name:string;participants:readonly WppPhoneLink[]}){
  let period:Period;
  try{period=bankPeriod(from,to);}catch{return "Escolha um período válido de até 366 dias para conferir suas despesas.";}
  try{
-  const {ledger,recurring,label,incomplete,bankEnabled}=await readPlanning(user,mode,period);
+  const {ledger,recurring,label,incomplete,bankEnabled}=await readPlanning(user,mode,period,false,details);
   const {expensePlan}=financePeriodExpenses(ledger,recurring,{...period,type:"expense",categories:[],search:""},today);
-  const {forecast,recorded,total,groups,unquantified}=expensePlan;
+  const {forecast,recorded,total,groups,unquantified,forecastItems}=expensePlan;
   const partial=incomplete||unquantified>0||!bankEnabled;
   const lines=[
    `*Despesas do período* · ${label} · ${dateRange(from,to)}`,
@@ -72,6 +75,14 @@ export async function answerFinancePlanning(user:OpenFinanceIdentity,mode:Financ
    `${partial?"Total com os valores disponíveis":"Total de despesas"}: *${money(total)}*`,
    ...groups.map(group=>`• ${safe(group.name)}: ${money(group.value)}${group.forecast&&group.forecast!==group.value?` (${money(group.forecast)} previstos)`:""}`),
   ];
+  if(details&&forecastItems.length){
+   lines.push("", "*O que compõe o valor previsto*");
+   for(const item of forecastItems.slice(0,30)){
+    const author=financeAuthorLabel(item);
+    lines.push(`• ${safe(item.description)} · ${money(item.amount)}${author?` · ${author}`:""}`);
+   }
+   if(forecastItems.length>30)lines.push(`Mais ${forecastItems.length-30} previsões em Finanças.`);
+  }
   if(unquantified)lines.push(`${unquantified} previsão(ões) fora da soma em reais por valor, moeda ou período a conferir.`);
   if(incomplete)lines.push("A atualização dos bancos está incompleta. O total pode mudar.");
   if(!bankEnabled)lines.push("A consulta bancária pelo WhatsApp está indisponível. Os valores acima vêm dos registros da Zelo.");

@@ -1397,3 +1397,16 @@ describe("limpar todas as receitas/despesas", () => {
     expect(getExplicitFinanceClearByTypeResult("apaga isso")).toBeNull();
   });
 });
+
+
+it.each([
+  ["Dora, me mande o contrato da reforma da cozinha.", { intent: "drive_search" }],
+  ["Lia, estou no supermercado. O que falta comprar na minha lista?", { intent: "grocery_list_show" }],
+  ["Lia, já peguei o leite.", { intent: "grocery_list_check", grocery: { itemNames: ["leite"] } }],
+  ["Nina, quanto já juntei para a viagem e quanto falta?", { intent: "goal_query", keyword: "viagem" }],
+  ["Hugo, quem está na minha equipe e quanto somam os salários?", { intent: "employee_list" }],
+  ["Hugo, qual é o salário da Joana?", { intent: "employee_list", keyword: "Joana" }],
+  ["Clara, encontre a ficha da cliente Ana Prado.", { intent: "customer_query", keyword: "Ana Prado" }],
+])("reconhece o exemplo da página e usa a consulta correspondente: %s", async (message, expected) => {
+  expect(await processMessage(message)).toMatchObject(expected);
+});

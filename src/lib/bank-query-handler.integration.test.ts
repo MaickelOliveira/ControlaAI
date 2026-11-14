@@ -92,6 +92,18 @@ it("answers the reported WhatsApp prompt with the Finanças forecast and exclude
     expect(m.confirm).not.toHaveBeenCalled();
   }finally{vi.useRealTimers();}
 });
+it("lists the expenses behind the forecast when asked as in the Rita demo", async () => {
+  planningFixture();
+  try {
+    await handleIncomingMessage({from:"5511999990000",text:"Rita, quanto já tenho a pagar em dezembro no Pessoal? Me mostra o que entra nessa conta."});
+    const reply = m.send.mock.calls.map(call => call[1]).join("\n");
+    expect(reply).toContain("O que compõe o valor previsto");
+    expect(reply).toContain("Mesa · parcela 2 de 3");
+    expect(reply).toContain("Crédito pessoal");
+    expect(reply).toContain("Netflix");
+    expect(reply).not.toContain("Pagamento de fatura");
+  } finally { vi.useRealTimers(); }
+});
 it.each([
  ["O que tenho parcelado em todos os cartos?",true],
  ["Quais compras parceladas tenho no cartão do Nubank mês que vem?",false],
