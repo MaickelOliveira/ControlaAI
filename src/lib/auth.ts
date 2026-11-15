@@ -68,6 +68,7 @@ export type SessionPayload = {
   plan: string;
   role: "client" | "admin";
   iat?: number;
+  passwordChangedAt?: string | null;
   adminVersion?: string;
 };
 
@@ -110,7 +111,11 @@ export async function getSessionWithUser(): Promise<{ session: SessionPayload; u
 
   const user = await getCachedUser(payload.sub);
   if (!user || !hasAccess(user)) return null;
-  if (user.passwordChangedAt && (!payload.iat || payload.iat * 1000 < new Date(user.passwordChangedAt).getTime())) return null;
+  if (payload.passwordChangedAt !== undefined) {
+    if (payload.passwordChangedAt !== (user.passwordChangedAt ?? null)) return null;
+  } else if (user.passwordChangedAt && (!payload.iat || payload.iat * 1000 < new Date(user.passwordChangedAt).getTime())) {
+    return null;
+  }
 
   const mode=browserWorkspaceMode(payload.sub,jar.get(WORKSPACE_MODE_COOKIE)?.value);
   return { session: payload, user: mode?{...user,activeMode:mode}:user };

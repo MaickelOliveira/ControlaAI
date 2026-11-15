@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, invalidateUserAuthCache, setSessionCookie, signToken } from "@/lib/auth";
 import { getUserById, updateUser, validatePassword } from "@/lib/users";
 import bcrypt from "bcryptjs";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -22,7 +22,11 @@ export async function POST(req: NextRequest) {
   if (!valid) return NextResponse.json({ error: "Senha atual incorreta" }, { status: 400 });
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await updateUser(session.sub, { passwordHash, passwordChangedAt: new Date().toISOString() });
+  const updated = await updateUser(session.sub, { passwordHash, passwordChangedAt: new Date().toISOString() });
+  if (!updated) return NextResponse.json({ error: "Não foi possível alterar a senha. Tente novamente." }, { status: 503 });
+  invalidateUserAuthCache(session.sub);
+  const token = await signToken({ ...session, passwordChangedAt: updated.passwordChangedAt ?? null });
+  await setSessionCookie(token);
 
   return NextResponse.json({ ok: true });
 }

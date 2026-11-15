@@ -20,7 +20,10 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Email ou senha incorretos" }, { status: 401 });
   if (!hasAccess(user)) return NextResponse.json({ error: "Acesso aguardando confirmação do pagamento" }, { status: 403 });
 
-  const token = await signToken({ sub: user.id, name: user.name, email: user.email, plan: user.plan, role: "client" });
+  const token = await signToken({
+    sub: user.id, name: user.name, email: user.email, plan: user.plan, role: "client",
+    passwordChangedAt: user.passwordChangedAt ?? null,
+  });
   await setSessionCookie(token);
 
   return NextResponse.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, plan: user.plan, status: user.status, activeMode: user.activeMode } });

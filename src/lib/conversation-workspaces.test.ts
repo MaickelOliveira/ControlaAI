@@ -70,3 +70,11 @@ it("removes exactly the selected outbound message and retains a concurrent inbou
  expect(await deleteInboxMessage(phone, inboxMessageId(inbound))).toBe(false);
  expect(await getHistory(phone)).toEqual([other, inbound]);
 });
+
+it("keeps two photos with the same caption and counts a resumed photo only once", async () => {
+ const photo = {role:"user",type:"image",content:"",ts:1,mediaUrl:"foto-1"} as const;
+ await addMessage(phone, photo);
+ await addMessage(phone, {...photo,ts:2,mediaUrl:"foto-2"});
+ await addMessage(phone, {...photo,ts:3});
+ expect((await getHistory(phone)).map(message=>message.mediaUrl)).toEqual(["foto-1","foto-2"]);
+});

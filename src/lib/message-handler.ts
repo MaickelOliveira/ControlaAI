@@ -1023,6 +1023,7 @@ export type IncomingMessage = {
   fileMimeType?: string;
   fileCaption?: string;
   fileName?: string;
+  inboxImageUrl?: string;
 };
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
@@ -1030,6 +1031,14 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     const {answerCreditPixQuestion}=await import("./credit-pix-whatsapp");
     await addMessage(msg.from,{role:"user",content:msg.text,ts:msg.receivedAt??Date.now(),channel:msg.channel,privateFinancial:true});
     await answerCreditPixQuestion(msg.from,msg.creditPixAnswer);return;
+  }
+  if (msg.isFileMessage && msg.fileBuffer) {
+    const { storeInboxImage } = await import("./support-attachments");
+    const inboxImageUrl = await storeInboxImage(msg.from, msg.fileBuffer).catch(() => {
+      console.error("[inbox] Não foi possível guardar a foto recebida");
+      return undefined;
+    });
+    if (inboxImageUrl) msg = { ...msg, inboxImageUrl };
   }
   return runWithVirtualAgentReply(msg.from,()=>withWhatsAppCompany(msg,handleMessageWithAgent));
 }
@@ -1041,7 +1050,12 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     let messageText = msg.text;
 
     if (from) {
-      await addMessage(from, { role: "user", content: messageText || (msg.isFileMessage ? "[Arquivo]" : ""), ts:msg.receivedAt??Date.now(),...(msg.channel?{channel:msg.channel}:{}),...(parseMarkBillPayment(messageText,todayStrBR())?{privateFinancial:true}:{}) }, { contactName: msg.contactName });
+      await addMessage(from, {
+        role: "user", content: msg.inboxImageUrl ? (typeof msg.fileCaption === "string" ? msg.fileCaption : "") : messageText || (msg.isFileMessage ? "[Arquivo]" : ""),
+        ts: msg.receivedAt ?? Date.now(), channel: msg.channel,
+        ...(msg.inboxImageUrl ? { type: "image", mediaUrl: msg.inboxImageUrl } : {}),
+        ...(parseMarkBillPayment(messageText, todayStrBR()) ? { privateFinancial: true } : {}),
+      }, { contactName: msg.contactName });
     }
 
     // ── IA pausada (atendente respondendo manualmente pelo Inbox) ──

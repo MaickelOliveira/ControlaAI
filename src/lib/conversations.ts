@@ -4,7 +4,7 @@ import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 
 export type ChatMessage = { channel?: "waba"|"evolution"; role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string; privateFinancial?: boolean; companyId?: string; workspaceMode?: "personal" | "business"; workspaceUserId?: string };
 export function messageForAiContext(message:ChatMessage):{role:"user"|"assistant";content:string}{
-  return {role:message.role,content:message.privateFinancial?"[A Zelo respondeu uma consulta financeira usando o extrato privado; os valores foram omitidos deste contexto.]":message.type==="audio"&&!message.content?"[Áudio]":message.content};
+  return {role:message.role,content:message.privateFinancial?"[A Zelo respondeu uma consulta financeira usando o extrato privado; os valores foram omitidos deste contexto.]":message.content || (message.type==="image"?"[Imagem]":message.type==="audio"?"[Áudio]":"")};
 }
 
 export type LastFinanceBatchItem = { id: string; description: string; amount: number; type: "income" | "expense" };
@@ -264,7 +264,8 @@ export async function addMessage(phone: string, msg: ChatMessage, opts?: { conta
   await changeConversation(phone, conv => {
     // Deduplicação: ignora mensagem idêntica com mesmo role em janela de 10s.
     const lastMsg = conv.messages.at(-1);
-    if (lastMsg && lastMsg.role === msg.role && lastMsg.content === msg.content && lastMsg.workspaceUserId === msg.workspaceUserId && lastMsg.companyId === msg.companyId && lastMsg.workspaceMode === msg.workspaceMode && Math.abs(msg.ts - lastMsg.ts) < 10_000) {
+    if (msg.mediaUrl && conv.messages.some(message => message.mediaUrl === msg.mediaUrl)) return false;
+    if (!msg.mediaUrl && lastMsg && !lastMsg.mediaUrl && lastMsg.role === msg.role && lastMsg.content === msg.content && lastMsg.workspaceUserId === msg.workspaceUserId && lastMsg.companyId === msg.companyId && lastMsg.workspaceMode === msg.workspaceMode && Math.abs(msg.ts - lastMsg.ts) < 10_000) {
       return false;
     }
     conv.messages.push(msg);

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/auth";
-import { getUserById, updateUser, deleteUser, activateUser, deactivateUser } from "@/lib/users";
+import bcrypt from "bcryptjs";
+import { getAdminSession, invalidateUserAuthCache } from "@/lib/auth";
+import { isValidNewPassword } from "@/lib/password-reset";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getUserById, hasAccess, updateUser, deleteUser, activateUser, deactivateUser } from "@/lib/users";
 
 type Params = Promise<{ id: string }>;
 
@@ -10,12 +13,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
   const { id } = await params;
   const body = await req.json();
-  const { action, trialDays, maxWppPhones, priceOverride } = body;
+  const { action, trialDays, maxWppPhones, priceOverride, newPassword } = body;
 
   const user = await getUserById(id);
   if (!user) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
 
-  if (action === "activate") {
+  if (action === "set_password") {
+    if (!hasAccess(user) || !user.email || user.email.endsWith("@whatsapp.controlaai.app")) {
+      return NextResponse.json({ error: "A senha provisória exige um cliente ativo com e-mail cadastrado." }, { status: 409 });
+    }
+    if (!isValidNewPassword(newPassword) || bcrypt.truncates(newPassword) || !newPassword.trim()) {
+      return NextResponse.json({ error: "Digite uma senha com pelo menos 10 caracteres e até 72 bytes." }, { status: 400 });
+    }
+    if (!await checkRateLimit(`admin:client-password:${id}`, 5, 15 * 60_000)) {
+      return NextResponse.json({ error: "Muitas tentativas. Aguarde 15 minutos." }, { status: 429 });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const updated = await updateUser(id, { passwordHash, passwordChangedAt: new Date().toISOString() });
+    if (!updated) {
+      return NextResponse.json({ error: "Não foi possível salvar a senha. Tente novamente." }, { status: 503 });
+    }
+    invalidateUserAuthCache(id);
+  } else if (action === "activate") {
     await activateUser(id);
   } else if (action === "deactivate") {
     await deactivateUser(id);

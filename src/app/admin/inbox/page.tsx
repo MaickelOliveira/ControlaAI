@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useChatImage } from "@/components/useChatImage";
 import { formatInboxMessage } from "@/lib/inbox-message-format";
 
-type ChatMessage = { id?: string; role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image" };
+type ChatMessage = { id?: string; role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image"; mediaUrl?: string };
 type ConversationSummary = {
   phone: string;
   contactName: string | null;
@@ -469,6 +469,12 @@ export default function AdminInboxPage() {
                     <div key={m.id ?? i} className={clsx("flex", m.role === "assistant" ? "justify-end" : "justify-start")}>
                       <div className={clsx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words",
                         m.role === "assistant" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-surface text-ink rounded-bl-sm border border-line")}>
+                        {m.type === "image" && m.mediaUrl && (
+                          <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="mb-1 block" aria-label="Abrir foto recebida">
+                            <Image src={m.mediaUrl} alt="Foto recebida pelo WhatsApp" width={480} height={480}
+                              unoptimized className="h-auto max-h-72 w-auto max-w-full rounded-lg object-contain" />
+                          </a>
+                        )}
                         {m.type === "audio" && !m.content ? "🎵 Áudio" : <InboxMessageText content={m.content} />}
                         <div className={clsx("text-[10px] mt-1 flex items-center gap-1 justify-end", m.role === "assistant" ? "text-emerald-100" : "text-subtle")}>
                           {formatFullTime(m.ts)}

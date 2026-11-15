@@ -24,3 +24,22 @@ it("keeps the browser in its selected workspace even when WhatsApp changes the s
  m.mode="browser-fixture:personal";expect((await auth.getSessionWithUser())?.user.activeMode).toBe("personal");
  m.mode="another-owner:business";expect((await auth.getSessionWithUser())?.user.activeMode).toBe("personal");m.mode="";auth.invalidateUserAuthCache("browser-fixture");
 });
+
+it("accepts a new login immediately after a password change and revokes the previous session",async()=>{
+  vi.stubEnv("JWT_SECRET","fixture-auth-password-test-only-secret-long-enough");
+  vi.resetModules();
+  const auth = await import("./auth");
+  const sub = "password-change-fixture";
+  const base = {sub,name:"Fixture",email:"fixture@example.test",plan:"personal",role:"client" as const};
+  m.token = await auth.signToken({...base,passwordChangedAt:null});
+  m.user.mockResolvedValue({id:sub,activeMode:"personal"});
+  expect(await auth.getSession()).not.toBeNull();
+
+  const passwordChangedAt = new Date().toISOString();
+  m.user.mockResolvedValue({id:sub,activeMode:"personal",passwordChangedAt});
+  auth.invalidateUserAuthCache(sub);
+  expect(await auth.getSession()).toBeNull();
+  m.token = await auth.signToken({...base,passwordChangedAt});
+  expect(await auth.getSession()).not.toBeNull();
+  auth.invalidateUserAuthCache(sub);
+});
