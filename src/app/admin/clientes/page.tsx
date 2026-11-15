@@ -1,6 +1,7 @@
 "use client";
 import PageTitle from "@/components/PageTitle";
-import { useEffect, useState } from "react";
+import PasswordField from "@/components/PasswordField";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 
@@ -26,6 +27,46 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
+  const passwordDialog = useRef<HTMLDialogElement>(null);
+  const [passwordClient, setPasswordClient] = useState<Cliente | null>(null);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordNotice, setPasswordNotice] = useState("");
+
+  function openPasswordDialog(c: Cliente) {
+    setPasswordClient(c);
+    setPasswordError("");
+    setPasswordNotice("");
+    passwordDialog.current?.showModal();
+  }
+
+  async function saveTemporaryPassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!passwordClient || passwordSaving) return;
+    setPasswordError("");
+    const formData = new FormData(event.currentTarget);
+    const newPassword = formData.get("newPassword");
+    if (newPassword !== formData.get("confirmPassword")) {
+      setPasswordError("As senhas não coincidem.");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const response = await clienteAction(passwordClient.id, "set_password", { newPassword });
+      if (!response.ok) {
+        const result = await response.json();
+        setPasswordError(result.error || "Não foi possível salvar a senha.");
+        return;
+      }
+      setPasswordNotice(`Senha provisória definida para ${passwordClient.name}.`);
+      passwordDialog.current?.close();
+    } catch {
+      setPasswordError("Não foi possível salvar a senha. Tente novamente.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
 
   async function removeCliente(c:Cliente) {
     if(!confirm(`Excluir ${c.name}?`))return;
@@ -71,6 +112,7 @@ export default function ClientesPage() {
   return (
     <div className="space-y-5 max-w-6xl">
       {actionError&&<p role="alert" className="rounded-xl border border-line bg-amber-soft p-4 text-sm text-amber-ink">{actionError}</p>}
+      {passwordNotice && <p role="status" className="rounded-xl border border-line bg-amber-soft p-4 text-sm text-amber-ink">{passwordNotice}</p>}
       <div className="flex items-center justify-between">
         <div>
           <PageTitle icon="client">Clientes ({clientes.length})</PageTitle>
@@ -162,6 +204,12 @@ export default function ClientesPage() {
                           className="text-xs border border-line text-muted hover:bg-surface-muted rounded-lg px-2.5 py-1 transition">
                           Ver
                         </Link>
+                        {c.status === "active" && c.email && !c.email.endsWith("@whatsapp.controlaai.app") && (
+                          <button type="button" onClick={() => openPasswordDialog(c)}
+                            className="text-xs border border-line text-amber-ink hover:bg-amber-soft rounded-lg px-2.5 py-1 transition">
+                            Definir senha
+                          </button>
+                        )}
                         {c.status !== "active" && (
                           <button onClick={async () => { await clienteAction(c.id, "activate"); load(); }}
                             className="text-xs border border-line text-amber-ink hover:bg-amber-soft rounded-lg px-2.5 py-1 transition">
@@ -199,6 +247,40 @@ export default function ClientesPage() {
           </div>
         )}
       </div>
+
+      <dialog ref={passwordDialog} aria-labelledby="temporary-password-title"
+        onClose={() => setPasswordClient(null)}
+        onCancel={event => { if (passwordSaving) event.preventDefault(); }}
+        className="m-auto w-11/12 max-w-md rounded-2xl border border-line bg-surface p-5 text-ink shadow-2xl backdrop:bg-black/60">
+        <h2 id="temporary-password-title" className="font-bold">Definir senha provisória</h2>
+        {passwordClient && (
+          <form onSubmit={saveTemporaryPassword} className="mt-2 space-y-4">
+            <p className="break-words text-sm text-subtle">{passwordClient.name} · {passwordClient.email}</p>
+            <p className="text-sm text-muted">Ao salvar, a senha anterior deixa de funcionar. O cliente pode trocar a senha em Configurações.</p>
+            <div>
+              <label htmlFor="temporary-password" className="mb-1 block text-sm">Senha provisória</label>
+              <PasswordField id="temporary-password" name="newPassword" required minLength={10} maxLength={72}
+                autoComplete="new-password" disabled={passwordSaving}
+                className="w-full rounded-lg border border-line bg-surface-muted px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label htmlFor="confirm-temporary-password" className="mb-1 block text-sm">Confirmar senha provisória</label>
+              <PasswordField id="confirm-temporary-password" name="confirmPassword" required minLength={10} maxLength={72}
+                autoComplete="new-password" disabled={passwordSaving}
+                className="w-full rounded-lg border border-line bg-surface-muted px-3 py-2 text-sm" />
+            </div>
+            {passwordError && <p role="alert" className="text-sm text-amber-ink">{passwordError}</p>}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" disabled={passwordSaving} onClick={() => passwordDialog.current?.close()}
+                className="rounded-lg border border-line px-3 py-2 text-sm">Cancelar</button>
+              <button type="submit" disabled={passwordSaving}
+                className="rounded-lg bg-amber-soft px-3 py-2 text-sm font-semibold text-amber-ink disabled:opacity-50">
+                {passwordSaving ? "Salvando…" : "Salvar senha"}
+              </button>
+            </div>
+          </form>
+        )}
+      </dialog>
 
       {/* Modal Novo Cliente */}
       {modal && (
