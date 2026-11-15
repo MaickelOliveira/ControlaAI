@@ -59,12 +59,12 @@ export function hasValidImageSignature(bytes: Uint8Array, mimeType: SupportImage
     && bytes[11] === 0x50;
 }
 
-export async function uploadSupportImage(userId: string, file: File): Promise<SupportImageAttachment> {
+export async function readChatImage(file: File, allowWebp = true) {
   const mimeType = file.type.toLowerCase() as SupportImageMime;
   const extension = EXTENSION_BY_MIME[mimeType];
 
-  if (!extension) {
-    throw new SupportImageError("Envie uma imagem JPG, PNG ou WEBP.", 400);
+  if (!extension || (!allowWebp && mimeType === "image/webp")) {
+    throw new SupportImageError(allowWebp ? "Envie uma imagem JPG, PNG ou WEBP." : "Envie uma imagem JPG ou PNG.", 400);
   }
   if (file.size <= 0) {
     throw new SupportImageError("A imagem selecionada está vazia.", 400);
@@ -77,7 +77,11 @@ export async function uploadSupportImage(userId: string, file: File): Promise<Su
   if (!hasValidImageSignature(bytes, mimeType)) {
     throw new SupportImageError("O arquivo selecionado não é uma imagem válida.", 400);
   }
+  return { bytes, mimeType, extension };
+}
 
+export async function uploadSupportImage(userId: string, file: File): Promise<SupportImageAttachment> {
+  const { bytes, mimeType, extension } = await readChatImage(file);
   const fileName = `${crypto.randomUUID()}.${extension}`;
   const { error } = await getSupabase().storage
     .from(SUPPORT_IMAGE_BUCKET)

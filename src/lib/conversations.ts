@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { getSupabase,resolveCompanyDatabaseScope } from "./supabase";
 import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 
@@ -11,6 +12,7 @@ type LastFinanceBatch = { items: LastFinanceBatchItem[]; mode: "personal" | "bus
 
 type Conversation = {
   messages: ChatMessage[];
+  revision?: string;
   contactName?: string | null;
   lastActivity: number;
   unread?: boolean;
@@ -97,9 +99,10 @@ export function phoneVariants(phone: string): string[] {
 // blob único que o JSON usava, o que também elimina a necessidade do cache
 // de mtime em memória (não faz sentido com um banco compartilhado entre
 // instâncias).
-async function findConversation(phone: string): Promise<{ key: string; conv: Conversation } | null> {
+async function findConversation(phone: string, forWrite = false): Promise<{ key: string; conv: Conversation } | null> {
   const variants = phoneVariants(phone);
   const { data, error } = await getSupabase().from("conversations").select("phone, data").in("phone", variants);
+  if (error && forWrite) throw Error("Não foi possível carregar a conversa.");
   if (error || !data || data.length === 0) return null;
   const rows = data as Array<{ phone: string; data: Conversation }>;
   for (const v of variants) {
@@ -109,9 +112,43 @@ async function findConversation(phone: string): Promise<{ key: string; conv: Con
   return null;
 }
 
-async function saveConversation(key: string, conv: Conversation) {
-  await getSupabase().from("conversations").upsert({ phone: key, data: conv });
-  summaryCache = null;
+async function changeConversation(phone: string, change: (conversation: Conversation) => boolean): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const found = await findConversation(phone, true);
+    const conv = found?.conv ?? { messages: [], lastActivity: 0 };
+    if (!change(conv)) return false;
+
+    // Compare the revision so another write cannot restore an old message list.
+    const revision = conv.revision;
+    conv.revision = randomUUID();
+    const table = getSupabase().from("conversations");
+    if (found) {
+      const update = table.update({ data: conv }).eq("phone", found.key);
+      const result = await (revision ? update.eq("data->>revision", revision) : update.is("data->>revision", null)).select("phone");
+      if (result.error) throw Error("Não foi possível atualizar a conversa.");
+      if (!result.data?.length) continue;
+    } else {
+      const { error } = await table.insert({ phone, data: conv });
+      if (error?.code === "23505") continue;
+      if (error) throw Error("Não foi possível salvar a conversa.");
+    }
+    summaryCache = null;
+    return true;
+  }
+  throw Error("A conversa foi atualizada ao mesmo tempo. Tente novamente.");
+}
+
+export function inboxMessageId(message: ChatMessage): string {
+  return createHash("sha256").update(JSON.stringify(message)).digest("hex");
+}
+
+export async function deleteInboxMessage(phone: string, messageId: string): Promise<boolean> {
+  return changeConversation(phone, conv => {
+    const index = conv.messages.findIndex(message => message.role === "assistant" && inboxMessageId(message) === messageId);
+    if (index < 0) return false;
+    conv.messages.splice(index, 1);
+    return true;
+  });
 }
 
 export async function getHistory(phone: string): Promise<ChatMessage[]> {
@@ -173,11 +210,11 @@ export async function getAllConversations(): Promise<ConversationSummary[]> {
 }
 
 export async function markAsRead(phone: string) {
-  const found = await findConversation(phone);
-  if (found?.conv.unread) {
-    found.conv.unread = false;
-    await saveConversation(found.key, found.conv);
-  }
+  await changeConversation(phone, conv => {
+    if (!conv.unread) return false;
+    conv.unread = false;
+    return true;
+  });
 }
 
 /** Grava o(s) lançamento(s) que acabaram de ser registrados (1 ou vários de
@@ -185,12 +222,11 @@ export async function markAsRead(phone: string) {
  *  ("tá errado, são despesas") logo depois de registrar, tanto pra um
  *  lançamento único quanto pra um lote inteiro. */
 export async function setLastFinanceBatch(phone: string, items: LastFinanceBatchItem[], mode: "personal" | "business") {
-  const found = await findConversation(phone);
-  const key = found?.key ?? phone;
-  const conv: Conversation = found?.conv ?? { messages: [], lastActivity: 0 };
   const scope=await resolveCompanyDatabaseScope();
-  conv.lastFinanceBatch = { items, mode, ts: Date.now(),...(scope?{companyId:scope.companyId,workspaceUserId:scope.userId}:{}) };
-  await saveConversation(key, conv);
+  await changeConversation(phone, conv => {
+    conv.lastFinanceBatch = { items, mode, ts: Date.now(),...(scope?{companyId:scope.companyId,workspaceUserId:scope.userId}:{}) };
+    return true;
+  });
 }
 
 export async function getLastFinanceBatch(phone: string): Promise<LastFinanceBatch | null> {
@@ -204,16 +240,12 @@ export async function getLastFinanceBatch(phone: string): Promise<LastFinanceBat
 }
 
 export async function setAiPaused(phone: string, paused: boolean) {
-  const found = await findConversation(phone);
-  // Sem conversa ainda (ex: atendente manda a 1ª mensagem pra um lead novo,
-  // antes de qualquer contato dele) — cria o registro em vez de descartar a
-  // pausa silenciosamente, senão a IA responde normal no primeiro contato.
-  const key = found?.key ?? phone;
-  const conv: Conversation = found?.conv ?? { messages: [], lastActivity: Date.now() };
-  if (conv.aiPaused !== paused) {
+  await changeConversation(phone, conv => {
+    if (conv.aiPaused === paused) return false;
     conv.aiPaused = paused;
-    await saveConversation(key, conv);
-  }
+    if (!conv.lastActivity) conv.lastActivity = Date.now();
+    return true;
+  });
 }
 
 export async function getAiPaused(phone: string): Promise<boolean> {
@@ -222,9 +254,6 @@ export async function getAiPaused(phone: string): Promise<boolean> {
 }
 
 export async function addMessage(phone: string, msg: ChatMessage, opts?: { contactName?: string }) {
-  const found = await findConversation(phone);
-  const key = found?.key ?? phone;
-  const conv: Conversation = found?.conv ?? { messages: [], lastActivity: 0 };
   if (process.env.MULTI_COMPANY_ENABLED === "true") {
     const { currentCompanyContext } = await import("./company-context");
     const scope = currentCompanyContext();
@@ -232,25 +261,23 @@ export async function addMessage(phone: string, msg: ChatMessage, opts?: { conta
     msg = { ...msg, companyId: scope?.companyId, workspaceMode: scope?.mode, workspaceUserId: scope?.userId };
   }
 
-  // Deduplicação: ignora mensagem idêntica com mesmo role em janela de 10s
-  const DEDUP_MS = 10_000;
-  const lastMsg = conv.messages[conv.messages.length - 1];
-  if (lastMsg && lastMsg.role === msg.role && lastMsg.content === msg.content && lastMsg.workspaceUserId === msg.workspaceUserId && lastMsg.companyId === msg.companyId && lastMsg.workspaceMode === msg.workspaceMode && Math.abs(msg.ts - lastMsg.ts) < DEDUP_MS) {
-    return;
-  }
-
-  conv.messages.push(msg);
-  if (conv.messages.length > MAX_MESSAGES) {
-    conv.messages = conv.messages.slice(-MAX_MESSAGES);
-  }
-  conv.lastActivity = Date.now();
-  if (opts?.contactName) {
-    const sanitized = sanitizeContactName(opts.contactName, phone);
-    const existingIsReal = conv.contactName && conv.contactName !== phone && !/^[\d\s+\-().]{7,}$/.test(conv.contactName);
-    if (sanitized && !existingIsReal) conv.contactName = sanitized;
-  }
-  if (msg.role === "user") conv.unread = true;
-  await saveConversation(key, conv);
+  await changeConversation(phone, conv => {
+    // Deduplicação: ignora mensagem idêntica com mesmo role em janela de 10s.
+    const lastMsg = conv.messages.at(-1);
+    if (lastMsg && lastMsg.role === msg.role && lastMsg.content === msg.content && lastMsg.workspaceUserId === msg.workspaceUserId && lastMsg.companyId === msg.companyId && lastMsg.workspaceMode === msg.workspaceMode && Math.abs(msg.ts - lastMsg.ts) < 10_000) {
+      return false;
+    }
+    conv.messages.push(msg);
+    if (conv.messages.length > MAX_MESSAGES) conv.messages = conv.messages.slice(-MAX_MESSAGES);
+    conv.lastActivity = Date.now();
+    if (opts?.contactName) {
+      const sanitized = sanitizeContactName(opts.contactName, phone);
+      const existingIsReal = conv.contactName && conv.contactName !== phone && !/^[\d\s+\-().]{7,}$/.test(conv.contactName);
+      if (sanitized && !existingIsReal) conv.contactName = sanitized;
+    }
+    if (msg.role === "user") conv.unread = true;
+    return true;
+  });
 }
 
 /** Valida/sanitiza nome de contato vindo de fontes externas (WhatsApp, webhooks).
@@ -267,9 +294,10 @@ export function sanitizeContactName(raw: string | null | undefined, phone?: stri
 
 /** Atualiza a última mensagem de uma conversa (ex: substituir "[Áudio]" pela transcrição). */
 export async function updateLastMessage(phone: string, patch: Partial<ChatMessage>) {
-  const found = await findConversation(phone);
-  if (found && found.conv.messages.length > 0) {
-    Object.assign(found.conv.messages[found.conv.messages.length - 1], patch);
-    await saveConversation(found.key, found.conv);
-  }
+  await changeConversation(phone, conv => {
+    const lastMessage = conv.messages.at(-1);
+    if (!lastMessage) return false;
+    Object.assign(lastMessage, patch);
+    return true;
+  });
 }
