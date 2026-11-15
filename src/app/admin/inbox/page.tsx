@@ -2,8 +2,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { clsx } from "clsx";
 import Image from "next/image";
+import { useChatImage } from "@/components/useChatImage";
+import { formatInboxMessage } from "@/lib/inbox-message-format";
 
-type ChatMessage = { role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image" };
+type ChatMessage = { id?: string; role: "user" | "assistant"; content: string; ts: number; type?: "text" | "audio" | "image" };
 type ConversationSummary = {
   phone: string;
   contactName: string | null;
@@ -31,8 +33,6 @@ type SupportSummary = {
   messageCount: number;
 };
 
-const SUPPORT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MAX_SUPPORT_IMAGE_BYTES = 5 * 1024 * 1024;
 const INBOX_LIST_REFRESH_MS = 30_000;
 const INBOX_MESSAGE_REFRESH_MS = 15_000;
 
@@ -69,15 +69,32 @@ function SupportStatusBadge({ status }: { status: SupportStatus }) {
   return <span className="text-[10px] font-semibold text-muted bg-surface-muted rounded-full px-2 py-0.5 shrink-0">Em andamento</span>;
 }
 
+function InboxMessageText({ content }: { content: string }) {
+  return formatInboxMessage(content).split(/(`[^`\n]+`|\*[^*\n]+\*|(?<!\w)_[^_\n]+_(?!\w)|~[^~\n]+~|https?:\/\/[^\s<>"\])]+)/g).map((part, index) => {
+    if (index % 2 === 0) return part;
+    if (part.startsWith("*")) return <strong key={index}>{part.slice(1, -1)}</strong>;
+    if (part.startsWith("_")) return <em key={index}>{part.slice(1, -1)}</em>;
+    if (part.startsWith("~")) return <s key={index}>{part.slice(1, -1)}</s>;
+    if (part.startsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
+    const url = part.replace(/[.,!?;:]+$/, "");
+    return <span key={index}><a className="underline" href={url} target="_blank" rel="noopener noreferrer">{url}</a>{part.slice(url.length)}</span>;
+  });
+}
+
 export default function AdminInboxPage() {
   const [tab, setTab] = useState<"inbox" | "suporte">("inbox");
 
-  // ── Inbox (WhatsApp/IA) — inalterado ──
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [inboxError, setInboxError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const inboxImage = useChatImage(setInboxError, false);
+  const { file: inboxFile, preview: inboxPreview, fileInput: inboxFileInput, accept: inboxAccept } = inboxImage;
+  const inboxInputRef = useRef<HTMLTextAreaElement>(null);
+  const inboxMessageRequest = useRef(0);
   const [search, setSearch] = useState("");
   const selectedRef = useRef<string | null>(null);
   const userScrolledUpRef = useRef(false);
@@ -90,20 +107,14 @@ export default function AdminInboxPage() {
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
   const [supportInput, setSupportInput] = useState("");
   const [supportSending, setSupportSending] = useState(false);
-  const [supportImage, setSupportImage] = useState<File | null>(null);
-  const [supportImagePreview, setSupportImagePreview] = useState<string | null>(null);
   const [supportSendError, setSupportSendError] = useState<string | null>(null);
+  const supportAttachment = useChatImage(setSupportSendError);
+  const { file: supportImage, preview: supportImagePreview, fileInput: supportFileInputRef } = supportAttachment;
   const [supportSearch, setSupportSearch] = useState("");
   const supportSelectedRef = useRef<string | null>(null);
   const supportUserScrolledUpRef = useRef(false);
   const supportMessagesEndRef = useRef<HTMLDivElement>(null);
   const supportScrollContainerRef = useRef<HTMLDivElement>(null);
-  const supportFileInputRef = useRef<HTMLInputElement>(null);
-  const supportImagePreviewRef = useRef<string | null>(null);
-
-  useEffect(() => () => {
-    if (supportImagePreviewRef.current) URL.revokeObjectURL(supportImagePreviewRef.current);
-  }, []);
 
   const fetchConversations = useCallback(() => {
     fetch("/api/admin/inbox/conversations")
@@ -112,14 +123,15 @@ export default function AdminInboxPage() {
   }, []);
 
   const fetchMessages = useCallback((phone: string) => {
-    fetch(`/api/admin/inbox/messages?phone=${encodeURIComponent(phone)}`)
-      .then(r => (r.ok && selectedRef.current === phone ? r.json() : null))
+    const request = ++inboxMessageRequest.current;
+    return fetch(`/api/admin/inbox/messages?phone=${encodeURIComponent(phone)}`)
+      .then(r => (r.ok ? r.json() : null))
       .then(d => {
-        if (d) {
+        if (d && selectedRef.current === phone && inboxMessageRequest.current === request) {
           setMessages(d.messages ?? []);
           setConversations(cs => cs.map(c => c.phone === phone ? { ...c, unread: false } : c));
         }
-      });
+      }).catch(() => {});
   }, []);
 
   const fetchSupportConversations = useCallback(() => {
@@ -191,49 +203,24 @@ export default function AdminInboxPage() {
   }, [supportMessages]);
 
   function handleSelect(phone: string) {
+    if (selectedRef.current === phone) return;
     selectedRef.current = phone;
     setSelected(phone);
     setMessages([]);
+    setInput("");
+    setInboxError(null);
+    inboxImage.clear();
     userScrolledUpRef.current = false;
   }
 
   function handleSupportSelect(userId: string) {
-    clearSupportImage();
+    supportAttachment.clear();
     setSupportInput("");
     setSupportSendError(null);
     supportSelectedRef.current = userId;
     setSupportSelected(userId);
     setSupportMessages([]);
     supportUserScrolledUpRef.current = false;
-  }
-
-  function clearSupportImage() {
-    if (supportImagePreviewRef.current) URL.revokeObjectURL(supportImagePreviewRef.current);
-    supportImagePreviewRef.current = null;
-    setSupportImagePreview(null);
-    setSupportImage(null);
-    if (supportFileInputRef.current) supportFileInputRef.current.value = "";
-  }
-
-  function selectSupportImage(file: File | null) {
-    if (!file) return;
-    setSupportSendError(null);
-    if (!SUPPORT_IMAGE_TYPES.has(file.type.toLowerCase())) {
-      setSupportSendError("Envie uma imagem JPG, PNG ou WEBP.");
-      if (supportFileInputRef.current) supportFileInputRef.current.value = "";
-      return;
-    }
-    if (file.size > MAX_SUPPORT_IMAGE_BYTES) {
-      setSupportSendError("A imagem deve ter no máximo 5 MB.");
-      if (supportFileInputRef.current) supportFileInputRef.current.value = "";
-      return;
-    }
-
-    if (supportImagePreviewRef.current) URL.revokeObjectURL(supportImagePreviewRef.current);
-    const objectUrl = URL.createObjectURL(file);
-    supportImagePreviewRef.current = objectUrl;
-    setSupportImagePreview(objectUrl);
-    setSupportImage(file);
   }
 
   function handleScroll() {
@@ -249,22 +236,74 @@ export default function AdminInboxPage() {
   }
 
   async function send() {
-    if (!selected || !input.trim() || sending) return;
+    if (!selected || (!input.trim() && !inboxImage.file) || sending) return;
     setSending(true);
-    const content = input.trim();
-    setInput("");
-    const r = await fetch("/api/admin/inbox/send", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: selected, content }),
-    });
-    if (r.ok) {
-      setMessages(m => [...m, { role: "assistant", content, ts: Date.now() }]);
-      setConversations(cs => cs.map(c => c.phone === selected ? { ...c, aiPaused: true } : c));
-    } else {
-      alert("Falha ao enviar mensagem");
-      setInput(content);
+    setInboxError(null);
+    const phone = selected;
+    try {
+      let request: RequestInit;
+      if (inboxImage.file) {
+        const body = new FormData();
+        body.set("phone", phone);
+        body.set("content", input);
+        body.set("image", inboxImage.file);
+        request = { method: "POST", body };
+      } else {
+        request = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, content: input }) };
+      }
+      const response = await fetch("/api/admin/inbox/send", request);
+      const data = await response.json().catch(() => null);
+      if (selectedRef.current !== phone) return;
+      if (!response.ok) {
+        setInboxError(data?.error ?? "Não foi possível enviar a mensagem.");
+        return;
+      }
+      setInput("");
+      inboxImage.clear();
+      setInboxError(data?.warning ?? null);
+      await fetchMessages(phone);
+      fetchConversations();
+    } catch {
+      if (selectedRef.current === phone) setInboxError("Não foi possível confirmar o envio. Confira a conversa antes de tentar novamente.");
+    } finally {
+      setSending(false);
     }
-    setSending(false);
+  }
+
+  function formatSelection(marker: "*" | "_") {
+    const field = inboxInputRef.current;
+    if (!field) return;
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    setInput(`${input.slice(0, start)}${marker}${input.slice(start, end)}${marker}${input.slice(end)}`);
+    requestAnimationFrame(() => {
+      field.focus();
+      field.setSelectionRange(start + 1, end + 1);
+    });
+  }
+
+  async function deleteMessage(id: string) {
+    if (!selected || deleting || !window.confirm("Apagar esta mensagem do Inbox da Zelo? A cópia no WhatsApp do cliente continua disponível.")) return;
+    const phone = selected;
+    setDeleting(id);
+    setInboxError(null);
+    try {
+      const response = await fetch("/api/admin/inbox/messages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, id }),
+      });
+      if (!response.ok) throw Error("Não foi possível apagar a mensagem.");
+      if (selectedRef.current === phone) {
+        ++inboxMessageRequest.current;
+        setMessages(messages => messages.filter(message => message.id !== id));
+      }
+      fetchConversations();
+    } catch {
+      if (selectedRef.current === phone) setInboxError("Não foi possível apagar a mensagem. Tente novamente.");
+    } finally {
+      setDeleting(null);
+    }
   }
 
   async function toggleAiPause(paused: boolean) {
@@ -313,7 +352,7 @@ export default function AdminInboxPage() {
           : conversation));
       }
       setSupportInput("");
-      clearSupportImage();
+      supportAttachment.clear();
     } catch {
       setSupportSendError("Não foi possível enviar. Verifique sua conexão e tente novamente.");
     } finally {
@@ -400,7 +439,7 @@ export default function AdminInboxPage() {
           </div>
 
           {/* Chat */}
-          <div className={clsx("flex-1 flex flex-col min-w-0", !selected && "hidden sm:flex")}>
+          <div {...inboxImage.dropHandlers(sending || !selected)} className={clsx("flex-1 flex flex-col min-w-0", !selected && "hidden sm:flex")}>
             {!selected || !selectedConv ? (
               <div className="flex-1 flex items-center justify-center text-subtle text-sm">
                 Selecione uma conversa para ver o histórico
@@ -427,13 +466,19 @@ export default function AdminInboxPage() {
 
                 <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-2 bg-surface-muted">
                   {messages.map((m, i) => (
-                    <div key={i} className={clsx("flex", m.role === "assistant" ? "justify-end" : "justify-start")}>
+                    <div key={m.id ?? i} className={clsx("flex", m.role === "assistant" ? "justify-end" : "justify-start")}>
                       <div className={clsx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words",
                         m.role === "assistant" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-surface text-ink rounded-bl-sm border border-line")}>
-                        {m.type === "audio" && !m.content ? "🎵 Áudio" : m.content}
+                        {m.type === "audio" && !m.content ? "🎵 Áudio" : <InboxMessageText content={m.content} />}
                         <div className={clsx("text-[10px] mt-1 flex items-center gap-1 justify-end", m.role === "assistant" ? "text-emerald-100" : "text-subtle")}>
                           {formatFullTime(m.ts)}
                           {m.role === "assistant" && <span>✓✓</span>}
+                          {m.id && (
+                            <button type="button" disabled={!!deleting} onClick={() => deleteMessage(m.id!)}
+                              className="ml-2 rounded px-1 underline underline-offset-2 disabled:opacity-50">
+                              {deleting === m.id ? "Apagando…" : "Apagar do Inbox"}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -441,15 +486,41 @@ export default function AdminInboxPage() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                <div className="p-3 border-t border-line flex gap-2">
-                  <input value={input} onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                    placeholder="Digite uma mensagem..."
-                    className="flex-1 bg-surface-muted border border-line rounded-xl px-4 py-2.5 text-sm text-ink caret-ink placeholder:text-subtle outline-none focus:border-amber-500 transition" />
-                  <button onClick={send} disabled={!input.trim() || sending}
-                    className="bg-amber-600 hover:bg-amber-500 text-ink font-semibold rounded-xl px-4 text-sm transition disabled:opacity-40">
-                    Enviar
-                  </button>
+                <div className="shrink-0 space-y-2 border-t border-line p-3">
+                  {inboxError && <p className="text-xs text-red-ink" role="alert">{inboxError}</p>}
+                  {inboxPreview && (
+                    <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-muted p-2">
+                      <Image src={inboxPreview} alt="Pré-visualização da imagem" width={48} height={48} unoptimized
+                        className="h-12 w-12 rounded-lg object-cover" />
+                      <p className="min-w-0 flex-1 truncate text-xs text-muted">{inboxFile?.name}</p>
+                      <button type="button" onClick={inboxImage.clear} disabled={sending}
+                        className="h-7 w-7 rounded-full text-lg text-muted hover:bg-line" aria-label="Remover imagem">×</button>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                    <input ref={inboxFileInput} type="file" accept={inboxAccept} className="hidden"
+                      onChange={event => inboxImage.select(event.target.files?.[0] ?? null)} />
+                    <button type="button" onClick={() => inboxFileInput.current?.click()} disabled={sending}
+                      className="rounded-lg border border-line px-2 py-1 hover:bg-line" title="Anexe ou solte uma imagem JPG ou PNG aqui">
+                      Anexar imagem
+                    </button>
+                    <button type="button" onClick={() => formatSelection("*")} disabled={sending}
+                      className="rounded-lg border border-line px-2 py-1 font-bold hover:bg-line">Negrito</button>
+                    <button type="button" onClick={() => formatSelection("_")} disabled={sending}
+                      className="rounded-lg border border-line px-2 py-1 italic hover:bg-line">Itálico</button>
+                    <span className="hidden sm:inline">Shift + Enter para nova linha</span>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <textarea ref={inboxInputRef} value={input} onChange={e => setInput(e.target.value)} disabled={sending}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
+                      rows={2} aria-label="Mensagem do WhatsApp"
+                      placeholder={inboxFile ? "Escreva uma legenda (opcional)..." : "Digite uma mensagem..."}
+                      className="max-h-44 min-w-0 flex-1 resize-y rounded-xl border border-line bg-surface-muted px-3 py-2.5 text-sm text-ink placeholder:text-subtle outline-none focus:border-amber-500" />
+                    <button type="button" onClick={send} disabled={(!input.trim() && !inboxFile) || sending}
+                      className="shrink-0 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-ink hover:bg-amber-500 disabled:opacity-40">
+                      {sending ? "Enviando..." : "Enviar"}
+                    </button>
+                  </div>
                 </div>
               </>
             )}
@@ -496,7 +567,7 @@ export default function AdminInboxPage() {
           </div>
 
           {/* Chat */}
-          <div className={clsx("flex-1 flex flex-col min-w-0", !supportSelected && "hidden sm:flex")}>
+          <div {...supportAttachment.dropHandlers(supportSending || !supportSelected)} className={clsx("flex-1 flex flex-col min-w-0", !supportSelected && "hidden sm:flex")}>
             {!supportSelected || !supportSelectedConv ? (
               <div className="flex-1 flex items-center justify-center text-subtle text-sm">
                 Selecione uma conversa de suporte para ver o histórico
@@ -567,18 +638,18 @@ export default function AdminInboxPage() {
                       <Image src={supportImagePreview} alt="Pré-visualização da imagem" width={48} height={48} unoptimized
                         className="h-12 w-12 rounded-lg object-cover" />
                       <p className="min-w-0 flex-1 truncate text-xs text-muted">{supportImage?.name}</p>
-                      <button type="button" onClick={clearSupportImage} disabled={supportSending}
+                      <button type="button" onClick={supportAttachment.clear} disabled={supportSending}
                         className="h-7 w-7 rounded-full text-lg leading-none text-muted hover:bg-line disabled:opacity-40"
                         aria-label="Remover imagem">×</button>
                     </div>
                   )}
                   {supportSendError && <p className="mb-2 text-xs text-red-ink" role="alert">{supportSendError}</p>}
                   <div className="flex gap-2">
-                    <input ref={supportFileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-                      onChange={event => selectSupportImage(event.target.files?.[0] ?? null)} />
+                    <input ref={supportFileInputRef} type="file" accept={supportAttachment.accept} className="hidden"
+                      onChange={event => supportAttachment.select(event.target.files?.[0] ?? null)} />
                     <button type="button" onClick={() => supportFileInputRef.current?.click()} disabled={supportSending}
                       className="h-10 w-10 shrink-0 rounded-xl border border-line bg-surface-muted text-muted transition hover:border-amber-500 hover:text-amber-ink disabled:opacity-40"
-                      aria-label="Anexar uma imagem" title="Anexar imagem (até 5 MB)">
+                      aria-label="Anexar uma imagem" title="Anexe ou solte uma imagem aqui (até 5 MB)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="mx-auto h-5 w-5" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a3.75 3.75 0 0 0-5.303-5.303L6.11 9.53a5.25 5.25 0 0 0 7.425 7.425l7.5-7.5M8.25 12.75l7.5-7.5" />
                       </svg>

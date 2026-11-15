@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession as getSession } from "@/lib/auth";
-import { getHistory, markAsRead } from "@/lib/conversations";
+import { deleteInboxMessage, getHistory, inboxMessageId, markAsRead } from "@/lib/conversations";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -11,5 +11,29 @@ export async function GET(req: NextRequest) {
 
   const messages = await getHistory(phone);
   await markAsRead(phone);
-  return NextResponse.json({ messages });
+  return NextResponse.json({ messages: messages.map(message => ({
+    role: message.role,
+    content: message.content,
+    ts: message.ts,
+    type: message.type,
+    ...(message.role === "assistant" ? { id: inboxMessageId(message) } : {}),
+  })) });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session || session.role !== "admin") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  const phone = typeof body?.phone === "string" ? body.phone : "";
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!/^\d{8,20}$/.test(phone) || !/^[0-9a-f]{64}$/.test(id)) {
+    return NextResponse.json({ error: "Mensagem inválida." }, { status: 400 });
+  }
+  try {
+    await deleteInboxMessage(phone, id);
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível apagar. Tente novamente." }, { status: 503 });
+  }
 }

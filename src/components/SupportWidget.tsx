@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { clsx } from "clsx";
 import Image from "next/image";
+import { useChatImage } from "./useChatImage";
 
 type SupportMessage = {
   sender: "user" | "admin" | "system";
@@ -10,8 +11,6 @@ type SupportMessage = {
   attachment?: { type: "image"; fileName: string; mimeType: string; size: number };
 };
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const SUPPORT_REFRESH_MS = 15_000;
 
 function formatTime(ts: number): string {
@@ -23,12 +22,10 @@ export default function SupportWidget() {
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const image = useChatImage(setSendError);
+  const { file: selectedImage, preview: imagePreview, fileInput: fileInputRef } = image;
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imagePreviewRef = useRef<string | null>(null);
 
   const fetchMessages = useCallback(() => {
     fetch("/api/dashboard/support/messages")
@@ -53,38 +50,6 @@ export default function SupportWidget() {
   useEffect(() => {
     if (open) messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, open]);
-
-  useEffect(() => () => {
-    if (imagePreviewRef.current) URL.revokeObjectURL(imagePreviewRef.current);
-  }, []);
-
-  function selectImage(file: File | null) {
-    setSendError(null);
-    if (!file) return;
-    if (!ALLOWED_IMAGE_TYPES.has(file.type.toLowerCase())) {
-      setSendError("Envie uma imagem JPG, PNG ou WEBP.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setSendError("A imagem deve ter no máximo 5 MB.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-    if (imagePreviewRef.current) URL.revokeObjectURL(imagePreviewRef.current);
-    const objectUrl = URL.createObjectURL(file);
-    imagePreviewRef.current = objectUrl;
-    setImagePreview(objectUrl);
-    setSelectedImage(file);
-  }
-
-  function removeSelectedImage() {
-    if (imagePreviewRef.current) URL.revokeObjectURL(imagePreviewRef.current);
-    imagePreviewRef.current = null;
-    setImagePreview(null);
-    setSelectedImage(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
 
   async function send() {
     if ((!input.trim() && !selectedImage) || sending) return;
@@ -115,7 +80,7 @@ export default function SupportWidget() {
 
       setMessages(data?.messages ?? []);
       setInput("");
-      removeSelectedImage();
+      image.clear();
     } catch {
       setSendError("Não foi possível enviar. Verifique sua conexão e tente novamente.");
     } finally {
@@ -126,7 +91,8 @@ export default function SupportWidget() {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm h-[28rem] max-h-[calc(100dvh-7rem)] bg-surface rounded-2xl shadow-2xl border border-line flex flex-col overflow-hidden">
+        <div {...image.dropHandlers(sending)}
+          className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm h-[28rem] max-h-[calc(100dvh-7rem)] bg-surface rounded-2xl shadow-2xl border border-line flex flex-col overflow-hidden">
           <div className="bg-[#128C7E] text-white px-4 py-3 flex items-center justify-between shrink-0">
             <div>
               <p className="font-semibold text-sm">Suporte Zelo</p>
@@ -183,18 +149,18 @@ export default function SupportWidget() {
                 <Image src={imagePreview} alt="Pré-visualização da imagem" width={48} height={48} unoptimized
                   className="h-12 w-12 rounded-lg object-cover" />
                 <p className="min-w-0 flex-1 truncate text-xs text-muted">{selectedImage?.name}</p>
-                <button type="button" onClick={removeSelectedImage} disabled={sending}
+                <button type="button" onClick={image.clear} disabled={sending}
                   className="h-7 w-7 rounded-full text-lg leading-none text-muted hover:bg-line disabled:opacity-40"
                   aria-label="Remover imagem">×</button>
               </div>
             )}
             {sendError && <p className="mb-2 text-xs text-red-ink" role="alert">{sendError}</p>}
             <div className="flex gap-2">
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-                onChange={e => selectImage(e.target.files?.[0] ?? null)} />
+              <input ref={fileInputRef} type="file" accept={image.accept} className="hidden"
+                onChange={e => image.select(e.target.files?.[0] ?? null)} />
               <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending}
                 className="h-10 w-10 shrink-0 rounded-xl border border-line bg-surface-muted text-muted transition hover:border-emerald-500 hover:text-emerald-ink disabled:opacity-40"
-                aria-label="Anexar uma foto" title="Anexar foto (até 5 MB)">
+                aria-label="Anexar uma foto" title="Anexe ou solte uma foto aqui (até 5 MB)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="mx-auto h-5 w-5" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a3.75 3.75 0 0 0-5.303-5.303L6.11 9.53a5.25 5.25 0 0 0 7.425 7.425l7.5-7.5M8.25 12.75l7.5-7.5" />
                 </svg>
