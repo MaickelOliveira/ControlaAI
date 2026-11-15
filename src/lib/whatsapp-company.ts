@@ -94,8 +94,12 @@ export async function withWhatsAppCompany(msg: IncomingMessage, next: (message: 
     async function ask(resume?: IncomingMessage) {
       await setPendingAction(msg.from, { type: "company_selection", userId: user!.id,
         ...(resume ? { resume: { text: resume.text, channel:resume.channel,providerMessageId:resume.providerMessageId,receivedAt:resume.receivedAt,isFileMessage: resume.isFileMessage, fileMimeType: resume.fileMimeType,
-          fileName: resume.fileName, contactName: resume.contactName, fileBase64: resume.fileBuffer?.toString("base64") } } : {}) });
-      await addMessage(msg.from, { role: "user", content: msg.text || "[Arquivo]", ts:msg.receivedAt??Date.now(),channel:msg.channel });
+          fileName: resume.fileName, fileCaption: resume.fileCaption, inboxImageUrl: resume.inboxImageUrl, contactName: resume.contactName, fileBase64: resume.fileBuffer?.toString("base64") } } : {}) });
+      await addMessage(msg.from, {
+        role: "user", content: msg.inboxImageUrl ? (typeof msg.fileCaption === "string" ? msg.fileCaption : "") : msg.text || "[Arquivo]",
+        ts: msg.receivedAt ?? Date.now(), channel: msg.channel,
+        ...(msg.inboxImageUrl ? { type: "image", mediaUrl: msg.inboxImageUrl } : {}),
+      }, { contactName: msg.contactName });
       await sendText(msg.from, `${es ? "¿En qué empresa quieres hacer este pedido?" : "Em qual empresa você quer fazer este pedido?"}\n\n${companies.map((company, index) => `${index + 1}. ${company.name}`).join("\n")}\n\n${es ? "Responde con el nombre o número. Para desistir, escribe cancelar." : "Responda com o nome ou número. Para desistir, escreva cancelar."}`);
     }
     if (createCommand) {

@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     content: message.content,
     ts: message.ts,
     type: message.type,
+    ...(message.type === "image" && message.mediaUrl?.startsWith("/api/admin/inbox/image?") ? { mediaUrl: message.mediaUrl } : {}),
     ...(message.role === "assistant" ? { id: inboxMessageId(message) } : {}),
   })) });
 }

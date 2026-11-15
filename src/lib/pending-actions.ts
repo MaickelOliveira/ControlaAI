@@ -436,7 +436,7 @@ export type PendingAccountCreateConfirm = {
   expiresAt: string;
 };
 
-export type PendingCompanySelection={type:"company_selection";phone:string;userId:string;expiresAt:string;resume?:{text:string;channel?:"waba"|"evolution";providerMessageId?:string;receivedAt?:number;fileBase64?:string;fileMimeType?:string;fileName?:string;isFileMessage?:boolean;contactName?:string}};
+export type PendingCompanySelection={type:"company_selection";phone:string;userId:string;expiresAt:string;resume?:{text:string;channel?:"waba"|"evolution";providerMessageId?:string;receivedAt?:number;fileBase64?:string;fileMimeType?:string;fileName?:string;fileCaption?:string;inboxImageUrl?:string;isFileMessage?:boolean;contactName?:string}};
 export type PendingFiscalDraft = {
  type: "nfse_draft"; phone: string; userId: string; expiresAt: string;
  stage: "service" | "new_service" | "recipient" | "document" | "amount" | "competence";

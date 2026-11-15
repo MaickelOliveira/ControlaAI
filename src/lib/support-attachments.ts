@@ -99,6 +99,19 @@ export async function uploadSupportImage(userId: string, file: File): Promise<Su
   return { type: "image", fileName, mimeType, size: file.size };
 }
 
+export function inboxImageUrl(phone: string, fileName: string): string {
+  return `/api/admin/inbox/image?phone=${phone}&file=${fileName}`;
+}
+
+export async function storeInboxImage(phone: string, buffer: Buffer): Promise<string | undefined> {
+  if (!/^\d{8,20}$/.test(phone) || buffer.length > MAX_SUPPORT_IMAGE_BYTES) return;
+  const mimeType = (Object.keys(EXTENSION_BY_MIME) as SupportImageMime[])
+    .find(type => hasValidImageSignature(buffer, type));
+  if (!mimeType) return;
+  const { fileName } = await uploadSupportImage(`whatsapp/${phone}`, new File([Uint8Array.from(buffer)], "foto", { type: mimeType }));
+  return inboxImageUrl(phone, fileName);
+}
+
 export async function deleteSupportImage(userId: string, fileName: string): Promise<void> {
   if (!supportImageMimeFromFileName(fileName)) return;
   const { error } = await getSupabase().storage.from(SUPPORT_IMAGE_BUCKET).remove([`${userId}/${fileName}`]);
