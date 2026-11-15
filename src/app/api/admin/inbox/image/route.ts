@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const url = inboxImageUrl(phone, fileName);
   const history = await getHistory(phone);
-  const image = history.some(message => message.role === "user" && message.type === "image" && message.mediaUrl === url)
+  const image = history.some(message => message.type === "image" && message.mediaUrl === url)
     ? await downloadSupportImage(`whatsapp/${phone}`, fileName)
     : null;
   if (!image) return NextResponse.json({ error: "Imagem não encontrada" }, { status: 404 });

@@ -470,8 +470,8 @@ export default function AdminInboxPage() {
                       <div className={clsx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words",
                         m.role === "assistant" ? "bg-[#005c4b] text-white rounded-br-sm" : "bg-surface text-ink rounded-bl-sm border border-line")}>
                         {m.type === "image" && m.mediaUrl && (
-                          <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="mb-1 block" aria-label="Abrir foto recebida">
-                            <Image src={m.mediaUrl} alt="Foto recebida pelo WhatsApp" width={480} height={480}
+                          <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="mb-1 block" aria-label="Abrir imagem">
+                            <Image src={m.mediaUrl} alt={m.role === "assistant" ? "Foto enviada pelo WhatsApp" : "Foto recebida pelo WhatsApp"} width={480} height={480}
                               unoptimized className="h-auto max-h-72 w-auto max-w-full rounded-lg object-contain" />
                           </a>
                         )}

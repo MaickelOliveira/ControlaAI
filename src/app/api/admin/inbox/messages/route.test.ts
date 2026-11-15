@@ -53,11 +53,11 @@ it("requires an administrator before allowing deletion", async () => {
   expect(mocks.remove).not.toHaveBeenCalled();
 });
 
-it("shows only private Inbox image links and serves media only for the conversation that received it", async () => {
+it.each(["user", "assistant"] as const)("serves private Inbox images from %s only in the associated conversation", async role => {
   const file = "550e8400-e29b-41d4-a716-446655440000.jpg";
   const mediaUrl = `/api/admin/inbox/image?phone=${phone}&file=${file}`;
   mocks.history.mockResolvedValue([
-    { role: "user", type: "image", content: "Legenda", ts: 1, mediaUrl },
+    { role, type: "image", content: "Legenda", ts: 1, mediaUrl },
     { role: "user", type: "image", content: "", ts: 2, mediaUrl: "https://outside.example/image.jpg" },
   ]);
   const response = await GET(new NextRequest(`${url}?phone=${phone}`));

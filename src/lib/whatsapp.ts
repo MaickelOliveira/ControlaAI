@@ -2,6 +2,7 @@ import { getConfig } from "@/lib/whatsapp-config";
 import * as evolution from "@/lib/evolution";
 import * as waba from "@/lib/waba";
 import { addMessage, hasOpenCustomerServiceWindow } from "@/lib/conversations";
+import { storeInboxImage } from "@/lib/support-attachments";
 import {decorateVirtualAgentReply} from "./virtual-agent-replies";
 
 async function outgoingActivity(to:string){
@@ -272,8 +273,17 @@ export async function sendFile(to: string, fileBuffer: Buffer, filename: string,
     ? await waba.sendFile(to, fileBuffer, filename, mimeType, caption)
     : await evolution.sendFile(to, fileBuffer, filename, mimeType, caption);
   if (ok) {
-    const label = mimeType.startsWith("image/") ? "📷 Imagem" : mimeType.startsWith("audio/") ? "🎵 Áudio" : `📎 ${filename}`;
-    await addMessage(to, { role: "assistant", content: caption ? `${label}\n${caption}` : label, ts: Date.now(),...(options?.privateFinancial?{privateFinancial:true}:{}) });
+    const ts = Date.now();
+    const isImage = mimeType.startsWith("image/");
+    const mediaUrl = isImage ? await storeInboxImage(to.replace(/\D/g, ""), fileBuffer).catch(() => undefined) : undefined;
+    const label = isImage ? "📷 Imagem enviada · prévia indisponível" : mimeType.startsWith("audio/") ? "🎵 Áudio" : `📎 ${filename}`;
+    await addMessage(to, {
+      role: "assistant",
+      content: mediaUrl ? caption ?? "" : caption ? `${label}\n${caption}` : label,
+      ts,
+      ...(mediaUrl ? { type: "image", mediaUrl } : {}),
+      ...(options?.privateFinancial ? { privateFinancial: true } : {}),
+    });
   }
   return ok;
   } finally { await activity.finish().catch(()=>{}); }

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   sendText: vi.fn(),
   sendTemplate: vi.fn(),
   sendFile: vi.fn(),
+  storeImage: vi.fn(),
 }));
 
 vi.mock("@/lib/whatsapp-config", () => ({
@@ -26,6 +27,8 @@ vi.mock("@/lib/waba", () => ({
 vi.mock("@/lib/evolution", () => ({
   sendText: vi.fn(),
 }));
+
+vi.mock("@/lib/support-attachments", () => ({ storeInboxImage: mocks.storeImage }));
 
 import {runWithVirtualAgentReply,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
 import { sendReminderTemplate, sendWelcomeTemplate,sendText,sendFile } from "./whatsapp";
@@ -132,4 +135,37 @@ it("decorates bank file captions only for the identified recipient and keeps pri
  expect(mocks.sendFile.mock.lastCall?.[4]).toContain("*Rita*");
  expect(mocks.sendFile.mock.lastCall?.[4]).toContain("Fatura do cartão");
  expect(mocks.addMessage).toHaveBeenLastCalledWith("5511988881111",expect.objectContaining({privateFinancial:true,content:expect.stringContaining("*Juliana*")}));
+});
+
+it("keeps the sent photo and caption in the Inbox after WhatsApp accepts the send", async () => {
+  const phone = "5511988881111";
+  const buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+  const mediaUrl = `/api/admin/inbox/image?phone=${phone}&file=550e8400-e29b-41d4-a716-446655440000.jpg`;
+  mocks.sendFile.mockResolvedValueOnce(true);
+  mocks.storeImage.mockResolvedValueOnce(mediaUrl);
+
+  await expect(sendFile(phone, buffer, "foto.jpg", "image/jpeg", "Legenda")).resolves.toBe(true);
+  expect(mocks.sendFile).toHaveBeenLastCalledWith(phone, buffer, "foto.jpg", "image/jpeg", "Legenda");
+  expect(mocks.storeImage).toHaveBeenLastCalledWith(phone, buffer);
+  expect(mocks.addMessage).toHaveBeenLastCalledWith(phone, {
+    role: "assistant", type: "image", content: "Legenda", mediaUrl, ts: expect.any(Number),
+  });
+});
+
+it("does not record a rejected photo or report a failed send when only the preview fails", async () => {
+  const phone = "5511988881111";
+  const buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+  mocks.storeImage.mockClear();
+  mocks.addMessage.mockClear();
+  mocks.sendFile.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  mocks.storeImage.mockRejectedValueOnce(new Error("Storage temporarily unavailable"));
+
+  await expect(sendFile(phone, buffer, "foto.jpg", "image/jpeg")).resolves.toBe(false);
+  expect(mocks.storeImage).not.toHaveBeenCalled();
+  expect(mocks.addMessage).not.toHaveBeenCalled();
+
+  await expect(sendFile(phone, buffer, "foto.jpg", "image/jpeg")).resolves.toBe(true);
+  expect(mocks.addMessage).toHaveBeenLastCalledWith(phone, expect.objectContaining({
+    role: "assistant", content: "📷 Imagem enviada · prévia indisponível",
+  }));
 });
