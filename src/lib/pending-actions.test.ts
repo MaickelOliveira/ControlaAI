@@ -137,13 +137,15 @@ describe("parseAmountBR", () => {
 describe("parseAmountReply", () => {
   it.each([
     ["1200", 1200], ["1.200", 1200], ["R$ 1.200,50", 1200.50],
-    ["1200.50", 1200.50], ["foi 1,2 mil", 1200], ["mil e duzentos", 1200],
+    ["1200.50", 1200.50], ["foi 1,2 mil reais", 1200], ["mil e duzentos", 1200],
+    ["o valor é de 1200", 1200], ["ficou em R$ 1.200,50", 1200.50],
+    ["1 200,50 reais", 1200.50], ["1.200 reais e 50 centavos", 1200.50],
     ["cien pesos con cincuenta centavos", 100.50],
   ] as const)("accepts %s as a single amount", (answer, expected) => {
     expect(parseAmountReply(answer)).toBe(expected);
   });
 
-  it.each(["dia 20/11", "-1200", "0", "1200 ou 1500", "mil ou dois mil"])(
+  it.each(["dia 20/11", "-1200", "0", "1200 ou 1500", "mil ou dois mil", "1.200,50 reais e 50 centavos"])(
     "rejects %s as an amount",
     answer => expect(parseAmountReply(answer)).toBeNull(),
   );

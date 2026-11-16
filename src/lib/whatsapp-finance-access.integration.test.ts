@@ -106,7 +106,11 @@ it("registers the business receivables together with the only available account 
   expect(reply()).toContain("Dinheiro");
 });
 
-it("uses a four-digit reply as the second amount in a business batch", async () => {
+it.each([
+  ["1200", 1200],
+  ["o valor é de R$ 1.200,50", 1200.50],
+  ["mil e duzentos reais", 1200],
+] as const)("uses %s as the second amount in a business batch", async (answer, amount) => {
   m.accounts.mockResolvedValue([cash]);
   m.process.mockResolvedValue({
     intent: "finance_register", confidence: .99,
@@ -129,13 +133,13 @@ it("uses a four-digit reply as the second amount in a business batch", async () 
   expect(m.addBatch).not.toHaveBeenCalled();
 
   m.send.mockClear();
-  await receive("1200");
+  await receive(answer);
 
   expect(lookupLinkCode).not.toHaveBeenCalled();
   expect(m.process).toHaveBeenCalledOnce();
   expect(m.addBatch).toHaveBeenCalledExactlyOnceWith([
     expect.objectContaining({ description: "Cliente Alfa", amount: 348.21, date: "2026-11-17", category: "Serviços" }),
-    expect.objectContaining({ description: "Cliente Beta", amount: 1200, date: "2026-11-20", category: "Outros", accountId: cash.id, mode: "business", status: "pending" }),
+    expect.objectContaining({ description: "Cliente Beta", amount, date: "2026-11-20", category: "Outros", accountId: cash.id, mode: "business", status: "pending" }),
   ]);
   expect(reply()).toContain("2 lançamentos registrados");
 });
