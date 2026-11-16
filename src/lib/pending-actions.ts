@@ -873,6 +873,21 @@ export function parseAmountBR(text: string): number | null {
   return parseWrittenAmountBR(text);
 }
 
+/** A resposta a uma pergunta de valor não deve interpretar datas ou números de documento. */
+export function parseAmountReply(text: string): number | null {
+  const answer = text.trim().replace(/^(?:[eé]|es|foi|son|s[ãa]o)\s+/i, "").replace(/[.!]$/, "");
+  const numeric = answer.match(/^(?:(?:R\$|€|\$)\s*)?(\d{1,3}(?:\.\d{3})+|\d+)(?:([,.]\d{1,2}))?\s*(mil|rea(?:l|is)|euros?|pesos?|d[oó]lares?)?$/i);
+  if (numeric) {
+    const amount = parseAmountBR(numeric[1].replaceAll(".", "") + (numeric[2]?.replace(".", ",") ?? "") + (numeric[3]?.toLowerCase() === "mil" ? " mil" : ""));
+    return amount && Number.isSafeInteger(Math.round(amount * 100)) ? amount : null;
+  }
+  const words = tokenizeWords(answer.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase());
+  if (!/^[\p{L}\s]+$/u.test(answer) || words.some(word =>
+    !Object.hasOwn(WRITTEN_NUMBER_UNITS, word) && !Object.hasOwn(WRITTEN_NUMBER_MULTIPLIERS, word)
+    && !/^(?:e|y|com|con|real|reais|euros?|pesos?|dolares?|centavos?|centimos?)$/.test(word))) return null;
+  return parseWrittenAmountBR(answer);
+}
+
 /** Interpreta a resposta do usuário como o NOVO VALOR de um lançamento já
  *  escolhido (etapa final de finance_edit, quando falta só o "o que mudar").
  *  Aceita valor, nome de categoria conhecida, modo pessoal/empresarial

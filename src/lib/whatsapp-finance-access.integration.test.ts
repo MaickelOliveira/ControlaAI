@@ -5,7 +5,8 @@ const vehicle = vi.hoisted(() => ({ list: vi.fn(), addExpense: vi.fn(), linkFina
 vi.mock("./vehicles", async original => ({ ...await original<typeof import("./vehicles")>(), getVehiclesByUser: vehicle.list, addVehicleExpense: vehicle.addExpense, setExpenseFinanceId: vehicle.linkFinance }));
 const tasks = vi.hoisted(() => ({ pending: vi.fn(), update: vi.fn() }));
 vi.mock("./tasks", async original => ({ ...await original<typeof import("./tasks")>(), getPendingTasks: tasks.pending, updateTask: tasks.update }));
-vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner, updateUser: m.userUpdate, generateWppVerifyCode: m.code }));
+const lookupLinkCode = vi.hoisted(() => vi.fn(async () => null));
+vi.mock("./users", async original => ({ ...await original<typeof import("./users")>(), getUserById: m.owner, updateUser: m.userUpdate, generateWppVerifyCode: m.code, getUserByWppCode: lookupLinkCode }));
 vi.mock("./wpp-phone-links", () => ({ getUserIdByPhone: async () => "fixture-owner", getPhoneAccess: m.access, getPhonesForUser: async () => [{ userId: "fixture-owner", phone: "5511999990000", name: "Fixture", relation: "Titular" }, { userId: "fixture-owner", phone: "5511999990002", name: "Ana", relation: "Equipe" }], countPhonesForUser: m.count, findPhoneByName: async () => "5511999990002", findPhoneByRelation: async () => null }));
 vi.mock("./pending-actions", async original => ({ ...await original<typeof import("./pending-actions")>(), getPendingAction: m.pending, clearPendingAction: m.clear, setPendingAction: m.setPending }));
 vi.mock("./conversations", async original => ({ ...await original<typeof import("./conversations")>(), addMessage: vi.fn(), getAiPaused: async () => false, getAiHistory: async () => [], getLastFinanceBatch: m.batch, setLastFinanceBatch: vi.fn() }));
@@ -103,6 +104,40 @@ it("registers the business receivables together with the only available account 
   ]);
   expect(reply()).toContain("3 lançamentos registrados");
   expect(reply()).toContain("Dinheiro");
+});
+
+it("uses a four-digit reply as the second amount in a business batch", async () => {
+  m.accounts.mockResolvedValue([cash]);
+  m.process.mockResolvedValue({
+    intent: "finance_register", confidence: .99,
+    finances: [
+      { type: "income", description: "Cliente Alfa", amount: 348.21, date: "2026-11-17", pending: true, category: "Serviços" },
+      { type: "income", description: "Cliente Beta", amount: 0, date: "2026-11-20", pending: true, category: "Outros" },
+    ],
+  });
+
+  await receive("Registre os recebimentos de Alfa e Beta");
+  expect(reply()).toContain("Qual é o valor do lançamento 2?");
+  expect(m.addBatch).not.toHaveBeenCalled();
+  const stored = m.setPending.mock.lastCall?.[1];
+  expect(stored).toMatchObject({ type: "action_continuation" });
+  m.pending.mockResolvedValue(stored);
+
+  await receive("dia 20/11");
+  expect(reply()).toContain("Envie o valor");
+  expect(m.clear).not.toHaveBeenCalled();
+  expect(m.addBatch).not.toHaveBeenCalled();
+
+  m.send.mockClear();
+  await receive("1200");
+
+  expect(lookupLinkCode).not.toHaveBeenCalled();
+  expect(m.process).toHaveBeenCalledOnce();
+  expect(m.addBatch).toHaveBeenCalledExactlyOnceWith([
+    expect.objectContaining({ description: "Cliente Alfa", amount: 348.21, date: "2026-11-17", category: "Serviços" }),
+    expect.objectContaining({ description: "Cliente Beta", amount: 1200, date: "2026-11-20", category: "Outros", accountId: cash.id, mode: "business", status: "pending" }),
+  ]);
+  expect(reply()).toContain("2 lançamentos registrados");
 });
 
 it("waits for a choice between two business accounts before writing any of a batch", async () => {

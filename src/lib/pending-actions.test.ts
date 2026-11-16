@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseYesNo, parseAmountBR, choiceIndexByLabels, parseAccountCreateRequest, parseFinanceChoiceMulti, parseFinanceEmployeeChoice, parseRecurringConfirmationAnswer, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
+import { parseYesNo, parseAmountBR, parseAmountReply, choiceIndexByLabels, parseAccountCreateRequest, parseFinanceChoiceMulti, parseFinanceEmployeeChoice, parseRecurringConfirmationAnswer, parseVehicleChoice, parseVehiclePatchFromText } from "./pending-actions";
 
 describe("parseYesNo", () => {
   it("recognizes affirmative answers", () => {
@@ -132,6 +132,21 @@ describe("parseAmountBR", () => {
     expect(parseAmountBR("cien pesos con cincuenta centavos")).toBe(100.5);
     expect(parseAmountBR("cincuenta centimos")).toBe(0.5);
   });
+});
+
+describe("parseAmountReply", () => {
+  it.each([
+    ["1200", 1200], ["1.200", 1200], ["R$ 1.200,50", 1200.50],
+    ["1200.50", 1200.50], ["foi 1,2 mil", 1200], ["mil e duzentos", 1200],
+    ["cien pesos con cincuenta centavos", 100.50],
+  ] as const)("accepts %s as a single amount", (answer, expected) => {
+    expect(parseAmountReply(answer)).toBe(expected);
+  });
+
+  it.each(["dia 20/11", "-1200", "0", "1200 ou 1500", "mil ou dois mil"])(
+    "rejects %s as an amount",
+    answer => expect(parseAmountReply(answer)).toBeNull(),
+  );
 });
 
 describe("parseFinanceChoiceMulti", () => {
