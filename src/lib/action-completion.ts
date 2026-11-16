@@ -52,6 +52,13 @@ function hasRecurringChange(ai: AIResult): boolean {
   return !!(recurring?.amount || recurring?.category || recurring?.dayOfMonth || recurring?.repeatUnit || recurring?.totalInstallments || recurring?.startDate);
 }
 
+export function pendingFinanceAmountIndex(ai: AIResult): number {
+  if (ai.intent !== "finance_register") return -1;
+  const items = ai.finances?.length ? ai.finances : ai.finance ? [ai.finance] : [];
+  if (items.some(item => item?.type !== "income" && item?.type !== "expense")) return -1;
+  return items.findIndex(item => !Number.isFinite(item.amount) || item.amount <= 0);
+}
+
 /**
  * Validação central das ações que ainda não usam o motor detalhado de slots.
  * Retorna só a pergunta do próximo dado indispensável. `null` significa que
@@ -71,7 +78,7 @@ export function getMissingActionQuestion(ai: AIResult, locale?: string, sourceTe
       if (missingType >= 0) return say(locale,
         `💰 O lançamento${items.length > 1 ? ` ${missingType + 1}` : ""} é uma despesa ou uma receita?`,
         `💰 ¿El movimiento${items.length > 1 ? ` ${missingType + 1}` : ""} es un gasto o un ingreso?`);
-      const missingAmount = items.findIndex(item => !(typeof item?.amount === "number" && item.amount > 0));
+      const missingAmount = pendingFinanceAmountIndex(ai);
       if (missingAmount >= 0) return say(locale,
         `💰 Qual é o valor${items.length > 1 ? ` do lançamento ${missingAmount + 1}` : ""}?`,
         `💰 ¿Cuál es el importe${items.length > 1 ? ` del movimiento ${missingAmount + 1}` : ""}?`);

@@ -48,7 +48,7 @@ import {
 import { createEmployee, getEmployeesByUser, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { getContactsByUser, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
-import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, choiceIndexByLabels, choicesByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
+import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, parseAmountReply, choiceIndexByLabels, choicesByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, beginReminderRecipientCorrection, hasMissingSlotFields, isReminderRecipientCorrection, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
   buildActionContinuationMessage,
@@ -56,6 +56,7 @@ import {
   isActionContinuationCancel,
   isClearlyNewActionDuringContinuation,
   mergeActionContinuation,
+  pendingFinanceAmountIndex,
 } from "@/lib/action-completion";
 import { getRecurringByUser, confirmRecurring, cancelRecurring, updateRecurring, findDueRecurringMatches, descriptionsLikelyMatch, upsertImportedInstallmentSchedules, type RecurringTransaction } from "@/lib/recurring";
 import { collectUpcomingFinanceItems, replyUpcomingFinances } from "@/lib/upcoming-finances";
@@ -1350,13 +1351,18 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
     if (!messageText) return;
 
+    const linkPending = await getPendingAction(from);
+
     // ── Verifica se é um código de vinculação (4 dígitos) ──
     // Não vincula na hora — identifica a pessoa e confirma o modo permitido,
     // usando o nome da plataforma para o titular. Só então
     // chama linkPhone. Precisa ficar ANTES de identificar o usuário pelo
     // telefone (abaixo), porque o número ainda não está vinculado aqui.
     const codeMatch = messageText.trim().match(/^(\d{4})$/);
-    if (codeMatch) {
+    const awaitingAmount = codeMatch && linkPending?.type === "action_continuation"
+      && pendingFinanceAmountIndex(linkPending.partial) >= 0
+      && await getUserIdByPhone(from) === linkPending.userId;
+    if (codeMatch && !awaitingAmount) {
       const allowed = await checkRateLimit(`wpp-code:${from}`, 10, 10 * 60_000);
       if (!allowed) {
         await wppSend(from, "⏳ Muitas tentativas de código. Aguarde 10 minutos e tente novamente.");
@@ -1387,7 +1393,6 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
 
     // ── Vinculação em andamento (nome → vínculo → acesso) — precisa vir
     //    ANTES de identificar usuário pelo telefone, pelo mesmo motivo acima ──
-    const linkPending = await getPendingAction(from);
     if (linkPending?.type === "awaiting_wpp_link_info") {
       const linkOwner = await getUserById(linkPending.userId);
       if (!linkOwner || !hasAccess(linkOwner)) {
@@ -1531,7 +1536,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     }
 
     // ── Verifica ação pendente (ex: seleção de veículo) ──
-    let pending = await getPendingAction(from);
+    let pending = linkPending;
     const billCorrection=parseMarkBillPayment(messageText,todayStrBR());
     const billConfirmation=pending?.type==="finance_bill_payment"&&pending.userId===user.id?pending:null;
     if(billCorrection||billConfirmation){
@@ -1635,6 +1640,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       else {await wppSend(from,localized(user.locale,"O pedido original continua guardado. Confira a Agenda. Responda *tentar novamente* para conferir a mesma tentativa, ou *cancelar* para interrompê-la.","El pedido original sigue guardado. Consulta Agenda. Responde *intentar de nuevo* para consultar el mismo intento, o *cancelar* para detenerlo."));return;}
     }
     let actionContinuation: { originalText: string; answers: string[]; partial: AIResult } | null = null;
+    let resumedFinanceAmount: AIResult | null = null;
     let accountSelectionResume: AIResult | null = null;
     let employeeSelectionResume: AIResult | null = null;
     let recordSelection: { id: string; ai: AIResult } | undefined;
@@ -2901,15 +2907,33 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         await wppSend(from, user.locale === "es" ? "Acción cancelada; no cambié nada. 👍" : "Ação cancelada — não alterei nada. 👍");
         return;
       }
-      await clearPendingAction(from);
       if (!isClearlyNewActionDuringContinuation(messageText)) {
+        const index = pendingFinanceAmountIndex(pending.partial);
+        if (index >= 0) {
+          const amount = parseAmountReply(messageText);
+          if (amount === null) {
+            const question = getMissingActionQuestion(pending.partial, user.locale);
+            await wppSend(from, `${question}\n\n${localized(user.locale, "Envie o valor, por exemplo *1200* ou *1.200,50*.", "Envía el importe, por ejemplo *1200* o *1.200,50*.")}`);
+            return;
+          }
+          const partial = pending.partial;
+          resumedFinanceAmount = {
+            ...partial, confidence: Math.max(partial.confidence || 0, 0.85),
+            ...(partial.finances?.length
+              ? { finances: partial.finances.map((item, i) => i === index ? { ...item, amount } : item) }
+              : { finance: { ...partial.finance!, amount } }),
+          };
+        }
         actionContinuation = {
           originalText: pending.originalText,
           answers: [...pending.answers, messageText],
           partial: pending.partial,
         };
-        messageText = buildActionContinuationMessage(actionContinuation.originalText, actionContinuation.answers);
+        messageText = resumedFinanceAmount
+          ? actionContinuation.originalText
+          : buildActionContinuationMessage(actionContinuation.originalText, actionContinuation.answers);
       }
+      await clearPendingAction(from);
       // Se for claramente outro comando, a pendência é abandonada e a
       // mensagem atual segue normalmente para o classificador.
     }
@@ -3137,8 +3161,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       return;
     }
     const selectedRecordId = recordSelection?.id;
-    const classifiedAi = recordSelection?.ai ?? accountSelectionResume ?? employeeSelectionResume ?? getExplicitUpcomingFinanceQueryResult(messageText) ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
-    const ai = withExplicitFinanceCategoryEdit(messageText, getScopedModeReadResult(messageText) ?? (actionContinuation
+    const classifiedAi = resumedFinanceAmount ?? recordSelection?.ai ?? accountSelectionResume ?? employeeSelectionResume ?? getExplicitUpcomingFinanceQueryResult(messageText) ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
+    const ai = withExplicitFinanceCategoryEdit(messageText, resumedFinanceAmount ?? getScopedModeReadResult(messageText) ?? (actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi));
     setVirtualAgentIntent(ai.intent);

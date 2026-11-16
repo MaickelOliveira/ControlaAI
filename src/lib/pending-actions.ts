@@ -873,6 +873,27 @@ export function parseAmountBR(text: string): number | null {
   return parseWrittenAmountBR(text);
 }
 
+/** A resposta a uma pergunta de valor não deve interpretar datas ou números de documento. */
+export function parseAmountReply(text: string): number | null {
+  const answer = text.trim().replace(/[.!]$/, "").trimEnd().replace(
+    /^(?:(?:(?:o |el )?valor\s+)?(?:[eé]|es|foi|son|s[ãa]o|ficou(?: em)?|queda(?: en)?)(?: de)?|(?:o |el )?valor de|pode colocar|pode anotar)\s+/i,
+    "",
+  );
+  const numeric = answer.match(/^(?:(?:R\$|€|\$)\s*)?(\d{1,3}(?:\.\d{3})+|\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)([,.]\d{1,2})?\s*(mil)?\s*(?:(?:rea(?:l|is)|euros?|pesos?|d[oó]lares?)(?:\s+(?:e|y|com|con)\s+(\d{1,2})\s+cent(?:avos?|[ií]mos?))?)?$/i);
+  if (numeric) {
+    const [, whole, decimal, thousands, cents] = numeric;
+    if (decimal && cents) return null;
+    const units = Number(whole.replace(/[.\s]/g, "") + (decimal?.replace(",", ".") ?? ""));
+    const amount = units * (thousands ? 1000 : 1) + Number(cents ?? 0) / 100;
+    return amount > 0 && Number.isSafeInteger(Math.round(amount * 100)) ? amount : null;
+  }
+  const words = tokenizeWords(answer.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase());
+  if (!/^[\p{L}\s]+$/u.test(answer) || words.some(word =>
+    !Object.hasOwn(WRITTEN_NUMBER_UNITS, word) && !Object.hasOwn(WRITTEN_NUMBER_MULTIPLIERS, word)
+    && !/^(?:e|y|com|con|real|reais|euros?|pesos?|dolares?|centavos?|centimos?)$/.test(word))) return null;
+  return parseWrittenAmountBR(answer);
+}
+
 /** Interpreta a resposta do usuário como o NOVO VALOR de um lançamento já
  *  escolhido (etapa final de finance_edit, quando falta só o "o que mudar").
  *  Aceita valor, nome de categoria conhecida, modo pessoal/empresarial
