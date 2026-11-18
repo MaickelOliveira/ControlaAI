@@ -99,3 +99,14 @@ it("interprets loan duration units before exposing installment counts and import
  expect(normalizeCredit("loans",{...source,first_instalment_due_date:null,scheduled_instalments:{type_number_of_instalments:"MES",total_number_of_instalments:36}})).toMatchObject({remaining_installments:7});
  expect(normalizeCredit("loans",{...source,instalment_periodicity:"SEMANAL"})).toMatchObject({remaining_installments:null,credit_schedule:{total_installments:null}});
 });
+
+ it("imports a credit contract with a zero-value release without inventing a payment",async()=>{
+  const {normalizeCreditPayments}=await import("./open-finance-normalize");
+  const empty={paymentId:"fixture-zero",paidDate:"2026-11-03",paidAmount:"0.0000",currency:"BRL"};
+  const paid={...empty,paymentId:"fixture-paid",paidAmount:"123.45"};
+  expect(normalizeCreditPayments([empty,paid])).toEqual([{external_id:"fixture-paid",date:"2026-11-03",amount:"123.45",currency:"BRL"}]);
+  expect(normalizeCredit("loans",{id:"fixture-loan",currency:"BRL",contract_amount:"2500.0000",payments:{paid_instalments:0,contract_outstanding_balance:"1289.8000",releases:[empty]}})).toMatchObject({outstanding_amount:"1289.8000",paid_installments:0,payment_history:[]});
+  expect(()=>normalizeCreditPayments([{...empty,paidAmount:"-0.01"}])).toThrow("INVALID_CREDIT_PAYMENTS");
+  expect(()=>normalizeCreditPayments([{...empty,currency:"invalid"}])).toThrow("INVALID_AMOUNT");
+  expect(()=>normalizeCreditPayments([{...empty,paidDate:"2026-02-30"}])).toThrow("INVALID_DATE");
+ });

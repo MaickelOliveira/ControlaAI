@@ -20,6 +20,7 @@ import FinanceDuplicateReview from "@/components/FinanceDuplicateReview";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
 import FinanceBankSchedules from "@/components/FinanceBankSchedules";
 import FinanceLoanRows from "@/components/FinanceLoanRows";
+import {bankSyncStatus} from "@/lib/bank-sync-status";
 import {bankForecastCategory} from "@/lib/finance-bank-schedules";
 import {missingHistoricalLedgerNotice} from "@/lib/finance-history";
 import {recurringInstallmentEnd} from "@/lib/installment-progress";
@@ -102,6 +103,7 @@ function FinancasContent() {
   const [readLedger]=useState(createActiveFinanceLedgerReader);
   const loader=useCallback((signal:AbortSignal)=>readLedger(signal,filters.from,filters.to),[readLedger,filters.from,filters.to]);
   const {data:ledger,setData:setLedger,error:ledgerError}=useBankUpdates<FinanceLedgerData>(loader);
+  const bankStatus=bankSyncStatus(ledger?.bank,Boolean(ledgerError));
   const mode=ledger?.mode??bootstrapMode;
   const finances=useMemo(()=>ledger?.finances??[],[ledger]);
   const accountOptions=useMemo(()=>financeBankOptions(ledger),[ledger]);
@@ -458,7 +460,7 @@ function FinancasContent() {
       <FinanceFilterBar key={filters.search} categories={allCategories} onCategoryCreated={()=>void loadCategories()} accounts={accountOptions} value={filters} onChange={next=>{setFilters(next);setSelectedIds(new Set());}} />
       {ledgerError&&<p role="alert" className="rounded-xl border border-line bg-amber-soft p-4 text-sm text-amber-ink">{ledgerError} O extrato pode estar desatualizado.</p>}
       {ledger?.bank&&<p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>Conta, cartão, WhatsApp e plataforma no mesmo extrato · Pessoal e Empresa separados.</span><span className="rounded-full bg-emerald-soft px-3 py-1 text-emerald-ink">Atualização automática</span></p>}
-      {ledger?.bank?.report.sync_pending&&<p role="status" className="text-xs text-amber-ink">O banco ainda está enviando dados. O extrato acompanha os registros recebidos.</p>}
+      {bankStatus&&bankStatus.state!=="updated"&&<p role="status" className="text-xs text-amber-ink">{bankStatus.title}. {bankStatus.detail} O extrato preserva os dados já recebidos.</p>}
       {missingHistory&&<p role="status" className="text-xs text-amber-ink">{missingHistory}</p>}
       {!!ledger?.bank?.report.missing_dates&&<p className="text-xs text-amber-ink">Há {ledger.bank.report.missing_dates} movimento(s) sem data enviados pelo banco, fora deste período.</p>}
       {postedFinances.some(f=>f.possibleDuplicate)&&<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-amber-soft p-3 text-xs text-amber-ink"><p className="min-w-0 flex-1 basis-64">Há registros com mesmo valor e data em mais de uma origem. Os totais ainda podem conter repetições.</p><button type="button" onClick={()=>setShowDuplicateReview(true)} className="rounded-xl border border-current px-4 py-2 font-semibold">Conferir possíveis duplicadas</button></div>}

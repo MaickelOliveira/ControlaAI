@@ -22,3 +22,10 @@ describe("live update states from read endpoints", () => {
     expect(bankUpdatesPending(data)).toBe(false);
   });
 });
+
+it("uses current queue status instead of stale watermarks when an import failed",()=>{
+ const bank={overview:{connections:[{status:"active"}],sync:[{status:"running"}]},report:{sync_pending:true,sync_status:"failed"}};
+ expect(bankUpdatesPending({bank})).toBe(false);
+ bank.report.sync_status="updating";expect(bankUpdatesPending({bank})).toBe(true);
+ bank.report.sync_status="idle";expect(bankUpdatesPending({bank})).toBe(false);
+});

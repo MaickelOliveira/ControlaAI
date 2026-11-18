@@ -8,6 +8,7 @@ import {createActiveFinanceLedgerReader} from "@/lib/active-finance-ledger-clien
 import {fetchDashboardMe} from "@/lib/dashboard-me-client";
 import {ledgerBalance,type FinanceHistoryData,type LedgerEntry} from "@/lib/finance-ledger";
 import {bankDate} from "@/lib/open-finance-display";
+import {bankSyncStatus} from "@/lib/bank-sync-status";
 import {bankDashboardAccounts} from "@/lib/bank-dashboard";
 import {bankMoney} from "@/lib/open-finance-display";
 import FinanceCategorySummary from "@/components/FinanceCategorySummary";
@@ -186,6 +187,7 @@ export default function DashboardPage() {
   const [readLedger]=useState(createActiveFinanceLedgerReader);
   const ledgerLoader=useCallback((signal:AbortSignal)=>readLedger(signal,filters.from,filters.to),[readLedger,filters.from,filters.to]);
   const {data:ledger,error:ledgerError}=useBankUpdates(ledgerLoader);
+  const bankStatus=bankSyncStatus(ledger?.bank,Boolean(ledgerError));
   const mode=ledger?.mode??bootstrapMode;
   const historyLoader=useCallback(async(signal:AbortSignal):Promise<FinanceHistoryData|null>=>{
     if(!mode)return null;
@@ -290,7 +292,7 @@ export default function DashboardPage() {
 
   return (
     <div className="z-page z-eclipse-dashboard pb-8">
-      <EclipseDashboardHeader name={user.name} mode={user.activeMode} monthLabel={monthLabel} syncAt={ledger?.bank?.report.last_successful_sync_at} updating={ledger?.bank?.report.sync_pending}/>
+      <EclipseDashboardHeader name={user.name} mode={user.activeMode} monthLabel={monthLabel} bankStatus={bankStatus}/>
       <FinanceFilterBar categories={[...new Set([...categories,...finances.map(f=>f.category)])]} value={filters} onChange={setFilters}/>
       {user.status==="trial"&&<p className="text-xs text-amber-ink">Trial · {trialDays} dias</p>}
       {ledgerError&&<p role="alert" className="rounded-xl bg-amber-soft p-4 text-xs text-amber-ink">{ledgerError} Os valores exibidos podem estar desatualizados.</p>}
@@ -306,7 +308,7 @@ export default function DashboardPage() {
             </div>
             <div className="mb-4 flex justify-between gap-3"><h3 className="text-sm font-medium">Entradas e saídas</h3><span className="text-[10px] text-white/50">Últimos 6 meses</span></div>
             <div className="z-dashboard-flow-chart">{history.mode!==mode?<div className="z-chart-empty">Carregando histórico…</div>:history.error?<p role="alert" className="z-chart-empty">{history.error}</p>:barData.every(d=>d.receitas===0&&d.despesas===0)?<div className="z-chart-empty">Seu histórico financeiro aparecerá aqui.</div>:<DailyFlowChartComponent data={barData} fill/>}</div>
-            {ledger?.bank&&<p className="mt-3 text-[10px] leading-5 text-white/50">Saldo: posição recebida do banco. Resultado: entradas menos saídas do período. Última importação: {bankDate(ledger.bank.report.last_successful_sync_at)}{ledger.bank.report.sync_pending?" · atualizando":""}. O histórico bancário pode estar incompleto.</p>}
+            {ledger?.bank&&<p className="mt-3 text-[10px] leading-5 text-white/50">Saldo: posição recebida do banco. Resultado: entradas menos saídas do período. Última importação: {bankDate(ledger.bank.report.last_successful_sync_at)}{bankStatus?.state!=="updated"?` · ${bankStatus?.title??"Atualização não confirmada"}`:""}. O histórico bancário pode estar incompleto.</p>}
             {cashGroups.length>1&&<p className="mt-2 text-[10px] text-white/70">Outras moedas: {cashGroups.filter(group=>group!==primaryCash).map(group=>bankMoney(group.total,group.currency)).join(" · ")} · exibidas separadamente.</p>}
           </section>
         </div>

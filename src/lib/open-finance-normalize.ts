@@ -115,10 +115,11 @@ export function normalizeCreditPayments(releases:unknown):PolpObject[]|null{
  return releases.flatMap(value=>{
   const row=polpObject(value),id=polpExternalId(row.paymentId),date=sourceDate(row.paidDate);
   const amount=money({amount:row.paidAmount,currency:row.currency});
-  if(!date||!amount.amount||Number(amount.amount)<=0)throw Error("INVALID_CREDIT_PAYMENTS");
+  if(!date||!amount.amount||Number(amount.amount)<0)throw Error("INVALID_CREDIT_PAYMENTS");
   const payment={external_id:id,date,amount:amount.amount,currency:amount.currency};
   const signature=JSON.stringify(payment);
   if(seen.has(id)){if(seen.get(id)!==signature)throw Error("CONFLICTING_CREDIT_PAYMENTS");return [];}
-  seen.set(id,signature);return [payment];
+  // Some banks send zero-value releases; they are not repayments.
+  seen.set(id,signature);return Number(amount.amount)===0?[]:[payment];
  });
 }

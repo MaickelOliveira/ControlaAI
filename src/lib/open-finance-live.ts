@@ -19,8 +19,8 @@ export function bankUpdatesPending(data: unknown): boolean {
   const report = bank?.report && typeof bank.report === "object" ? bank.report as Record<string, unknown> : null;
   const connections = Array.isArray(overview.connections) ? overview.connections : [];
   const sync = Array.isArray(overview.sync) ? overview.sync : [];
-  // The report flag reads sync_jobs, whereas overview.sync may be an older
-  // committed watermark. Conservatively keep flagged failures fast as well.
+  if(report?.sync_status)return report.sync_status === "updating";
+  // Older servers only provide the combined pending/failure flag.
   return report?.sync_pending === true
     || connections.some(connection => connection && !connection.archived_at && (connection.status === "pending" || connection.status === "revoking"))
     || sync.some(job => job && (job.status === "pending" || job.status === "running"));
