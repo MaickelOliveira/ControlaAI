@@ -54,8 +54,16 @@ describe("bank synchronization indicator",()=>{
  it("does not leave a stale green status when reading the current status fails",()=>{
   expect(bankSyncStatus(bank(),true,now)?.state).toBe("failed");
  });
- it("does not show green when the provider reports a partial import",()=>{
-  expect(bankSyncStatus(bank({sync_notes:["SOURCE_PARTIAL"]},{sync_status:"idle"}),false,now)?.state).toBe("failed");
+ it("identifies the bank awaiting more source data without presenting an import failure",()=>{
+  const result=bankSyncStatus(bank({institution_name:"Banco Inter PJ",sync_notes:["SOURCE_PARTIAL","RESOURCES_PENDING"]},{sync_status:"idle"}),false,now);
+  expect(result?.state).toBe("waiting");
+  expect(result?.detail).toContain("Banco Inter PJ");
+  expect(result?.detail).toMatch(/automaticamente/i);
+  expect(`${result?.title} ${result?.detail}`).not.toMatch(/falha|confira em contas/i);
+ });
+ it("keeps usable imported data synchronized while source categories are enriched",()=>{
+  expect(bankSyncStatus(bank({sync_notes:["ENRICHMENT_PENDING"]},{sync_status:"idle"}),false,now)?.state).toBe("updated");
+  expect(bankSyncStatus(bank({sync_notes:["ENRICHMENT_PENDING"]},{sync_status:"failed"}),false,now)?.state).toBe("failed");
  });
  it("waits when authorized resources have not yet been sent by the provider",()=>{
   expect(bankSyncStatus(bank({sync_notes:["RESOURCES_PENDING"]},{sync_status:"idle"}),false,now)?.state).toBe("waiting");
