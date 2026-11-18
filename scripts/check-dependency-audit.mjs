@@ -1,7 +1,7 @@
 import {spawnSync} from 'node:child_process';
-import {reviewedLegacyMinimatch,reviewedUntil} from './dependency-audit-policy.mjs';
+import {reviewedLegacyMinimatch,reviewedUntil,reviewedBuildPicomatch,buildReviewUntil} from './dependency-audit-policy.mjs';
 // Previous node-forge/uuid exceptions were removed after installing fixes.
-// The only remaining assessment verifies exact legacy source hashes; see
+// Assessments verify exact sources and the reviewed build-only dependency scope; see
 // tasks/dependency-audit-followup.md. New versions/advisories still block.
 const result=spawnSync('npm',['audit','--json'],{encoding:'utf8',maxBuffer:8*1024*1024});
 let audit;try{audit=JSON.parse(result.stdout);}catch{console.error('Dependency audit unavailable; release check blocked.');process.exit(1);}
@@ -13,8 +13,8 @@ for(const [name,item] of issues){
  for(const via of item.via??[]){
   if(typeof via==='string'){if(!audit.vulnerabilities?.[via])blocked.push({package:name,advisory:'unknown',severity:item.severity});continue;} // its root advisory is checked separately
   const id=typeof via.url==='string'?via.url.match(/GHSA-[a-z0-9-]+/)?.[0]:undefined;
-  if(item.severity==='critical'||!id||!reviewedLegacyMinimatch(name,item,id,today))blocked.push({package:name,advisory:id??'unknown',severity:item.severity});
+  if(item.severity==='critical'||!id||!(reviewedLegacyMinimatch(name,item,id,today)||reviewedBuildPicomatch(name,item,id,today)))blocked.push({package:name,advisory:id??'unknown',severity:item.severity});
  }
 }
 if(blocked.length){console.error(JSON.stringify({blocked_dependency_advisories:blocked}));process.exitCode=1;}
-else console.log(JSON.stringify({known_audit_counts:audit.metadata?.vulnerabilities,reviewed_until:reviewedUntil,remaining_findings_are_not_claimed_fixed:true}));
+else console.log(JSON.stringify({known_audit_counts:audit.metadata?.vulnerabilities,reviewed_until:reviewedUntil,build_review_until:buildReviewUntil,remaining_findings_are_not_claimed_fixed:true}));
