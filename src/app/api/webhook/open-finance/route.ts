@@ -7,6 +7,7 @@ import { openFinanceRpc, OF_HEADERS } from "@/lib/open-finance-http";
 import { parseBankWebhook, verifyBankWebhook } from "@/lib/open-finance-webhook";
 import { polpObject,polpUuid } from "@/lib/polp-production";
 import { readBankBody } from "@/lib/open-finance-body";
+import {enqueueBankWebhook} from "@/lib/open-finance-sync";
 
 export async function POST(request:Request) {
   if(process.env.OPEN_FINANCE_SYNC_ENABLED!=="true")return NextResponse.json({error:"Não disponível"},{status:404,headers:OF_HEADERS});
@@ -28,7 +29,7 @@ export async function POST(request:Request) {
       if(process.env.MULTI_COMPANY_ENABLED==="true"&&target.companyId===undefined)throw Error("OF_COMPANY_SCOPE_MISSING");
       const scope=await getOpenFinanceAccess(user,String(target.mode),{throwOnStorageError:true,companyId:target.companyId===null?null:target.companyId===undefined?undefined:polpUuid(target.companyId)});
       if(!scope)return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
-      await openFinanceRpc(scope,"zelo_of_enqueue",{p_connection:polpUuid(target.id),p_job:job});
+      await enqueueBankWebhook(scope,polpUuid(target.id),job);
       return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
     }
     const owner=await getOpenFinanceOwner();
@@ -41,7 +42,7 @@ export async function POST(request:Request) {
     if(connection.status==="revoked"||connection.status==="revoking")return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
     const current=await getOpenFinanceAccess(owner,String(connection.mode));
     if(!current)throw new Error("OF_ACCESS_DENIED");
-    await openFinanceRpc(current,"zelo_of_enqueue",{p_connection:connection.id,p_job:job});
+    await enqueueBankWebhook(current,polpUuid(connection.id),job);
     return NextResponse.json({ok:true},{status:202,headers:OF_HEADERS});
   }catch{return NextResponse.json({error:"Atualização não salva; repetir entrega"},{status:503,headers:OF_HEADERS});}
 }

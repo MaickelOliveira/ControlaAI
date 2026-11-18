@@ -3,7 +3,7 @@ vi.mock("server-only",()=>({}));
 const m=vi.hoisted(()=>({rpc:vi.fn(),page:vi.fn(),request:vi.fn()}));
 vi.mock("./open-finance-http",()=>({openFinanceRpc:m.rpc}));
 vi.mock("./polp-production",async original=>({...await original<typeof import("./polp-production")>(),polpProductionPage:m.page,polpProductionRequest:m.request}));
-import { runBankSyncPage } from "./open-finance-sync";
+import { enqueueBankWebhook,runBankSyncPage } from "./open-finance-sync";
 const id="550e8400-e29b-41d4-a716-446655440000", user="650e8400-e29b-41d4-a716-446655440000";
 const scope={userId:user,mode:"personal" as const,environment:"production" as const};
 const base={id,lease_token:id,connection_id:id,external_consent_id:id,institution_id:id,cursor:null,filter_window:{},kind:"catalog",family:"credit-cards",external_resource_id:id};
@@ -30,6 +30,35 @@ it("confirms source ownership before importing and keeps unavailable resources v
   expect(m.rpc.mock.lastCall?.[2]?.p_rows.sync_notes).toContain("SOURCE_PARTIAL");
   expect(m.rpc.mock.lastCall?.[2]?.p_rows.sync_notes).toContain("UNSUPPORTED_CREDIT_DETAILS");
   expect(m.rpc.mock.lastCall?.[2]?.p_children.every((j:{family:string})=>j.family!=="credit-cards")).toBe(true);
+});
+it.each(["ERROR_PROCESSING_CATEGORIES","ERROR_PROCESSING_COUNTERPARTIES"])("does not confuse %s with missing bank transactions",async flag=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValueOnce({...base,kind:"consent",family:"consents",scopes:["ACCOUNT"]}).mockResolvedValue(null);
+ m.request.mockResolvedValueOnce({data:{id,cliente_user_id:user,institution_id:id,status:"AUTHORISED",products:["ACCOUNT"],execution_status:"PARTIAL_SUCCESS",flags:[flag]}}).mockResolvedValueOnce({data:[{type:"ACCOUNT",status:"AVAILABLE",resource_id:"account-1"}]});
+ expect(await runBankSyncPage(scope)).toBe("processed");
+ expect(m.rpc.mock.lastCall?.[2]?.p_rows.sync_notes).toEqual(["ENRICHMENT_PENDING"]);
+});
+it("retains unknown source warnings instead of silently treating them as enrichment",async()=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValueOnce({...base,kind:"consent",family:"consents",scopes:["ACCOUNT"]}).mockResolvedValue(null);
+ m.request.mockResolvedValueOnce({data:{id,cliente_user_id:user,institution_id:id,status:"AUTHORISED",products:["ACCOUNT"],flags:["NEW_SOURCE_WARNING"]}}).mockResolvedValueOnce({data:[]});
+ expect(await runBankSyncPage(scope)).toBe("processed");
+ expect(m.rpc.mock.lastCall?.[2]?.p_rows.sync_notes).toContain("SOURCE_PARTIAL");
+});
+it.each(["SOURCE_PARTIAL","ENRICHMENT_PENDING","RESOURCES_PENDING"])("rechecks %s when new source data arrives, without requiring a customer click",async note=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValueOnce(id).mockResolvedValueOnce({external_consent_id:id,status:"active",sync_notes:[note]}).mockResolvedValue(id);
+ const job={kind:"transactions" as const,family:"accounts" as const,external_resource_id:"account-1",window:{}};
+ await enqueueBankWebhook(scope,id,job);
+ expect(m.rpc.mock.calls[0]).toEqual([scope,"zelo_of_enqueue",{p_connection:id,p_job:job}]);
+ expect(m.rpc.mock.lastCall).toEqual([scope,"zelo_of_enqueue",{p_connection:id,p_job:{kind:"consent",family:"consents",external_resource_id:id,window:{}}}]);
+});
+it("does not schedule another consent from a consent notification",async()=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValue(id);
+ await enqueueBankWebhook(scope,id,{kind:"consent",family:"consents",external_resource_id:id,window:{}});
+ expect(m.rpc).toHaveBeenCalledTimes(1);
+});
+it("does not recheck already healthy bank metadata on a data notification",async()=>{
+ m.rpc.mockReset();m.rpc.mockResolvedValueOnce(id).mockResolvedValueOnce({status:"active",sync_notes:[]});
+ await enqueueBankWebhook(scope,id,{kind:"catalog",family:"accounts",external_resource_id:id,window:{}});
+ expect(m.rpc.mock.calls.map(c=>c[1])).toEqual(["zelo_of_enqueue","zelo_of_connection"]);
 });
 it("keeps provider or storage failures retryable without committing partial output",async()=>{
   m.page.mockRejectedValue(new Error("POLP_HTTP_429"));

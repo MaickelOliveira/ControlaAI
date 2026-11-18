@@ -11,7 +11,7 @@ import { POST } from "./route";
 const id="550e8400-e29b-41d4-a716-446655440000";
 const raw=JSON.stringify({event:"accounts",resource:"consents",resource_id:id});
 function request(signed=true,body=raw){return new Request("https://zelo.example/api/webhook/open-finance",{method:"POST",body,headers:{...(signed?{"X-Webhook-Signature":"sha256="+createHmac("sha256","test-secret").update(body).digest("hex")}:{}),"Content-Type":"application/json"}});}
-beforeEach(()=>{vi.resetAllMocks();m.publicEnabled.mockReturnValue(false);vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","true");vi.stubEnv("POLP_WEBHOOK_SIGNING_SECRET","test-secret");m.owner.mockResolvedValue({id,email:"owner@example.test"});m.access.mockResolvedValue({userId:id,mode:"personal",environment:"production"});m.rpc.mockResolvedValueOnce({id,mode:"personal",status:"active"}).mockResolvedValue(id);});
+beforeEach(()=>{vi.resetAllMocks();m.publicEnabled.mockReturnValue(false);vi.stubEnv("OPEN_FINANCE_SYNC_ENABLED","true");vi.stubEnv("POLP_WEBHOOK_SIGNING_SECRET","test-secret");m.owner.mockResolvedValue({id,email:"owner@example.test"});m.access.mockResolvedValue({userId:id,mode:"personal",environment:"production"});m.rpc.mockImplementation(async (_scope,operation)=>operation==="zelo_of_enqueue"?id:{id,mode:"personal",status:"active",sync_notes:[]});});
 afterEach(()=>vi.unstubAllEnvs());
 it("rejects unsigned input before parsing or accessing any owner data",async()=>{
   expect((await POST(request(false,"not json"))).status).toBe(401);
@@ -19,9 +19,9 @@ it("rejects unsigned input before parsing or accessing any owner data",async()=>
 });
 it("acknowledges only durably saved metadata with server-derived owner and mode",async()=>{
   expect((await POST(request())).status).toBe(202);
-  expect(m.rpc.mock.lastCall?.[1]).toBe("zelo_of_enqueue");
-  expect(m.rpc.mock.lastCall?.[0]).toMatchObject({userId:id,mode:"personal"});
-  expect(m.rpc.mock.lastCall?.[2]?.p_job).toMatchObject({family:"accounts",kind:"catalog",external_resource_id:id});
+  const queued=m.rpc.mock.calls.find(call=>call[1]==="zelo_of_enqueue");
+  expect(queued?.[0]).toMatchObject({userId:id,mode:"personal"});
+  expect(queued?.[2]?.p_job).toMatchObject({family:"accounts",kind:"catalog",external_resource_id:id});
 });
 it("asks the provider to retry if storage fails or the resource is not yet known",async()=>{
   m.rpc.mockReset();m.rpc.mockRejectedValueOnce(new Error("OF_STORAGE_ERROR"));
@@ -34,10 +34,19 @@ it("does not enqueue late data for a revoked consent",async()=>{
   expect((await POST(request())).status).toBe(202);expect(m.rpc).toHaveBeenCalledTimes(1);
 });
 it("requests retry if a public holder cannot be read and routes a healthy holder from local ownership",async()=>{
-  m.publicEnabled.mockReturnValue(true);m.rpc.mockReset();m.rpc.mockResolvedValue(id);
+  m.publicEnabled.mockReturnValue(true);m.rpc.mockReset();m.rpc.mockImplementation(async (_scope,operation)=>operation==="zelo_of_enqueue"?id:{id,status:"active",sync_notes:[]});
   m.globalRpc.mockResolvedValue({data:{id,userId:id,mode:"business",status:"active"}});m.user.mockResolvedValue(null);
   expect((await POST(request())).status).toBe(503);expect(m.rpc).not.toHaveBeenCalled();
   m.user.mockResolvedValue({id,email:"client@example.test"});m.access.mockResolvedValue({userId:id,mode:"business",environment:"production"});
   expect((await POST(request())).status).toBe(202);
   expect(m.rpc.mock.lastCall?.[0]).toMatchObject({userId:id,mode:"business"});expect(m.owner).not.toHaveBeenCalled();
+});
+it("refreshes pending source details within the verified company scope on a data webhook",async()=>{
+ m.publicEnabled.mockReturnValue(true);vi.stubEnv("MULTI_COMPANY_ENABLED","true");
+ m.globalRpc.mockResolvedValue({data:{id,userId:id,companyId:id,mode:"business",status:"active"}});m.user.mockResolvedValue({id});
+ m.access.mockResolvedValue({userId:id,companyId:id,mode:"business",environment:"production"});
+ m.rpc.mockImplementation(async (_scope,operation)=>operation==="zelo_of_enqueue"?id:{id,status:"active",external_consent_id:id,sync_notes:["SOURCE_PARTIAL"]});
+ expect((await POST(request())).status).toBe(202);
+ expect(m.rpc.mock.lastCall?.[0]).toMatchObject({userId:id,companyId:id,mode:"business"});
+ expect(m.rpc.mock.lastCall?.[2]?.p_job).toMatchObject({kind:"consent",external_resource_id:id});
 });

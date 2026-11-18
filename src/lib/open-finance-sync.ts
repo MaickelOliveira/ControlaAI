@@ -16,6 +16,15 @@ export async function enqueueConsentCheck(scope:OpenFinanceScope,id:string):Prom
   await openFinanceRpc(scope,"zelo_of_retry_failed",{p_connection:id});
   await openFinanceRpc(scope,"zelo_of_enqueue",{p_connection:id,p_job:{kind:"consent",family:"consents",external_resource_id:polpUuid(connection.external_consent_id),window:{}}});
 }
+export async function enqueueBankWebhook(scope:OpenFinanceScope,id:string,job:BankJobSpec):Promise<void> {
+  await openFinanceRpc(scope,"zelo_of_enqueue",{p_connection:polpUuid(id),p_job:job});
+  if(job.kind==="consent")return;
+  const connection=polpObject(await openFinanceRpc(scope,"zelo_of_connection",{p_id:id}));
+  // A data webhook also signals that previously missing source metadata may be ready.
+  if(connection.status==="active"&&Array.isArray(connection.sync_notes)&&connection.sync_notes.some(note=>["SOURCE_PARTIAL","ENRICHMENT_PENDING","RESOURCES_PENDING","AWAITING_RESOURCES"].includes(String(note)))) {
+    await openFinanceRpc(scope,"zelo_of_enqueue",{p_connection:id,p_job:{kind:"consent",family:"consents",external_resource_id:polpUuid(connection.external_consent_id),window:{}}});
+  }
+}
 async function consentPage(scope:OpenFinanceScope,job:PolpObject) {
   const id=polpUuid(job.external_consent_id);
   const consent=polpObject((await polpProductionRequest(`/consents/${id}`)).data);
@@ -24,7 +33,10 @@ async function consentPage(scope:OpenFinanceScope,job:PolpObject) {
   if (!status) throw new Error("INVALID_CONSENT_STATUS");
   const notes:string[]=[];
   if(consent.execution_status==="AWAITING_RESOURCES")notes.push("AWAITING_RESOURCES");
-  if(consent.execution_status==="PARTIAL_SUCCESS" || (Array.isArray(consent.flags)&&consent.flags.length))notes.push("SOURCE_PARTIAL");
+  const flags=Array.isArray(consent.flags)?consent.flags:[];
+  const enrichmentFlags=["ERROR_PROCESSING_CATEGORIES","ERROR_PROCESSING_COUNTERPARTIES"];
+  if(flags.some(flag=>enrichmentFlags.includes(String(flag))))notes.push("ENRICHMENT_PENDING");
+  if(flags.some(flag=>!enrichmentFlags.includes(String(flag)))||(consent.execution_status==="PARTIAL_SUCCESS"&&!flags.length))notes.push("SOURCE_PARTIAL");
   if(status==="active") {
     const inventory=(await polpProductionRequest(`/consents/${id}/resources`)).data;
     if(!Array.isArray(inventory)||inventory.length>1000)throw new Error("INVALID_RESPONSE");
