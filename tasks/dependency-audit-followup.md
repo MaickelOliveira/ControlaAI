@@ -1,5 +1,13 @@
 # Atualizar dependências com avisos de segurança
 
+## Open Finance em todos os planos — 18/11/2026
+
+Next.js e eslint-config-next atualizados de 16.4.3 para 16.4.6, corrigindo os avisos oficiais [GHSA-mfr8-8qww-v76h](https://github.com/advisories/GHSA-mfr8-8qww-v76h) e [GHSA-vc7v-qv4w-wrv8](https://github.com/advisories/GHSA-vc7v-qv4w-wrv8). A primeira versão corrigida informada pelo mantenedor é 16.4.5.
+
+O novo aviso [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) afeta picomatch até 4.0.7, ainda sem versão corrigida publicada. O gatilho é um padrão glob externo com extglobs repetidos; o projeto não aceita padrões glob dos clientes e não importa picomatch/micromatch/globby em src. `npm ls picomatch --omit=dev` retorna árvore vazia. As quatro instalações no lockfile são exclusivamente ferramentas de lint/teste/desenvolvimento (`dev: true`). Isso é avaliação de alcance, não correção da biblioteca.
+
+A avaliação restrita vence em 25/11/2026 UTC: apenas esse aviso com severidade alta, exclusivamente pacotes dev com nome/versão e SHA-256 de `lib/parse.js` conferidos nos tarballs oficiais do registro npm. Versões avaliadas: 2.3.2 (`3a91656f440069aa8f8e15c9d695b9f6b2209df1eab2be8127c72cbcca45ff5f`), 4.0.5 (`73211a8ba85ce257b827abd8960e52c9750385b3fd18e8ef1080b114d774eb23`) e 4.0.7 (`4e1e05447668aa1e94366c5516a2bcd8f5fff800cc92b1d0cd7d77703b8618c4`). Qualquer ocorrência em dependência de produção, alteração de fonte, versão desconhecida, agravamento para crítica, aviso diferente ou prazo vencido continua bloqueando a publicação. Os testes da política verificam essas negativas. Atualizar quando o mantenedor publicar uma correção; não usar código não revisado de PRs abertos.
+
 Responsável: manutenção da Zelo. Registrado em 10/10/2026; revisar até 17/10/2026. Este registro não agenda uma execução.
 
 A auditoria do lockfile atual encontrou 9 ocorrências (7 altas, 2 moderadas, nenhuma crítica), já presentes antes da unificação financeira. Nenhuma dependência ou lockfile foi alterado por essa funcionalidade.

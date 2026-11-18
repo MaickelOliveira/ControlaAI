@@ -83,6 +83,48 @@ try{
   await db.exec('alter function public.zelo_of_credit_pix_targets() owner to postgres');
   console.log('PASS: a non-superuser managed migration updates scoped functions atomically and removes temporary privileges');
  }
+ if(process.argv.includes('--all-plans')){
+  const signatures=['public.zelo_of_enable_brazil(uuid,text,text,boolean)','public.zelo_of_worker_scope(text,text)','public.zelo_of_notice_targets(text)','public.zelo_of_notice_claim(uuid,text,text,text,text)','public.zelo_of_prepare_schedules(text)','public.zelo_of_credit_pix_targets()'];
+  const migrator='zelo_all_plans_migrator';
+  await db.exec(`create role ${migrator} nosuperuser createrole inherit bypassrls;grant usage,create on schema public,open_finance to ${migrator} with grant option;grant zelo_of_workspace to ${migrator} with admin true,inherit false,set false`);
+  for(const signature of signatures.filter(s=>!s.includes('notice_claim')))await db.exec(`alter function ${signature} owner to ${migrator}`);
+  const permissions=async()=> (await db.query('select oid::regprocedure::text signature,proowner,proacl::text acl,proconfig from pg_proc where oid=any($1::regprocedure[]) order by oid',[signatures])).rows;
+  const before=await permissions();
+  await db.exec('set role '+migrator);
+  await db.exec(await sql('../migrations/20261118113000_open_finance_all_plans.sql'));
+  await root();
+  assert.deepEqual(await permissions(),before,'plan eligibility does not change function owners, grants or RLS');
+  assert.equal((await db.query("select pg_has_role($1,'zelo_of_workspace','USAGE') allowed",[migrator])).rows[0].allowed,false,'temporary migration inheritance is removed');
+  for(const schema of ['public','open_finance'])assert.equal((await db.query("select has_schema_privilege('zelo_of_workspace',$1,'CREATE') allowed",[schema])).rows[0].allowed,false);
+  for(const signature of signatures.filter(s=>!s.includes('notice_claim')))await db.exec(`alter function ${signature} owner to postgres`);
+  for(const signature of signatures)assert.doesNotMatch((await db.query('select pg_get_functiondef($1::regprocedure) definition',[signature])).rows[0].definition,/\bplan\s*=\s*'business'/,'no legacy plan gate remains in '+signature);
+  await db.exec("update users set plan='personal'");
+  const fresh=randomUUID(),freshPhone='5511999990003';
+  await db.query("insert into users(id,phone,name,email,password_hash,plan,status,trial_ends_at) values($1,$2,'New client','new@example.test','fake','personal','active',now()+interval '7 days')",[fresh,freshPhone]);
+  const workspace=(await db.query('select id from companies where user_id=$1 and is_default',[fresh])).rows[0].id;
+  await linkPhone(fresh,workspace,freshPhone);
+  for(const mode of ['personal','business'])assert.equal(await rpc('zelo_of_enable_brazil',[fresh,mode,'BR',true]),true,'new personal-plan client can enroll in '+mode);
+  await assert.rejects(rpc('zelo_of_enable_brazil',[fresh,'invalid','BR',true]),/OF_SCOPE_INVALID/);
+  await assert.rejects(rpc('zelo_of_enable_brazil',[fresh,'business','PT',true]),/OF_COUNTRY_INVALID/);
+  const c=await rpc('zelo_of_save_consent',[fresh,'business',JSON.stringify({id:randomUUID(),cliente_user_id:fresh,institution_id:bank,institution_name:'Fixture Bank',status:'AUTHORISED',products:['CREDIT_CARD_ACCOUNT']})]);
+  await root();
+  const resource=(await db.query("insert into open_finance.resources(connection_id,user_id,environment,mode,resource_type,external_id,name,subtype) values($1,$2,'production','business','card','all-plans-card','Fixture card','credit-cards') returning id",[c.id,fresh])).rows[0].id;
+  await db.query("insert into open_finance.bills(resource_id,user_id,environment,mode,external_id,currency,due_date,total_amount) values($1,$2,'production','business','all-plans-bill','BRL',(now() at time zone 'America/Sao_Paulo')::date,50)",[resource,fresh]);
+  await scope(fresh,workspace);
+  assert.equal(await rpc('zelo_of_prepare_schedules',[null]),3,'business card refreshes bills, installments and recurrings without a business plan');
+  assert.equal((await rpc('zelo_of_worker_scope',['business',null])).userId,fresh,'business sync routes a personal-plan client');
+  const notices=await rpc('zelo_of_notice_targets',[null]);assert.equal(notices.length,1);assert.equal(notices[0].userId,fresh);
+  assert.ok(await rpc('zelo_of_notice_claim',[fresh,'business',notices[0].itemKey,freshPhone,null]),'personal-plan client can receive the scoped business notice');
+  await root();await db.query("update users set status='inactive' where id=$1",[fresh]);await scope(fresh,workspace);
+  for(const mode of ['personal','business'])await assert.rejects(rpc('zelo_of_enable_brazil',[fresh,mode,'BR',true]),/OF_ACCESS_DENIED/);
+  assert.equal(await rpc('zelo_of_worker_scope',['business',null]),null);
+  await root();await db.query("update users set status='active' where id=$1",[fresh]);await db.query('update open_finance.user_access set enabled=false where user_id=$1',[fresh]);await scope(fresh,workspace);
+  await assert.rejects(rpc('zelo_of_enable_brazil',[fresh,'business','BR',true]),/OF_ACCESS_DISABLED/);
+  assert.equal(await rpc('zelo_of_worker_scope',['business',null]),null);
+  await db.exec('set role anon');await assert.rejects(rpc('zelo_of_enable_brazil',[fresh,'business','BR',true]),/permission denied/);
+  await root();await db.query("update users set status='inactive' where id=$1",[fresh]);
+  console.log('PASS: existing/new personal-plan clients, both modes, business workers/schedules/notices, inactive/disabled denial and unchanged private grants');
+ }
  company=(await db.query('select id from companies where user_id=$1 and is_default',[owner])).rows[0].id;
  otherCompany=(await db.query("insert into companies(user_id,name) values($1,'Second fixture company') returning id",[owner])).rows[0].id;
  foreignCompany=(await db.query('select id from companies where user_id=$1 and is_default',[other])).rows[0].id;

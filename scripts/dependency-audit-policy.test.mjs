@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {reviewedLegacyMinimatch} from './dependency-audit-policy.mjs';
+import {reviewedLegacyMinimatch,reviewedBuildPicomatch} from './dependency-audit-policy.mjs';
 const id='GHSA-g3hv-75wg-m249',today='2026-11-02';
 const item={severity:'moderate',nodes:['node_modules/minimatch','node_modules/readdir-glob/node_modules/minimatch']};
 const packages={
@@ -10,6 +10,16 @@ const packages={
 test('assesses only the two verified upstream legacy sources',()=>{
  assert.equal(reviewedLegacyMinimatch('minimatch',item,id,today,path=>packages[path]),true);
  assert.equal(reviewedLegacyMinimatch('minimatch',item,id,today),true);
+});
+test('assesses picomatch only in the exact reviewed development sources',()=>{
+ const issue={severity:'high',nodes:['node_modules/picomatch','node_modules/tinyglobby/node_modules/picomatch','node_modules/vite/node_modules/picomatch','node_modules/vitest/node_modules/picomatch']};
+ assert.equal(reviewedBuildPicomatch('picomatch',issue,'GHSA-fc5q-39xc-vjpf','2026-11-18'),true);
+ const installed={name:'picomatch',version:'4.0.7',dev:true,hash:'4e1e05447668aa1e94366c5516a2bcd8f5fff800cc92b1d0cd7d77703b8618c4'};
+ for(const patch of [{dev:false},{hash:'changed'},{version:'4.0.8'},{name:'other'}])assert.equal(reviewedBuildPicomatch('picomatch',issue,'GHSA-fc5q-39xc-vjpf','2026-11-18',()=>({...installed,...patch})),false);
+ assert.equal(reviewedBuildPicomatch('picomatch',issue,'GHSA-new-advisory','2026-11-18',()=>installed),false);
+ assert.equal(reviewedBuildPicomatch('picomatch',issue,'GHSA-fc5q-39xc-vjpf','2026-11-26',()=>installed),false);
+ assert.equal(reviewedBuildPicomatch('picomatch',{...issue,severity:'critical'},'GHSA-fc5q-39xc-vjpf','2026-11-18',()=>installed),false);
+ for(const nodes of [[],['node_modules/../picomatch'],null])assert.equal(reviewedBuildPicomatch('picomatch',{...issue,nodes},'GHSA-fc5q-39xc-vjpf','2026-11-18',()=>installed),false);
 });
 test('blocks modern, changed, missing and mixed package sources',()=>{
  for(const patch of [{version:'10.2.6'},{version:'3.1.4'},{hash:'changed'},{name:'other'}]){

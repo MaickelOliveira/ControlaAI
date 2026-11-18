@@ -20,7 +20,7 @@ export function canEnrollOpenFinance(user:OpenFinanceIdentity,mode:string|null|u
 
 /** Private owner testing does not upgrade the production plan or active mode. */
 export function canUseOpenFinanceBusiness(user: Pick<User, "email" | "plan">): boolean {
-  if (user.plan === "business") return true;
+  if (isPublicOpenFinanceEnabled() || user.plan === "business") return true;
   const owner = process.env.OPEN_FINANCE_OWNER_EMAIL?.trim().toLowerCase();
   const privateBusiness = process.env.OPEN_FINANCE_PREVIEW_ONLY === "true"
     && process.env.OPEN_FINANCE_PREVIEW_BUSINESS_ENABLED === "true";

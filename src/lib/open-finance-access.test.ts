@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const rpc = vi.hoisted(() => vi.fn());
 vi.mock("./supabase", () => ({ getSupabase: () => ({ rpc }) }));
-import { getOpenFinanceAccess, requireOpenFinanceOrigin } from "./open-finance-access";
+import { canEnrollOpenFinance, getOpenFinanceAccess, requireOpenFinanceOrigin } from "./open-finance-access";
 
 const owner = { id: "00000000-0000-4000-8000-000000000001", email: "owner@example.com", plan: "personal", activeMode: "personal" } as const;
 function configured() {
@@ -22,11 +22,24 @@ describe("private Open Finance access", () => {
     expect(await getOpenFinanceAccess(client,"personal")).toEqual({userId:client.id,mode:"personal",environment:"production"});
     expect(await getOpenFinanceAccess(client,"business")).toEqual({userId:client.id,mode:"business",environment:"production"});
     expect(await getOpenFinanceAccess({...client,status:"inactive"},"personal")).toBeNull();
-    expect(await getOpenFinanceAccess({...client,plan:"personal"},"business")).toBeNull();
+    expect(await getOpenFinanceAccess({...client,plan:"personal"},"business")).toEqual({userId:client.id,mode:"business",environment:"production"});
     rpc.mockResolvedValue({data:{enabled:true,country_code:"PT",country_verified_at:"2026-10-10T12:00:00Z"}});
     expect(await getOpenFinanceAccess(client,"personal")).toBeNull();
     vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","true");
     expect(await getOpenFinanceAccess(client,"personal")).toBeNull();
+  });
+  it.each(["personal", "business"] as const)("enrolls new active clients in both modes with a %s plan",async(plan)=>{
+    configured();vi.stubEnv("OPEN_FINANCE_PUBLIC_ENABLED","true");
+    const client={...owner,email:"new@example.test",plan,status:"active" as const};
+    for(const mode of ["personal","business"]){
+      expect(canEnrollOpenFinance(client,mode)).toBe(true);
+      expect(canEnrollOpenFinance({...client,status:"inactive"},mode)).toBe(false);
+      rpc.mockResolvedValue({data:{enabled:false,country_code:"BR",country_verified_at:"2026-10-10T12:00:00Z"}});
+      expect(await getOpenFinanceAccess(client,mode)).toBeNull();
+    }
+    expect(canEnrollOpenFinance(client,"invalid")).toBe(false);
+    vi.stubEnv("OPEN_FINANCE_PUBLIC_ENABLED","false");
+    expect(canEnrollOpenFinance(client,"business")).toBe(false);
   });
   it("allows only the Brazilian owner to evaluate PJ in the complete official app",async()=>{
     configured();vi.stubEnv("OPEN_FINANCE_PREVIEW_ONLY","false");vi.stubEnv("OPEN_FINANCE_OWNER_BUSINESS_ENABLED","true");
