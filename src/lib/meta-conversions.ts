@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { DEFAULT_META_PIXEL_ID } from "./meta-tracking-config";
 
 export type MetaConversionInput = {
   eventName: "CompleteRegistration";
@@ -71,16 +72,55 @@ export function buildMetaConversionPayload(input: MetaConversionInput, timestamp
   };
 }
 
+export type MetaPageViewInput = {
+  eventId: string;
+  eventSourceUrl: string;
+  clientIp?: string;
+  userAgent?: string;
+  fbp?: string;
+  fbc?: string;
+};
+
+/** PageView espelhado pelo servidor: sem dados pessoais, só os identificadores
+ *  técnicos (IP, navegador, _fbp/_fbc). O event_id é o mesmo do Pixel no
+ *  navegador, então a Meta junta os dois e conta uma visita só. */
+export function buildMetaPageViewPayload(input: MetaPageViewInput, timestamp = Date.now()) {
+  const userData: MetaUserData = {};
+  if (input.clientIp && input.clientIp !== "unknown") userData.client_ip_address = input.clientIp;
+  if (input.userAgent) userData.client_user_agent = input.userAgent;
+  if (input.fbp) userData.fbp = input.fbp;
+  if (input.fbc) userData.fbc = input.fbc;
+
+  return {
+    data: [{
+      event_name: "PageView",
+      event_time: Math.floor(timestamp / 1000),
+      event_id: input.eventId,
+      event_source_url: input.eventSourceUrl,
+      action_source: "website",
+      user_data: userData,
+    }],
+  };
+}
+
 export async function sendMetaConversion(input: MetaConversionInput) {
-  const pixelId = process.env.META_PIXEL_ID || process.env.NEXT_PUBLIC_META_PIXEL_ID;
+  return postToMeta(buildMetaConversionPayload(input));
+}
+
+export async function sendMetaPageView(input: MetaPageViewInput) {
+  return postToMeta(buildMetaPageViewPayload(input));
+}
+
+async function postToMeta(body: object) {
+  const pixelId = process.env.META_PIXEL_ID || process.env.NEXT_PUBLIC_META_PIXEL_ID || DEFAULT_META_PIXEL_ID;
   const accessToken = process.env.META_CONVERSIONS_API_TOKEN;
-  if (!pixelId || !accessToken) return { sent: false as const, reason: "not_configured" as const };
+  if (!accessToken) return { sent: false as const, reason: "not_configured" as const };
 
   const apiVersion = process.env.META_GRAPH_API_VERSION || "v25.0";
   const url = new URL(`https://graph.facebook.com/${apiVersion}/${encodeURIComponent(pixelId)}/events`);
   url.searchParams.set("access_token", accessToken);
 
-  const payload: Record<string, unknown> = buildMetaConversionPayload(input);
+  const payload: Record<string, unknown> = { ...body };
   if (process.env.META_TEST_EVENT_CODE) payload.test_event_code = process.env.META_TEST_EVENT_CODE;
 
   try {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMetaConversionPayload, hashMetaValue } from "./meta-conversions";
+import { buildMetaConversionPayload, buildMetaPageViewPayload, hashMetaValue } from "./meta-conversions";
 
 describe("Meta Conversions API", () => {
   it("normaliza e protege dados pessoais com SHA-256", () => {
@@ -48,5 +48,35 @@ describe("Meta Conversions API", () => {
       event_time: 1_700_000_000,
       action_source: "website",
     });
+  });
+});
+
+describe("PageView pelo servidor", () => {
+  it("usa o mesmo event_id do navegador e não leva dados pessoais", () => {
+    const payload = buildMetaPageViewPayload({
+      eventId: "3f2c8e1a-4b5d-4c6e-9f70-1a2b3c4d5e6f",
+      eventSourceUrl: "https://zelogestaointeligente.com.br/?fbclid=abc",
+      clientIp: "203.0.113.10",
+      userAgent: "Mozilla/5.0",
+      fbp: "fb.1.1800000000000.123456789",
+      fbc: "fb.1.1800000000000.IwAR1234567890",
+    }, 1_800_000_000_000);
+    const [event] = payload.data;
+    expect(event.event_name).toBe("PageView");
+    expect(event.event_id).toBe("3f2c8e1a-4b5d-4c6e-9f70-1a2b3c4d5e6f");
+    expect(event.event_time).toBe(1_800_000_000);
+    expect(event.action_source).toBe("website");
+    expect(event.user_data).toEqual({
+      client_ip_address: "203.0.113.10",
+      client_user_agent: "Mozilla/5.0",
+      fbp: "fb.1.1800000000000.123456789",
+      fbc: "fb.1.1800000000000.IwAR1234567890",
+    });
+    expect(Object.keys(event.user_data)).not.toContain("em");
+  });
+
+  it("omite o IP quando ele é desconhecido", () => {
+    const [event] = buildMetaPageViewPayload({ eventId: "x", eventSourceUrl: "https://zelogestaointeligente.com.br/", clientIp: "unknown" }).data;
+    expect(event.user_data).toEqual({});
   });
 });
