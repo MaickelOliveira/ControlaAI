@@ -1,7 +1,7 @@
 "use client";
 
 import UiIcon from "@/components/UiIcon";
-import { hasMetaConsent } from "@/components/MetaTracking";
+import { hasMetaConsent, landingSearchWithAttribution } from "@/components/MetaTracking";
 import { BRAZIL_CHECKOUT, checkoutUrlWithLandingParams } from "@/lib/checkout-markets";
 import s from "./pricing-section.module.css";
 
@@ -59,7 +59,7 @@ export default function PricingSection() {
                 onClick={(event) => {
                   event.currentTarget.href = checkoutUrlWithLandingParams(
                     BRAZIL_CHECKOUT.checkoutUrls[plan.id],
-                    window.location.search,
+                    landingSearchWithAttribution(),
                     hasMetaConsent(),
                   );
                 }}

@@ -4,15 +4,31 @@ import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
+  DEFAULT_META_PIXEL_ID,
   isMetaPublicPath,
   isMetaRegistrationPath,
   metaCheckoutCurrency,
 } from "@/lib/meta-tracking-config";
+import {
+  fbcFromFbclid,
+  isAttribution,
+  mergeAttribution,
+  searchFromAttribution,
+  type Attribution,
+} from "@/lib/meta-attribution";
 
 const CONSENT_KEY = "zelo_meta_consent";
 const CONSENT_CHANGED = "zelo:meta-consent-changed";
+const ATTRIBUTION_KEY = "zelo_attribution";
+const COOKIE_MAX_AGE = 90 * 24 * 60 * 60;
 
-type Consent = "granted" | "denied" | null;
+// A medição vem LIGADA: a pessoa só deixa de ser medida se escolher desativar
+// (botão na página de Privacidade). Antes ela só ligava depois de um "permitir"
+// explícito — e como o aviso de cookies saiu das páginas de venda, ninguém mais
+// permitia e as visitas deixaram de ser contadas.
+const DEFAULT_CONSENT = "granted" as const;
+
+type Consent = "granted" | "denied";
 type MetaParameters = Record<string, string | number | boolean | string[]>;
 type MetaPixel = {
   (...args: unknown[]): void;
@@ -31,12 +47,12 @@ declare global {
 }
 
 function getStoredConsent(): Consent {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") return DEFAULT_CONSENT;
   try {
     const value = window.localStorage.getItem(CONSENT_KEY);
-    return value === "granted" || value === "denied" ? value : null;
+    return value === "granted" || value === "denied" ? value : DEFAULT_CONSENT;
   } catch {
-    return null;
+    return DEFAULT_CONSENT;
   }
 }
 
@@ -50,10 +66,23 @@ function subscribeToConsent(listener: () => void) {
 }
 
 function useMetaConsent() {
-  return useSyncExternalStore(subscribeToConsent, getStoredConsent, () => null);
+  return useSyncExternalStore(subscribeToConsent, getStoredConsent, () => DEFAULT_CONSENT);
 }
 
-function setStoredConsent(value: Exclude<Consent, null>) {
+function useIsClient() {
+  return useSyncExternalStore(() => () => {}, () => true, () => false);
+}
+
+function expireCookie(name: string) {
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
+}
+
+function readCookie(name: string): string | undefined {
+  const match = document.cookie.split("; ").find(item => item.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
+}
+
+function setStoredConsent(value: Consent) {
   try {
     window.localStorage.setItem(CONSENT_KEY, value);
   } catch {
@@ -62,8 +91,11 @@ function setStoredConsent(value: Exclude<Consent, null>) {
   document.cookie = `${CONSENT_KEY}=${value}; Max-Age=15552000; Path=/; SameSite=Lax; Secure`;
   if (value === "denied") {
     window.fbq?.("consent", "revoke");
-    for (const cookie of ["_fbp", "_fbc"]) {
-      document.cookie = `${cookie}=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
+    for (const cookie of ["_fbp", "_fbc"]) expireCookie(cookie);
+    try {
+      window.localStorage.removeItem(ATTRIBUTION_KEY);
+    } catch {
+      // sem acesso ao armazenamento: nada a apagar
     }
   }
   window.dispatchEvent(new Event(CONSENT_CHANGED));
@@ -72,20 +104,20 @@ function setStoredConsent(value: Exclude<Consent, null>) {
 const consentCopy = {
   "pt-BR": {
     title: "Medição de anúncios",
-    description: "Se você permitir, o Pixel da Meta poderá medir visitas e cliques para assinar nas páginas públicas da Zelo. A escolha também controla o envio do identificador de clique da Meta ao checkout da Hotmart. Você pode desativar essa medição a qualquer momento. O site continua usando cookies de sessão para manter seu acesso.",
-    allow: "Permitir medição de anúncios",
+    description: "O Pixel da Meta mede visitas e cliques para assinar nas páginas públicas da Zelo, para sabermos quais anúncios funcionam. A medição também envia o identificador de clique da Meta ao checkout da Hotmart. Você pode desativá-la aqui a qualquer momento. O site continua usando cookies de sessão para manter seu acesso.",
+    allow: "Reativar medição de anúncios",
     disable: "Desativar medição de anúncios",
   },
   "pt-PT": {
     title: "Medição de anúncios",
-    description: "Se autorizares, o Pixel da Meta pode medir visitas e cliques para subscrever nas páginas públicas da Zelo. A escolha também controla o envio do identificador de clique da Meta para a página de pagamento da Hotmart. Podes desativar esta medição a qualquer momento. O site continua a utilizar cookies de sessão para manter o teu acesso.",
-    allow: "Permitir medição de anúncios",
+    description: "O Pixel da Meta mede visitas e cliques para subscrever nas páginas públicas da Zelo, para sabermos quais os anúncios que funcionam. A medição também envia o identificador de clique da Meta para a página de pagamento da Hotmart. Podes desativá-la aqui a qualquer momento. O site continua a utilizar cookies de sessão para manter o teu acesso.",
+    allow: "Reativar medição de anúncios",
     disable: "Desativar medição de anúncios",
   },
   es: {
     title: "Medición de anuncios",
-    description: "Si lo permites, el píxel de Meta podrá medir visitas y clics para suscribirse en las páginas públicas de Zelo. Tu elección también controla el envío del identificador de clic de Meta a la página de pago de Hotmart. Puedes desactivar esta medición en cualquier momento. El sitio sigue usando cookies de sesión para mantener tu acceso.",
-    allow: "Permitir la medición de anuncios",
+    description: "El píxel de Meta mide visitas y clics para suscribirse en las páginas públicas de Zelo, para saber qué anuncios funcionan. La medición también envía el identificador de clic de Meta a la página de pago de Hotmart. Puedes desactivarla aquí en cualquier momento. El sitio sigue usando cookies de sesión para mantener tu acceso.",
+    allow: "Reactivar la medición de anuncios",
     disable: "Desactivar la medición de anuncios",
   },
 };
@@ -129,6 +161,38 @@ export function hasMetaConsent() {
   return getStoredConsent() === "granted";
 }
 
+function readAttribution(): Attribution | null {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(ATTRIBUTION_KEY) || "null");
+    return isAttribution(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Guarda o clique do anúncio (fbclid/UTMs) e, se faltar, cria o cookie _fbc —
+ *  assim a pessoa continua ligada ao anúncio mesmo que o Pixel demore a carregar. */
+function rememberAttribution() {
+  const now = Date.now();
+  const next = mergeAttribution(readAttribution(), window.location.search, now);
+  try {
+    if (next) window.localStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(next));
+    else window.localStorage.removeItem(ATTRIBUTION_KEY);
+  } catch {
+    // armazenamento bloqueado: a URL atual ainda vale
+  }
+  const fbclid = next?.params.fbclid;
+  if (fbclid && !readCookie("_fbc")) {
+    document.cookie = `_fbc=${fbcFromFbclid(fbclid, next.savedAt)}; Max-Age=${COOKIE_MAX_AGE}; Path=/; SameSite=Lax; Secure`;
+  }
+}
+
+/** Parâmetros da URL atual completados com o último clique de anúncio guardado.
+ *  Usado ao montar o link do checkout da Hotmart. */
+export function landingSearchWithAttribution(): string {
+  return searchFromAttribution(window.location.search, hasMetaConsent() ? readAttribution() : null);
+}
+
 export function trackMetaEvent(
   name: string,
   parameters: MetaParameters = {},
@@ -140,39 +204,66 @@ export function trackMetaEvent(
   window.fbq(custom ? "trackCustom" : "track", name, parameters, options);
 }
 
+/** PageView no navegador + o mesmo evento (mesmo event_id) pelo servidor, que
+ *  continua contando quando o Pixel é bloqueado. A espera dá tempo ao Pixel de
+ *  criar o cookie _fbp antes de ele ser lido. */
+function trackPageView(fbq: MetaPixel) {
+  const eventId = crypto.randomUUID();
+  fbq("track", "PageView", {}, { eventID: eventId });
+  window.setTimeout(() => {
+    if (!hasMetaConsent()) return;
+    void fetch("/api/meta/pageview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        eventId,
+        url: window.location.href,
+        fbp: readCookie("_fbp"),
+        fbc: readCookie("_fbc"),
+      }),
+    }).catch(() => {});
+  }, 1500);
+}
+
 export default function MetaTracking() {
   const pathname = usePathname();
-  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID || "1673074203783828";
+  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID || DEFAULT_META_PIXEL_ID;
   const isPublicPage = isMetaPublicPath(pathname);
   const consent = useMetaConsent();
+  const isClient = useIsClient();
   const initialized = useRef(false);
   const previousPath = useRef(pathname);
 
   useEffect(() => {
+    // Na hidratação o React ainda usa o consentimento padrão do servidor; só
+    // agimos depois de ler a escolha real da pessoa (isClient).
+    if (!isClient) return;
     if (!pixelId || consent !== "granted" || !isPublicPage) {
       window.fbq?.("consent", "revoke");
       return;
     }
 
+    rememberAttribution();
     const fbq = installMetaQueue();
     fbq("consent", "grant");
     if (!initialized.current) {
       fbq("init", pixelId);
       fbq("set", "autoConfig", false, pixelId);
-      fbq("track", "PageView");
+      trackPageView(fbq);
       initialized.current = true;
       previousPath.current = pathname;
       return;
     }
 
     if (previousPath.current !== pathname) {
-      fbq("track", "PageView");
+      trackPageView(fbq);
       previousPath.current = pathname;
     }
-  }, [consent, isPublicPage, pathname, pixelId]);
+  }, [consent, isClient, isPublicPage, pathname, pixelId]);
 
   useEffect(() => {
-    if (!pixelId || consent !== "granted" || !isPublicPage) return;
+    if (!isClient || !pixelId || consent !== "granted" || !isPublicPage) return;
 
     const handleClick = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
@@ -199,9 +290,9 @@ export default function MetaTracking() {
 
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
-  }, [consent, isPublicPage, pathname, pixelId]);
+  }, [consent, isClient, isPublicPage, pathname, pixelId]);
 
-  if (!pixelId || !isPublicPage || consent !== "granted") return null;
+  if (!pixelId || !isClient || !isPublicPage || consent !== "granted") return null;
 
   return (
     <Script

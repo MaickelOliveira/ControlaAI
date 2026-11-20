@@ -22,3 +22,25 @@ describe("Meta tracking by language", () => {
     expect(metaCheckoutCurrency("/es")).toBe("USD");
   });
 });
+
+describe("páginas medidas pelo Pixel", () => {
+  it.each([
+    "/", "/pt", "/es", "/cadastro", "/login", "/bancos", "/privacidade", "/termos",
+    "/pt/cadastro", "/pt/login", "/es/login", "/pt/", "/privacidade?x=1",
+  ])("mede a página pública %s", pathname => {
+    expect(isMetaPublicPath(pathname)).toBe(true);
+  });
+
+  it.each([
+    "/dashboard", "/dashboard/financas", "/es/dashboard", "/es/dashboard/agenda",
+    "/pt/dashboard", "/admin", "/admin/login", "/api/me", "/api/meta/pageview",
+    "/primeiro-acesso", "/esqueci-senha", "/es/esqueci-senha",
+  ])("não mede a área logada ou técnica %s", pathname => {
+    expect(isMetaPublicPath(pathname)).toBe(false);
+  });
+
+  it("não confunde páginas públicas parecidas com áreas privadas", () => {
+    expect(isMetaPublicPath("/dashboards-publicos")).toBe(true);
+    expect(isMetaPublicPath("/administracao")).toBe(true);
+  });
+});
