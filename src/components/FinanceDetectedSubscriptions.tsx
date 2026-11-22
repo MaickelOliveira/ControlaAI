@@ -12,9 +12,9 @@ export default function FinanceDetectedSubscriptions({items}:{items:readonly Det
    <div className="flex min-w-0 items-start gap-3">
     <span aria-hidden className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-soft text-sm">🔁</span>
     <div className="min-w-0">
-     <p className="break-words text-sm font-medium text-ink">{item.description} · conta mensal</p>
+     <p className="break-words text-sm font-medium text-ink">{item.description} · {item.loan?"parcela de empréstimo":"conta mensal"}</p>
      <p className="mt-1 text-[11px] text-muted">{bankFilterLabel(item.institutionName)} · {item.resourceName} · previsto para {date} · {item.category}</p>
-     <p className="mt-1 text-[10px] text-amber-ink">Reconhecida pelas cobranças dos últimos meses · previsão · fora dos gastos confirmados</p>
+     <p className="mt-1 text-[10px] text-amber-ink">{item.loan?"Reconhecida pelos pagamentos dos últimos meses":"Reconhecida pelas cobranças dos últimos meses"} · previsão · fora dos gastos confirmados</p>
     </div>
    </div>
    <div className="shrink-0 max-w-[45%] text-right"><p className="text-sm font-bold tabular-nums text-amber-ink">{bankMoney(String(item.amount),"BRL")}</p></div>

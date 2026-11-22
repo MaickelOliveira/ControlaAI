@@ -134,7 +134,7 @@ describe("detecção de assinaturas mensais", () => {
     expect(new Set(found.map(item => item.id)).size).toBe(2);
   });
 
-  it("empresa: pagamento mensal fixo por Pix entra, parcela de empréstimo e Pix de valores variados não", () => {
+  it("empresa: pagamento fixo por Pix e parcela de empréstimo entram; Pix de valores variados não", () => {
     const pix = (date: string, description: string, amount: string) => charge(date, description, amount,
       { resource_id: "acc", resource_type: "account", institution_name: "Nubank", resource_name: "Conta PJ", kind: "account_debits", user_category: null });
     const found = detectSubscriptions({
@@ -146,7 +146,10 @@ describe("detecção de assinaturas mensais", () => {
       ],
       period: december, today,
     });
-    expect(found.map(item => [item.description, item.date])).toEqual([["Transferência enviada pelo Pix REALIZE CREDITO", "2026-12-13"]]);
+    expect(found.map(item => [item.description, item.date, item.category, !!item.loan])).toEqual([
+      ["Transferência enviada pelo Pix REALIZE CREDITO", "2026-12-13", "Outros", false],
+      ["Parcela paga - Capital de giro", "2026-12-21", "Empréstimos", true],
+    ]);
   });
 
   it("normaliza a descrição para comparar a mesma cobrança", () => {
@@ -192,6 +195,21 @@ describe("assinatura que o banco conhece só até o mês atual", () => {
     const { subscriptions, expensePlan } = financePeriodExpenses(ledger, [], { ...december, type: "expense", categories: [], search: "", account: "" } as never, today, []);
     expect(subscriptions).toEqual([expect.objectContaining({ description: "Google", amount: 96.99, date: "2026-12-12" })]);
     expect(expensePlan.forecast).toBe(96.99);
+  });
+
+  it("parcela de empréstimo reconhecida entra em Empréstimos só quando o banco não informa o empréstimo", async () => {
+    const { financePeriodExpenses } = await import("./finance-period-expenses");
+    const history = [
+      charge("2026-10-21", "Parcela paga - Capital de giro", "2228.99", { kind: "account_debits", resource_type: "account", user_category: null }),
+      charge("2026-11-21", "Parcela paga - Capital de giro", "2228.99", { kind: "account_debits", resource_type: "account", user_category: null }),
+    ];
+    const ledger = {
+      finances: [], installmentAnchors: { items: [], incomplete: false },
+      bank: { report: { movements: [] }, overview: { resources: [], credit: [], connections: [], loans: [], financings: [], agenda: { incomplete: false, items: [] } } },
+    } as unknown as Parameters<typeof financePeriodExpenses>[0];
+    const { expensePlan } = financePeriodExpenses(ledger, [], { ...december, type: "expense", categories: [], search: "", account: "" } as never, today, history);
+    expect(expensePlan.groups).toEqual([expect.objectContaining({ name: "Empréstimos", forecast: 2228.99 })]);
+    expect(expensePlan.forecastItems).toEqual([expect.objectContaining({ description: "Parcela paga - Capital de giro · parcela de empréstimo" })]);
   });
 
   it("tira da previsão juros de atraso e lanches que o banco marca como recorrentes", async () => {

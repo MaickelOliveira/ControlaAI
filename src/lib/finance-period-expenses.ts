@@ -55,7 +55,11 @@ export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<Fin
    // recorrência com a próxima data já vencida não cobre os meses seguintes.
    bankSchedules:inPeriodSchedules,
    knownDescriptions:[...continuedRecurring.map(row=>row.description),...loanInstallments.map(row=>row.name),...recurring.map(row=>row.description),...projectedInstallments.map(row=>row.description),...postedFinances.filter(row=>row.date>=filters.from).map(row=>row.description)],
-  })].filter(item=>(!filters.categories.length||filters.categories.includes(item.category))&&(!search||normalizeBankText(`${item.description} ${item.institutionName} ${item.resourceName}`).includes(search))&&matchesBankFilter(item.institutionName,item.resourceId,filters.account));
+  })]
+  // Parcela reconhecida pelos pagamentos só entra se o banco não informou o
+  // mesmo empréstimo (valor até 2% diferente), para não contar duas vezes.
+  .filter(item=>!item.loan||!loanInstallments.some(loan=>loan.amount!==null&&Math.abs(loan.amount-item.amount)<=item.amount*0.02))
+  .filter(item=>(!filters.categories.length||filters.categories.includes(item.category))&&(!search||normalizeBankText(`${item.description} ${item.institutionName} ${item.resourceName}`).includes(search))&&matchesBankFilter(item.institutionName,item.resourceId,filters.account));
  const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:datedPending,recurring:periodOccurrences,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,subscriptions,from:filters.from,to:filters.to});
  return {incomeForecast,filteredFinances,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,subscriptions,expensePlan};
 }

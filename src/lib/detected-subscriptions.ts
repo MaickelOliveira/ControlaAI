@@ -19,6 +19,8 @@ export type DetectedSubscription = {
   resourceId?: string;
   resourceName: string;
   institutionName: string;
+  /** Parcela de empréstimo reconhecida pelos pagamentos (o banco não informou o empréstimo). */
+  loan?: boolean;
 };
 
 const MIN_MONTHS = 2;
@@ -49,9 +51,14 @@ const median = (values: number[]) => {
 
 const LATE_FEE_RE = /\b(?:juros|multas?|iof|rotativo|mora|atraso|encargos?)\b/;
 const FOOD_CATEGORIES = new Set(["Delivery", "Alimentação"]);
-// Parcela de empréstimo já entra em "Empréstimos" pela previsão do banco.
 const LOAN_PAYMENT_RE = /\b(?:parcela\s+paga|capital\s+de\s+giro|consignado)\b/;
 const LOAN_CATEGORIES = new Set(["Empréstimos", "Parcelas do veículo"]);
+
+/** Parcela de empréstimo paga todo mês. Entra na previsão em "Empréstimos",
+ * não como conta mensal. */
+export function isLoanPayment(description: string, category?: string | null): boolean {
+  return LOAN_PAYMENT_RE.test(normalizeMerchantText(description)) || !!category && LOAN_CATEGORIES.has(category.trim());
+}
 
 /**
  * Cobranças que podem se repetir, mas não são conta mensal: juros, multa e IOF
@@ -60,8 +67,7 @@ const LOAN_CATEGORIES = new Set(["Empréstimos", "Parcelas do veículo"]);
  */
 export function isOccasionalCharge(description: string, category?: string | null): boolean {
   const text = normalizeMerchantText(description);
-  if (LATE_FEE_RE.test(text) || LOAN_PAYMENT_RE.test(text)) return true;
-  if (category && LOAN_CATEGORIES.has(category.trim())) return true;
+  if (LATE_FEE_RE.test(text)) return true;
   const byDescription = descriptionExpenseCategory(description);
   if (byDescription === "Assinaturas" || byDescription === "Inteligência Artificial") return false;
   return [byDescription, category?.trim()].some(name => !!name && FOOD_CATEGORIES.has(name));
@@ -138,6 +144,7 @@ export function detectSubscriptions(input: {
     if (Math.max(...days) - Math.min(...days) > MAX_DAY_SPREAD) continue;
 
     const lastSeen = months[months.length - 1];
+    const loan = rows.some(row => isLoanPayment(row.description, bankCategory(row).name));
     const latest = rows.find(row => monthIndex(row.date) === lastSeen)!;
     const day = Math.round(median(days));
     // Cancelada: a cobrança deste mês não veio até 10 dias depois do dia de
@@ -154,11 +161,12 @@ export function detectSubscriptions(input: {
         description: latest.description.replace(/\s+/g, " ").trim(),
         amount: Math.round(typical * 100) / 100,
         // Mesma tradução de categoria do extrato ("Alimentação", não o código do banco).
-        category: bankCategory(latest).name,
+        category: loan ? "Empréstimos" : bankCategory(latest).name,
         date,
         resourceId: latest.resource_id,
         resourceName: latest.resource_name,
         institutionName: latest.institution_name,
+        ...(loan ? {loan: true} : {}),
       });
     }
    }
@@ -197,7 +205,8 @@ export function projectBankRecurring(input: {
     const dueMonth = monthIndex(item.due_date);
     if (dueMonth < current - 1 || dueMonth > current) continue;
     const category = input.category(item);
-    if (isOccasionalCharge(item.description, category)) continue;
+    // Empréstimo informado pelo banco já entra em "Empréstimos".
+    if (isOccasionalCharge(item.description, category) || isLoanPayment(item.description, category)) continue;
     const day = Number(item.due_date.slice(8, 10));
     for (let month = Math.max(firstMonth, dueMonth + 1); month <= lastMonth; month++) {
       const date = dateInMonth(month, day);

@@ -81,7 +81,7 @@ export async function readBankExpenseForecast(user:OpenFinanceIdentity,mode:Fina
 export function monthlyBills(schedules:readonly BankAgendaItem[],subscriptions:readonly DetectedSubscription[],period:Period){
  const fromBank=schedules.filter(row=>row.kind==="recurring"&&bankScheduleInExpensePeriod(row,period.from,period.to)&&row.amount!==null&&(row.currency??"BRL")==="BRL")
   .map(row=>({description:row.description,amount:Number(row.amount),date:row.due_date}));
- const detected=subscriptions.map(row=>({description:row.description,amount:row.amount,date:row.date as string|null}));
+ const detected=subscriptions.filter(row=>!row.loan).map(row=>({description:row.description,amount:row.amount,date:row.date as string|null}));
  return [...fromBank,...detected].filter(row=>Number.isFinite(row.amount)&&row.amount>0).sort((a,b)=>(a.date??"9").localeCompare(b.date??"9"));
 }
 

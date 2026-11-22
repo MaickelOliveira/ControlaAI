@@ -45,7 +45,7 @@ export function financeExpensePlan(input:Inputs){
   add(`schedule:${row.kind}:${row.id}`,bankForecastCategory(row,input.categoryHistory??input.posted),row.description,ledgerAmount(row.amount),row.currency);
  }
  // Assinaturas que o banco não marcou como recorrentes, vistas todo mês no cartão.
- for(const row of input.subscriptions??[])add(row.id,row.category,`${row.description} · assinatura mensal`,row.amount);
+ for(const row of input.subscriptions??[])add(row.id,row.category,`${row.description} · ${row.loan?"parcela de empréstimo":"assinatura mensal"}`,row.amount);
  const forecast=forecastCents/100;
  return {recorded,forecast,forecastItems,total:(Math.round(recorded*100)+forecastCents)/100,unquantified,groups:[...groups.values()].sort((a,b)=>b.value-a.value)};
 }
