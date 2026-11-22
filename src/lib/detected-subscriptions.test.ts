@@ -56,6 +56,28 @@ describe("detecção de assinaturas mensais", () => {
     expect(detectSubscriptions({ history, period: december, today })).toEqual([]);
   });
 
+  it("junta as cobranças do mesmo banco mesmo quando o cartão muda de identificador", () => {
+    const found = detectSubscriptions({
+      history: [
+        charge("2026-09-17", "OPENAI  CHATGPT SUBSCR", "543.38", { resource_id: "card-a", direction: "unknown" }),
+        charge("2026-10-17", "OPENAI  CHATGPT SUBSCR", "543.38", { resource_id: "card-b", direction: "unknown" }),
+      ],
+      period: december, today,
+    });
+    expect(found).toEqual([expect.objectContaining({ amount: 543.38, date: "2026-12-17" })]);
+  });
+
+  it("usa a categoria traduzida do extrato, não o código do banco", () => {
+    const found = detectSubscriptions({
+      history: [
+        charge("2026-10-05", "TARIFA PACOTE", "101.71", { user_category: null, source_category: "BANK_FEES_OTHER_BANK_FEES" }),
+        charge("2026-11-05", "TARIFA PACOTE", "101.71", { user_category: null, source_category: "BANK_FEES_OTHER_BANK_FEES" }),
+      ],
+      period: december, today,
+    });
+    expect(found[0].category).toBe("Encargos bancários");
+  });
+
   it("normaliza a descrição para comparar a mesma cobrança", () => {
     expect(subscriptionKey("OPENAI *CHATGPT SUBSCR 123")).toBe(subscriptionKey("Openai  ChatGPT"));
   });

@@ -1,5 +1,6 @@
 import type {BankMovement} from "./open-finance-report";
 import type {BankAgendaItem} from "./open-finance-schedules";
+import {bankCategory} from "./bank-category";
 
 /**
  * Assinaturas que o banco não marca como recorrentes (ex.: ChatGPT cobrado no
@@ -43,7 +44,11 @@ const median = (values: number[]) => {
 };
 
 function isSubscriptionCandidate(row: BankMovement): boolean {
-  if (row.direction !== "debit" || row.classification === "bill_payment") return false;
+  // Compras no cartão podem chegar sem "debit" como direção; o tipo do
+  // movimento diz que é saída.
+  const outflow = row.kind === "card_purchases" || row.kind === "account_debits" || row.direction === "debit";
+  if (!outflow || row.direction === "credit" || row.classification === "bill_payment") return false;
+  if (bankCategory(row).source === "excluded") return false;
   if ((row.currency ?? "BRL") !== "BRL" || row.amount === null) return false;
   if ((row.installment_count ?? 1) > 1) return false;
   const amount = Number(row.amount);
@@ -70,7 +75,9 @@ export function detectSubscriptions(input: {
     if (!isSubscriptionCandidate(row) || row.date > input.today) continue;
     const key = subscriptionKey(row.description);
     if (key.length < 3) continue;
-    const groupKey = `${row.resource_id ?? row.resource_name}|${key}`;
+    // Agrupa pelo banco, não pelo cartão: alguns bancos trocam o identificador
+    // do cartão entre faturas e separariam as cobranças do mesmo serviço.
+    const groupKey = `${row.institution_name}|${key}`;
     groups.set(groupKey, [...(groups.get(groupKey) ?? []), row]);
   }
 
@@ -110,7 +117,8 @@ export function detectSubscriptions(input: {
         id: `detected:${groupKey}:${monthStart(month)}`,
         description: latest.description.replace(/\s+/g, " ").trim(),
         amount: Math.round(typical * 100) / 100,
-        category: latest.user_category || latest.source_category || "Assinaturas",
+        // Mesma tradução de categoria do extrato ("Alimentação", não o código do banco).
+        category: bankCategory(latest).name,
         date,
         resourceId: latest.resource_id,
         resourceName: latest.resource_name,
