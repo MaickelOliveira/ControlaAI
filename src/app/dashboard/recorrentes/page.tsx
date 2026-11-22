@@ -66,14 +66,17 @@ export default function RecorrentesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [readError, setReadError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [confirming, setConfirming] = useState<string | null>(null);
 
   function load(m: string) {
     setLoading(true);
     fetch(`/api/recurring?mode=${m}&status=active`)
-      .then(r => r.json())
-      .then(d => { setItems(Array.isArray(d) ? d : []); setLoading(false); });
+      .then(async r => { if (!r.ok) throw Error(); return r.json(); })
+      .then(d => { if (!Array.isArray(d)) throw Error(); setItems(d); setReadError(""); })
+      .catch(() => { setItems([]); setReadError("Não foi possível conferir os cadastros. Tente atualizar a página."); })
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {
@@ -262,7 +265,8 @@ export default function RecorrentesPage() {
             </div>
           )}
 
-          {items.length === 0 && (
+          {readError && <p role="alert" className="text-sm text-amber-ink">{readError}</p>}
+          {!readError && items.length === 0 && (
             <div className="bg-surface rounded-2xl border border-line p-12 text-center shadow-sm">
               <p className="text-4xl mb-3">💳</p>
               <p className="font-semibold text-ink">Nenhum lançamento recorrente</p>

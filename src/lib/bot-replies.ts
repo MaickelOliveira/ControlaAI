@@ -730,6 +730,10 @@ Pode falar naturalmente. Sempre que possível, inclua: *o que quer fazer + dado 
 • Evite responder apenas _"1"_ depois que uma lista vencer; peça a lista novamente.
 • Para várias ações, use frases separadas: _"Gastei 40 com alimentação. Crie uma tarefa para ligar ao João amanhã"_.
 
+💰 *Receita fixa e previsão*
+• _"Recebo R$ 2.500 de salário todo dia 10, todos os meses."_ Depois da confirmação, você pode conferir em *Recorrentes*.
+• _"Quanto vai sobrar no mês que vem?"_ A Rita consulta o saldo pelos registros da Zelo, as receitas e as despesas do período. Em *Finanças*, selecione o mês para ver quanto já recebeu e quanto está previsto.
+
 Se faltar informação, vou perguntar antes de executar. Para ver este manual novamente, digite *ajuda*.`;
 }
 

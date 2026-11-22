@@ -275,7 +275,10 @@ function askBatchWithTtl(slot: SlotDef, draft: Draft, ctx: SlotCtx, index: numbe
   const prefix = ctx.user.locale === "es"
     ? `*Elemento ${index + 1} de ${total}${batchItemLabel(draft)}*`
     : `*Item ${index + 1} de ${total}${batchItemLabel(draft)}*`;
-  return `${prefix}\n${askWithTtl(slot, draft, ctx)}`;
+  const shared = index === 0 && draft.recurrenceType && (slot.key === "dayOfMonth" || (slot.label === "duração" && draft.recurrenceType === "recurring")) ? localized(ctx,
+    '\nSe o dia e o prazo forem iguais, pode responder "todos, sempre, dia 10", usando o seu dia.',
+    '\nSi el plazo y el día son iguales, puedes decir "todos, siempre, día 10" con tu día.') : "";
+  return `${prefix}\n${askWithTtl(slot, draft, ctx)}${shared}`;
 }
 
 function joinBatchReplies(replies: string[], ctx: SlotCtx): string {
@@ -363,7 +366,12 @@ async function runBatchSlotFillTurn(
   }
 
   let value: unknown;
-  if (isSkipWord(trimmed) && slot.fallback) value = slot.fallback(draft, ctx);
+  const shared = pending.intent === "recurring_create" && /\b(?:todos|todas)\b/i.test(trimmed) && !/\b(?:exceto|menos|salvo|excepto)\b/i.test(trimmed);
+  const sharedDay = shared ? trimmed.match(/\bd[ií]a\s+(0?[1-9]|[12]\d|3[01])\b/i) : null;
+  const forever = shared && /\b(?:sempre|siempre|sem fim|sin fin)\b/i.test(trimmed);
+  if (queue[0] === "term" && forever) value = null;
+  else if (slot.key === "dayOfMonth" && sharedDay) value = Number(sharedDay[1]);
+  else if (isSkipWord(trimmed) && slot.fallback) value = slot.fallback(draft, ctx);
   else {
     const parsed = slot.parse(text, draft, ctx);
     if (!parsed.ok) {
@@ -383,6 +391,18 @@ async function runBatchSlotFillTurn(
   await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
   drafts[index] = draft;
   missing[index] = queue;
+  if (sharedDay || forever) {
+    for (let i = index; i < drafts.length; i++) {
+      if (forever && drafts[i].recurrenceType === "recurring" && missing[i].includes("term")) {
+        drafts[i].lifetime = true;
+        missing[i] = missing[i].filter(key => key !== "term");
+      }
+      if (sharedDay && missing[i].includes("dayOfMonth")) {
+        drafts[i].dayOfMonth = Number(sharedDay[1]);
+        missing[i] = missing[i].filter(key => key !== "dayOfMonth");
+      }
+    }
+  }
 
   const next = missing.findIndex((candidate, candidateIndex) => candidateIndex >= index && candidate.length > 0);
   if (next < 0) {

@@ -11,6 +11,7 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
   const incomeLines = new Map<string, number>();
   const possibleRepeats = new Set<string>();
   const datesSeen = new Set<string>();
+  let hasEarlierPending = false;
 
   function add(type: Finance["type"], amount: number, date: string, expected: boolean, label: string) {
     const cents = Math.round(amount * 100);
@@ -31,12 +32,13 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
     if (row.mode !== mode || row.date > period.to) continue;
     const pending = row.status === "pending";
     if (pending && row.autoPost === false) { undated++; continue; }
-    if (pending && row.date < windowStart) continue;
+    if (pending && row.date < windowStart) { hasEarlierPending = true; continue; }
     if (row.recurringId) represented.add(row.recurringId + "|" + row.date);
     add(row.type, row.amount, row.date, pending || row.date > today, row.description);
   }
   for (const row of schedules) {
     if (row.mode !== mode || row.status !== "active") continue;
+    if (row.nextDueDate < windowStart) hasEarlierPending = true;
     for (const date of scheduledDates(row, windowStart, period.to)) {
       if (represented.has(row.id + "|" + date)) continue;
       const key = [similarBenefit(row.description,row.description) ? "benefício alimentação/refeição" : recurrenceName(row.description), row.type, Math.round(row.amount * 100), date].join("|");
@@ -45,7 +47,7 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
       add(row.type, row.amount, date, true, row.description);
     }
   }
-  return {opening, openingEvidence, received, spent, income, expense, undated, incomeLines, possibleRepeats,
+  return {opening, openingEvidence, received, spent, income, expense, undated, incomeLines, possibleRepeats, hasEarlierPending,
     result: received + income - spent - expense, closing: opening + received + income - spent - expense};
 }
 
@@ -69,6 +71,10 @@ export function projectionReply(p: ReturnType<typeof cashProjection>, mode: Fina
   if (!p.openingEvidence) lines.push(es ? "No hay saldo realizado anterior registrado. Si ya tenías dinero, el saldo final cambia por ese valor." : "Sem saldo realizado anterior registrado. Se já havia dinheiro antes, o saldo final muda por esse valor.");
   if (!p.income && !p.received) lines.push(es ? "No encontré ingresos para este período. Puedes consultar tus ingresos recurrentes antes de registrar uno nuevo." : "Não encontrei receitas para esse período. Confira as receitas em Recorrentes antes de cadastrar uma nova.");
   if (p.undated) lines.push(es ? "Hay pendientes sin fecha fuera de la proyección." : "Há pendências sem data fora da projeção.");
-  if (p.possibleRepeats.size) lines.push(es ? "Hay recurrencias similares en el total. Revisa Recorrentes antes de usar la proyección." : "O total inclui recorrências semelhantes. Confira possíveis repetições em Recorrentes antes de usar a projeção.");
+  if (p.hasEarlierPending) lines.push(es ? "Hay vencimientos anteriores sin confirmar fuera del saldo inicial. Comprueba si se pagaron o cobraron." : "Há vencimentos anteriores sem baixa fora do saldo inicial. Confira se foram pagos ou recebidos.");
+  if (p.possibleRepeats.size) {
+    const names = [...p.possibleRepeats].slice(0,5).map(s => s.replace(/[\n\r*_~]/g," ").slice(0,80)).join(", ");
+    lines.push((es ? "Total provisional. Revisa posibles repeticiones en Recorrentes: " : "Total provisório. Confira possíveis repetições em Recorrentes: ") + names + ".");
+  }
   return lines.join("\n");
 }
