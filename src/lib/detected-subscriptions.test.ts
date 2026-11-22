@@ -212,7 +212,7 @@ describe("assinatura que o banco conhece só até o mês atual", () => {
     expect(expensePlan.forecastItems).toEqual([expect.objectContaining({ description: "Parcela paga - Capital de giro · parcela de empréstimo" })]);
   });
 
-  it("assinatura antiga continua nos próximos 5 meses, venha do banco ou das cobranças", async () => {
+  it("assinatura antiga continua nos próximos 6 meses, venha do banco ou das cobranças", async () => {
     const { financePeriodExpenses } = await import("./finance-period-expenses");
     const history = [charge("2026-09-17", "OPENAI CHATGPT SUBSCR", "543.38"), charge("2026-10-17", "OPENAI CHATGPT SUBSCR", "543.38"), charge("2026-11-17", "OPENAI CHATGPT SUBSCR", "543.38")];
     const ledger = {
@@ -226,10 +226,10 @@ describe("assinatura que o banco conhece só até o mês atual", () => {
       const { subscriptions } = financePeriodExpenses(ledger, [], { ...period, type: "expense", categories: [], search: "", account: "" } as never, today, history);
       expect(subscriptions.map(item => [item.description, item.date.slice(8)])).toEqual([["Anthropic", "11"], ["OPENAI CHATGPT SUBSCR", "17"]]);
     }
-    // Até 5 meses à frente: abril entra, maio não.
-    const april = financePeriodExpenses(ledger, [], { from: "2027-04-01", to: "2027-04-30", type: "expense", categories: [], search: "", account: "" } as never, today, history);
+    // Até 6 meses à frente: maio entra, junho não.
+    const april = financePeriodExpenses(ledger, [], { from: "2027-05-01", to: "2027-05-31", type: "expense", categories: [], search: "", account: "" } as never, today, history);
     expect(april.subscriptions).toHaveLength(2);
-    const may = financePeriodExpenses(ledger, [], { from: "2027-05-01", to: "2027-05-31", type: "expense", categories: [], search: "", account: "" } as never, today, history);
+    const may = financePeriodExpenses(ledger, [], { from: "2027-06-01", to: "2027-06-30", type: "expense", categories: [], search: "", account: "" } as never, today, history);
     expect(may.subscriptions).toEqual([]);
   });
 

@@ -28,7 +28,7 @@ const MAX_AMOUNT_SPREAD = 0.15;
 const MAX_DAY_SPREAD = 5;
 const CANCEL_GRACE_DAYS = 10;
 /** Até quantos meses à frente as contas mensais são previstas. */
-const MAX_MONTHS_AHEAD = 5;
+const MAX_MONTHS_AHEAD = 6;
 const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
 export function subscriptionKey(description: string): string {
