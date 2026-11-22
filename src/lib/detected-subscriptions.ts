@@ -1,6 +1,8 @@
 import type {BankMovement} from "./open-finance-report";
 import type {BankAgendaItem} from "./open-finance-schedules";
 import {bankCategory} from "./bank-category";
+import {descriptionExpenseCategory} from "./expense-category";
+import {normalizeMerchantText} from "./merchant-text";
 
 /**
  * Assinaturas que o banco não marca como recorrentes (ex.: ChatGPT cobrado no
@@ -43,12 +45,28 @@ const median = (values: number[]) => {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 };
 
+const LATE_FEE_RE = /\b(?:juros|multas?|iof|rotativo|mora|atraso|encargos?)\b/;
+const FOOD_CATEGORIES = new Set(["Delivery", "Alimentação"]);
+
+/**
+ * Cobranças que podem se repetir, mas não são conta mensal: juros, multa e IOF
+ * só aparecem quando a fatura atrasa; lanche, restaurante, mercado e delivery
+ * são consumo. Assinaturas de comida (iFood Club) continuam valendo.
+ */
+export function isOccasionalCharge(description: string, category?: string | null): boolean {
+  if (LATE_FEE_RE.test(normalizeMerchantText(description))) return true;
+  const byDescription = descriptionExpenseCategory(description);
+  if (byDescription === "Assinaturas" || byDescription === "Inteligência Artificial") return false;
+  return [byDescription, category?.trim()].some(name => !!name && FOOD_CATEGORIES.has(name));
+}
+
 export function isSubscriptionCandidate(row: BankMovement): boolean {
   // Compras no cartão podem chegar sem "debit" como direção; o tipo do
   // movimento diz que é saída.
   const outflow = row.kind === "card_purchases" || row.kind === "account_debits" || row.direction === "debit";
   if (!outflow || row.direction === "credit" || row.classification === "bill_payment") return false;
-  if (bankCategory(row).source === "excluded") return false;
+  const category = bankCategory(row);
+  if (category.source === "excluded" || isOccasionalCharge(row.description, category.name)) return false;
   if ((row.currency ?? "BRL") !== "BRL" || row.amount === null) return false;
   if ((row.installment_count ?? 1) > 1) return false;
   const amount = Number(row.amount);

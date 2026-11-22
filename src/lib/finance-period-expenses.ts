@@ -9,7 +9,7 @@ import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} fr
 import {linkBankInstallmentAnchors,linkScheduledBankInstallments,projectBankInstallments} from "./bank-installment-projections";
 import {bankScheduleInExpensePeriod,financeExpensePlan} from "./finance-expense-plan";
 import {BILL_PAYMENT_CATEGORY,isBankBillPaymentDescription} from "./bank-bill-payment";
-import {detectSubscriptions} from "./detected-subscriptions";
+import {detectSubscriptions,isOccasionalCharge} from "./detected-subscriptions";
 import type {BankMovement} from "./open-finance-report";
 export type PeriodRecurring=Schedule & {id:string;type:string;amount:number;category:string;description:string;status:string;nextDueDate:string};
 export function matchesPeriodFilters(entry:Pick<LedgerEntry,"type"|"category"|"description">,filters:FinanceFilters){
@@ -37,7 +37,10 @@ export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<Fin
  const projectedInstallments=!ledger?.bank||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:")?[]:
   projectBankInstallments(installmentAnchors.map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today},scheduledInstallments)
    .filter(item=>item.user_category!==BILL_PAYMENT_CATEGORY&&!isBankBillPaymentDescription(item.description)&&(!filters.categories.length||filters.categories.includes(bankForecastCategory(item,finances)))&&matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
- const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,[...scheduledInstallments.flatMap(row=>row.schedule_ids),...installmentAnchors.flatMap(row=>row.source_schedule_ids??[])]);
+ // Juros/multa de atraso e lanches que o banco marca como recorrentes não são
+ // conta mensal: ficam fora da previsão e da lista.
+ const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,[...scheduledInstallments.flatMap(row=>row.schedule_ids),...installmentAnchors.flatMap(row=>row.source_schedule_ids??[])])
+  .filter(row=>row.kind!=="recurring"||!isOccasionalCharge(row.description,bankForecastCategory(row,finances)));
  const subscriptions=!subscriptionHistory?.length||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:")?[]:
   detectSubscriptions({
    history:subscriptionHistory,period:{from:filters.from,to:filters.to},today,

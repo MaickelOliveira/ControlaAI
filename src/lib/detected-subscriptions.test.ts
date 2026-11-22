@@ -79,6 +79,34 @@ describe("detecção de assinaturas mensais", () => {
     expect(found[0].category).toBe("Encargos bancários");
   });
 
+  it("não trata juros, multa e IOF de atraso nem lanches como conta mensal", () => {
+    const twice = (description: string, amount: string, extra: Partial<BankMovement> = {}) =>
+      [charge("2026-10-16", description, amount, extra), charge("2026-11-16", description, amount, extra)];
+    const found = detectSubscriptions({
+      history: [
+        ...twice("Juros do rotativo", "33.37", { user_category: null }), ...twice("Multa por atraso", "55.37", { user_category: null }),
+        ...twice("IOF do rotativo", "11.10", { user_category: null }), ...twice("SILVIO LANCHES", "108.00", { user_category: null }),
+        ...twice("Restaurante Bom Prato", "60.00", { user_category: "Alimentação" }),
+        ...twice("iFood Club", "8.08", { user_category: null }), ...twice("TARIFA PACOTE", "101.71", { user_category: null }),
+      ],
+      period: december, today,
+    });
+    expect(found.map(item => item.description).sort()).toEqual(["TARIFA PACOTE", "iFood Club"]);
+  });
+
+  it("ChatGPT e Claude cobrados todo mês sempre entram, mesmo com categoria errada no extrato", () => {
+    const found = detectSubscriptions({
+      history: [
+        charge("2026-10-17", "OPENAI *CHATGPT SUBSCR", "543.38", { user_category: "Delivery" }),
+        charge("2026-11-17", "OPENAI *CHATGPT SUBSCR", "543.38", { user_category: "Delivery" }),
+        charge("2026-10-11", "CLAUDE.AI SUBSCRIPTION", "113.85", { user_category: null }),
+        charge("2026-11-11", "CLAUDE.AI SUBSCRIPTION", "113.85", { user_category: null }),
+      ],
+      period: december, today,
+    });
+    expect(found.map(item => [item.date, item.amount])).toEqual([["2026-12-11", 113.85], ["2026-12-17", 543.38]]);
+  });
+
   it("normaliza a descrição para comparar a mesma cobrança", () => {
     expect(subscriptionKey("OPENAI *CHATGPT SUBSCR 123")).toBe(subscriptionKey("Openai  ChatGPT"));
   });
@@ -107,6 +135,21 @@ describe("assinatura que o banco conhece só até o mês atual", () => {
     } as unknown as Parameters<typeof financePeriodExpenses>[0];
     const { expensePlan } = financePeriodExpenses(ledger, [], { ...december, type: "expense", categories: [], search: "", account: "" } as never, today, history);
     expect(expensePlan.forecastItems).toEqual([expect.objectContaining({ amount: 543.38 })]);
+  });
+
+  it("tira da previsão juros de atraso e lanches que o banco marca como recorrentes", async () => {
+    const { financePeriodExpenses } = await import("./finance-period-expenses");
+    const item = (id: string, description: string, amount: string) => ({ id, kind: "recurring", description, resource_id: "card-mp", resource_name: "Mercado Pago",
+      institution_name: "Mercado Pago", due_date: "2026-12-16", amount, currency: "BRL", synced_at: "2026-11-22" });
+    const ledger = {
+      finances: [], installmentAnchors: { items: [], incomplete: false },
+      bank: { report: { movements: [] }, overview: { resources: [], credit: [], connections: [], loans: [], financings: [], agenda: { incomplete: false, items: [
+        item("j", "Juros do rotativo", "33.37"), item("m", "Multa por atraso", "55.37"), item("l", "SILVIO LANCHES", "108.00"), item("n", "Netflix", "20.90"),
+      ] } } },
+    } as unknown as Parameters<typeof financePeriodExpenses>[0];
+    const { bankSchedules, expensePlan } = financePeriodExpenses(ledger, [], { ...december, type: "expense", categories: [], search: "", account: "" } as never, today, []);
+    expect(bankSchedules.map(row => row.description)).toEqual(["Netflix"]);
+    expect(expensePlan.forecast).toBe(20.9);
   });
 });
 
