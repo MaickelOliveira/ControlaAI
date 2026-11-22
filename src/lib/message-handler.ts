@@ -116,6 +116,13 @@ import {
   replyFirstUseTips,
 } from "@/lib/bot-replies";
 
+/** Uma pergunta objetiva do classificador antes de pesquisar ("Para qual
+ * data?"). Textos longos ou afirmativos não são perguntas de esclarecimento. */
+export function isWebSearchClarifyingQuestion(response: string | undefined): boolean {
+  const text = response?.trim() ?? "";
+  return !!text && text.length <= 400 && /[?¿]/.test(text);
+}
+
 export function phoneMatches(stored: string, incoming: string): boolean {
   const storedVariants = phoneVariants(stored);
   const incomingVariants = new Set(phoneVariants(incoming));
@@ -5800,8 +5807,11 @@ async function handleSingleMessage(msg:IncomingMessage, agentFollowUps:string[])
       }
 
       case "web_search": {
-        if (ai.response) {
-          await wppSend(from, ai.response);
+        // "response" só serve para UMA pergunta curta quando falta um dado da
+        // busca. Uma resposta pronta do classificador seria um dado inventado
+        // sem pesquisa (e pode passar do limite do WhatsApp): pesquisa de fato.
+        if (isWebSearchClarifyingQuestion(ai.response)) {
+          await wppSend(from, ai.response!.trim());
           break;
         }
         const query = ai.keyword?.trim() || messageText.trim();
