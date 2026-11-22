@@ -54,6 +54,7 @@ import {
 import { createEmployee, getEmployeesByUser, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { getContactsByUser, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
+import { planWithZeloAgent, replyDeferredAgentCommands, shouldUseZeloAgent } from "@/lib/zelo-agent";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, parseAmountReply, choiceIndexByLabels, choicesByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, beginReminderRecipientCorrection, hasMissingSlotFields, isReminderRecipientCorrection, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
@@ -1037,6 +1038,9 @@ export type IncomingMessage = {
   fileCaption?: string;
   fileName?: string;
   inboxImageUrl?: string;
+  /** Comando extra gerado pelo agente a partir de uma mensagem já gravada.
+   * Definido somente por handleMessageWithAgent, nunca pelo provedor. */
+  agentFollowUp?: boolean;
 };
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
@@ -1056,13 +1060,34 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
   return runWithVirtualAgentReply(msg.from,()=>withWhatsAppCompany(msg,handleMessageWithAgent));
 }
 
+/** Executa a mensagem e, depois, os pedidos extras que o agente separou dela
+ * ("paguei a luz e me lembra da água" = 2 comandos), um de cada vez. Se um
+ * comando ficar esperando resposta do cliente, os seguintes não atropelam a
+ * pergunta: a Zelo avisa o que ainda falta. */
 async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
+  const followUps: string[] = [];
+  await handleSingleMessage(msg, followUps);
+  for (let index = 0; index < followUps.length; index += 1) {
+    if (await getPendingAction(msg.from)) {
+      const locale = (await getUserByWppPhone(msg.from).catch(() => null))?.locale;
+      await wppSend(msg.from, replyDeferredAgentCommands(followUps.slice(index), locale));
+      return;
+    }
+    await handleSingleMessage({
+      from: msg.from, text: followUps[index], contactName: msg.contactName,
+      channel: msg.channel, receivedAt: msg.receivedAt, agentFollowUp: true,
+    }, []);
+  }
+}
+
+async function handleSingleMessage(msg:IncomingMessage, agentFollowUps:string[]):Promise<void> {
   const from = msg.from;
   let responseLocale: string | undefined;
   try {
     let messageText = msg.text;
 
-    if (from) {
+    // Comandos extras do agente vêm de uma mensagem que já está no histórico.
+    if (from && !msg.agentFollowUp) {
       await addMessage(from, {
         role: "user", content: msg.inboxImageUrl ? (typeof msg.fileCaption === "string" ? msg.fileCaption : "") : messageText || (msg.isFileMessage ? "[Arquivo]" : ""),
         ts: msg.receivedAt ?? Date.now(), channel: msg.channel,
@@ -3117,6 +3142,29 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     if (financeScreenshot && /^\s*\?+\s*$/.test(messageText) && !financeConversation(messageText,recentHistory)) {
       await wppSend(from, localized(user.locale,"O que você está tentando encontrar nessa tela?","¿Qué intentas encontrar en esta pantalla?")); return;
     }
+
+    // ── Agente conversacional (ZELO_AGENT_ENABLED) ──
+    // Entende a mensagem do jeito que o cliente escreveu. Conversa e dúvidas
+    // recebem resposta natural; pedidos viram comandos claros que seguem
+    // pelo fluxo abaixo, com todas as regras e confirmações de sempre. Sem
+    // plano (desligado, erro ou resposta estranha), nada muda.
+    if (!msg.agentFollowUp && !resumedFinanceAmount && !recordSelection && !accountSelectionResume
+      && !employeeSelectionResume && !actionContinuation && messageText.trim()
+      && shouldUseZeloAgent(user.id, from)) {
+      const plan = await planWithZeloAgent(messageText, {
+        userId: user.id, phone: from, locale: user.locale, activeMode: mode, history: recentHistory,
+      });
+      if (plan?.kind === "reply") {
+        setVirtualAgentIntent("help");
+        await wppSend(from, plan.reply);
+        return;
+      }
+      if (plan?.kind === "commands") {
+        messageText = plan.commands[0];
+        agentFollowUps.push(...plan.commands.slice(1));
+      }
+    }
+
     if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
     setVirtualAgentIntent("finance_query");
     const financeQuestion = financeConversation(messageText, recentHistory);
