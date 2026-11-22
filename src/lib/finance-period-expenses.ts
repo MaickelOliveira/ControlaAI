@@ -7,7 +7,7 @@ import {normalizeBankText} from "./bank-question-parser";
 import {financeLoanInstallments} from "./finance-loan-installments";
 import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} from "./finance-bank-schedules";
 import {linkBankInstallmentAnchors,linkScheduledBankInstallments,projectBankInstallments} from "./bank-installment-projections";
-import {financeExpensePlan} from "./finance-expense-plan";
+import {bankScheduleInExpensePeriod,financeExpensePlan} from "./finance-expense-plan";
 import {BILL_PAYMENT_CATEGORY,isBankBillPaymentDescription} from "./bank-bill-payment";
 import {detectSubscriptions} from "./detected-subscriptions";
 import type {BankMovement} from "./open-finance-report";
@@ -41,7 +41,9 @@ export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<Fin
  const subscriptions=!subscriptionHistory?.length||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:")?[]:
   detectSubscriptions({
    history:subscriptionHistory,period:{from:filters.from,to:filters.to},today,
-   bankSchedules:ledger?.bank?.overview.agenda?.items??[],
+   // Só conta como "já previsto" o que o banco prevê DENTRO do período. Uma
+   // recorrência com a próxima data já vencida não cobre os meses seguintes.
+   bankSchedules:bankSchedules.filter(row=>bankScheduleInExpensePeriod(row,filters.from,filters.to)),
    knownDescriptions:[...recurring.map(row=>row.description),...projectedInstallments.map(row=>row.description),...postedFinances.filter(row=>row.date>=filters.from).map(row=>row.description)],
   }).filter(item=>(!filters.categories.length||filters.categories.includes(item.category))&&(!search||normalizeBankText(`${item.description} ${item.institutionName} ${item.resourceName}`).includes(search))&&matchesBankFilter(item.institutionName,item.resourceId,filters.account));
  const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:datedPending,recurring:periodOccurrences,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,subscriptions,from:filters.from,to:filters.to});

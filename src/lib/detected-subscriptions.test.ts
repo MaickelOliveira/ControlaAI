@@ -93,6 +93,22 @@ describe("detecção de assinaturas mensais", () => {
   });
 });
 
+describe("assinatura que o banco conhece só até o mês atual", () => {
+  it("é prevista no mês seguinte pelas previsões do período", async () => {
+    const { financePeriodExpenses } = await import("./finance-period-expenses");
+    const history = [charge("2026-09-17", "OPENAI CHATGPT SUBSCR", "543.38"), charge("2026-10-17", "OPENAI CHATGPT SUBSCR", "543.38")];
+    const ledger = {
+      finances: [], installmentAnchors: { items: [], incomplete: false },
+      bank: { report: { movements: [] }, overview: { resources: [], credit: [], connections: [], loans: [], financings: [], agenda: { incomplete: false, items: [
+        { id: "s1", kind: "recurring", description: "OPENAI CHATGPT", resource_id: "card-mp", resource_name: "Mercado Pago", institution_name: "Mercado Pago",
+          due_date: "2026-11-17", amount: "543.38", currency: "BRL", synced_at: "2026-11-22" },
+      ] } } },
+    } as unknown as Parameters<typeof financePeriodExpenses>[0];
+    const { expensePlan } = financePeriodExpenses(ledger, [], { ...december, type: "expense", categories: [], search: "", account: "" } as never, today, history);
+    expect(expensePlan.forecastItems).toEqual([expect.objectContaining({ amount: 543.38 })]);
+  });
+});
+
 describe("projeção com as previsões dos bancos", () => {
   it("\"quanto começo devendo\" inclui empréstimos, parcelas e assinaturas", () => {
     const base = cashProjection([], [], "personal", december, today);
