@@ -56,6 +56,12 @@ describe("rollout", () => {
     expect(shouldUseZeloAgent("user-1", "5544999887766", "canary", "")).toBe(false);
   });
 
+  it("reconhece o celular com e sem o nono dígito, como o WhatsApp entrega", () => {
+    expect(shouldUseZeloAgent("user-1", "551187654321", "canary", "5511987654321")).toBe(true);
+    expect(shouldUseZeloAgent("user-1", "5511987654321", "canary", "551187654321")).toBe(true);
+    expect(shouldUseZeloAgent("user-1", "551187650000", "canary", "5511987654321")).toBe(false);
+  });
+
   it("nunca liga para quem não é cliente identificado", () => {
     expect(shouldUseZeloAgent(undefined, "5544999887766", "all", "")).toBe(false);
   });

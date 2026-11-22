@@ -3,6 +3,7 @@ import { getConfig } from "./whatsapp-config";
 import { isOpenAITestUser, openAIJson } from "./openai-provider";
 import { virtualAgentPrompt } from "./virtual-agent-replies";
 import { nowISOBR, todayStrBR } from "./date-br";
+import { phoneVariants } from "./conversations";
 
 /**
  * Agente conversacional da Zelo.
@@ -63,9 +64,13 @@ export function shouldUseZeloAgent(
   const mode = zeloAgentMode(setting);
   if (mode === "off") return false;
   if (mode === "all") return true;
-  const digits = phone?.replace(/\D/g, "") ?? "";
-  return !!digits && (testPhonesRaw ?? "")
-    .split(",").map(value => value.replace(/\D/g, "")).filter(Boolean).includes(digits);
+  // O WhatsApp entrega celulares brasileiros com ou sem o nono dígito
+  // (5511987654321 ou 551187654321); as duas formas são o mesmo número.
+  const incoming = new Set(phone ? phoneVariants(phone) : []);
+  const listed = incoming.size > 0 && (testPhonesRaw ?? "").split(",")
+    .some(value => value.trim() && phoneVariants(value).some(variant => incoming.has(variant)));
+  if (!listed) console.log("[zelo-agent] canary: número fora da lista de teste");
+  return listed;
 }
 
 // Uma resposta livre nunca pode fingir que algo foi gravado ou alterado:
