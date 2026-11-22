@@ -11,6 +11,8 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
   const incomeLines = new Map<string, number>();
   const possibleRepeats = new Set<string>();
   const datesSeen = new Set<string>();
+  const expenseLines = new Map<string,number>();
+  const outsideIncome = new Map<string,string>();
   let hasEarlierPending = false;
 
   function add(type: Finance["type"], amount: number, date: string, expected: boolean, label: string) {
@@ -23,7 +25,10 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
       if (type === "income") {
         income += cents;
         incomeLines.set(label, (incomeLines.get(label) ?? 0) + cents);
-      } else expense += cents;
+      } else {
+        expense += cents;
+        expenseLines.set(label,(expenseLines.get(label) ?? 0)+cents);
+      }
     } else if (type === "income") received += cents;
     else spent += cents;
   }
@@ -39,7 +44,9 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
   for (const row of schedules) {
     if (row.mode !== mode || row.status !== "active") continue;
     if (row.nextDueDate < windowStart) hasEarlierPending = true;
-    for (const date of scheduledDates(row, windowStart, period.to)) {
+    const dates = scheduledDates(row, windowStart, period.to);
+    if (row.type==="income" && !dates.some(date=>date>=period.from)) outsideIncome.set(row.description,row.nextDueDate);
+    for (const date of dates) {
       if (represented.has(row.id + "|" + date)) continue;
       const key = [similarBenefit(row.description,row.description) ? "benefício alimentação/refeição" : recurrenceName(row.description), row.type, Math.round(row.amount * 100), date].join("|");
       if (datesSeen.has(key)) possibleRepeats.add(row.description);
@@ -47,7 +54,7 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
       add(row.type, row.amount, date, true, row.description);
     }
   }
-  return {opening, openingEvidence, received, spent, income, expense, undated, incomeLines, possibleRepeats, hasEarlierPending,
+  return {opening, openingEvidence, received, spent, income, expense, undated, incomeLines, expenseLines, outsideIncome, possibleRepeats, hasEarlierPending,
     result: received + income - spent - expense, closing: opening + received + income - spent - expense};
 }
 
@@ -64,12 +71,17 @@ export function projectionReply(p: ReturnType<typeof cashProjection>, mode: Fina
     ...Array.from(p.incomeLines).slice(0,8).map(([name, cents]) => `  • ${name.replace(/[\n\r*_~]/g," ").slice(0,80)}: ${money(cents)}`),
     `${es ? "Gastos realizados" : "Despesas realizadas"}: ${money(p.spent)}`,
     `${es ? "Gastos previstos" : "Despesas programadas"}: ${money(p.expense)}`,
+    ...Array.from(p.expenseLines).slice(0,12).map(([name,cents])=>`  • ${name.replace(/[\n\r*_~]/g," ").slice(0,80)}: ${money(cents)}`),
     `${es ? "Resultado del período" : "Resultado do período"}: ${money(p.result)}`,
     `*${es ? "Saldo final previsto" : "Saldo final projetado"}: ${money(p.closing)}*`,
     es ? "Base: movimientos y compromisos registrados en Zelo." : "Base: lançamentos e compromissos cadastrados na Zelo.",
   ];
   if (!p.openingEvidence) lines.push(es ? "No hay saldo realizado anterior registrado. Si ya tenías dinero, el saldo final cambia por ese valor." : "Sem saldo realizado anterior registrado. Se já havia dinheiro antes, o saldo final muda por esse valor.");
   if (!p.income && !p.received) lines.push(es ? "No encontré ingresos para este período. Puedes consultar tus ingresos recurrentes antes de registrar uno nuevo." : "Não encontrei receitas para esse período. Confira as receitas em Recorrentes antes de cadastrar uma nova.");
+  if (!p.income && !p.received && p.outsideIncome.size) {
+    lines.push(es ? "Próximo vencimiento registrado de cada ingreso:" : "Próxima data cadastrada de cada receita:");
+    for (const [name,next] of [...p.outsideIncome].slice(0,8)) lines.push(`• ${name.replace(/[\r\n*_~]/g," ").slice(0,80)}: ${date(next)}`);
+  }
   if (p.undated) lines.push(es ? "Hay pendientes sin fecha fuera de la proyección." : "Há pendências sem data fora da projeção.");
   if (p.hasEarlierPending) lines.push(es ? "Hay vencimientos anteriores sin confirmar fuera del saldo inicial. Comprueba si se pagaron o cobraron." : "Há vencimentos anteriores sem baixa fora do saldo inicial. Confira se foram pagos ou recebidos.");
   if (p.possibleRepeats.size) {

@@ -55,3 +55,14 @@ it("keeps a storage failure out of client totals",async()=>{
  const reply=m.send.mock.calls.map(call=>call[1]).join("\n");
  expect(reply).toContain("Não consegui conferir");expect(reply).not.toContain("0,00");
 });
+
+it("repeats the same query and executes paraphrased projections through the classifier against the same records",async()=>{
+ const text="Chego em dezembro no azul depois das entradas e dos pagamentos?";
+ m.process.mockResolvedValue({intent:"balance_query",cashProjection:true,confidence:.97,period:{from:"2026-12-01",to:"2026-12-31"}});
+ m.recurring.mockResolvedValue([{id:"s",description:"Entrada mensal",amount:2800,type:"income",mode:"personal",status:"active",repeatUnit:"monthly",nextDueDate:"2026-12-10"},{id:"p",description:"Parcela",amount:200,type:"expense",mode:"personal",status:"active",repeatUnit:"monthly",nextDueDate:"2026-12-10",totalInstallments:12,paidInstallments:3}]);
+ for(let i=0;i<2;i++) await handleIncomingMessage({from:"5511999990000",text});
+ const replies=m.send.mock.calls.map(c=>String(c[1]).replace(/\u00a0/g," "));
+ expect(replies).toHaveLength(2);expect(replies[0]).toEqual(replies[1]);
+ expect(replies[0]).toMatch(/Saldo final projetado: R\$ 2\.600,00/);
+ expect(m.due).not.toHaveBeenCalled();expect(m.confirm).not.toHaveBeenCalled();
+});

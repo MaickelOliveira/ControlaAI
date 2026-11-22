@@ -10,6 +10,7 @@ import {
 } from "./pending-actions";
 import { occurrenceDate, firstMonthlyDue } from "./recurring-calendar";
 import { formatCurrency } from "./finances";
+import { validImportDate } from "./import-date";
 import { registerChatRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
 import type {GoogleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
@@ -1051,6 +1052,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         startDate: r?.startDate,
         nextDueDate: r?.nextDueDate,
         paidInstallments: r?.paidInstallments,
+        explicitProgress: r?.explicitProgress === true,
         totalInstallments: r?.totalInstallments,
         lifetime: r?.lifetime ?? false,
         mode: r?.mode ?? ctx.mode,
@@ -1065,10 +1067,11 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
       if (!(typeof draft.amount === "number" && draft.amount > 0)) q.push("amount");
       if (draft.recurrenceType === "installment") {
         if (!draft.totalInstallments) q.push("totalInstallments");
+        if (Number(draft.paidInstallments) > 0 && !draft.nextDueDate && (!draft.startDate || String(draft.startDate) >= todayStrBR())) q.push("nextDueDate");
       } else if (draft.totalInstallments === undefined && draft.lifetime !== true) {
         q.push("term");
       }
-      if (draft.repeatUnit === "monthly" && !draft.dayOfMonth) q.push("dayOfMonth");
+      if (draft.repeatUnit === "monthly" && !draft.dayOfMonth && !q.includes("nextDueDate") && !draft.nextDueDate) q.push("dayOfMonth");
       return q;
     },
 
@@ -1104,6 +1107,22 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         parse: slotCountOrForever(),
         ask: (_draft, ctx) => localized(ctx, "💳 Em quantas vezes? _(ex: \"10\")_", "💳 ¿En cuántas cuotas? _(ej.: \"10\")_"),
         fallback: () => 1, // sem resposta, assume compra à vista (1 parcela) — encerra sozinho, não fica perpétuo por engano
+      },
+      nextDueDate: {
+        key: "nextDueDate",
+        label: "data da próxima parcela",
+        parse: (text,draft,ctx) => {
+          const date = text.match(/\b(?:20\d{2}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(?:\/\d{4})?)\b/g);
+          if (date && date.length !== 1) return {ok:false};
+          const result = slotDate()(date?.[0] ?? text,draft,ctx);
+          if (!result.ok || !validImportDate(String(result.value))) return {ok:false};
+          return result;
+        },
+        ask: (_draft,ctx) => localized(ctx,"Qual é a data da próxima parcela em aberto?","¿Cuál es la fecha de la próxima cuota pendiente?"),
+        apply(value,draft) {
+          draft.nextDueDate=value;
+          if (!draft.dayOfMonth) draft.dayOfMonth=Number(String(value).slice(8));
+        },
       },
       term: {
         key: "totalInstallments",
@@ -1165,11 +1184,13 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         paidInstallments: paid,
         source: "whatsapp",
         employeeId: draft.employeeId as string | undefined,
-      });
+      }, draft.explicitProgress === true);
       // Carimba o ID criado no rascunho — finalizeWithDefaults usa isso pra
       // saber o que corrigir se um campo tiver ficado no valor padrão.
       const {record:rec, existing} = registration;
       if ("ambiguous" in registration) return localized(ctx,`Já existe um benefício com o mesmo valor e dia: *${rec.description}*. Se for outro benefício, informe um nome distinto, por exemplo com a origem. Nenhum novo cadastro foi feito.`,`Ya existe un beneficio del mismo importe y día: *${rec.description}*. Si es otro, indica un nombre distinto.`);
+      if (existing && registration.progressConflict) return localized(ctx,`Encontrei *${rec.description}* com próxima parcela em ${rec.nextDueDate.split("-").reverse().join("/")}. Confirme qual cadastro e vencimento devo corrigir.`,`Confirma el registro y el vencimiento de *${rec.description}* que quieres corregir.`);
+      if (existing && rec.recurrenceType === "installment" && draft.explicitProgress === true) return replyRecurringCreated(rec,ctx.user.locale);
       if (existing) return localized(ctx,`Já existe: *${rec.description}* · ${formatCurrency(rec.amount)}. Mantive um único cadastro. Próxima data: ${rec.nextDueDate.split("-").reverse().join("/")}.`,`Ya existe: *${rec.description}* · ${formatCurrency(rec.amount)}. Se mantuvo el registro existente.`);
       draft._createdRecurringId = rec.id;
       return replyRecurringCreated(rec, ctx.user.locale);

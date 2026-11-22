@@ -1,3 +1,4 @@
+import {panelKnowledge} from "./panel-guidance";
 import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
 import { shouldUseWhatsAppAiFirst } from "./whatsapp-ai-routing";
@@ -228,6 +229,7 @@ export type AgendaData = {
 };
 
 export type RecurringData = {
+  explicitProgress?: boolean;
   paidInstallments?: number;
   nextDueDate?: string;
   type: "income" | "expense";
@@ -342,6 +344,8 @@ export type TransferData = {
 };
 
 export type AIResult = {
+  cashProjection?: boolean;
+  panelTopic?: import("./panel-guidance").PanelTopic;
   intent: Intent;
   finance?: FinanceData;
   finances?: FinanceData[]; // múltiplos lançamentos de uma vez
@@ -1262,6 +1266,16 @@ function explicitPurchaseCalendarPeriod(message: string, anchor: Date, future = 
   const explicitYear = normalized.match(/\b(?:(?:no|do|em|del)\s+ano\s+(?:de\s+)?|(?:em|de|no|del)\s+)(20\d{2})\b/);
   if (explicitYear) return { from: `${explicitYear[1]}-01-01`, to: `${explicitYear[1]}-12-31` };
   return null;
+}
+
+/** Bare expense lists use the upcoming month; an explicit past-tense request keeps its historical interpretation. */
+export function generalExpensePeriod(message:string, anchor=nowBR()):AIResult|null {
+  const s=normalizeCapabilityText(message).replace(/^(?:rita|zelo)[, :]+/,"").replace(/[?!.]+$/,"").trim();
+  const match=s.match(/^(?:(?:quais(?: sao)?|liste|lista|mostr[ae]|me mostr[ae]|quero ver|cuales son|muestra)\s+)?(?:(?:as|os|las|los)\s+)?(?:(?:minhas|meus|mis)\s+)?(?:despesas|gastos)(?:\s+(?:do|de|para|em|no|del|en))?\s+(.+)$/);
+  if(!match) return null;
+  const period=explicitFinanceCalendarPeriod(match[1],anchor,true);
+  if(!period || !new RegExp("^(?:(?:o |dia |mes de |el |mes de )*(?:[0-9/]+|"+Object.keys(PURCHASE_MONTHS).join("|")+")(?: (?:de )?20[0-9]{2})?|(?:este|esse|proximo|ultimo) mes|mes (?:passado|que vem))$").test(match[1])) return null;
+  return {intent:"finance_upcoming",confidence:1,financeType:"expense",period};
 }
 
 export function explicitFinanceCalendarPeriod(message: string, anchor = nowBR(), future = true): DatePeriod | null {
@@ -2311,6 +2325,8 @@ Endereço do painel web do Zelo (use SEMPRE este exato, nunca invente outro dom�
  *  cada mensagem. */
 function buildStaticInstructions() {
   return `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
+${panelKnowledge}
+Interprete a finalidade usando o histórico e a linguagem natural, inclusive correções, referências e perguntas fora dos exemplos. A mensagem atual prevalece sobre o histórico. Separe consultar de alterar. Para previsão de dinheiro que vai sobrar ou faltar, inclusive em outras palavras, use balance_query com cashProjection:true e o período. Para saber onde encontrar uma função, use how_to com panelTopic payables, receivables ou support quando corresponder. Para renomear uma recorrência, use recurring_edit, keyword para o nome antigo e newDescription para o novo. Não confunda o novo nome com o alvo. Só use help para um pedido de guia geral. Para dúvida específica responda a ela; se falta informação faça uma pergunta curta sobre o dado que falta. Não declare que gravou, calculou ou enviou algo com texto livre.
 Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 As categorias válidas, a data de hoje, o calendário e os períodos pré-calculados vêm no início da mensagem do usuário a cada chamada — use sempre os valores de lá, nunca invente.
@@ -4264,6 +4280,8 @@ function explicitFuelOrHistory(message: string): AIResult | null {
 /** A IA interpreta primeiro para todos os usuários reais após o rollout.
  * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  const datedExpenses = generalExpensePeriod(message);
+  if (datedExpenses) return datedExpenses;
   const explicitQuery = explicitFuelOrHistory(message) ?? explicitFinanceAuthorQuestion(message);
   const goalProgress = message.trim().match(/^(?:nina[, :]+)?quanto (?:já |ja )?(?:juntei|guardei) (?:para|pra) (?:a |o )?(.+?)(?: e quanto falta)?[?.!]*$/i);
   if (goalProgress && (/^nina\b/i.test(message) || /\bmeta\b/i.test(goalProgress[1]) || /\be quanto falta\b/i.test(message))) {
@@ -4321,6 +4339,8 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   // concordam; a IA resolve as frases que as regras não cobrem.
   if (explicit?.intent === "finance_detail" && explicit.category && modeled.intent === "finance_detail") return {...modeled,...explicit,mode:explicit.mode??modeled.mode,period:explicit.period??modeled.period,keyword:undefined,response:undefined};
   if(explicit?.intent==="recurring_query"&&modeled.intent==="recurring_query")return {...modeled,...explicit,mode:explicit.mode??modeled.mode,period:explicit.period??modeled.period,keyword:explicit.keyword??modeled.keyword};
+  if (modeled.intent === "balance_query" && modeled.cashProjection === true && !explicit?.bankQuery) return modeled;
+  if (modeled.intent === "how_to" && modeled.panelTopic && !explicit) return modeled;
   if (explicit?.intent === modeled.intent) return explicit;
   // Regras que representam limites da plataforma devem prevalecer.
   if (explicit?.intent === "how_to" && explicit.response) return explicit;
@@ -4657,6 +4677,7 @@ export async function generateFallbackResponse(
   const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Tom caloroso, direto e seguro, como alguém de confiança que cuida da vida financeira/organização da pessoa.
 ${virtualAgentPrompt()}
 
+${panelKnowledge}
 O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Sua única tarefa aqui é responder de um jeito humano e específico ao que ela disse, para entender o que ela precisa — nunca confirme que algo foi feito/registrado/agendado, porque NADA foi executado ainda.${localeInstruction(locale) ? `\n${localeInstruction(locale)}` : ""}
 
 HISTÓRICO RECENTE DA CONVERSA:

@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import {saveWorkspaceCategories} from "./workspace-categories";
+import {importDates, importDecision} from "./import-date";
+import {navigationTopic, panelReply} from "./panel-guidance";
 import {cashProjection, projectionReply} from "./cash-projection";
 import {explicitPaidCount, financeConversation, isFinanceScreenQuestion} from "./finance-conversation";
 import {selectedMonthRange, monthRange} from "./calendar-range";
 import {bankPeriod} from "./open-finance-report";
-import {explicitFinanceCalendarPeriod,getExplicitSpendingSummaryResult,getExplicitUpcomingFinanceQueryResult} from "./ai-processor";
+import {explicitFinanceCalendarPeriod,generalExpensePeriod,getExplicitSpendingSummaryResult,getExplicitUpcomingFinanceQueryResult} from "./ai-processor";
 import {answerCardInstallments,answerFinancePlanning,parseCardInstallmentsQuestion} from "./finance-planning-whatsapp";
 import {parseInstallmentDetailQuestion} from "./installment-detail";
 import {connectedInstallmentDetailAnswer} from "./connected-installment-detail";
@@ -576,13 +578,19 @@ async function prepareFinancialTransactionListImport(options: {
 
   const mode = extraction.mode || user.activeMode;
   const accountHint = documentAccountHintFromCaption(caption) || extraction.bankName;
-  const items: PendingFinancialDocumentImportItem[] = extraction.transactions.map(item => ({
+  const extractedItems: PendingFinancialDocumentImportItem[] = extraction.transactions.map(item => ({
     type: item.type,
     amount: item.amount,
     description: cap(item.description),
     category: cap(item.category),
     date: item.date,
   }));
+  const requestedDates = importDates(extractedItems, caption ?? "", nowBR());
+  if (requestedDates && "invalid" in requestedDates) {
+    await wppSend(from, localized(user.locale, "Qual data devo usar para estas despesas? Reenvie a imagem com a data completa na legenda.", "Reenvía la imagen indicando la fecha completa que debo usar."));
+    return true;
+  }
+  const items = requestedDates?.items ?? extractedItems;
   const duplicateFlags = await getDocumentFinanceDuplicateFlags(user.id, mode, items);
   const newItems = items.filter((_, index) => !duplicateFlags[index]);
   const duplicateItems = items.filter((_, index) => duplicateFlags[index]);
@@ -1073,7 +1081,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     }
 
     // ── Detecta arquivo/documento enviado via WhatsApp ──
-    const financeScreenshot = msg.fileMimeType?.startsWith("image/") && msg.fileCaption && isFinanceScreenQuestion(msg.fileCaption) && parseImageAction(msg.fileCaption) !== "save";
+    const financeScreenshot = msg.fileMimeType?.startsWith("image/") && msg.fileCaption && (isFinanceScreenQuestion(msg.fileCaption) || navigationTopic(msg.fileCaption, []) || /^\s*\?+\s*$/.test(msg.fileCaption)) && parseImageAction(msg.fileCaption) !== "save";
     if (financeScreenshot) messageText = msg.fileCaption!;
     const isFileMessage = !!msg.isFileMessage && !!msg.fileBuffer && !financeScreenshot;
 
@@ -1297,7 +1305,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           }
           // Imagem sem legenda: tenta registrar direto (cupom, comprovante). Só
           // pergunta a ação se não for documento financeiro.
-          if (mimeType.includes("image") && !caption?.trim()) {
+          if (mimeType.includes("image") && (!caption?.trim() || (!requestedImageAction && /[?？]/.test(caption)))) {
             await setPendingAction(from, {
               type: "image_action",
               userId: fileUser.id,
@@ -2053,9 +2061,39 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // movimentações. A prévia inteira já foi lida, mas nenhuma linha é
     // gravada até esta etapa terminar. ──
     if (pending?.type === "financial_document_import" && pending.userId === user.id) {
-      if (pending.stage === "duplicate_review") {
-        const duplicates = pending.duplicateItems || [];
-        const yesNo = parseYesNo(messageText);
+      let documentImport = pending;
+      const decision = importDecision(messageText);
+      if (decision === "cancel" && (documentImport.stage !== "duplicate_review" || BARE_CANCEL_RE.test(messageText.trim()))) {
+        await clearPendingAction(from);
+        await wppSend(from, localized(user.locale, "Combinado, não importei nenhuma movimentação da imagem.", "De acuerdo, no importé ningún movimiento de la imagen."));
+        return;
+      }
+      if (decision === "date") {
+        const original = [...documentImport.items, ...(documentImport.duplicateItems ?? [])];
+        const dates = importDates(original, messageText, now);
+        if (!dates || "invalid" in dates || !dates.items.length) {
+          await wppSend(from, localized(user.locale, "Qual é a data válida para todos os itens? A lista continua aguardando.", "¿Qué fecha válida debo usar para todos los movimientos?"));
+          return;
+        }
+        const flags = await getDocumentFinanceDuplicateFlags(user.id, documentImport.mode, dates.items);
+        const items = dates.items.filter((_,i) => !flags[i]);
+        const duplicates = dates.items.filter((_,i) => flags[i]);
+        const totals = financialDocumentImportTotals(items);
+        documentImport = {...documentImport, items, duplicateItems:duplicates, stage:duplicates.length ? "duplicate_review" : "confirm",
+          expectedItemCount:items.length, expectedIncomeTotal:totals.income, expectedExpenseTotal:totals.expense};
+        await setPendingAction(from, documentImport);
+        if (duplicates.length) {
+          await wppSendLong(from, localized(user.locale, "Na nova data já encontrei estes itens. Quais ocorreram duas vezes? Responda todas, nenhuma ou os números.", "En la nueva fecha ya encontré estos movimientos. ¿Cuáles ocurrieron dos veces?") + "\n" + financialDocumentImportPreview(duplicates,user.locale));
+          return;
+        }
+        if (!/^(?:sim|sí|si|ok|confirmo)\b/i.test(messageText.trim())) {
+          await wppSendLong(from, financialDocumentImportPreview(items,user.locale) + localized(user.locale, "\nPosso registrar com essas datas?", "\n¿Puedo registrar con esas fechas?"));
+          return;
+        }
+      }
+      if (documentImport.stage === "duplicate_review") {
+        const duplicates = documentImport.duplicateItems || [];
+        const yesNo = decision === "confirm" ? true : decision === "cancel" ? false : null;
         const normalizedAnswer = messageText.normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "")
           .trim()
@@ -2072,7 +2110,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             amount: item.amount,
             date: item.date,
             category: item.category,
-            mode: pending.mode,
+            mode: documentImport.mode,
           })));
           if (parsed.length > 0) selectedDuplicateIndexes = parsed;
         }
@@ -2085,7 +2123,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
 
         const selectedDuplicates = selectedDuplicateIndexes.map(index => duplicates[index]).filter(Boolean);
-        const finalItems = [...pending.items, ...selectedDuplicates];
+        const finalItems = [...documentImport.items, ...selectedDuplicates];
         if (finalItems.length === 0) {
           await clearPendingAction(from);
           await wppSend(from, localized(user.locale,
@@ -2097,47 +2135,39 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         const totals = financialDocumentImportTotals(finalItems);
         await setPendingAction(from, {
           type: "financial_document_import",
-          userId: pending.userId,
-          mode: pending.mode,
+          userId: documentImport.userId,
+          mode: documentImport.mode,
           items: finalItems,
           stage: "confirm",
-          accountHint: pending.accountHint,
+          accountHint: documentImport.accountHint,
           expectedItemCount: finalItems.length,
           expectedIncomeTotal: totals.income,
           expectedExpenseTotal: totals.expense,
-          fileBase64: pending.fileBase64,
-          mimeType: pending.mimeType,
-          originalName: pending.originalName,
+          fileBase64: documentImport.fileBase64,
+          mimeType: documentImport.mimeType,
+          originalName: documentImport.originalName,
         });
         const totalsLine = [
           totals.income ? `🟢 ${localized(user.locale, "Receitas", "Ingresos")}: ${formatCurrency(totals.income)}` : "",
           totals.expense ? `🔴 ${localized(user.locale, "Despesas", "Gastos")}: ${formatCurrency(totals.expense)}` : "",
         ].filter(Boolean).join("\n");
         await wppSend(from, localized(user.locale,
-          `📋 *Revisão concluída*\n\n${pending.items.length} nova(s) + ${selectedDuplicates.length} repetida(s) confirmada(s)\n${totalsLine}\n\n*Posso gravar estas ${finalItems.length} movimentações separadamente agora?* (sim/não)`,
-          `📋 *Revisión concluida*\n\n${pending.items.length} nueva(s) + ${selectedDuplicates.length} repetida(s) confirmada(s)\n${totalsLine}\n\n*¿Puedo guardar ahora estos ${finalItems.length} movimientos por separado?* (sí/no)`));
+          `📋 *Revisão concluída*\n\n${documentImport.items.length} nova(s) + ${selectedDuplicates.length} repetida(s) confirmada(s)\n${totalsLine}\n\n*Posso gravar estas ${finalItems.length} movimentações separadamente agora?* (sim/não)`,
+          `📋 *Revisión concluida*\n\n${documentImport.items.length} nueva(s) + ${selectedDuplicates.length} repetida(s) confirmada(s)\n${totalsLine}\n\n*¿Puedo guardar ahora estos ${finalItems.length} movimientos por separado?* (sí/no)`));
         return;
       }
 
-      const answer = parseYesNo(messageText);
+      const answer = decision === "confirm" || decision === "date" ? true : null;
       if (answer === null) {
         await wppSend(from, localized(user.locale,
-          "Responda *sim* para gravar cada movimentação separadamente ou *não* para cancelar. Ainda não gravei nada.",
+          "Se quiser trocar a data, diga, por exemplo, “todas para 10/12/2026”. Responda *sim* para gravar cada movimentação separadamente ou *não* para cancelar. Ainda não gravei nada.",
           "Responde *sí* para guardar cada movimiento por separado o *no* para cancelar. Todavía no guardé nada."));
         return;
       }
-      if (!answer) {
-        await clearPendingAction(from);
-        await wppSend(from, localized(user.locale,
-          "Combinado, não importei nenhuma movimentação da imagem. 👍",
-          "De acuerdo, no importé ningún movimiento de la imagen. 👍"));
-        return;
-      }
-
-      const totals = financialDocumentImportTotals(pending.items);
-      const totalsMatch = pending.items.length === pending.expectedItemCount
-        && Math.abs(totals.income - pending.expectedIncomeTotal) <= 0.01
-        && Math.abs(totals.expense - pending.expectedExpenseTotal) <= 0.01;
+      const totals = financialDocumentImportTotals(documentImport.items);
+      const totalsMatch = documentImport.items.length === documentImport.expectedItemCount
+        && Math.abs(totals.income - documentImport.expectedIncomeTotal) <= 0.01
+        && Math.abs(totals.expense - documentImport.expectedExpenseTotal) <= 0.01;
       if (!totalsMatch) {
         await clearPendingAction(from);
         await wppSend(from, localized(user.locale,
@@ -2149,30 +2179,31 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       let newlyCreatedAccountId: string | undefined;
       let importedFinanceIds: string[] = [];
       try {
-        const account = pending.accountHint
-          ? await resolveOrCreateInvoiceAccount(user.id, pending.mode, pending.accountHint, {
-              transactionDate: pending.items[0]?.date,
+        const account = documentImport.accountHint
+          ? await resolveOrCreateInvoiceAccount(user.id, documentImport.mode, documentImport.accountHint, {
+              transactionDate: documentImport.items[0]?.date,
             })
-          : await resolveAccountFields(user.id, pending.mode, undefined);
+          : await resolveAccountFields(user.id, documentImport.mode, undefined);
         if ("created" in account && account.created === true) newlyCreatedAccountId = account.accountId;
-        const imported = await addFinances(pending.items.map(item => ({
+        const imported = await addFinances(documentImport.items.map(item => ({
           userId: user.id,
           type: item.type,
           amount: item.amount,
           category: item.category,
           description: item.description,
           date: item.date,
-          mode: pending.mode,
+          status: item.date > todayStrBR() ? "pending" : "posted",
+          mode: documentImport.mode,
           source: "whatsapp",
           registeredBy: from,
           accountId: account.accountId,
           cardInvoiceId: account.cardInvoiceId,
         })));
         importedFinanceIds = imported.map(item => item.id);
-        const balance = await getAllTimeBalance(user.id, pending.mode);
+        const balance = await getAllTimeBalance(user.id, documentImport.mode);
         const accountName = "accountName" in account && typeof account.accountName === "string"
           ? account.accountName
-          : pending.accountHint;
+          : documentImport.accountHint;
         const accountLine = accountName
           ? `\n🏦 ${localized(user.locale, "Conta", "Cuenta")}: *${accountName}*${"created" in account && account.created === true ? localized(user.locale, " (criada agora)", " (creada ahora)") : ""}`
           : "";
@@ -2181,14 +2212,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           totals.expense ? `🔴 ${localized(user.locale, "Despesas", "Gastos")}: ${formatCurrency(totals.expense)}` : "",
         ].filter(Boolean).join("\n");
 
-        if (pending.fileBase64 && pending.mimeType) {
-          const extension = pending.originalName?.match(/\.[a-z0-9]{2,5}$/i)?.[0]
-            || (pending.mimeType.includes("png") ? ".png" : ".jpg");
+        if (documentImport.fileBase64 && documentImport.mimeType) {
+          const extension = documentImport.originalName?.match(/\.[a-z0-9]{2,5}$/i)?.[0]
+            || (documentImport.mimeType.includes("png") ? ".png" : ".jpg");
           await setPendingAction(from, {
             type: "receipt_save",
             userId: user.id,
-            fileBase64: pending.fileBase64,
-            mimeType: pending.mimeType,
+            fileBase64: documentImport.fileBase64,
+            mimeType: documentImport.mimeType,
             suggestedName: `${accountName || localized(user.locale, "Extrato", "Extracto")} - ${todayStrBR()}${extension}`,
             description: localized(user.locale,
               `${imported.length} movimentações importadas separadamente`,
@@ -2198,12 +2229,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           await clearPendingAction(from);
         }
 
-        const saveQuestion = pending.fileBase64 && pending.mimeType
+        const importedDates = [...new Set(documentImport.items.map(item => item.date))];
+        const dateLine = importedDates.length === 1 ? " · " + importedDates[0].split("-").reverse().join("/") : "";
+        const saveQuestion = documentImport.fileBase64 && documentImport.mimeType
           ? localized(user.locale, "\n\n_💾 Quer guardar esta imagem no Drive? (sim/não)_", "\n\n_💾 ¿Quieres guardar esta imagen en Drive? (sí/no)_")
           : "";
         await wppSend(from, localized(user.locale,
-          `✅ *${imported.length} movimentações registradas separadamente!*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`,
-          `✅ *¡${imported.length} movimientos registrados por separado!*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`));
+          `✅ *${imported.length} movimentações registradas separadamente!${dateLine}*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`,
+          `✅ *¡${imported.length} movimientos registrados por separado!${dateLine}*${accountLine}\n\n${totalsLine}\n📊 Saldo acumulado: ${formatCurrency(balance.balance)}${saveQuestion}`));
       } catch {
         await Promise.all(importedFinanceIds.map(id => deleteFinance(id, user.id).catch(() => {
           console.error("[webhook] erro ao desfazer movimentação da imagem:");
@@ -3072,16 +3105,22 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     // de passar pro classificador pra não duplicar com "Mensagem do
     // usuário" no prompt.
     const recentHistory = (await getAiHistory(from))
-      .slice(-16, -1)
+      .slice(-17)
+      .filter((turn,index,turns) => !(index === turns.length-1 && turn.role === "user" && (turn.content === msg.text || turn.content === msg.fileCaption || turn.content === messageText)))
       .map(messageForAiContext);
+    const nav = navigationTopic(messageText, recentHistory);
+    if (nav) { setVirtualAgentIntent("how_to"); await wppSend(from, panelReply(nav, user.locale)); return; }
+    if (financeScreenshot && /^\s*\?+\s*$/.test(messageText) && !financeConversation(messageText,recentHistory)) {
+      await wppSend(from, localized(user.locale,"O que você está tentando encontrar nessa tela?","¿Qué intentas encontrar en esta pantalla?")); return;
+    }
     if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
     setVirtualAgentIntent("finance_query");
     const financeQuestion = financeConversation(messageText, recentHistory);
-    if (financeQuestion && !resumedFinanceAmount && !recordSelection && !accountSelectionResume && !employeeSelectionResume && !actionContinuation) {
+    const answerProjection = async (financeQuestion: NonNullable<ReturnType<typeof financeConversation>>, model?: AIResult) => {
       setVirtualAgentIntent("finance_query");
       const source = financeQuestion.subject;
       const scopeText = [source, financeQuestion.prior].find(value => /\b(?:pessoal|personal|empresa|empresarial|pj|pf)\b/i.test(value)) ?? "";
-      const workspace = /\b(?:empresa|empresarial|pj)\b/i.test(scopeText) ? "business" : /\b(?:pessoal|personal|pf)\b/i.test(scopeText) ? "personal" : mode;
+      const workspace = /\b(?:empresa|empresarial|pj)\b/i.test(scopeText) ? "business" : /\b(?:pessoal|personal|pf)\b/i.test(scopeText) ? "personal" : model?.mode ?? mode;
       if (!allowsFinanceMode(workspace)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); return; }
       if (/\b(?:empresa|empresarial|pj)\b/i.test(scopeText) && /\b(?:pessoal|personal|pf)\b/i.test(scopeText)) {
         await wppSend(from, localized(user.locale,"Quer conferir o espaço Pessoal ou Empresa?","¿Quieres consultar Personal o Empresa?")); return;
@@ -3089,7 +3128,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       const company = currentCompanyContext()?.companyId;
       let answer: string;
       try {
-        const recurring = await getRecurringByUser(user.id, workspace, "active", true);
+        let recurring = await getRecurringByUser(user.id, workspace, "active", true);
         const prevPeriod = explicitFinanceCalendarPeriod(financeQuestion.prior, now, true);
         let range = explicitFinanceCalendarPeriod(source, now, true);
         const correction = source.match(/(?:quero|quise dizer)\s+(?:de\s+)?(20\d{2})\s*[.!?]*$/i);
@@ -3097,7 +3136,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           const revised = selectedMonthRange(correction[1] + prevPeriod.to.slice(4,7));
           if (revised) range = revised;
         }
-        const period = range ?? prevPeriod ?? monthRange(0, now);
+        const period = range ?? (model?.period?.from && model.period.to ? {from:model.period.from,to:model.period.to} : prevPeriod) ?? monthRange(0, now);
         if (period.from === period.to && financeQuestion.kind === "projection") period.from = period.to.slice(0,7) + "-01";
         if (financeQuestion.kind === "income" && !range) {
           const incomes = recurring.filter(r => r.type === "income");
@@ -3107,7 +3146,16 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             localized(user.locale,"Não encontrei receitas recorrentes ativas neste espaço. Você pode cadastrar uma informando descrição, valor e dia.","No encontré ingresos recurrentes activos en este espacio. Indica descripción, importe y día para registrar uno.");
         } else {
           const valid = bankPeriod(period.from, period.to);
-          const rows = await getFinancesInRangeStrict(user.id, workspace, undefined, valid.to);
+          // A payment may move a due date while its ledger entry is being read.
+          // Retry that cut once instead of showing both sides or losing the receipt.
+          const signature = (items:typeof recurring) => JSON.stringify(items.map(r=>[r.id,r.type,r.amount,r.description,r.startDate,r.nextDueDate,r.repeatUnit,r.dayOfMonth,r.totalInstallments,r.paidInstallments]).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))));
+          let rows = await getFinancesInRangeStrict(user.id, workspace, undefined, valid.to);
+          const after = await getRecurringByUser(user.id, workspace, "active", true);
+          if (signature(recurring)!==signature(after)) {
+            recurring = after;
+            rows = await getFinancesInRangeStrict(user.id,workspace,undefined,valid.to);
+            if (signature(after)!==signature(await getRecurringByUser(user.id,workspace,"active",true))) throw Error("FORECAST_CHANGED");
+          }
           answer = projectionReply(cashProjection(rows, recurring, workspace, valid, todayStrBR()), workspace, valid, user.locale);
         }
       } catch {
@@ -3116,6 +3164,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       const [access, fresh] = await Promise.all([getPhoneAccess(user.id, from), getUserById(user.id)]);
       if (fresh && hasAccess(fresh) && (access === "both" || access === workspace) && currentCompanyContext()?.companyId === company) await wppSendLong(from, answer, 3500, true);
       return;
+    }
+    if (financeQuestion && !resumedFinanceAmount && !recordSelection && !accountSelectionResume && !employeeSelectionResume && !actionContinuation) {
+      await answerProjection(financeQuestion); return;
     }
     const billHistoryAnswer=paidBillHistoryAnswer(messageText);
     if(billHistoryAnswer){await wppSend(from,billHistoryAnswer);return;}
@@ -3212,10 +3263,20 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       return;
     }
     const selectedRecordId = recordSelection?.id;
-    const classifiedAi = resumedFinanceAmount ?? recordSelection?.ai ?? accountSelectionResume ?? employeeSelectionResume ?? getExplicitUpcomingFinanceQueryResult(messageText) ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
+    // The previous assistant identified a specific schedule. "Mude o nome para X"
+    // has both the target and the change; a finance, contact or file is never inferred here.
+    const rename = messageText.trim().match(/^(?:mude?|mud[ea]r|alter[ea]r?|troqu[ea]|troca|cambi[ae])\s+(?:o |el )?nom(?:e|bre)\s+(?:para|pra|a)\s+(.{1,80}?)\s*[.!]?$/i);
+    const lastReply = recentHistory.at(-1);
+    const reference = lastReply?.role === "assistant" && lastReply.content.match(/(?:Já existe:\s*|Ya existe:\s*|💳\s*)\*([^*\n]{1,80})\*(?:[.:]|\s*·)|\*([^*\n]{1,80})\*\s*·[^\n]{1,50}(?:por parcela|por cuota)/i);
+    const renameRequest:AIResult|null = rename && reference ? {intent:"recurring_edit",confidence:1,keyword:reference[1]||reference[2],newDescription:rename[1].trim()} : null;
+    const classifiedAi = resumedFinanceAmount ?? recordSelection?.ai ?? accountSelectionResume ?? employeeSelectionResume ?? renameRequest ?? generalExpensePeriod(messageText,now) ?? getExplicitUpcomingFinanceQueryResult(messageText) ?? getExplicitSpendingSummaryResult(messageText) ?? await processMessage(messageText, { user, phone: from, history: recentHistory });
     const ai = withExplicitFinanceCategoryEdit(messageText, resumedFinanceAmount ?? getScopedModeReadResult(messageText) ?? (actionContinuation
       ? mergeActionContinuation(actionContinuation.partial, classifiedAi)
       : classifiedAi));
+    if (ai.intent === "balance_query" && ai.cashProjection === true && !ai.account && !ai.bankQuery) {
+      await answerProjection({kind:"projection",subject:messageText,prior:recentHistory.filter(t=>t.role==="user").at(-1)?.content ?? ""},ai);
+      return;
+    }
     setVirtualAgentIntent(ai.intent);
     const selectRecord = async <T extends { id: string }>(
       rows: T[], label: (item: T) => string, keyword: string,
@@ -5332,6 +5393,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (ai.recurring?.recurrenceType === "installment" && !ai.recurrings?.length) {
           const historyRequest = recentHistory.filter(t => t.role === "user").at(-1)?.content ?? "";
           const count = explicitPaidCount(messageText) ?? (/^(?:em|no dia|dia)\s/i.test(messageText.trim()) ? explicitPaidCount(historyRequest) : undefined);
+          ai.recurring.explicitProgress = count !== undefined;
           if (count !== undefined) ai.recurring.paidInstallments = count;
         }
         if (ai.recurrings?.length) {
@@ -5449,12 +5511,13 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "recurring_edit": {
-        const editKw = ai.keyword || ai.recurring?.description || "";
-        const editFound = await selectRecord(await getRecurringByUser(user.id, mode, "active"), item => item.description, editKw);
+        const editKw = ai.keyword || (ai.newDescription ? "" : ai.recurring?.description) || "";
+        const editFound = await selectRecord(await getRecurringByUser(user.id, mode, "active", true), item => item.description, editKw);
         if (!editFound) break;
         const patch: Parameters<typeof updateRecurring>[2] = {};
         if (ai.recurring?.amount) patch.amount = ai.recurring.amount;
-        if (ai.recurring?.description) patch.description = cap(ai.recurring.description);
+        if (ai.newDescription?.trim()) patch.description = cap(ai.newDescription.trim());
+        else if (ai.recurring?.description && ai.keyword && ai.recurring.description !== ai.keyword) patch.description = cap(ai.recurring.description);
         if (ai.recurring?.category) patch.category = cap(ai.recurring.category);
         if (ai.recurring?.dayOfMonth) patch.dayOfMonth = ai.recurring.dayOfMonth;
         if (ai.recurring?.repeatUnit) patch.repeatUnit = ai.recurring.repeatUnit;
@@ -5471,6 +5534,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         }
         if (Object.keys(patch).length === 0) { await wppSend(from, localized(user.locale, "❓ O que deseja alterar? Ex: _\"muda o netflix para 65 reais\"_ ou _\"a academia é só até dezembro, 5 meses\"_", "❓ ¿Qué quieres cambiar? Ej.: _\"cambia Netflix a 65 dólares\"_ o _\"el gimnasio termina en diciembre, 5 meses\"_")); break; }
         const editUpdated = await updateRecurring(editFound.id, user.id, patch);
+        if (editUpdated && patch.description && Object.keys(patch).length === 1) {
+          await wppSend(from,localized(user.locale,`Nome alterado de *${editFound.description}* para *${editUpdated.description}*.`,`Nombre cambiado de *${editFound.description}* a *${editUpdated.description}*.`)); break;
+        }
         if (editUpdated && patch.paidInstallments !== undefined) {
           await wppSend(from, replyRecurringCreated(editUpdated,user.locale)); break;
         }
@@ -5670,10 +5736,13 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "how_to": {
+        if (ai.panelTopic && ["payables","receivables","support"].includes(ai.panelTopic)) {
+          await wppSend(from,panelReply(ai.panelTopic,user.locale)); break;
+        }
         if (ai.response) {
           await wppSend(from, ai.response);
         } else {
-          await wppSendLong(from, replyHelp(user.locale));
+          await wppSend(from,await generateFallbackResponse(messageText,recentHistory,user.locale,user.id) || replyUnknown(messageText,user.locale));
         }
         break;
       }
@@ -5694,7 +5763,8 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "help": {
-        await wppSendLong(from, replyHelp(user.locale));
+        if (/^(?:[¿¡]?\s*(?:(?:zoe|zelo|rita)[,!: ]+)?)?(?:ajuda|ayuda|help|menu|comandos?|guia(?: de uso| completo)?|manual(?: completo)?|.*(?:quais (?:s[aã]o )?os comandos|o que (?:voc[eê]|vcs) (?:faz|pode fazer)|todas as fun[cç][oõ]es|todos os comandos|gu[ií]a complet[oa]|que puedes hacer).*)[?.! ]*$/i.test(messageText.trim())) await wppSendLong(from, replyHelp(user.locale));
+        else await wppSend(from,await generateFallbackResponse(messageText,recentHistory,user.locale,user.id) || replyUnknown(messageText,user.locale));
         break;
       }
 
@@ -5776,7 +5846,7 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
           break;
         }
         const lower = messageText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        if (lower.includes("ajuda") || lower.includes("ayuda") || lower === "help" || lower === "?") {
+        if (/^(?:ajuda|ayuda|help|guia completo|manual completo)[.! ]*$/.test(lower)) {
           await wppSendLong(from, replyHelp(user.locale));
         } else if (lower.includes("saldo") || lower.includes("resumo") || lower.includes("resumen")) {
           const personal = allowsFinanceMode("personal") ? await getBalance(user.id, "personal", year, month) : null;

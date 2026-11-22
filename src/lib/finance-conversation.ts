@@ -3,8 +3,8 @@ const norm = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").to
 const forecast = /\b(?:projecao financeira|previsao financeira|proyeccion financiera|fluxo de caixa|fluxo de caixa pessoal|flujo de caja|(?:previsao|projecao|prevision|proyeccion) (?:d[eo] |do meu |del )?saldo|saldo (?:financeiro |financeiro pessoal |financiero )?(?:projetado|proyectado|previsto|futuro|final)|saldo que (?:terei|vou ter)|quanto (?:dinheiro )?(?:(?:vai|ira|vai me|me vai) )?(?:sobrar[a]?|restara)|cuanto (?:me )?(?:sobrara|quedara)|dinheiro que sobrara|quanto terei (?:disponivel|no fim)|quanto (?:posso|poderei) gastar sem comprometer)\b/;
 export function explicitPaidCount(text: string) {
   const s = norm(text);
-  const match = s.match(/\b(?:ja\s+)?(?:paguei|pagamos|foram pag[oa]s?|foi pag[oa]s?|he pagado)\s+(\d{1,3})\s*(?:parcelas?|prestacoes|mes(?:es)?|cuotas?)\b/) ??
-    s.match(/\b(\d{1,3})\s*(?:parcelas?|prestacoes|cuotas?)?\s*(?:ja\s+)?pag[oa]s?\b/);
+  const match = s.match(/\b(?:ja\s+)?(?:paguei|pagamos|foram pag[oa]s?|foi pag[oa]s?|he pagado)\s+(\d{1,3})\s*(?:x\b|parcelas?|prestacoes|mes(?:es)?|cuotas?)\b/) ??
+    s.match(/\b(\d{1,3})\s*(?:x|parcelas?|prestacoes|cuotas?)?\s*(?:ja\s+)?pag[oa]s?\b/);
   return match ? Number(match[1]) : undefined;
 }
 const incomeProblem = /\b(?:kd|cade|onde est(?:a|ao)|donde est(?:a|an))\b.*\b(?:receitas?|ingresos?)\b|\b(?:receitas?|ingresos?)\b[\s\S]{0,100}\b(?:zero|zerad[oa]s?|nao aparecem|nao estao aparecendo)\b|\b(?:receitas? previstas|receitas? (?:fixas|recorrentes)|salario e vale alimentacao)\b/;
