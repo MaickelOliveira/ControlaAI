@@ -49,7 +49,7 @@ function hasContactChange(ai: AIResult): boolean {
 
 function hasRecurringChange(ai: AIResult): boolean {
   const recurring = ai.recurring;
-  return !!(recurring?.amount || recurring?.category || recurring?.dayOfMonth || recurring?.repeatUnit || recurring?.totalInstallments || recurring?.startDate);
+  return !!(ai.newDescription?.trim() || (ai.keyword && recurring?.description && recurring.description !== ai.keyword) || recurring?.paidInstallments != null || recurring?.amount || recurring?.category || recurring?.dayOfMonth || recurring?.repeatUnit || recurring?.totalInstallments || recurring?.startDate);
 }
 
 export function pendingFinanceAmountIndex(ai: AIResult): number {

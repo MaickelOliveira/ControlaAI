@@ -1,3 +1,4 @@
+import {panelKnowledge} from "./panel-guidance";
 import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
 import { shouldUseWhatsAppAiFirst } from "./whatsapp-ai-routing";
@@ -228,6 +229,7 @@ export type AgendaData = {
 };
 
 export type RecurringData = {
+  explicitProgress?: boolean;
   paidInstallments?: number;
   nextDueDate?: string;
   type: "income" | "expense";
@@ -342,6 +344,8 @@ export type TransferData = {
 };
 
 export type AIResult = {
+  cashProjection?: boolean;
+  panelTopic?: import("./panel-guidance").PanelTopic;
   intent: Intent;
   finance?: FinanceData;
   finances?: FinanceData[]; // múltiplos lançamentos de uma vez
@@ -1262,6 +1266,16 @@ function explicitPurchaseCalendarPeriod(message: string, anchor: Date, future = 
   const explicitYear = normalized.match(/\b(?:(?:no|do|em|del)\s+ano\s+(?:de\s+)?|(?:em|de|no|del)\s+)(20\d{2})\b/);
   if (explicitYear) return { from: `${explicitYear[1]}-01-01`, to: `${explicitYear[1]}-12-31` };
   return null;
+}
+
+/** Bare expense lists use the upcoming month; an explicit past-tense request keeps its historical interpretation. */
+export function generalExpensePeriod(message:string, anchor=nowBR()):AIResult|null {
+  const s=normalizeCapabilityText(message).replace(/^(?:rita|zelo)[, :]+/,"").replace(/[?!.]+$/,"").trim();
+  const match=s.match(/^(?:(?:quais(?: sao)?|liste|lista|mostr[ae]|me mostr[ae]|quero ver|cuales son|muestra)\s+)?(?:(?:as|os|las|los)\s+)?(?:(?:minhas|meus|mis)\s+)?(?:despesas|gastos)(?:\s+(?:do|de|para|em|no|del|en))?\s+(.+)$/);
+  if(!match) return null;
+  const period=explicitFinanceCalendarPeriod(match[1],anchor,true);
+  if(!period || !new RegExp("^(?:(?:o |dia |mes de |el |mes de )*(?:[0-9/]+|"+Object.keys(PURCHASE_MONTHS).join("|")+")(?: (?:de )?20[0-9]{2})?|(?:este|esse|proximo|ultimo) mes|mes (?:passado|que vem))$").test(match[1])) return null;
+  return {intent:"finance_upcoming",confidence:1,financeType:"expense",period};
 }
 
 export function explicitFinanceCalendarPeriod(message: string, anchor = nowBR(), future = true): DatePeriod | null {
@@ -2311,6 +2325,8 @@ Endereço do painel web do Zelo (use SEMPRE este exato, nunca invente outro dom�
  *  cada mensagem. */
 function buildStaticInstructions() {
   return `Você é um assistente de análise de intenções para um sistema de gestão pessoal e empresarial via WhatsApp em português brasileiro.
+${panelKnowledge}
+Interprete a finalidade usando o histórico e a linguagem natural, inclusive correções, referências e perguntas fora dos exemplos. A mensagem atual prevalece sobre o histórico. Separe consultar de alterar. Para previsão de dinheiro que vai sobrar ou faltar, inclusive em outras palavras, use balance_query com cashProjection:true e o período. Para saber onde encontrar uma função, use how_to com panelTopic payables, receivables ou support quando corresponder. Para renomear uma recorrência, use recurring_edit, keyword para o nome antigo e newDescription para o novo. Não confunda o novo nome com o alvo. Só use help para um pedido de guia geral. Para dúvida específica responda a ela; se falta informação faça uma pergunta curta sobre o dado que falta. Não declare que gravou, calculou ou enviou algo com texto livre.
 Analise a mensagem do usuário e retorne APENAS um JSON com a estrutura abaixo.
 Use sempre datas no formato YYYY-MM-DD e horários no formato YYYY-MM-DDTHH:MM:SS.
 As categorias válidas, a data de hoje, o calendário e os períodos pré-calculados vêm no início da mensagem do usuário a cada chamada — use sempre os valores de lá, nunca invente.
@@ -4264,6 +4280,8 @@ function explicitFuelOrHistory(message: string): AIResult | null {
 /** A IA interpreta primeiro para todos os usuários reais após o rollout.
  * "canary" limita a números de teste; "false" volta à ordem anterior. */
 export async function processMessage(message: string, ctx?: AiContext): Promise<AIResult> {
+  const datedExpenses = generalExpensePeriod(message);
+  if (datedExpenses) return datedExpenses;
   const explicitQuery = explicitFuelOrHistory(message) ?? explicitFinanceAuthorQuestion(message);
   const goalProgress = message.trim().match(/^(?:nina[, :]+)?quanto (?:já |ja )?(?:juntei|guardei) (?:para|pra) (?:a |o )?(.+?)(?: e quanto falta)?[?.!]*$/i);
   if (goalProgress && (/^nina\b/i.test(message) || /\bmeta\b/i.test(goalProgress[1]) || /\be quanto falta\b/i.test(message))) {
@@ -4321,6 +4339,8 @@ export async function processMessage(message: string, ctx?: AiContext): Promise<
   // concordam; a IA resolve as frases que as regras não cobrem.
   if (explicit?.intent === "finance_detail" && explicit.category && modeled.intent === "finance_detail") return {...modeled,...explicit,mode:explicit.mode??modeled.mode,period:explicit.period??modeled.period,keyword:undefined,response:undefined};
   if(explicit?.intent==="recurring_query"&&modeled.intent==="recurring_query")return {...modeled,...explicit,mode:explicit.mode??modeled.mode,period:explicit.period??modeled.period,keyword:explicit.keyword??modeled.keyword};
+  if (modeled.intent === "balance_query" && modeled.cashProjection === true && !explicit?.bankQuery) return modeled;
+  if (modeled.intent === "how_to" && modeled.panelTopic && !explicit) return modeled;
   if (explicit?.intent === modeled.intent) return explicit;
   // Regras que representam limites da plataforma devem prevalecer.
   if (explicit?.intent === "how_to" && explicit.response) return explicit;
@@ -4657,7 +4677,8 @@ export async function generateFallbackResponse(
   const prompt = `Você é o Zelo, um assessor pessoal via WhatsApp para usuários brasileiros — não um chatbot genérico. Tom caloroso, direto e seguro, como alguém de confiança que cuida da vida financeira/organização da pessoa.
 ${virtualAgentPrompt()}
 
-O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Sua única tarefa aqui é responder de um jeito humano e específico ao que ela disse, para entender o que ela precisa — nunca confirme que algo foi feito/registrado/agendado, porque NADA foi executado ainda.${localeInstruction(locale) ? `\n${localeInstruction(locale)}` : ""}
+${panelKnowledge}
+O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Responda à pergunta concreta usando o histórico e as capacidades confirmadas abaixo. Uma dúvida conceitual sobre finanças ou sobre como usar a Zelo pode ser respondida diretamente. Para um pedido de ação ambíguo, retome os detalhes já informados e pergunte somente o que falta. Neste fluxo você não consultou os registros nem executou ações. Nunca invente valores, datas, diagnósticos ou confirmações de execução.${localeInstruction(locale) ? `\n${localeInstruction(locale)}` : ""}
 
 HISTÓRICO RECENTE DA CONVERSA:
 ${historyText}
@@ -4670,7 +4691,7 @@ Instruções:
 - Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.
 - Se a mensagem for vaga/sem relação clara com nada acima, faça 1 pergunta objetiva e específica ao que ela disse pra entender a intenção (não uma lista de todos os comandos possíveis).
 - No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
-- ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Se o pedido não estiver claramente coberto pela lista ou faltar informação confirmada, diga isso com naturalidade e oriente a pessoa a entrar no painel do Zelo e abrir o *Suporte* no canto inferior direito. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
+- ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Quando faltar um detalhe do pedido, pergunte por ele. Ofereça o Suporte pelo botão de conversa no canto inferior direito do painel se a pessoa pedir atendimento humano ou se a solução depender da equipe. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
 - ${process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PUBLIC_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"?"Existem contas manuais e Open Finance para contas bancárias do Brasil. A conexão é feita pelo titular em Contas no painel. Não invente dados bancários nem execute autorização por conversa; perguntas precisam das ferramentas financeiras.":"Existem contas manuais, mas não existe cartão de crédito, e a conexão/sincronização bancária (Open Finance) ainda não está disponível: estamos implementando e em breve vai estar disponível para todos. Nunca informe prazo ou data; nunca diga que já funciona."}
 - Nunca diga que o Zelo não consegue transcrever ou compreender áudios, analisar fotos, ler PDFs, CSVs ou planilhas Excel .xlsx: essas funções existem. Não prometa formatos legados não confirmados, como .xls.
 - Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
@@ -4680,9 +4701,7 @@ Instruções:
     "generateFallbackResponse",
     async () => {
       const text = (await openAIText({ prompt, userId, maxOutputTokens: 500 })).trim();
-      if (!text) return null;
-      if (/\b(suporte|support|soporte)\b/i.test(text)) return text;
-      return `${text}\n\n${supportInsidePlatformLine(locale)}`;
+      return text || null;
     },
   );
   if (openAIAttempt.ok) return openAIAttempt.value;
@@ -4696,9 +4715,7 @@ Instruções:
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    if (!text) return null;
-    if (/\b(suporte|support|soporte)\b/i.test(text)) return text;
-    return `${text}\n\n${supportInsidePlatformLine(locale)}`;
+    return text || null;
   } catch  {
     console.error("[ai-processor] Erro generateFallbackResponse:");
     return null;

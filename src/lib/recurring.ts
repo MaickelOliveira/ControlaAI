@@ -176,7 +176,7 @@ export async function createRecurring(data: CreateRecurringInput, id = randomUUI
 
 /** Match an active rule before saving a repeat request. Concurrent requests for
  * the same rule and workspace also share an insert ID. Closed rules can restart. */
-export async function registerChatRecurring(input: CreateRecurringInput) {
+export async function registerChatRecurring(input: CreateRecurringInput, explicitProgress = false) {
   const rows = await getRecurringByUser(input.userId, input.mode, undefined, true);
   const due = input.nextDueDate ?? calcFirstDueDate(input.startDate, input.dayOfMonth);
   const signature = (r: CreateRecurringInput) => JSON.stringify([recurrenceName(r.description), r.type, Math.round(r.amount*100),
@@ -186,7 +186,21 @@ export async function registerChatRecurring(input: CreateRecurringInput) {
   const key = signature(input);
   const same = rows.filter(row => signature(row) === key);
   const existing = same.find(row => row.status === "active");
-  if (existing) return {record: existing, existing: true};
+  if (existing) {
+    if (explicitProgress && input.recurrenceType === "installment" && input.paidInstallments != null) {
+      const paid = input.paidInstallments;
+      if (!Number.isInteger(paid) || paid < 0 || paid >= (existing.totalInstallments ?? 0) || existing.nextDueDate !== due || same.filter(r=>r.status==="active").length !== 1)
+        return {record:existing, existing:true, progressConflict:true};
+      if (existing.paidInstallments !== paid) {
+        const {data,error} = await getSupabase().from("recurring_transactions").update({paid_installments:paid})
+          .eq("id",existing.id).eq("user_id",input.userId).eq("mode",input.mode).eq("status","active")
+          .eq("paid_installments",existing.paidInstallments).eq("next_due_date",due).select("*").maybeSingle();
+        if (error || !data) throw Error("RECURRING_PROGRESS_CHANGED");
+        return {record:fromRow(data as Row),existing:true};
+      }
+    }
+    return {record: existing, existing: true};
+  }
   const unclearBenefit = rows.find(r => r.status === "active" && r.type === input.type && r.amount === input.amount &&
     r.repeatUnit === input.repeatUnit && r.dayOfMonth === input.dayOfMonth && similarBenefit(r.description,input.description));
   if (unclearBenefit) return {record:unclearBenefit, existing:true, ambiguous:true};
