@@ -7,7 +7,7 @@ import {explicitPaidCount, financeConversation, isFinanceScreenQuestion} from ".
 import {selectedMonthRange, monthRange} from "./calendar-range";
 import {bankPeriod} from "./open-finance-report";
 import {explicitFinanceCalendarPeriod,generalExpensePeriod,getExplicitSpendingSummaryResult,getExplicitUpcomingFinanceQueryResult} from "./ai-processor";
-import {answerCardInstallments,answerFinancePlanning,parseCardInstallmentsQuestion} from "./finance-planning-whatsapp";
+import {answerCardInstallments,answerFinancePlanning,parseCardInstallmentsQuestion,readBankExpenseForecast} from "./finance-planning-whatsapp";
 import {parseInstallmentDetailQuestion} from "./installment-detail";
 import {connectedInstallmentDetailAnswer} from "./connected-installment-detail";
 import {saveChosenCategory} from "./save-chosen-category";
@@ -3233,7 +3233,10 @@ async function handleSingleMessage(msg:IncomingMessage, agentFollowUps:string[])
             rows = await getFinancesInRangeStrict(user.id,workspace,undefined,valid.to);
             if (signature(after)!==signature(await getRecurringByUser(user.id,workspace,"active",true))) throw Error("FORECAST_CHANGED");
           }
-          answer = projectionReply(cashProjection(rows, recurring, workspace, valid, todayStrBR()), workspace, valid, user.locale);
+          // Empréstimos, parcelas e assinaturas dos bancos entram na projeção;
+          // sem eles, "quanto vou dever" ignorava a maior parte das contas.
+          const bankForecast = await readBankExpenseForecast(user, workspace, valid.from, valid.to, todayStrBR()).catch(() => null);
+          answer = projectionReply(cashProjection(rows, recurring, workspace, valid, todayStrBR()), workspace, valid, user.locale, bankForecast);
         }
       } catch {
         answer = localized(user.locale,"Não consegui conferir os registros completos para calcular a previsão. Tente consultar novamente.","No pude verificar todos los registros para calcular la previsión. Vuelve a intentarlo.");

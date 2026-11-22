@@ -3,9 +3,10 @@ import type {LoanInstallment} from "./finance-loan-installments";
 import type {BankInstallmentProjection} from "./bank-installment-projections";
 import type {BankAgendaItem} from "./open-finance-schedules";
 import {bankForecastCategory} from "./finance-bank-schedules";
+import type {DetectedSubscription} from "./detected-subscriptions";
 
 type RecurringExpense={id:string;type:string;amount:number;category:string;status:string;description?:string};
-type Inputs={categoryHistory?:readonly LedgerEntry[];posted:readonly LedgerEntry[];pending:readonly LedgerEntry[];recurring:readonly RecurringExpense[];loans:readonly LoanInstallment[];installments:readonly BankInstallmentProjection[];schedules:readonly BankAgendaItem[];from:string;to:string};
+type Inputs={categoryHistory?:readonly LedgerEntry[];posted:readonly LedgerEntry[];pending:readonly LedgerEntry[];recurring:readonly RecurringExpense[];loans:readonly LoanInstallment[];installments:readonly BankInstallmentProjection[];schedules:readonly BankAgendaItem[];subscriptions?:readonly DetectedSubscription[];from:string;to:string};
 export function bankScheduleInExpensePeriod(row:BankAgendaItem,from:string,to:string):boolean {
  if(row.due_date)return row.due_date>=from&&row.due_date<=to;
  if(row.kind!=="installment"||!row.last_observed_month||!row.last_observed_installment)return false;
@@ -43,6 +44,8 @@ export function financeExpensePlan(input:Inputs){
   if(!bankScheduleInExpensePeriod(row,input.from,input.to)){unquantified++;continue;}
   add(`schedule:${row.kind}:${row.id}`,bankForecastCategory(row,input.categoryHistory??input.posted),row.description,ledgerAmount(row.amount),row.currency);
  }
+ // Assinaturas que o banco não marcou como recorrentes, vistas todo mês no cartão.
+ for(const row of input.subscriptions??[])add(row.id,row.category,`${row.description} · assinatura mensal`,row.amount);
  const forecast=forecastCents/100;
  return {recorded,forecast,forecastItems,total:(Math.round(recorded*100)+forecastCents)/100,unquantified,groups:[...groups.values()].sort((a,b)=>b.value-a.value)};
 }

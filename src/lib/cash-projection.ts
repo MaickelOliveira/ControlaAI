@@ -58,7 +58,13 @@ export function cashProjection(records: readonly Finance[], schedules: readonly 
     result: received + income - spent - expense, closing: opening + received + income - spent - expense};
 }
 
-export function projectionReply(p: ReturnType<typeof cashProjection>, mode: FinanceMode, period: Period, locale?: string) {
+/** O que os bancos preveem para o período (empréstimos, parcelas,
+ * assinaturas), somado à projeção feita com os registros da Zelo. */
+export type BankProjection = {forecastCents: number; groups: readonly [string, number][]; unquantified: number; incomplete: boolean};
+
+export function projectionReply(base: ReturnType<typeof cashProjection>, mode: FinanceMode, period: Period, locale?: string, bank?: BankProjection | null) {
+  const bankCents = bank?.forecastCents ?? 0;
+  const p = {...base, result: base.result - bankCents, closing: base.closing - bankCents};
   const es = locale === "es";
   const money = (cents: number) => (cents/100).toLocaleString(es ? "es-419" : "pt-BR", {style:"currency",currency:"BRL"});
   const date = (s: string) => s.split("-").reverse().join("/");
@@ -72,10 +78,18 @@ export function projectionReply(p: ReturnType<typeof cashProjection>, mode: Fina
     `${es ? "Gastos realizados" : "Despesas realizadas"}: ${money(p.spent)}`,
     `${es ? "Gastos previstos" : "Despesas programadas"}: ${money(p.expense)}`,
     ...Array.from(p.expenseLines).slice(0,12).map(([name,cents])=>`  • ${name.replace(/[\n\r*_~]/g," ").slice(0,80)}: ${money(cents)}`),
+    ...(bank ? [
+      `${es ? "Previsto por los bancos (préstamos, cuotas y suscripciones)" : "Previsto pelos bancos (empréstimos, parcelas e assinaturas)"}: ${money(bankCents)}`,
+      ...bank.groups.slice(0,10).map(([name,cents])=>`  • ${name.replace(/[\n\r*_~]/g," ").slice(0,80)}: ${money(cents)}`),
+    ] : []),
     `${es ? "Resultado del período" : "Resultado do período"}: ${money(p.result)}`,
     `*${es ? "Saldo final previsto" : "Saldo final projetado"}: ${money(p.closing)}*`,
-    es ? "Base: movimientos y compromisos registrados en Zelo." : "Base: lançamentos e compromissos cadastrados na Zelo.",
+    bank
+      ? (es ? "Base: registros de Zelo y previsiones de los bancos conectados." : "Base: registros da Zelo e previsões dos bancos conectados.")
+      : (es ? "Base: movimientos y compromisos registrados en Zelo." : "Base: lançamentos e compromissos cadastrados na Zelo."),
   ];
+  if (bank?.incomplete) lines.push(es ? "La actualización de los bancos está incompleta. El total puede cambiar." : "A atualização dos bancos está incompleta. O total pode mudar.");
+  if (bank?.unquantified) lines.push(es ? `${bank.unquantified} previsión(es) bancaria(s) sin importe en reales quedaron fuera.` : `${bank.unquantified} previsão(ões) dos bancos sem valor em reais ficaram fora da soma.`);
   if (!p.openingEvidence) lines.push(es ? "No hay saldo realizado anterior registrado. Si ya tenías dinero, el saldo final cambia por ese valor." : "Sem saldo realizado anterior registrado. Se já havia dinheiro antes, o saldo final muda por esse valor.");
   if (!p.income && !p.received) lines.push(es ? "No encontré ingresos para este período. Puedes consultar tus ingresos recurrentes antes de registrar uno nuevo." : "Não encontrei receitas para esse período. Confira as receitas em Recorrentes antes de cadastrar uma nova.");
   if (!p.income && !p.received && p.outsideIncome.size) {

@@ -5,7 +5,9 @@ import {normalizeBankText} from "./bank-question-parser";
 import {monthRange} from "./calendar-range";
 import {bankScheduleInExpensePeriod} from "./finance-expense-plan";
 import {createFinanceLedger} from "./finance-ledger";
-import {readBankInstallmentAnchors,readBankLedger} from "./finance-ledger-storage";
+import {readBankInstallmentAnchors,readBankLedger,readBankReport} from "./finance-ledger-storage";
+import {financeExpensePlan} from "./finance-expense-plan";
+import type {BankMovement} from "./open-finance-report";
 import {financeAuthorLabel,identifyFinanceAuthors} from "./finance-attribution";
 import type {WppPhoneLink} from "./wpp-phone-links";
 import {financePeriodExpenses} from "./finance-period-expenses";
@@ -44,7 +46,7 @@ export function parseCardInstallmentsQuestion(message:string,today:string){
  return {period,last4,target,mode,compareModes:/\b(?:empresa|empresarial|pj)\b/.test(text)&&/\b(?:pessoal|pf)\b/.test(text)};
 }
 
-async function readPlanning(user:OpenFinanceIdentity,mode:FinanceMode,period:Period,cardOnly=false,authors?:{name:string;participants:readonly WppPhoneLink[]}){
+async function readPlanning(user:OpenFinanceIdentity,mode:FinanceMode,period:Period,cardOnly=false,authors?:{name:string;participants:readonly WppPhoneLink[]},today=period.from){
  const bankEnabled=process.env.OPEN_FINANCE_WHATSAPP_ENABLED==="true";
  const scope=bankEnabled?await getOpenFinanceAccess(user,mode,{throwOnStorageError:true}):null;
  const [records,recurring,bank,installmentAnchors]=await Promise.all([
@@ -57,15 +59,34 @@ async function readPlanning(user:OpenFinanceIdentity,mode:FinanceMode,period:Per
  const finances=createFinanceLedger(named,bank?.report.movements??[],mode);
  const label=mode==="personal"?"Pessoal":`Empresa${scope?.companyName?` · ${safe(scope.companyName)}`:""}`;
  const incomplete=!!(bank?.report.sync_pending||bank?.overview.truncated||bank?.overview.agenda?.incomplete||installmentAnchors?.incomplete);
- return {ledger:{finances,bank,installmentAnchors},recurring,label,incomplete,bankEnabled};
+ const subscriptionHistory=scope&&!cardOnly&&period.to>=today?await readSubscriptionHistory(scope,today):[];
+ return {ledger:{finances,bank,installmentAnchors},recurring,label,incomplete,bankEnabled,subscriptionHistory};
+}
+
+/** Últimos ~100 dias de cobranças, para reconhecer assinaturas mensais que o
+ * banco não marca como recorrentes. Sem histórico, a previsão segue sem elas. */
+async function readSubscriptionHistory(scope:NonNullable<Awaited<ReturnType<typeof getOpenFinanceAccess>>>,today:string):Promise<BankMovement[]>{
+ const from=new Date(Date.parse(`${today}T12:00:00Z`)-100*86_400_000).toISOString().slice(0,10);
+ try{return (await readBankReport(scope,{from,to:today})).movements;}catch{return [];}
+}
+
+/** Só o que os bancos preveem (empréstimos, parcelas, assinaturas e débitos
+ * programados), para somar à projeção feita com os registros da Zelo. */
+export async function readBankExpenseForecast(user:OpenFinanceIdentity,mode:FinanceMode,from:string,to:string,today:string){
+ const period=bankPeriod(from,to);
+ const {ledger,recurring,incomplete,bankEnabled,subscriptionHistory}=await readPlanning(user,mode,period,false,undefined,today);
+ if(!bankEnabled||!ledger.bank)return null;
+ const {loanInstallments,projectedInstallments,bankSchedules,subscriptions}=financePeriodExpenses(ledger,recurring,{...period,type:"expense",categories:[],search:""},today,subscriptionHistory);
+ const plan=financeExpensePlan({categoryHistory:ledger.finances,posted:[],pending:[],recurring:[],loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,subscriptions,from:period.from,to:period.to});
+ return {forecastCents:Math.round(plan.forecast*100),groups:plan.groups.filter(group=>group.forecast>0).map(group=>[group.name,Math.round(group.forecast*100)] as [string,number]),unquantified:plan.unquantified,incomplete};
 }
 
 export async function answerFinancePlanning(user:OpenFinanceIdentity,mode:FinanceMode,from:string,to:string,today:string,details?:{name:string;participants:readonly WppPhoneLink[]}){
  let period:Period;
  try{period=bankPeriod(from,to);}catch{return "Escolha um período válido de até 366 dias para conferir suas despesas.";}
  try{
-  const {ledger,recurring,label,incomplete,bankEnabled}=await readPlanning(user,mode,period,false,details);
-  const {expensePlan}=financePeriodExpenses(ledger,recurring,{...period,type:"expense",categories:[],search:""},today);
+  const {ledger,recurring,label,incomplete,bankEnabled,subscriptionHistory}=await readPlanning(user,mode,period,false,details,today);
+  const {expensePlan}=financePeriodExpenses(ledger,recurring,{...period,type:"expense",categories:[],search:""},today,subscriptionHistory);
   const {forecast,recorded,total,groups,unquantified,forecastItems}=expensePlan;
   const partial=incomplete||unquantified>0||!bankEnabled;
   const lines=[
