@@ -54,7 +54,7 @@ export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<Fin
    // Só conta como "já previsto" o que o banco prevê DENTRO do período. Uma
    // recorrência com a próxima data já vencida não cobre os meses seguintes.
    bankSchedules:inPeriodSchedules,
-   knownDescriptions:[...continuedRecurring.map(row=>row.description),...recurring.map(row=>row.description),...projectedInstallments.map(row=>row.description),...postedFinances.filter(row=>row.date>=filters.from).map(row=>row.description)],
+   knownDescriptions:[...continuedRecurring.map(row=>row.description),...loanInstallments.map(row=>row.name),...recurring.map(row=>row.description),...projectedInstallments.map(row=>row.description),...postedFinances.filter(row=>row.date>=filters.from).map(row=>row.description)],
   })].filter(item=>(!filters.categories.length||filters.categories.includes(item.category))&&(!search||normalizeBankText(`${item.description} ${item.institutionName} ${item.resourceName}`).includes(search))&&matchesBankFilter(item.institutionName,item.resourceId,filters.account));
  const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:datedPending,recurring:periodOccurrences,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,subscriptions,from:filters.from,to:filters.to});
  return {incomeForecast,filteredFinances,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,subscriptions,expensePlan};

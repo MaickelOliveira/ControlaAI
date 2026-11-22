@@ -134,6 +134,21 @@ describe("detecção de assinaturas mensais", () => {
     expect(new Set(found.map(item => item.id)).size).toBe(2);
   });
 
+  it("empresa: pagamento mensal fixo por Pix entra, parcela de empréstimo e Pix de valores variados não", () => {
+    const pix = (date: string, description: string, amount: string) => charge(date, description, amount,
+      { resource_id: "acc", resource_type: "account", institution_name: "Nubank", resource_name: "Conta PJ", kind: "account_debits", user_category: null });
+    const found = detectSubscriptions({
+      history: [
+        pix("2026-09-14", "Transferência enviada pelo Pix REALIZE CREDITO", "211.76"), pix("2026-10-13", "Transferência enviada pelo Pix REALIZE CREDITO", "211.76"),
+        pix("2026-11-13", "Transferência enviada pelo Pix REALIZE CREDITO", "211.76"),
+        pix("2026-10-21", "Parcela paga - Capital de giro", "2228.99"), pix("2026-11-21", "Parcela paga - Capital de giro", "2228.99"),
+        pix("2026-10-10", "Transferência enviada pelo Pix HAVAN", "801.56"), pix("2026-11-10", "Transferência enviada pelo Pix HAVAN", "659.57"),
+      ],
+      period: december, today,
+    });
+    expect(found.map(item => [item.description, item.date])).toEqual([["Transferência enviada pelo Pix REALIZE CREDITO", "2026-12-13"]]);
+  });
+
   it("normaliza a descrição para comparar a mesma cobrança", () => {
     expect(subscriptionKey("OPENAI *CHATGPT SUBSCR 123")).toBe(subscriptionKey("Openai  ChatGPT"));
   });

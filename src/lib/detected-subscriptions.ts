@@ -49,6 +49,9 @@ const median = (values: number[]) => {
 
 const LATE_FEE_RE = /\b(?:juros|multas?|iof|rotativo|mora|atraso|encargos?)\b/;
 const FOOD_CATEGORIES = new Set(["Delivery", "Alimentação"]);
+// Parcela de empréstimo já entra em "Empréstimos" pela previsão do banco.
+const LOAN_PAYMENT_RE = /\b(?:parcela\s+paga|capital\s+de\s+giro|consignado)\b/;
+const LOAN_CATEGORIES = new Set(["Empréstimos", "Parcelas do veículo"]);
 
 /**
  * Cobranças que podem se repetir, mas não são conta mensal: juros, multa e IOF
@@ -56,7 +59,9 @@ const FOOD_CATEGORIES = new Set(["Delivery", "Alimentação"]);
  * são consumo. Assinaturas de comida (iFood Club) continuam valendo.
  */
 export function isOccasionalCharge(description: string, category?: string | null): boolean {
-  if (LATE_FEE_RE.test(normalizeMerchantText(description))) return true;
+  const text = normalizeMerchantText(description);
+  if (LATE_FEE_RE.test(text) || LOAN_PAYMENT_RE.test(text)) return true;
+  if (category && LOAN_CATEGORIES.has(category.trim())) return true;
   const byDescription = descriptionExpenseCategory(description);
   if (byDescription === "Assinaturas" || byDescription === "Inteligência Artificial") return false;
   return [byDescription, category?.trim()].some(name => !!name && FOOD_CATEGORIES.has(name));
@@ -67,6 +72,7 @@ export function isSubscriptionCandidate(row: BankMovement): boolean {
   // movimento diz que é saída.
   const outflow = row.kind === "card_purchases" || row.kind === "account_debits" || row.direction === "debit";
   if (!outflow || row.direction === "credit" || row.classification === "bill_payment") return false;
+  if (row.resource_type === "loan" || row.resource_type === "financing") return false;
   const category = bankCategory(row);
   if (category.source === "excluded" || isOccasionalCharge(row.description, category.name)) return false;
   if ((row.currency ?? "BRL") !== "BRL" || row.amount === null) return false;
