@@ -326,8 +326,14 @@ async function wppSendLong(to: string, message: string, maxLength = 3500,private
   if (chunks.length > 8 || /([^\s])\1{64,}/u.test(message)) {
     throw new Error("[message-handler] resposta longa ou repetitiva bloqueada");
   }
-  for (const chunk of chunks) await wppSend(to, chunk,privateFinancial);
+  // Uma pausa curta entre as partes evita que a Meta recuse várias mensagens
+  // seguidas para o mesmo número.
+  for (const [index, chunk] of chunks.entries()) {
+    if (index > 0) await new Promise(resolve => setTimeout(resolve, WHATSAPP_CHUNK_GAP_MS));
+    await wppSend(to, chunk, privateFinancial);
+  }
 }
+const WHATSAPP_CHUNK_GAP_MS = process.env.NODE_ENV === "test" ? 0 : 1_200;
 
 export type ImageAction = "save" | "search" | "describe" | "register";
 

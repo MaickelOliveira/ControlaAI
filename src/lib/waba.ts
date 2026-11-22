@@ -37,6 +37,28 @@ export async function isWabaConfigured(): Promise<boolean> {
   return !!(await phoneNumberId() && await accessToken());
 }
 
+/** Classifica a recusa da Meta só com textos fixos: nenhum conteúdo, número
+ * ou mensagem do provedor vai para o log. */
+export function wabaSendFailureKind(code: number | undefined, httpStatus: number, length: number): string {
+  if (length > 4096) return "texto acima de 4096 caracteres";
+  if (code === 131056 || code === 130429 || code === 80007 || code === 4 || httpStatus === 429) return "limite de envio atingido";
+  if (code === 131047 || code === 131026) return "janela de 24h fechada ou número indisponível";
+  if (code === 100) return "parâmetro recusado (formato do texto)";
+  if (code === 190 || httpStatus === 401) return "token de acesso inválido";
+  return "motivo não classificado";
+}
+
+function logWabaSendFailure(code: number | undefined, httpStatus: number, length: number): void {
+  switch (wabaSendFailureKind(code, httpStatus, length)) {
+    case "texto acima de 4096 caracteres": console.error("[waba] sendText falhou: texto acima de 4096 caracteres"); break;
+    case "limite de envio atingido": console.error("[waba] sendText falhou: limite de envio atingido"); break;
+    case "janela de 24h fechada ou número indisponível": console.error("[waba] sendText falhou: janela de 24h fechada ou número indisponível"); break;
+    case "parâmetro recusado (formato do texto)": console.error("[waba] sendText falhou: parâmetro recusado (formato do texto)"); break;
+    case "token de acesso inválido": console.error("[waba] sendText falhou: token de acesso inválido"); break;
+    default: console.error("[waba] sendText falhou: motivo não classificado");
+  }
+}
+
 export async function sendText(to: string, message: string, countryIso?: string): Promise<boolean> {
   const pnid = await phoneNumberId();
   const token = await accessToken();
@@ -53,11 +75,11 @@ export async function sendText(to: string, message: string, countryIso?: string)
       }),
       signal: AbortSignal.timeout(15_000),
     });
-    const data = await res.json().catch(() => null) as { error?: { message?: string } } | null;
+    const data = await res.json().catch(() => null) as { error?: { message?: string; code?: number } } | null;
     // A Graph API pode devolver HTTP 2xx com um erro no corpo (ex: janela de
     // 24h fechada) — checar só res.ok não é suficiente.
     const ok = res.ok && !data?.error;
-    if (!ok) console.error("[waba] sendText falhou:");
+    if (!ok) logWabaSendFailure(data?.error?.code, res.status, message.length);
     return ok;
   } catch  {
     console.error("[waba] sendText erro:");

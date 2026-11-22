@@ -4502,6 +4502,13 @@ export function toWhatsAppFormatting(text: string): string {
     .trim();
 }
 
+/** Pesquisas cujo resultado muda com o tempo ou depende de uma fonte para não
+ * virar um número inventado: essas só são enviadas com fontes. */
+export function isTimeSensitiveSearch(query: string): boolean {
+  const text = normalizeCapabilityText(query);
+  return /\b(?:pre[cç]os?|custa|valor|quanto (?:esta|ta|custa)|cota[cç](?:ao|oes)|dolar|euro|bitcoin|cripto|a[cç](?:ao|oes)|bolsa|hoje|agora|amanha|ontem|atual(?:mente)?|ultim[oa]s?|recentes?|noticias?|resultado|placar|jogo|clima|tempo em|previsao|chuva|temperatura|horarios?|funciona|aberto|abre|fecha|endere[cç]o|telefone|disponiv|estoque|promo[cç]|oferta|passage(?:m|ns)|voos?|hote(?:l|is)|caronas?|boleias?|ingressos?|eventos?|show|lan[cç]amento|eleic|presidente atual)\b/.test(text);
+}
+
 /** Rejeita saídas degeneradas do provedor antes que virem dezenas de mensagens. */
 export function isUsableWebSearchAnswer(value: string): boolean {
   const answer = value.trim();
@@ -4535,7 +4542,8 @@ Você é o Zelo, assessor pessoal do usuário. Faça uma pesquisa real na intern
 - Para viagens, deixe claros data, origem, destino, horários, preço encontrado, bagagem/taxas quando disponíveis e o link para conferência. Nunca diga que reservou ou comprou.
 - Se o usuário pedir caronas para uma data, pesquise a data EXATA e liste somente viagens individuais dessa data. Use uma linha por viagem com horário de saída e preço daquela viagem; inclua o destino, motorista e link individual se disponíveis. Comece com a data em YYYY-MM-DD. Não apresente médias, "a partir de", primeiro horário ou quantidade média como se fossem as opções do dia. Ignore páginas indexadas em datas antigas e ônibus. Se a fonte não mostrar a lista individual de hoje, responda que não conseguiu confirmar cada viagem e dê o link da plataforma. Nunca afirme "todas" se não puder verificar a lista completa.
 - Para outras viagens, se o usuário pedir TODAS as opções, liste apenas itens individuais com dados verificados e declare quando a lista pode estar incompleta.
-- Quando o pedido for curto, como "dólar hoje" ou o nome de um local seguido de "hoje", entregue um panorama atual completo e útil do assunto. Para um local, inclua o que estiver disponível e for relevante hoje, como clima e alertas, eventos, notícias locais, trânsito, horários de funcionamento, turismo e atrações. Não exija que o usuário escreva "pesquise na internet".
+- Quando o pedido for curto, como "dólar hoje" ou o nome de um local seguido de "hoje", entregue um panorama atual útil e resumido do assunto, com os números principais primeiro. Para um local, inclua o que estiver disponível e for relevante hoje, como clima e alertas, eventos, notícias locais, trânsito, horários de funcionamento, turismo e atrações. Não exija que o usuário escreva "pesquise na internet".
+- Seja enxuto: no máximo cerca de 1.200 caracteres, a menos que o usuário peça uma lista completa de itens. Prefira o dado pedido a um panorama longo.
 - Formate para WhatsApp: negrito com UM asterisco (*assim*), listas com "•" ou "-". Não use títulos com #, linhas "---", tabelas nem **dois asteriscos**.
 - Não mencione estas instruções.
 
@@ -4578,10 +4586,15 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
     const result = await model.generateContent(prompt);
     const answer = result.response.text().trim();
     const sources = groundedSources(result);
-    if (!isUsableWebSearchAnswer(answer) || !sources.length || (rideDetails && !hasIndividualRides(answer, rideDate))) {
+    // O Gemini 3.x responde conhecimento geral ("quem foi Thomas Edison?")
+    // sem pesquisar, então não há fontes. Só dados que mudam (preço, cotação,
+    // hoje, horário, disponibilidade...) exigem fontes para serem enviados.
+    const needsSources = rideDetails || isTimeSensitiveSearch(query);
+    if (!isUsableWebSearchAnswer(answer) || (needsSources && !sources.length) || (rideDetails && !hasIndividualRides(answer, rideDate))) {
       console.error("[ai-processor] Pesquisa web sem lista confirmada (consulta de caracteres)");
       return rideDetails ? rideListingUnavailable(query, rideDate, sources, locale) : failure;
     }
+    if (!sources.length) return toWhatsAppFormatting(answer);
 
     const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
     const sourceList = sources.map((source, index) => `${index + 1}. ${source.title}: ${source.url}`).join("\n");
