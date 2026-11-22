@@ -106,9 +106,15 @@ export function detectSubscriptions(input: {
   const firstMonth = monthIndex(input.period.from), lastMonth = monthIndex(input.period.to);
   const result: DetectedSubscription[] = [];
 
-  for (const [groupKey, rows] of groups) {
-    const key = groupKey.slice(groupKey.indexOf("|") + 1);
-    if (alreadyKnown(key, known)) continue;
+  for (const [baseKey, all] of groups) {
+   const key = baseKey.slice(baseKey.indexOf("|") + 1);
+   if (alreadyKnown(key, known)) continue;
+   // O mesmo nome pode ter cobranças de valores diferentes no mês (ex.: Google
+   // One de R$ 96,99 e uma verificação de R$ 1,00). Cada faixa de valor é
+   // avaliada sozinha, para uma não anular a outra.
+   const clusters = amountClusters(all);
+   for (const [index, rows] of clusters.entries()) {
+    const groupKey = clusters.length > 1 ? `${baseKey}|${index}` : baseKey;
     // Uma cobrança por mês: compras repetidas no mesmo mês não são assinatura.
     const byMonth = new Map<number, BankMovement[]>();
     for (const row of rows) byMonth.set(monthIndex(row.date), [...(byMonth.get(monthIndex(row.date)) ?? []), row]);
@@ -142,6 +148,54 @@ export function detectSubscriptions(input: {
         resourceName: latest.resource_name,
         institutionName: latest.institution_name,
       });
+    }
+   }
+  }
+  return result.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function amountClusters(rows: readonly BankMovement[]): BankMovement[][] {
+  const clusters: BankMovement[][] = [];
+  for (const row of [...rows].sort((a, b) => Number(a.amount) - Number(b.amount))) {
+    const current = clusters[clusters.length - 1];
+    if (current && Number(row.amount) <= Number(current[0].amount) * (1 + MAX_AMOUNT_SPREAD)) current.push(row);
+    else clusters.push([row]);
+  }
+  return clusters;
+}
+
+/**
+ * Recorrências que o banco informa só até o mês atual (ex.: Google com
+ * vencimento em 12/11) continuam nos meses seguintes, no mesmo dia. Só vale
+ * para recorrências vistas neste mês ou no anterior, com valor em reais.
+ */
+export function projectBankRecurring(input: {
+  schedules: readonly BankAgendaItem[];
+  period: {from: string; to: string};
+  today: string;
+  category: (item: BankAgendaItem) => string;
+}): DetectedSubscription[] {
+  const firstMonth = monthIndex(input.period.from), lastMonth = monthIndex(input.period.to), current = monthIndex(input.today);
+  const result: DetectedSubscription[] = [];
+  const seen = new Set<string>();
+  for (const item of input.schedules) {
+    if (item.kind !== "recurring" || !item.due_date || item.amount === null || (item.currency ?? "BRL") !== "BRL") continue;
+    const amount = Number(item.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const dueMonth = monthIndex(item.due_date);
+    if (dueMonth < current - 1 || dueMonth > current) continue;
+    const category = input.category(item);
+    if (isOccasionalCharge(item.description, category)) continue;
+    const day = Number(item.due_date.slice(8, 10));
+    for (let month = Math.max(firstMonth, dueMonth + 1); month <= lastMonth; month++) {
+      const date = dateInMonth(month, day);
+      if (date < input.period.from || date > input.period.to || date < input.today) continue;
+      const id = `bank-recurring:${item.id}:${monthStart(month)}`;
+      const dedupe = `${item.institution_name}|${subscriptionKey(item.description)}|${Math.round(amount * 100)}|${monthStart(month)}`;
+      if (seen.has(dedupe)) continue;
+      seen.add(dedupe);
+      result.push({id, description: item.description.replace(/\s+/g, " ").trim(), amount: Math.round(amount * 100) / 100, category, date,
+        resourceId: item.resource_id, resourceName: item.resource_name, institutionName: item.institution_name});
     }
   }
   return result.sort((a, b) => a.date.localeCompare(b.date));

@@ -107,6 +107,25 @@ describe("detecção de assinaturas mensais", () => {
     expect(found.map(item => [item.date, item.amount])).toEqual([["2026-12-11", 113.85], ["2026-12-17", 543.38]]);
   });
 
+  it("qualquer cobrança nova só vira conta mensal a partir da segunda vez", () => {
+    const first = [charge("2026-11-05", "Academia Fit", "99.90", { user_category: null })];
+    expect(detectSubscriptions({ history: first, period: december, today })).toEqual([]);
+    const second = [charge("2026-10-05", "Academia Fit", "99.90", { user_category: null }), ...first];
+    expect(detectSubscriptions({ history: second, period: december, today })).toEqual([expect.objectContaining({ description: "Academia Fit", date: "2026-12-05" })]);
+  });
+
+  it("uma cobrança pequena com o mesmo nome no mês não anula a assinatura (Google One R$ 96,99 + R$ 1,00)", () => {
+    const found = detectSubscriptions({
+      history: [
+        charge("2026-09-12", "Google One", "96.99"), charge("2026-09-23", "Google One", "1.00"),
+        charge("2026-10-12", "Google One", "96.99"), charge("2026-10-23", "Google One", "1.00"),
+      ],
+      period: december, today,
+    });
+    expect(found.map(item => [item.date, item.amount])).toEqual([["2026-12-12", 96.99], ["2026-12-23", 1]]);
+    expect(new Set(found.map(item => item.id)).size).toBe(2);
+  });
+
   it("normaliza a descrição para comparar a mesma cobrança", () => {
     expect(subscriptionKey("OPENAI *CHATGPT SUBSCR 123")).toBe(subscriptionKey("Openai  ChatGPT"));
   });
@@ -135,6 +154,21 @@ describe("assinatura que o banco conhece só até o mês atual", () => {
     } as unknown as Parameters<typeof financePeriodExpenses>[0];
     const { expensePlan } = financePeriodExpenses(ledger, [], { ...december, type: "expense", categories: [], search: "", account: "" } as never, today, history);
     expect(expensePlan.forecastItems).toEqual([expect.objectContaining({ amount: 543.38 })]);
+  });
+
+  it("recorrência que o banco informa só até este mês continua no mês seguinte", async () => {
+    const { financePeriodExpenses } = await import("./finance-period-expenses");
+    const item = (id: string, description: string, due: string, amount: string, institution = "Mercado Pago") => ({ id, kind: "recurring", description, resource_id: "card-mp",
+      resource_name: institution, institution_name: institution, due_date: due, amount, currency: "BRL", synced_at: "2026-11-22", user_category: "Assinaturas" });
+    const ledger = {
+      finances: [], installmentAnchors: { items: [], incomplete: false },
+      bank: { report: { movements: [] }, overview: { resources: [], credit: [], connections: [], loans: [], financings: [], agenda: { incomplete: false, items: [
+        item("g", "Google", "2026-11-12", "96.99"), item("old", "Google One", "2026-01-12", "96.99", "Nubank"), item("j", "Juros do rotativo", "2026-11-16", "33.37"),
+      ] } } },
+    } as unknown as Parameters<typeof financePeriodExpenses>[0];
+    const { subscriptions, expensePlan } = financePeriodExpenses(ledger, [], { ...december, type: "expense", categories: [], search: "", account: "" } as never, today, []);
+    expect(subscriptions).toEqual([expect.objectContaining({ description: "Google", amount: 96.99, date: "2026-12-12" })]);
+    expect(expensePlan.forecast).toBe(96.99);
   });
 
   it("tira da previsão juros de atraso e lanches que o banco marca como recorrentes", async () => {

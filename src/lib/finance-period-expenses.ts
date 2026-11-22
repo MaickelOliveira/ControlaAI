@@ -9,7 +9,7 @@ import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} fr
 import {linkBankInstallmentAnchors,linkScheduledBankInstallments,projectBankInstallments} from "./bank-installment-projections";
 import {bankScheduleInExpensePeriod,financeExpensePlan} from "./finance-expense-plan";
 import {BILL_PAYMENT_CATEGORY,isBankBillPaymentDescription} from "./bank-bill-payment";
-import {detectSubscriptions,isOccasionalCharge} from "./detected-subscriptions";
+import {detectSubscriptions,isOccasionalCharge,projectBankRecurring} from "./detected-subscriptions";
 import type {BankMovement} from "./open-finance-report";
 export type PeriodRecurring=Schedule & {id:string;type:string;amount:number;category:string;description:string;status:string;nextDueDate:string};
 export function matchesPeriodFilters(entry:Pick<LedgerEntry,"type"|"category"|"description">,filters:FinanceFilters){
@@ -41,14 +41,21 @@ export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<Fin
  // conta mensal: ficam fora da previsão e da lista.
  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,[...scheduledInstallments.flatMap(row=>row.schedule_ids),...installmentAnchors.flatMap(row=>row.source_schedule_ids??[])])
   .filter(row=>row.kind!=="recurring"||!isOccasionalCharge(row.description,bankForecastCategory(row,finances)));
- const subscriptions=!subscriptionHistory?.length||filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:")?[]:
+ const bankOnlyFilter=filters.type==="income"||filters.account&&!filters.account.startsWith("bank:")&&!filters.account.startsWith("institution:");
+ const inPeriodSchedules=bankSchedules.filter(row=>bankScheduleInExpensePeriod(row,filters.from,filters.to));
+ // Recorrências que o banco só informa até o mês atual seguem nos meses seguintes.
+ const continuedRecurring=bankOnlyFilter||!ledger?.bank?[]:projectBankRecurring({
+  schedules:(ledger.bank.overview.agenda?.items??[]).filter(item=>item.user_category!==BILL_PAYMENT_CATEGORY&&!isBankBillPaymentDescription(item.description)),
+  period:{from:filters.from,to:filters.to},today,category:item=>bankForecastCategory(item,finances),
+ }).filter(item=>!inPeriodSchedules.some(row=>row.institution_name===item.institutionName&&normalizeBankText(row.description)===normalizeBankText(item.description)));
+ const subscriptions=bankOnlyFilter?[]:[...continuedRecurring,...!subscriptionHistory?.length?[]:
   detectSubscriptions({
    history:subscriptionHistory,period:{from:filters.from,to:filters.to},today,
    // Só conta como "já previsto" o que o banco prevê DENTRO do período. Uma
    // recorrência com a próxima data já vencida não cobre os meses seguintes.
-   bankSchedules:bankSchedules.filter(row=>bankScheduleInExpensePeriod(row,filters.from,filters.to)),
-   knownDescriptions:[...recurring.map(row=>row.description),...projectedInstallments.map(row=>row.description),...postedFinances.filter(row=>row.date>=filters.from).map(row=>row.description)],
-  }).filter(item=>(!filters.categories.length||filters.categories.includes(item.category))&&(!search||normalizeBankText(`${item.description} ${item.institutionName} ${item.resourceName}`).includes(search))&&matchesBankFilter(item.institutionName,item.resourceId,filters.account));
+   bankSchedules:inPeriodSchedules,
+   knownDescriptions:[...continuedRecurring.map(row=>row.description),...recurring.map(row=>row.description),...projectedInstallments.map(row=>row.description),...postedFinances.filter(row=>row.date>=filters.from).map(row=>row.description)],
+  })].filter(item=>(!filters.categories.length||filters.categories.includes(item.category))&&(!search||normalizeBankText(`${item.description} ${item.institutionName} ${item.resourceName}`).includes(search))&&matchesBankFilter(item.institutionName,item.resourceId,filters.account));
  const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:datedPending,recurring:periodOccurrences,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,subscriptions,from:filters.from,to:filters.to});
  return {incomeForecast,filteredFinances,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,subscriptions,expensePlan};
 }
