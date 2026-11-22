@@ -26,8 +26,9 @@ export type DetectedSubscription = {
 const MIN_MONTHS = 2;
 const MAX_AMOUNT_SPREAD = 0.15;
 const MAX_DAY_SPREAD = 5;
-const MAX_MONTHS_SINCE_LAST = 2;
 const CANCEL_GRACE_DAYS = 10;
+/** Até quantos meses à frente as contas mensais são previstas. */
+const MAX_MONTHS_AHEAD = 5;
 const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
 export function subscriptionKey(description: string): string {
@@ -147,13 +148,11 @@ export function detectSubscriptions(input: {
     const loan = rows.some(row => isLoanPayment(row.description, bankCategory(row).name));
     const latest = rows.find(row => monthIndex(row.date) === lastSeen)!;
     const day = Math.round(median(days));
-    // Cancelada: a cobrança deste mês não veio até 10 dias depois do dia de
-    // sempre (o cartão pode lançar com alguns dias de atraso).
-    const currentMonth = monthIndex(input.today);
-    if (lastSeen < currentMonth && input.today > addDays(dateInMonth(currentMonth, day), CANCEL_GRACE_DAYS)) continue;
-    for (let month = Math.max(firstMonth, lastSeen + 1); month <= lastMonth; month++) {
-      // Sem cobrança há mais de dois meses, a assinatura provavelmente acabou.
-      if (month - lastSeen > MAX_MONTHS_SINCE_LAST) break;
+    // Cancelada: a cobrança seguinte não veio até 10 dias depois do dia de
+    // sempre (o cartão pode lançar com alguns dias de atraso). Enquanto segue
+    // ativa, é prevista em qualquer mês futuro.
+    if (input.today > addDays(dateInMonth(lastSeen + 1, day), CANCEL_GRACE_DAYS)) continue;
+    for (let month = Math.max(firstMonth, lastSeen + 1); month <= Math.min(lastMonth, monthIndex(input.today) + MAX_MONTHS_AHEAD); month++) {
       const date = dateInMonth(month, day);
       if (date < input.period.from || date > input.period.to || date < input.today) continue;
       result.push({
@@ -185,9 +184,9 @@ function amountClusters(rows: readonly BankMovement[]): BankMovement[][] {
 }
 
 /**
- * Recorrências que o banco informa só até o mês atual (ex.: Google com
- * vencimento em 12/11) continuam nos meses seguintes, no mesmo dia. Só vale
- * para recorrências vistas neste mês ou no anterior, com valor em reais.
+ * Recorrências que o banco informa só até a próxima data (ex.: Google com
+ * vencimento em 12/11) continuam em todos os meses seguintes, no mesmo dia.
+ * Vale para recorrências vistas a partir do mês anterior, com valor em reais.
  */
 export function projectBankRecurring(input: {
   schedules: readonly BankAgendaItem[];
@@ -203,12 +202,13 @@ export function projectBankRecurring(input: {
     const amount = Number(item.amount);
     if (!Number.isFinite(amount) || amount <= 0) continue;
     const dueMonth = monthIndex(item.due_date);
-    if (dueMonth < current - 1 || dueMonth > current) continue;
+    // Recorrência vista neste mês, no anterior ou já agendada adiante.
+    if (dueMonth < current - 1) continue;
     const category = input.category(item);
     // Empréstimo informado pelo banco já entra em "Empréstimos".
     if (isOccasionalCharge(item.description, category) || isLoanPayment(item.description, category)) continue;
     const day = Number(item.due_date.slice(8, 10));
-    for (let month = Math.max(firstMonth, dueMonth + 1); month <= lastMonth; month++) {
+    for (let month = Math.max(firstMonth, dueMonth + 1); month <= Math.min(lastMonth, current + MAX_MONTHS_AHEAD); month++) {
       const date = dateInMonth(month, day);
       if (date < input.period.from || date > input.period.to || date < input.today) continue;
       const id = `bank-recurring:${item.id}:${monthStart(month)}`;

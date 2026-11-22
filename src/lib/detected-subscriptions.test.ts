@@ -212,6 +212,27 @@ describe("assinatura que o banco conhece só até o mês atual", () => {
     expect(expensePlan.forecastItems).toEqual([expect.objectContaining({ description: "Parcela paga - Capital de giro · parcela de empréstimo" })]);
   });
 
+  it("assinatura antiga continua nos próximos 5 meses, venha do banco ou das cobranças", async () => {
+    const { financePeriodExpenses } = await import("./finance-period-expenses");
+    const history = [charge("2026-09-17", "OPENAI CHATGPT SUBSCR", "543.38"), charge("2026-10-17", "OPENAI CHATGPT SUBSCR", "543.38"), charge("2026-11-17", "OPENAI CHATGPT SUBSCR", "543.38")];
+    const ledger = {
+      finances: [], installmentAnchors: { items: [], incomplete: false },
+      bank: { report: { movements: [] }, overview: { resources: [], credit: [], connections: [], loans: [], financings: [], agenda: { incomplete: false, items: [
+        { id: "a", kind: "recurring", description: "Anthropic", resource_id: "card-mp", resource_name: "Mercado Pago", institution_name: "Mercado Pago",
+          due_date: "2026-12-11", amount: "113.85", currency: "BRL", synced_at: "2026-11-22", user_category: "Inteligência Artificial" },
+      ] } } },
+    } as unknown as Parameters<typeof financePeriodExpenses>[0];
+    for (const period of [{ from: "2027-01-01", to: "2027-01-31" }, { from: "2027-02-01", to: "2027-02-28" }]) {
+      const { subscriptions } = financePeriodExpenses(ledger, [], { ...period, type: "expense", categories: [], search: "", account: "" } as never, today, history);
+      expect(subscriptions.map(item => [item.description, item.date.slice(8)])).toEqual([["Anthropic", "11"], ["OPENAI CHATGPT SUBSCR", "17"]]);
+    }
+    // Até 5 meses à frente: abril entra, maio não.
+    const april = financePeriodExpenses(ledger, [], { from: "2027-04-01", to: "2027-04-30", type: "expense", categories: [], search: "", account: "" } as never, today, history);
+    expect(april.subscriptions).toHaveLength(2);
+    const may = financePeriodExpenses(ledger, [], { from: "2027-05-01", to: "2027-05-31", type: "expense", categories: [], search: "", account: "" } as never, today, history);
+    expect(may.subscriptions).toEqual([]);
+  });
+
   it("tira da previsão juros de atraso e lanches que o banco marca como recorrentes", async () => {
     const { financePeriodExpenses } = await import("./finance-period-expenses");
     const item = (id: string, description: string, amount: string) => ({ id, kind: "recurring", description, resource_id: "card-mp", resource_name: "Mercado Pago",
