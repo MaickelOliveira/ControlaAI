@@ -25,6 +25,8 @@ const MIN_MONTHS = 2;
 const MAX_AMOUNT_SPREAD = 0.15;
 const MAX_DAY_SPREAD = 5;
 const MAX_MONTHS_SINCE_LAST = 2;
+const CANCEL_GRACE_DAYS = 10;
+const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
 export function subscriptionKey(description: string): string {
   return description.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -132,6 +134,10 @@ export function detectSubscriptions(input: {
     const lastSeen = months[months.length - 1];
     const latest = rows.find(row => monthIndex(row.date) === lastSeen)!;
     const day = Math.round(median(days));
+    // Cancelada: a cobrança deste mês não veio até 10 dias depois do dia de
+    // sempre (o cartão pode lançar com alguns dias de atraso).
+    const currentMonth = monthIndex(input.today);
+    if (lastSeen < currentMonth && input.today > addDays(dateInMonth(currentMonth, day), CANCEL_GRACE_DAYS)) continue;
     for (let month = Math.max(firstMonth, lastSeen + 1); month <= lastMonth; month++) {
       // Sem cobrança há mais de dois meses, a assinatura provavelmente acabou.
       if (month - lastSeen > MAX_MONTHS_SINCE_LAST) break;

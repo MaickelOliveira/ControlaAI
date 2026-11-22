@@ -57,6 +57,14 @@ describe("detecção de assinaturas mensais", () => {
     expect(detectSubscriptions({ history, period: december, today })).toEqual([]);
   });
 
+  it("assinatura cancelada sai da previsão quando a cobrança do mês não vem", () => {
+    const history = [charge("2026-09-05", "Academia Fit", "99.90"), charge("2026-10-05", "Academia Fit", "99.90")];
+    // Hoje é 22/11: a cobrança de 05/11 não veio até 15/11.
+    expect(detectSubscriptions({ history, period: december, today })).toEqual([]);
+    // Ainda dentro do prazo do cartão lançar, continua prevista.
+    expect(detectSubscriptions({ history, period: december, today: "2026-11-12" })).toHaveLength(1);
+  });
+
   it("junta as cobranças do mesmo banco mesmo quando o cartão muda de identificador", () => {
     const found = detectSubscriptions({
       history: [
