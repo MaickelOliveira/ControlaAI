@@ -4678,7 +4678,7 @@ export async function generateFallbackResponse(
 ${virtualAgentPrompt()}
 
 ${panelKnowledge}
-O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Sua única tarefa aqui é responder de um jeito humano e específico ao que ela disse, para entender o que ela precisa — nunca confirme que algo foi feito/registrado/agendado, porque NADA foi executado ainda.${localeInstruction(locale) ? `\n${localeInstruction(locale)}` : ""}
+O sistema NÃO conseguiu identificar automaticamente o que a pessoa quer fazer com a mensagem abaixo. Responda à pergunta concreta usando o histórico e as capacidades confirmadas abaixo. Uma dúvida conceitual sobre finanças ou sobre como usar a Zelo pode ser respondida diretamente. Para um pedido de ação ambíguo, retome os detalhes já informados e pergunte somente o que falta. Neste fluxo você não consultou os registros nem executou ações. Nunca invente valores, datas, diagnósticos ou confirmações de execução.${localeInstruction(locale) ? `\n${localeInstruction(locale)}` : ""}
 
 HISTÓRICO RECENTE DA CONVERSA:
 ${historyText}
@@ -4691,7 +4691,7 @@ Instruções:
 - Olhe o histórico: se a mensagem atual parece responder algo que VOCÊ perguntou antes, ou continuar uma correção em andamento, reconheça isso e peça a informação que ainda falta de forma pontual — não repita uma lista genérica de exemplos.
 - Se a mensagem for vaga/sem relação clara com nada acima, faça 1 pergunta objetiva e específica ao que ela disse pra entender a intenção (não uma lista de todos os comandos possíveis).
 - No máximo 2-3 frases curtas. Sem emoji em excesso (no máximo 1). Sem "🎉"/entusiasmo artificial.
-- ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Se o pedido não estiver claramente coberto pela lista ou faltar informação confirmada, diga isso com naturalidade e oriente a pessoa a entrar no painel do Zelo e abrir o *Suporte* no canto inferior direito. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
+- ⚠️ Nunca invente que o sistema tem uma funcionalidade que não está na lista acima. Isso inclui NUNCA simular um fluxo de configuração em várias etapas (tipo perguntar "quer definir um limite/meta pra isso?", "quer configurar mais alguma coisa?") pra algo que você não tem certeza que existe de verdade. Quando faltar um detalhe do pedido, pergunte por ele. Ofereça o Suporte pelo botão de conversa no canto inferior direito do painel se a pessoa pedir atendimento humano ou se a solução depender da equipe. Uma pergunta genuína pra entender o pedido é ok; fingir que está "coletando dados" pra uma ação que não existe não é.
 - ${process.env.OPEN_FINANCE_ENABLED==="true"&&process.env.OPEN_FINANCE_PUBLIC_ENABLED==="true"&&process.env.OPEN_FINANCE_PREVIEW_ONLY!=="true"?"Existem contas manuais e Open Finance para contas bancárias do Brasil. A conexão é feita pelo titular em Contas no painel. Não invente dados bancários nem execute autorização por conversa; perguntas precisam das ferramentas financeiras.":"Existem contas manuais, mas não existe cartão de crédito, e a conexão/sincronização bancária (Open Finance) ainda não está disponível: estamos implementando e em breve vai estar disponível para todos. Nunca informe prazo ou data; nunca diga que já funciona."}
 - Nunca diga que o Zelo não consegue transcrever ou compreender áudios, analisar fotos, ler PDFs, CSVs ou planilhas Excel .xlsx: essas funções existem. Não prometa formatos legados não confirmados, como .xls.
 - Se no histórico você (o assistente) já vinha fazendo perguntas sobre algo que também não está na lista de capacidades, pare de continuar esse fluxo — reconheça que aquilo não é algo que você faz por aqui em vez de insistir na sequência de perguntas.`;
@@ -4701,9 +4701,7 @@ Instruções:
     "generateFallbackResponse",
     async () => {
       const text = (await openAIText({ prompt, userId, maxOutputTokens: 500 })).trim();
-      if (!text) return null;
-      if (/\b(suporte|support|soporte)\b/i.test(text)) return text;
-      return `${text}\n\n${supportInsidePlatformLine(locale)}`;
+      return text || null;
     },
   );
   if (openAIAttempt.ok) return openAIAttempt.value;
@@ -4717,9 +4715,7 @@ Instruções:
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    if (!text) return null;
-    if (/\b(suporte|support|soporte)\b/i.test(text)) return text;
-    return `${text}\n\n${supportInsidePlatformLine(locale)}`;
+    return text || null;
   } catch  {
     console.error("[ai-processor] Erro generateFallbackResponse:");
     return null;
