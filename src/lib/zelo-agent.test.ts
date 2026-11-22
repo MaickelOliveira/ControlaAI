@@ -17,7 +17,7 @@ vi.mock("./whatsapp-config", () => ({
 }));
 
 import {
-  MAX_AGENT_COMMANDS, ZELO_AGENT_DEFAULT_MODEL, normalizeAgentPlan, planWithZeloAgent,
+  MAX_AGENT_COMMANDS, ZELO_AGENT_DEFAULT_MODEL, isExplicitHelpCommand, normalizeAgentPlan, planWithZeloAgent,
   replyDeferredAgentCommands, shouldUseZeloAgent, zeloAgentMode,
 } from "./zelo-agent";
 
@@ -128,6 +128,15 @@ describe("planWithZeloAgent", () => {
     expect(await planWithZeloAgent("   ", ctx)).toBeNull();
     expect(generateContent).not.toHaveBeenCalled();
   });
+});
+
+it("manda pedidos de ajuda direto ao guia completo", () => {
+  for (const text of ["ajuda", "Ajuda!", "menu", "comandos", "zelo, ajuda", "¿ayuda?", "guia completo"]) {
+    expect(isExplicitHelpCommand(text), text).toBe(true);
+  }
+  for (const text of ["preciso de ajuda com minhas contas", "como faço pra cadastrar funcionário?", "gastei 30 de uber"]) {
+    expect(isExplicitHelpCommand(text), text).toBe(false);
+  }
 });
 
 it("avisa no idioma do cliente o que ainda falta fazer", () => {

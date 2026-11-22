@@ -57,6 +57,45 @@ it("does not run the next command over a question the first one left open",async
  expect(replies().at(-1)).toContain("• me lembrar da água na sexta");
 });
 
+it("runs the held request by itself once the customer answers the open question",async()=>{
+ let pendingOpen=false;
+ m.pending.mockImplementation(async()=>pendingOpen?{type:"action_continuation"}:null);
+ m.plan.mockResolvedValueOnce({kind:"commands",commands:["registrar despesa de luz","me lembrar da água na sexta"]});
+ m.model.mockImplementation(async(prompt:string)=>{
+  const command=prompt.match(/Mensagem do usuário: "([^"]*)"/)?.[1]??"";
+  if(command==="registrar despesa de luz")pendingOpen=true;
+  return {response:{text:()=>JSON.stringify({intent:"unknown",confidence:.9,response:`executado: ${command}`})}};
+ });
+ await handleIncomingMessage({from,text:"paguei a luz e me lembra da agua sexta"});
+ expect(classifiedCommands()).toEqual(["registrar despesa de luz"]);
+ expect(replies().at(-1)).toContain("eu também faço");
+ // O cliente responde à pergunta; a resposta fecha a pendência e o lembrete sai sozinho.
+ m.plan.mockResolvedValue(null);
+ m.model.mockImplementation(async(prompt:string)=>{
+  pendingOpen=false;
+  const command=prompt.match(/Mensagem do usuário: "([^"]*)"/)?.[1]??"";
+  return {response:{text:()=>JSON.stringify({intent:"unknown",confidence:.9,response:`executado: ${command}`})}};
+ });
+ await handleIncomingMessage({from,text:"150"});
+ expect(classifiedCommands().slice(-1)).toEqual(["me lembrar da água na sexta"]);
+});
+
+it("drops the held request when the customer changes the subject",async()=>{
+ let pendingOpen=false;
+ m.pending.mockImplementation(async()=>pendingOpen?{type:"action_continuation"}:null);
+ m.plan.mockResolvedValueOnce({kind:"commands",commands:["registrar despesa de luz","me lembrar da água na sexta"]});
+ m.model.mockImplementation(async(prompt:string)=>{
+  const command=prompt.match(/Mensagem do usuário: "([^"]*)"/)?.[1]??"";
+  if(command==="registrar despesa de luz")pendingOpen=true;
+  return {response:{text:()=>JSON.stringify({intent:"unknown",confidence:.9,response:`executado: ${command}`})}};
+ });
+ await handleIncomingMessage({from,text:"paguei a luz e me lembra da agua sexta"});
+ pendingOpen=false; // a pergunta expirou ou foi respondida em outro lugar
+ m.plan.mockResolvedValue(null);
+ await handleIncomingMessage({from,text:"quanto gastei hoje"});
+ expect(classifiedCommands()).not.toContain("me lembrar da água na sexta");
+});
+
 it("keeps the old flow untouched when the agent has no plan",async()=>{
  m.plan.mockResolvedValue(null);
  await handleIncomingMessage({from,text:"gastei 30 de uber"});

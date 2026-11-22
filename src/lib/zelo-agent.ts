@@ -74,6 +74,12 @@ export function shouldUseZeloAgent(
   return listed;
 }
 
+/** "ajuda", "menu", "comandos"... vão direto ao guia completo do sistema,
+ * sem passar pelo agente. */
+export function isExplicitHelpCommand(message: string): boolean {
+  return /^\s*[¿¡]?\s*(?:(?:zelo|zoe)[,!: ]+)?(?:ajuda|ayuda|help|menu|men[uú]|comandos?|manual|guia(?: de uso| completo)?|instru[cç][oõ]es|instrucciones)\s*[?.!]*\s*$/i.test(message);
+}
+
 // Uma resposta livre nunca pode fingir que algo foi gravado ou alterado:
 // isso só acontece quando um comando passa pelo fluxo real.
 // \b não funciona com letras acentuadas ("agendé"), por isso os limites
@@ -129,6 +135,7 @@ RESPONDA SEMPRE APENAS UM JSON: {"reply": string | null, "commands": string[]}
 
 QUANDO USAR "commands":
 - Sempre que o cliente quiser gravar, alterar, apagar, consultar, listar, lembrar, agendar ou pesquisar QUALQUER coisa da lista acima — inclusive perguntas sobre os próprios dados ("quanto gastei?", "o que tenho amanhã?").
+- Pedidos de ajuda, menu, comandos ou "o que você faz", e qualquer pergunta sobre COMO USAR a Zelo ou o painel ("como faço pra…", "onde vejo…", "como cadastro…", "como conecto o banco?"): mande o texto do cliente como comando. O sistema tem o guia completo e o caminho exato no painel; você não tem, então nunca responda essas perguntas em "reply".
 - Um comando por ação, na ordem em que o cliente pediu. "Paguei 120 de luz e me lembra da água sexta" = 2 comandos.
 - Vários lançamentos do mesmo tipo podem ir juntos num comando só ("registrar despesas: mercado 80, farmácia 35").
 - Se a mensagem já for um pedido único e claro, devolva o texto do cliente praticamente igual, como único comando. Não reescreva o que já está bom.
@@ -139,7 +146,7 @@ QUANDO USAR "commands":
 - Se o pedido for para apagar ou alterar algo e não estiver claro QUAL registro, não adivinhe: responda com "reply" perguntando qual.
 
 QUANDO USAR "reply" (com "commands": []):
-- Conversa (cumprimento, agradecimento, desabafo, elogio, reclamação), dúvidas sobre como a Zelo funciona, dicas e explicações gerais (ex.: como organizar finanças, o que é uma categoria), ou quando você realmente precisa de 1 esclarecimento para agir.
+- Conversa (cumprimento, agradecimento, desabafo, elogio, reclamação), dicas e explicações gerais que não dependem das telas da Zelo (ex.: como organizar finanças, o que é reserva de emergência), ou quando você realmente precisa de 1 esclarecimento para agir.
 - Pedidos que a Zelo NÃO faz (ex.: pagar boleto por ela, fazer Pix, mandar mensagem para terceiros fora dos lembretes): diga com naturalidade que isso não dá por aqui e ofereça o que ela pode fazer de parecido.
 - Seja humana, específica ao que a pessoa disse, calorosa e breve (no máximo 3 frases curtas, no máximo 1 emoji). Nada de listas genéricas de comandos.
 - NUNCA diga que registrou, agendou, apagou, alterou ou consultou algo em "reply": nada foi executado. Também nunca invente números, saldos ou dados do cliente.
@@ -243,11 +250,28 @@ export async function planWithZeloAgent(message: string, ctx: AgentContext): Pro
   }
 }
 
-/** Aviso enviado quando um comando anterior ficou esperando resposta e os
- * pedidos seguintes da mesma mensagem ainda não foram feitos. */
+/** Pedidos da mesma mensagem que esperam o cliente responder a uma pergunta
+ * do sistema ("qual conta?"). Ficam só na memória deste servidor e expiram
+ * junto com a pergunta (10 min). */
+const DEFERRED_TTL_MS = 10 * 60_000;
+const deferredCommands = new Map<string, { commands: string[]; expiresAt: number }>();
+
+export function deferAgentCommands(phone: string, commands: string[], now = Date.now()): void {
+  if (commands.length) deferredCommands.set(phone, { commands: [...commands], expiresAt: now + DEFERRED_TTL_MS });
+}
+
+/** Retira (e apaga) os pedidos guardados para este número, se ainda valem. */
+export function takeDeferredAgentCommands(phone: string, now = Date.now()): string[] {
+  const entry = deferredCommands.get(phone);
+  deferredCommands.delete(phone);
+  return entry && entry.expiresAt > now ? entry.commands : [];
+}
+
+/** Aviso enviado quando um comando anterior ficou esperando resposta: os
+ * pedidos seguintes da mesma mensagem são feitos logo após a resposta. */
 export function replyDeferredAgentCommands(commands: string[], locale?: string): string {
   const list = commands.map(command => `• ${command}`).join("\n");
-  if (locale === "es") return `Cuando respondas lo anterior, todavía falta:\n${list}\n\nEnvíamelo de nuevo después y lo hago.`;
-  if (locale === "pt-PT") return `Quando responderes ao anterior, ainda falta:\n${list}\n\nEnvia-mo de novo a seguir e eu trato disso.`;
-  return `Assim que você responder a pergunta acima, ainda falta:\n${list}\n\nMe mande de novo depois que eu faço.`;
+  if (locale === "es") return `Cuando respondas lo anterior, también hago:\n${list}`;
+  if (locale === "pt-PT") return `Assim que responderes ao anterior, também trato de:\n${list}`;
+  return `Assim que você responder a pergunta acima, eu também faço:\n${list}`;
 }

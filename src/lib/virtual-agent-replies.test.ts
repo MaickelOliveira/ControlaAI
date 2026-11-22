@@ -1,5 +1,35 @@
 import {describe,expect,it} from "vitest";
-import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
+import {decorateVirtualAgentReply,lastIntroducedAgent,runWithVirtualAgentReply,setConversationAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
+
+describe("apresentação só quando o agente muda",()=>{
+  const history=[
+    {role:"assistant",content:"Ei, *Ana*! Sou a *Rita*, sua agente virtual de finanças da Zelo. 👋\n\n✅ Registrado."},
+    {role:"user",content:"valeu"},
+    {role:"assistant",content:"✅ Lançamento atualizado!"},
+  ];
+  it("descobre no histórico quem falou por último",()=>{
+    expect(lastIntroducedAgent(history)).toBe("Rita");
+    expect(lastIntroducedAgent([{role:"assistant",content:"¡Hola, *Ana*! Soy *Bia*, tu agente virtual de recordatorios de Zelo. 👋"}])).toBe("Bia");
+    expect(lastIntroducedAgent([{role:"user",content:"Sou a *Rita*"}])).toBeUndefined();
+    expect(lastIntroducedAgent([])).toBeUndefined();
+  });
+  it("o mesmo agente responde direto; outro agente se apresenta",()=>{
+    runWithVirtualAgentReply("phone-a",()=>{
+      setVirtualAgentIdentity("Ana","pt-BR");setConversationAgent(lastIntroducedAgent(history));
+      setVirtualAgentIntent("finance_register");
+      expect(decorateVirtualAgentReply("phone-a","✅ Registrado.")).toBe("✅ Registrado.");
+      setVirtualAgentIntent("reminder_set");
+      expect(decorateVirtualAgentReply("phone-a","🔔 Lembrete criado.")).toContain("*Bia*");
+      expect(decorateVirtualAgentReply("phone-a","Outro aviso")).toBe("Outro aviso");
+    });
+  });
+  it("ignora nomes que não são de agentes",()=>{
+    runWithVirtualAgentReply("phone-a",()=>{
+      setVirtualAgentIdentity("Ana","pt-BR");setConversationAgent("Fulano");setVirtualAgentIntent("finance_register");
+      expect(decorateVirtualAgentReply("phone-a","✅ Registrado.")).toContain("*Rita*");
+    });
+  });
+});
 
 describe("request-scoped agent replies",()=>{
   it("adds Rita and the registered name while keeping the entire transaction receipt",()=>{

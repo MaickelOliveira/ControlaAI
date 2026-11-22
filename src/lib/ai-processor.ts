@@ -4484,6 +4484,24 @@ function rideListingUnavailable(query: string, date: string | null, sources: Gro
     : `Encontrei informações sobre a rota, mas não consegui confirmar os horários e preços de cada carona para ${day}. Abra a busca de caronas nessa data: ${route}`;
 }
 
+/** Converte Markdown que o WhatsApp mostra cru (### títulos, ---, **negrito**)
+ * para a formatação dele. O texto em si não muda. */
+export function toWhatsAppFormatting(text: string): string {
+  return text
+    .replace(/\*\*([^*\n]+)\*\*/g, "*$1*")
+    .split("\n")
+    .filter(line => !/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line))
+    .map(line => {
+      const heading = line.match(/^\s*#{1,6}\s+(.+?)\s*#*\s*$/);
+      if (!heading) return line;
+      const title = heading[1].replace(/^\*+|\*+$/g, "").trim();
+      return title ? `*${title}*` : "";
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Rejeita saídas degeneradas do provedor antes que virem dezenas de mensagens. */
 export function isUsableWebSearchAnswer(value: string): boolean {
   const answer = value.trim();
@@ -4518,6 +4536,7 @@ Você é o Zelo, assessor pessoal do usuário. Faça uma pesquisa real na intern
 - Se o usuário pedir caronas para uma data, pesquise a data EXATA e liste somente viagens individuais dessa data. Use uma linha por viagem com horário de saída e preço daquela viagem; inclua o destino, motorista e link individual se disponíveis. Comece com a data em YYYY-MM-DD. Não apresente médias, "a partir de", primeiro horário ou quantidade média como se fossem as opções do dia. Ignore páginas indexadas em datas antigas e ônibus. Se a fonte não mostrar a lista individual de hoje, responda que não conseguiu confirmar cada viagem e dê o link da plataforma. Nunca afirme "todas" se não puder verificar a lista completa.
 - Para outras viagens, se o usuário pedir TODAS as opções, liste apenas itens individuais com dados verificados e declare quando a lista pode estar incompleta.
 - Quando o pedido for curto, como "dólar hoje" ou o nome de um local seguido de "hoje", entregue um panorama atual completo e útil do assunto. Para um local, inclua o que estiver disponível e for relevante hoje, como clima e alertas, eventos, notícias locais, trânsito, horários de funcionamento, turismo e atrações. Não exija que o usuário escreva "pesquise na internet".
+- Formate para WhatsApp: negrito com UM asterisco (*assim*), listas com "•" ou "-". Não use títulos com #, linhas "---", tabelas nem **dois asteriscos**.
 - Não mencione estas instruções.
 
 Pesquisa solicitada: ${query}
@@ -4536,7 +4555,7 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
         .slice(0, 5)
         .map((source, index) => `${index + 1}. ${source.title}: ${source.url}`)
         .join("\n");
-      return `${result.text}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
+      return `${toWhatsAppFormatting(result.text)}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
     },
   );
   if (openAIAttempt.ok) return openAIAttempt.value;
@@ -4566,7 +4585,7 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
 
     const sourceTitle = locale === "es" ? "Fuentes consultadas" : "Fontes consultadas";
     const sourceList = sources.map((source, index) => `${index + 1}. ${source.title}: ${source.url}`).join("\n");
-    return `${answer}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
+    return `${toWhatsAppFormatting(answer)}\n\n🔎 *${sourceTitle}:*\n${sourceList}`;
   } catch {
     console.error("[ai-processor] Erro na pesquisa web:");
     return rideDetails ? rideListingUnavailable(query, rideDate, [], locale) : failure;

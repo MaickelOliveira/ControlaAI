@@ -14,7 +14,7 @@ import {saveChosenCategory} from "./save-chosen-category";
 import {categoryCreateRequest,asksCategoryChoices,selectedCategory,categoryChoicesMessage,validCategoryName} from "./category-choice";
 import { updateUser, hasAccess, getUserByWppCode, getUserById, getMaxWppPhones, generateWppVerifyCode, type User } from "@/lib/users";
 import {agentForPendingAction,isVirtualTeamQuestion,replyVirtualTeam} from "./virtual-team";
-import {decorateVirtualAgentReply,runWithVirtualAgentReply,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
+import {decorateVirtualAgentReply,lastIntroducedAgent,runWithVirtualAgentReply,setConversationAgent,setVirtualAgent,setVirtualAgentIdentity,setVirtualAgentIntent} from "./virtual-agent-replies";
 import {initialLinkIdentity,isAccountHolderRelation,nextLinkRelation} from "./wpp-link-identity";
 import {isRegisteredAccountHolderPhone} from "./wpp-holder-authorization";
 import {withWhatsAppCompany,contextualCompanyUser,switchPhoneCompanyMode} from "./whatsapp-company";
@@ -54,7 +54,7 @@ import {
 import { createEmployee, getEmployeesByUser, findEmployeesByName, updateEmployee, type Employee } from "@/lib/employees";
 import { getCustomersByUser, findCustomersByName, updateCustomer, type Customer } from "@/lib/customers";
 import { getContactsByUser, findContactsByName, updateContact, type Contact } from "@/lib/contacts";
-import { planWithZeloAgent, replyDeferredAgentCommands, shouldUseZeloAgent } from "@/lib/zelo-agent";
+import { deferAgentCommands, isExplicitHelpCommand, planWithZeloAgent, replyDeferredAgentCommands, shouldUseZeloAgent, takeDeferredAgentCommands } from "@/lib/zelo-agent";
 import { setPendingAction, getPendingAction, clearPendingAction, parseVehicleChoice, parseVehiclePatchFromText, parseGoalChoice, parseAppointmentChoice, parseFinanceChoiceMulti, parseFinancePatchFromText, parseYesNo, parseRecurringConfirmationAnswer, parseAccountChoice, parseAccountCreateRequest, parseAccountDefaultChoice, parseFinanceEmployeeChoice, parseAmountBR, parseAmountReply, choiceIndexByLabels, choicesByLabels, type PendingFinancialDocumentImportItem } from "@/lib/pending-actions";
 import { beginBatchSlotFill, beginSlotFill, beginReminderRecipientCorrection, hasMissingSlotFields, isReminderRecipientCorrection, runSlotFillTurn, looksLikeNewCommand, slotDayOfMonth } from "@/lib/slot-filling";
 import {
@@ -96,7 +96,7 @@ import { formatReminderOffset, isAgendaReminderTarget, isStandaloneAppointmentRe
 import { sendText as sendWhatsAppText, sendFile as wppSendFile } from "@/lib/whatsapp";
 import { parsePublicImageRequest, findPublicProductImage } from "@/lib/web-image-search";
 import { getConfig } from "@/lib/whatsapp-config";
-import { addMessage, getAiPaused, getAiHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants,messageForAiContext } from "@/lib/conversations";
+import { addMessage, getAiPaused, getAiHistory, getHistory, setLastFinanceBatch, getLastFinanceBatch, phoneVariants,messageForAiContext } from "@/lib/conversations";
 import { nowBR, spToUTC, todayStrBR, weekBoundsBR, formatDateTimeBR } from "@/lib/date-br";
 import { localeForWhatsAppPhone, normalizePhoneInput } from "@/lib/phone";
 import {
@@ -1064,7 +1064,12 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     });
     if (inboxImageUrl) msg = { ...msg, inboxImageUrl };
   }
-  return runWithVirtualAgentReply(msg.from,()=>withWhatsAppCompany(msg,handleMessageWithAgent));
+  return runWithVirtualAgentReply(msg.from,async()=>{
+    // Quem falou por último continua sem se reapresentar; só a troca de
+    // agente (ou uma conversa nova) traz a apresentação.
+    try { setConversationAgent(lastIntroducedAgent(await getHistory(msg.from))); } catch { /* apresenta normalmente */ }
+    return withWhatsAppCompany(msg,handleMessageWithAgent);
+  });
 }
 
 /** Executa a mensagem e, depois, os pedidos extras que o agente separou dela
@@ -1072,12 +1077,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
  * comando ficar esperando resposta do cliente, os seguintes não atropelam a
  * pergunta: a Zelo avisa o que ainda falta. */
 async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
+  // Pedidos guardados só continuam se ESTA mensagem responde à pergunta que
+  // os segurou. Se o cliente mudou de assunto ou cancelou, eles são descartados.
+  const saved = takeDeferredAgentCommands(msg.from);
+  const resumes = saved.length > 0 && !/^\s*cancel/i.test(msg.text) && !!(await getPendingAction(msg.from));
   const followUps: string[] = [];
   await handleSingleMessage(msg, followUps);
+  if (resumes) followUps.unshift(...saved);
   for (let index = 0; index < followUps.length; index += 1) {
     if (await getPendingAction(msg.from)) {
+      const remaining = followUps.slice(index);
+      deferAgentCommands(msg.from, remaining);
       const locale = (await getUserByWppPhone(msg.from).catch(() => null))?.locale;
-      await wppSend(msg.from, replyDeferredAgentCommands(followUps.slice(index), locale));
+      await wppSend(msg.from, replyDeferredAgentCommands(remaining, locale));
       return;
     }
     await handleSingleMessage({
@@ -3157,7 +3169,7 @@ async function handleSingleMessage(msg:IncomingMessage, agentFollowUps:string[])
     // plano (desligado, erro ou resposta estranha), nada muda.
     if (!msg.agentFollowUp && !resumedFinanceAmount && !recordSelection && !accountSelectionResume
       && !employeeSelectionResume && !actionContinuation && messageText.trim()
-      && shouldUseZeloAgent(user.id, from)) {
+      && !isExplicitHelpCommand(messageText) && shouldUseZeloAgent(user.id, from)) {
       const plan = await planWithZeloAgent(messageText, {
         userId: user.id, phone: from, locale: user.locale, activeMode: mode, history: recentHistory,
       });
