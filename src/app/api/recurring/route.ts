@@ -10,8 +10,12 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("mode") || undefined;
   const status = searchParams.get("status") || undefined;
-  const items = await getRecurringByUser(session.sub, mode, status);
-  return NextResponse.json(items);
+  try {
+    const items = await getRecurringByUser(session.sub, mode, status, true);
+    return NextResponse.json(items);
+  } catch {
+    return NextResponse.json({error:"Não foi possível consultar todas as recorrências."},{status:503});
+  }
 }
 
 export async function POST(req: NextRequest) {

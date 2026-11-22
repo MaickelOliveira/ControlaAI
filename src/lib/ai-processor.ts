@@ -228,6 +228,8 @@ export type AgendaData = {
 };
 
 export type RecurringData = {
+  paidInstallments?: number;
+  nextDueDate?: string;
   type: "income" | "expense";
   description: string;
   amount: number;
@@ -2378,6 +2380,7 @@ INTENÇÕES POSSÍVEIS:
 - recurring_create: cadastrar uma ou várias despesas/receitas parceladas ou recorrentes. Use "recurring" para uma e "recurrings" para várias. Use recurrenceType: "installment" para parcelamentos e "recurring" para recorrentes contínuos. Campos que ajudam MUITO se a mensagem trouxer (extraia sempre que possível, mas não invente se não tiver pista):
   • "dayOfMonth": o dia do mês em que vence, se mencionado (ex: "todo dia 10" → dayOfMonth: 10). Sem isso o sistema pergunta ao usuário, porque o dia do vencimento muda quando o cron avisa.
   • "repeatUnit": "monthly" (padrão), "weekly", "daily" ou "yearly" — só usa algo diferente de monthly se a mensagem disser claramente ("toda semana" → weekly, "todo ano"/"anual" → yearly).
+  • Em parcelamentos em andamento, use "paidInstallments" APENAS com a quantidade já paga declarada pelo usuário. "startDate" é a primeira parcela original e "nextDueDate" é a próxima parcela em aberto se explicitamente informada (YYYY-MM-DD). Nunca lance as parcelas antigas como gastos novamente. Se a pessoa disser que a próxima é em dezembro e que já pagou quatro, mantenha as quatro pagas. Em recurring_edit preserve esses campos quando explicitamente corrigidos.
   • "totalInstallments": nº de parcelas (installment) OU nº de meses/ocorrências de um recorrente com PRAZO (ex: "academia por 12 meses", "assinatura por 6 meses" → recurrenceType: "recurring" + totalInstallments: 12/6 — NÃO "installment", já que não é uma compra parcelada). Se o recorrente não tiver prazo mencionado (a maioria dos casos: netflix, aluguel, salário), NÃO inclua "totalInstallments" — fica perpétuo.
   • "lifetime": true SE E SOMENTE SE o usuário disser explicitamente que não tem fim ("para sempre", "vitalício", "sem prazo", "indefinidamente"). Isso evita que o sistema pergunte de novo algo que já foi respondido. Na dúvida (a maioria das mensagens não fala nada sobre prazo), NÃO inclua "lifetime" nem "totalInstallments" — o sistema pergunta se for realmente necessário.
   • "startDate": data de início, se mencionada explicitamente (padrão é hoje).

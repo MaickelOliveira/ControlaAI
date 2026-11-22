@@ -88,6 +88,7 @@ const EMPTY_FORM: FormState = {
 function FinancasContent() {
   const [bootstrapMode, setMode] = useState("");
 
+  const [recurringReady, setRecurringReady] = useState(false);
   const [recs, setRecs] = useState<Recurring[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
@@ -219,14 +220,17 @@ function FinancasContent() {
 
   function loadAll(m: string,refreshLedger=true) {
     const sequence = ++loadSequence.current;
+    setRecurringReady(false);
     setLoading(true);
     Promise.allSettled([
       refreshLedger?fetch(`/api/finances/ledger?mode=${m}&from=${filters.from}&to=${filters.to}`,{cache:"no-store"}).then(async r => {const body=await r.json();if(!r.ok)throw Error(body.error);return body;}):Promise.resolve(null),
-      fetch(`/api/recurring?mode=${m}&status=active`).then(r => r.json()),
+      fetch(`/api/recurring?mode=${m}&status=active`).then(async r => { if (!r.ok) throw Error("RECURRING_UNAVAILABLE"); return r.json(); }),
     ]).then(([fd, rd]) => {
       if (sequence !== loadSequence.current) return;
       if(fd.status==="fulfilled"&&fd.value)setLedger(fd.value);
-      if(rd.status==="fulfilled")setRecs(Array.isArray(rd.value) ? rd.value : []);
+      const ready = rd.status === "fulfilled" && Array.isArray(rd.value);
+      setRecs(ready && rd.status === "fulfilled" ? rd.value : []);
+      setRecurringReady(ready);
       setLoading(false);
     }).catch(() => { if (sequence === loadSequence.current) setLoading(false); });
   }
@@ -410,7 +414,7 @@ function FinancasContent() {
   // catTotals somava tudo sem filtro de data enquanto o saldo usado como
   // denominador era só do mês atual).
   const today = new Date().toISOString().slice(0, 10);
-  const {pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,expensePlan}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
+  const {incomeForecast,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,expensePlan}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
   // Só os lançamentos que aparecem na tela têm checkbox — "selecionar tudo"
   // não pode marcar o que nem está visível (postedFinances é limitado a 50).
   const selectableFinances = [...pendingFinances, ...postedFinances.slice(0, visibleCount)].filter(f=>f.source!=="bank");
@@ -469,13 +473,14 @@ function FinancasContent() {
       {/* Saldo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
-          <p className="text-xs text-emerald-ink font-medium uppercase tracking-wide">Receitas</p>
+          <p className="text-xs text-emerald-ink font-medium uppercase tracking-wide">Receitas recebidas</p>
           <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(periodBalance.income):"—"}</p>
+          <p className="mt-2 text-xs text-muted">{ledger && recurringReady ? `A receber no período: ${fmt(incomeForecast)}` : "Previsão indisponível"}</p>
         </div>
         <div className="bg-surface border border-line rounded-2xl p-5 shadow-sm">
           <p className="text-xs text-red-ink font-medium uppercase tracking-wide">Despesas do período</p>
-          <p className="text-2xl font-bold text-ink mt-2">{ledger?fmt(expensePlan.total):"—"}</p>
-          {ledger&&<p className="mt-2 text-xs leading-5 text-muted">Registradas: {fmt(expensePlan.recorded)} · A pagar (previsto): {fmt(expensePlan.forecast)}</p>}
+          <p className="text-2xl font-bold text-ink mt-2">{ledger && recurringReady ? fmt(expensePlan.total) : "—"}</p>
+          {ledger&&recurringReady&&<p className="mt-2 text-xs leading-5 text-muted">Registradas: {fmt(expensePlan.recorded)} · A pagar (previsto): {fmt(expensePlan.forecast)}</p>}
           {!!expensePlan.unquantified&&<p className="mt-1 text-[11px] text-amber-ink">{expensePlan.unquantified} previsão(ões) fora do total em reais: valor, moeda ou período a conferir.</p>}
         </div>
         <div className={clsx("rounded-2xl p-5 shadow-sm", totalBalance.balance >= 0 ? "bg-amber-soft border border-line" : "bg-red-soft border border-line")}>

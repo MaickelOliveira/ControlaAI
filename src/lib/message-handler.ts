@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import {saveWorkspaceCategories} from "./workspace-categories";
-import {getExplicitSpendingSummaryResult,getExplicitUpcomingFinanceQueryResult} from "./ai-processor";
+import {cashProjection, projectionReply} from "./cash-projection";
+import {explicitPaidCount, financeConversation, isFinanceScreenQuestion} from "./finance-conversation";
+import {selectedMonthRange, monthRange} from "./calendar-range";
+import {bankPeriod} from "./open-finance-report";
+import {explicitFinanceCalendarPeriod,getExplicitSpendingSummaryResult,getExplicitUpcomingFinanceQueryResult} from "./ai-processor";
 import {answerCardInstallments,answerFinancePlanning,parseCardInstallmentsQuestion} from "./finance-planning-whatsapp";
 import {parseInstallmentDetailQuestion} from "./installment-detail";
 import {connectedInstallmentDetailAnswer} from "./connected-installment-detail";
@@ -28,7 +32,7 @@ import {BANK_QUERY_GUIDANCE} from "@/lib/bank-query-intent";
 import {isBankPositionQuestion} from "@/lib/bank-question-parser";
 import { processMessage, generateAnalysisResponse, generateFallbackResponse, generateWebSearchResponse, getWebSearchMissingQuestion, identifyImageSubject, readImageText, categorizeDriveFile, findDriveFileByAI, extractFinanceFromDocument, extractFinancialTransactionsFromDocument, extractInvoiceTransactions, extractGroceryReceiptItems, financialDocumentDescription, getFinanceAccountDestinationHint, getExplicitLastFinanceEmployeeEditResult, getScopedModeReadResult, withExplicitFinanceCategoryEdit, financeEditTargetFilters, type AIResult, type FinanceData } from "@/lib/ai-processor";
 import { saveFile, getFiles, getFolders, getFolderByName, getFileBuffer, getFileById, updateFile, getRecentFile } from "@/lib/drive";
-import { addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, getKeywordFinances, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
+import { getFinancesInRangeStrict, addFinance, addFinances, getBalance, getAllTimeBalance, formatCurrency, findFinanceByDescription, deleteFinance, updateFinance, getFinancesInRange, getFinancesCreatedBetween, isLikelyDuplicateExpense, isLikelyDuplicateDocumentFinance, getDocumentFinanceDuplicateFlags, getInvoiceDuplicateFlags, getBalanceInRange, getCategoryTotal, getByCategoryInRange, getTransactionsInRange, getAccountTransactionsInRange, getKeywordTotal, getKeywordFinances, expandMerchantAliases, findImportedInstallmentStatus, getImportedInstallmentStatuses, getPendingFinances, CATEGORIES_EXPENSE, CATEGORIES_INCOME, countFinances, deleteAllFinances, parseFinanceDestinationMode, type FinanceMode } from "@/lib/finances";
 import { createdDayBoundsBR, isFinanceCreatedTodayQuery, replyFinancesCreatedToday } from "@/lib/finance-created-query";
 import { createAccount, deleteAccount, findAccountByName, getManualAccountsByUser, resolveAccountForFinance, resolveOrCreateInvoiceAccount, setDefaultAccount, updateAccount, type Account } from "@/lib/accounts";
 import { invoiceTransactionDescription, isInvoiceWorkbook, isLikelyInvoiceCsv, isProbableRepeatedInvoice } from "@/lib/invoice-import";
@@ -96,7 +100,7 @@ import {
   replyFinanceRegistered, replyBalance, replyTaskCreated, replyTasksCreated, replyTaskList,
   replyTaskUpdated, replyReminderSet, replyReminderList, replyReminderUpdated, replyReminderDeleted, replyModeSwitch, replyHelp,
   replyTrialExpired, replyAccountInactive, replyUnknown, replyLowConfidence,
-  replyRecurringAlreadyPosted, replyRecurringConfirmed, replyRecurringList,
+  replyRecurringCreated, replyRecurringAlreadyPosted, replyRecurringConfirmed, replyRecurringList,
   replyFileSaved, replyFileFound, replyFileNotFound, replyDriveFileList,
   replyAgendaList, replyAgendaReminderPolicy,
   replyMeetInvite,
@@ -1069,7 +1073,9 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     }
 
     // ── Detecta arquivo/documento enviado via WhatsApp ──
-    const isFileMessage = !!msg.isFileMessage && !!msg.fileBuffer;
+    const financeScreenshot = msg.fileMimeType?.startsWith("image/") && msg.fileCaption && isFinanceScreenQuestion(msg.fileCaption) && parseImageAction(msg.fileCaption) !== "save";
+    if (financeScreenshot) messageText = msg.fileCaption!;
+    const isFileMessage = !!msg.isFileMessage && !!msg.fileBuffer && !financeScreenshot;
 
     if (isFileMessage) {
       // Identifica usuário antes de processar o arquivo
@@ -1948,10 +1954,14 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
     }
 
     let imageFreeFormConsumed = false;
+    if (pending?.type === "image_action" && pending.userId === user.id && isFinanceScreenQuestion(messageText) && parseImageAction(messageText) !== "save") {
+      await clearPendingAction(from);
+      imageFreeFormConsumed = true;
+    }
     // Pedido livre sobre a imagem pendente ("agendar os dias e o que precisa"):
     // lê o conteúdo e segue o fluxo normal de texto, em vez de repetir o menu.
     if (pending?.type === "image_action" && pending.userId === user.id
-      && !parseImageAction(messageText)
+      && !imageFreeFormConsumed && !parseImageAction(messageText)
       && !/^(?:cancelar|cancela|deixa pra l[áa]|no|não|nao)$/i.test(messageText.trim())
       && messageText.trim().split(/\s+/).length >= 3) {
       const imageText = await readImageText(
@@ -3066,6 +3076,47 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       .map(messageForAiContext);
     if(isVirtualTeamQuestion(messageText)){setVirtualAgentIntent("help");await wppSend(from,replyVirtualTeam(user.locale));return;}
     setVirtualAgentIntent("finance_query");
+    const financeQuestion = financeConversation(messageText, recentHistory);
+    if (financeQuestion && !resumedFinanceAmount && !recordSelection && !accountSelectionResume && !employeeSelectionResume && !actionContinuation) {
+      setVirtualAgentIntent("finance_query");
+      const source = financeQuestion.subject;
+      const scopeText = [source, financeQuestion.prior].find(value => /\b(?:pessoal|personal|empresa|empresarial|pj|pf)\b/i.test(value)) ?? "";
+      const workspace = /\b(?:empresa|empresarial|pj)\b/i.test(scopeText) ? "business" : /\b(?:pessoal|personal|pf)\b/i.test(scopeText) ? "personal" : mode;
+      if (!allowsFinanceMode(workspace)) { await wppSend(from, replyModeAccessDenied(mode, user.locale)); return; }
+      if (/\b(?:empresa|empresarial|pj)\b/i.test(scopeText) && /\b(?:pessoal|personal|pf)\b/i.test(scopeText)) {
+        await wppSend(from, localized(user.locale,"Quer conferir o espaço Pessoal ou Empresa?","¿Quieres consultar Personal o Empresa?")); return;
+      }
+      const company = currentCompanyContext()?.companyId;
+      let answer: string;
+      try {
+        const recurring = await getRecurringByUser(user.id, workspace, "active", true);
+        const prevPeriod = explicitFinanceCalendarPeriod(financeQuestion.prior, now, true);
+        let range = explicitFinanceCalendarPeriod(source, now, true);
+        const correction = source.match(/(?:quero|quise dizer)\s+(?:de\s+)?(20\d{2})\s*[.!?]*$/i);
+        if (correction && prevPeriod) {
+          const revised = selectedMonthRange(correction[1] + prevPeriod.to.slice(4,7));
+          if (revised) range = revised;
+        }
+        const period = range ?? prevPeriod ?? monthRange(0, now);
+        if (period.from === period.to && financeQuestion.kind === "projection") period.from = period.to.slice(0,7) + "-01";
+        if (financeQuestion.kind === "income" && !range) {
+          const incomes = recurring.filter(r => r.type === "income");
+          answer = incomes.length ? localized(user.locale,"Receitas recorrentes cadastradas","Ingresos recurrentes registrados") + "\n" +
+            incomes.slice(0,30).map(r => `• ${r.description}: ${formatCurrency(r.amount)} · ${r.nextDueDate.split("-").reverse().join("/")}`).join("\n") + "\n" +
+            localized(user.locale,"São valores previstos. Em Finanças, escolha o mês do recebimento para conferir o valor a receber.","Son importes previstos. En Finanzas elige el mes del cobro.") :
+            localized(user.locale,"Não encontrei receitas recorrentes ativas neste espaço. Você pode cadastrar uma informando descrição, valor e dia.","No encontré ingresos recurrentes activos en este espacio. Indica descripción, importe y día para registrar uno.");
+        } else {
+          const valid = bankPeriod(period.from, period.to);
+          const rows = await getFinancesInRangeStrict(user.id, workspace, undefined, valid.to);
+          answer = projectionReply(cashProjection(rows, recurring, workspace, valid, todayStrBR()), workspace, valid, user.locale);
+        }
+      } catch {
+        answer = localized(user.locale,"Não consegui conferir os registros completos para calcular a previsão. Tente consultar novamente.","No pude verificar todos los registros para calcular la previsión. Vuelve a intentarlo.");
+      }
+      const [access, fresh] = await Promise.all([getPhoneAccess(user.id, from), getUserById(user.id)]);
+      if (fresh && hasAccess(fresh) && (access === "both" || access === workspace) && currentCompanyContext()?.companyId === company) await wppSendLong(from, answer, 3500, true);
+      return;
+    }
     const billHistoryAnswer=paidBillHistoryAnswer(messageText);
     if(billHistoryAnswer){await wppSend(from,billHistoryAnswer);return;}
     const billDifferenceAnswer=closedBillAnswer(messageText);
@@ -5278,6 +5329,11 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
       }
 
       case "recurring_create": {
+        if (ai.recurring?.recurrenceType === "installment" && !ai.recurrings?.length) {
+          const historyRequest = recentHistory.filter(t => t.role === "user").at(-1)?.content ?? "";
+          const count = explicitPaidCount(messageText) ?? (/^(?:em|no dia|dia)\s/i.test(messageText.trim()) ? explicitPaidCount(historyRequest) : undefined);
+          if (count !== undefined) ai.recurring.paidInstallments = count;
+        }
         if (ai.recurrings?.length) {
           const recurringAis = ai.recurrings.map(recurring => ({ ...ai, recurring, recurrings: undefined }));
           const { reply } = await beginBatchSlotFill("recurring_create", recurringAis, { user, userId: user.id, phone: from, mode }, messageText);
@@ -5403,8 +5459,21 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
         if (ai.recurring?.dayOfMonth) patch.dayOfMonth = ai.recurring.dayOfMonth;
         if (ai.recurring?.repeatUnit) patch.repeatUnit = ai.recurring.repeatUnit;
         if (ai.recurring?.totalInstallments) patch.totalInstallments = ai.recurring.totalInstallments;
+        const progress = ai.recurring?.paidInstallments ?? explicitPaidCount(messageText);
+        if (progress != null && editFound.recurrenceType === "installment") {
+          const total = patch.totalInstallments ?? editFound.totalInstallments;
+          if (!total || !Number.isInteger(progress) || progress < 0 || progress >= total) {
+            await wppSend(from, localized(user.locale,"Quantas parcelas estão pagas e quantas são ao todo?","¿Cuántas cuotas pagaste y cuántas son en total?")); break;
+          }
+          patch.paidInstallments = progress;
+          // Correct the count without creating payments or advancing a due date the customer did not change.
+          if (ai.recurring?.nextDueDate) patch.nextDueDate = bankPeriod(ai.recurring.nextDueDate,ai.recurring.nextDueDate).to;
+        }
         if (Object.keys(patch).length === 0) { await wppSend(from, localized(user.locale, "❓ O que deseja alterar? Ex: _\"muda o netflix para 65 reais\"_ ou _\"a academia é só até dezembro, 5 meses\"_", "❓ ¿Qué quieres cambiar? Ej.: _\"cambia Netflix a 65 dólares\"_ o _\"el gimnasio termina en diciembre, 5 meses\"_")); break; }
         const editUpdated = await updateRecurring(editFound.id, user.id, patch);
+        if (editUpdated && patch.paidInstallments !== undefined) {
+          await wppSend(from, replyRecurringCreated(editUpdated,user.locale)); break;
+        }
         if (editUpdated) {
           await wppSend(from, localized(user.locale, `✏️ *${editUpdated.description}* atualizado!\n\n💰 Novo valor: ${formatCurrency(editUpdated.amount)}`, `✏️ *${editUpdated.description}* se actualizó.\n\n💰 Nuevo importe: ${formatCurrency(editUpdated.amount)}`));
         } else await wppSend(from, localized(user.locale, "❌ Não consegui atualizar esse recorrente agora. Nada foi modificado; tente novamente.", "❌ No pude actualizar este movimiento recurrente. No se modificó nada; inténtalo de nuevo."));

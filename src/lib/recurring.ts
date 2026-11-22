@@ -1,5 +1,6 @@
-import { randomUUID } from "crypto";
-import { getSupabase } from "./supabase";
+import { firstMonthlyDue, occurrenceDate, recurrenceName, similarBenefit } from "./recurring-calendar";
+import { createHash, randomUUID } from "crypto";
+import { getSupabase, resolveCompanyDatabaseScope } from "./supabase";
 import { addFinance, deleteFinance, getFinancesByUser, isPostedFinance, type Finance } from "./finances";
 import type { InvoiceTransaction } from "./invoice-import";
 import { getPhoneAccess } from "./wpp-phone-links";
@@ -140,30 +141,10 @@ export function matchDueRecurringTransactions(
   return ranked.filter(item => item.score === bestScore).map(item => item.recurring);
 }
 
-function calcNextDueDate(from: string, repeatUnit: RecurringTransaction["repeatUnit"], dayOfMonth?: number): string {
-  const d = new Date(from + "T12:00:00");
-  if (repeatUnit === "monthly") {
-    d.setMonth(d.getMonth() + 1);
-    if (dayOfMonth) d.setDate(dayOfMonth);
-  } else if (repeatUnit === "weekly") {
-    d.setDate(d.getDate() + 7);
-  } else if (repeatUnit === "daily") {
-    d.setDate(d.getDate() + 1);
-  } else if (repeatUnit === "yearly") {
-    d.setFullYear(d.getFullYear() + 1);
-  }
-  return d.toISOString().slice(0, 10);
-}
-
 function calcFirstDueDate(startDate: string, dayOfMonth?: number): string {
   if (!dayOfMonth) return startDate;
   const today = todaySP();
-  const ref = new Date(today + "T12:00:00");
-  const candidate = new Date(ref.getFullYear(), ref.getMonth(), dayOfMonth);
-  const candidateStr = candidate.toISOString().slice(0, 10);
-  if (candidateStr >= today) return candidateStr;
-  const next = new Date(ref.getFullYear(), ref.getMonth() + 1, dayOfMonth);
-  return next.toISOString().slice(0, 10);
+  return firstMonthlyDue(startDate > today ? startDate : today, dayOfMonth);
 }
 
 export type CreateRecurringInput = Omit<RecurringTransaction, "id" | "paidInstallments" | "status" | "createdAt" | "nextDueDate"> & {
@@ -171,10 +152,10 @@ export type CreateRecurringInput = Omit<RecurringTransaction, "id" | "paidInstal
   paidInstallments?: number;
 };
 
-export async function createRecurring(data: CreateRecurringInput): Promise<RecurringTransaction> {
+export async function createRecurring(data: CreateRecurringInput, id = randomUUID() as string): Promise<RecurringTransaction> {
   const nextDueDate = data.nextDueDate || calcFirstDueDate(data.startDate, data.dayOfMonth);
   const row: Record<string, unknown> = {
-    id: randomUUID(), user_id: data.userId, type: data.type, amount: data.amount, total_amount: data.totalAmount,
+    id, user_id: data.userId, type: data.type, amount: data.amount, total_amount: data.totalAmount,
     category: data.category, description: data.description, mode: data.mode, recurrence_type: data.recurrenceType,
     total_installments: data.totalInstallments, paid_installments: data.paidInstallments ?? 0, repeat_unit: data.repeatUnit,
     day_of_month: data.dayOfMonth, start_date: data.startDate, next_due_date: nextDueDate, status: "active",
@@ -191,6 +172,33 @@ export async function createRecurring(data: CreateRecurringInput): Promise<Recur
     return row_;
   });
   return fromRow(inserted as Row);
+}
+
+/** Match an active rule before saving a repeat request. Concurrent requests for
+ * the same rule and workspace also share an insert ID. Closed rules can restart. */
+export async function registerChatRecurring(input: CreateRecurringInput) {
+  const rows = await getRecurringByUser(input.userId, input.mode, undefined, true);
+  const due = input.nextDueDate ?? calcFirstDueDate(input.startDate, input.dayOfMonth);
+  const signature = (r: CreateRecurringInput) => JSON.stringify([recurrenceName(r.description), r.type, Math.round(r.amount*100),
+    r.recurrenceType, r.repeatUnit, r.dayOfMonth ?? (r.repeatUnit === "monthly" ? Number((r.nextDueDate ?? due).slice(8)) : null),
+    r.repeatUnit === "weekly" ? new Date((r.nextDueDate ?? due)+"T00:00:00Z").getUTCDay() : r.repeatUnit === "yearly" ? (r.nextDueDate ?? due).slice(5) : null,
+    r.totalInstallments ?? null, r.employeeId ?? null]);
+  const key = signature(input);
+  const same = rows.filter(row => signature(row) === key);
+  const existing = same.find(row => row.status === "active");
+  if (existing) return {record: existing, existing: true};
+  const unclearBenefit = rows.find(r => r.status === "active" && r.type === input.type && r.amount === input.amount &&
+    r.repeatUnit === input.repeatUnit && r.dayOfMonth === input.dayOfMonth && similarBenefit(r.description,input.description));
+  if (unclearBenefit) return {record:unclearBenefit, existing:true, ambiguous:true};
+  const scope = await resolveCompanyDatabaseScope();
+  const hash = createHash("sha256").update(JSON.stringify([input.userId,input.mode,scope?.companyId,key,same.map(r=>r.id).sort(),due])).digest("hex");
+  const id = [hash.slice(0,8),hash.slice(8,12),"5"+hash.slice(13,16),"a"+hash.slice(17,20),hash.slice(20,32)].join("-");
+  try { return {record:await createRecurring({...input,nextDueDate:due}, id), existing:false}; }
+  catch (error) {
+    const concurrent = await getRecurringById(id,input.userId);
+    if (concurrent?.status === "active" && concurrent.mode === input.mode && signature(concurrent) === key) return {record:concurrent, existing:true};
+    throw error;
+  }
 }
 
 function addMonthsClamped(date: string, months: number): string {
@@ -457,7 +465,7 @@ export async function confirmRecurring(
   if (rec.totalInstallments && paidInstallments >= rec.totalInstallments) {
     rowPatch.status = "completed";
   } else {
-    rowPatch.next_due_date = calcNextDueDate(rec.nextDueDate, rec.repeatUnit, rec.dayOfMonth);
+    rowPatch.next_due_date = occurrenceDate({...rec, dayOfMonth: rec.dayOfMonth ?? Number(rec.startDate.slice(8, 10))}, 1);
     rowPatch.last_notified_date = null;
   }
 
@@ -489,12 +497,14 @@ export async function cancelRecurring(id: string, userId: string): Promise<Recur
 export async function updateRecurring(
   id: string,
   userId: string,
-  patch: Partial<Pick<RecurringTransaction, "amount" | "description" | "category" | "dayOfMonth" | "repeatUnit" | "totalInstallments">>
+  patch: Partial<Pick<RecurringTransaction, "amount" | "description" | "category" | "dayOfMonth" | "repeatUnit" | "totalInstallments" | "paidInstallments" | "nextDueDate">>
 ): Promise<RecurringTransaction | null> {
   const rowPatch: Record<string, unknown> = {};
   if (patch.amount !== undefined) rowPatch.amount = patch.amount;
   if (patch.description !== undefined) rowPatch.description = patch.description;
   if (patch.category !== undefined) {rowPatch.category = patch.category;rowPatch.category_override=patch.category;}
+  if (patch.paidInstallments !== undefined) rowPatch.paid_installments = patch.paidInstallments;
+  if (patch.nextDueDate !== undefined) rowPatch.next_due_date = patch.nextDueDate;
   if (patch.dayOfMonth !== undefined) rowPatch.day_of_month = patch.dayOfMonth;
   if (patch.repeatUnit !== undefined) rowPatch.repeat_unit = patch.repeatUnit;
   if (patch.totalInstallments !== undefined) rowPatch.total_installments = patch.totalInstallments;
