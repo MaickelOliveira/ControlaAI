@@ -1133,6 +1133,10 @@ async function handleMessageWithAgent(msg:IncomingMessage):Promise<void> {
             })) return;
           } catch {
             console.error("[webhook] erro ao extrair lista financeira da imagem:");
+            await wppSend(from, localized(fileUser.locale,
+              "Não consegui conferir a imagem inteira. Reenvie a foto para eu conferir as movimentações.",
+              "No pude revisar toda la imagen. Vuelve a enviarla para comprobar los movimientos."));
+            return;
           }
         }
 
