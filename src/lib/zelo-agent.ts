@@ -4,6 +4,7 @@ import { isOpenAITestUser, openAIJson } from "./openai-provider";
 import { virtualAgentPrompt } from "./virtual-agent-replies";
 import { nowISOBR, todayStrBR } from "./date-br";
 import { phoneVariants } from "./conversations";
+import { DEFAULT_GEMINI_MODEL, geminiModel } from "./gemini-model";
 
 /**
  * Agente conversacional da Zelo.
@@ -39,7 +40,7 @@ export type AgentContext = {
 
 export type ZeloAgentMode = "off" | "canary" | "all";
 
-export const ZELO_AGENT_DEFAULT_MODEL = "gemini-3.8-flash";
+export const ZELO_AGENT_DEFAULT_MODEL = DEFAULT_GEMINI_MODEL;
 export const MAX_AGENT_COMMANDS = 5;
 const MAX_COMMAND_LENGTH = 600;
 const MAX_REPLY_LENGTH = 1500;
@@ -223,7 +224,7 @@ export async function planWithZeloAgent(message: string, ctx: AgentContext): Pro
     const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
       // Flash mais inteligente da Google (nov/2026) e o melhor custo para
       // entender conversa. Pode ser trocado sem deploy por ZELO_AGENT_MODEL.
-      model: process.env.ZELO_AGENT_MODEL?.trim() || ZELO_AGENT_DEFAULT_MODEL,
+      model: process.env.ZELO_AGENT_MODEL?.trim() || geminiModel(),
       systemInstruction: instructions,
       generationConfig: {
         temperature: 0.3,

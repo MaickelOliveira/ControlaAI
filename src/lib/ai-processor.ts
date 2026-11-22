@@ -1,6 +1,7 @@
 import {panelKnowledge} from "./panel-guidance";
 import { GoogleGenerativeAI, type GenerateContentResult, type ResponseSchema } from "@google/generative-ai";
 import { getConfig } from "./whatsapp-config";
+import { geminiModel } from "./gemini-model";
 import { shouldUseWhatsAppAiFirst } from "./whatsapp-ai-routing";
 import {virtualAgentPrompt} from "./virtual-agent-replies";
 import {explicitBankQueryPlan, validateBankQuery, type StructuredBankQuery} from "./bank-query-intent";
@@ -4199,7 +4200,7 @@ async function classifyMessageWithModel(message: string, ctx?: AiContext): Promi
     // linhas de instrução a cada mensagem. Só o volátil (data, categorias,
     // modo do usuário) vai no conteúdo do turno.
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: geminiModel(),
       systemInstruction: buildStaticInstructions(),
       generationConfig: { temperature: 0.1 }, // classificador — não texto criativo
     });
@@ -4385,7 +4386,7 @@ async function splitWebSearchBatches(query: string): Promise<string[]> {
     const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
     if (!apiKey) return [query];
     const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: geminiModel(),
       generationConfig: { temperature: 0, responseMimeType: "application/json" },
     });
     const result = await model.generateContent(
@@ -4547,11 +4548,13 @@ Consulta iniciada em ${searchedAt} (horário de Brasília). ${rideDetails ? `Dat
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: geminiModel(),
       // O SDK instalado ainda tipa apenas o nome antigo da ferramenta, mas
       // Gemini 2.5 usa `googleSearch`, conforme a API atual.
       tools: [{ googleSearch: {} } as never],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 2_048 },
+      // No Gemini 3.x o raciocínio interno conta no limite de saída; 2.048
+      // cortava respostas de pesquisa. A resposta ao cliente continua curta.
+      generationConfig: { temperature: 0.1, maxOutputTokens: 8_192 },
     });
     const result = await model.generateContent(prompt);
     const answer = result.response.text().trim();
@@ -4597,7 +4600,7 @@ export async function readImageText(
   if (!apiKey) return null;
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0 } });
+    const model = genAI.getGenerativeModel({ model: geminiModel(), generationConfig: { temperature: 0 } });
     const result = await model.generateContent([
       prompt,
       { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
@@ -4645,7 +4648,7 @@ export async function identifyImageSubject(
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0 } });
+    const model = genAI.getGenerativeModel({ model: geminiModel(), generationConfig: { temperature: 0 } });
     const result = await model.generateContent([
       prompt,
       { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
@@ -4712,7 +4715,7 @@ Instruções:
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
     return text || null;
@@ -4781,7 +4784,7 @@ Instruções:
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
     const result = await model.generateContent(prompt);
     return result.response.text().trim();
   } catch  {
@@ -4850,7 +4853,7 @@ Não use markdown.`;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
     const result = await model.generateContent([
       prompt,
       { inlineData: { data: buffer.toString("base64"), mimeType: mimeType || "image/jpeg" } },
@@ -4892,7 +4895,7 @@ export async function findDriveFileByAI(
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim().replace(/"/g, "");
     return text === "null" || !text ? null : text;
@@ -4956,7 +4959,7 @@ Não use markdown.`;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(text);
@@ -5202,7 +5205,7 @@ Retorne APENAS JSON:
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: geminiModel(),
       generationConfig: {
         maxOutputTokens: 8_000,
         temperature: 0,
@@ -5299,7 +5302,7 @@ Retorne APENAS JSON válido, sem markdown.`;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
 
     const result = await model.generateContent([
       prompt,
@@ -5541,7 +5544,7 @@ Retorne APENAS JSON válido, sem markdown, sem comentários.`;
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: geminiModel(),
     generationConfig: {
       maxOutputTokens: 16_000,
       temperature: 0,
@@ -5700,7 +5703,7 @@ Retorne APENAS JSON válido, sem markdown.`;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
 
     const result = await model.generateContent([
       prompt,
@@ -5734,7 +5737,7 @@ export async function transcribeAudio(
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: geminiModel() });
 
     const result = await model.generateContent([
       "Transcreva exatamente o que está sendo dito neste áudio em português brasileiro. Retorne apenas a transcrição, sem comentários.",
