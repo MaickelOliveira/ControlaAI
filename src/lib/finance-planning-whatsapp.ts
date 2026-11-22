@@ -5,9 +5,10 @@ import {normalizeBankText} from "./bank-question-parser";
 import {monthRange} from "./calendar-range";
 import {bankScheduleInExpensePeriod} from "./finance-expense-plan";
 import {createFinanceLedger} from "./finance-ledger";
-import {readBankInstallmentAnchors,readBankLedger,readBankReport} from "./finance-ledger-storage";
+import {readBankInstallmentAnchors,readBankLedger,readSubscriptionHistory} from "./finance-ledger-storage";
 import {financeExpensePlan} from "./finance-expense-plan";
 import type {BankMovement} from "./open-finance-report";
+import type {DetectedSubscription} from "./detected-subscriptions";
 import {financeAuthorLabel,identifyFinanceAuthors} from "./finance-attribution";
 import type {WppPhoneLink} from "./wpp-phone-links";
 import {financePeriodExpenses} from "./finance-period-expenses";
@@ -59,15 +60,9 @@ async function readPlanning(user:OpenFinanceIdentity,mode:FinanceMode,period:Per
  const finances=createFinanceLedger(named,bank?.report.movements??[],mode);
  const label=mode==="personal"?"Pessoal":`Empresa${scope?.companyName?` · ${safe(scope.companyName)}`:""}`;
  const incomplete=!!(bank?.report.sync_pending||bank?.overview.truncated||bank?.overview.agenda?.incomplete||installmentAnchors?.incomplete);
- const subscriptionHistory=scope&&!cardOnly&&period.to>=today?await readSubscriptionHistory(scope,today):[];
+ // Opcional: sem histórico, a resposta sai normalmente, só sem as assinaturas reconhecidas.
+ const subscriptionHistory:BankMovement[]=scope&&!cardOnly&&period.to>=today?await Promise.resolve().then(()=>readSubscriptionHistory(scope,today)).catch(()=>[]):[];
  return {ledger:{finances,bank,installmentAnchors},recurring,label,incomplete,bankEnabled,subscriptionHistory};
-}
-
-/** Últimos ~100 dias de cobranças, para reconhecer assinaturas mensais que o
- * banco não marca como recorrentes. Sem histórico, a previsão segue sem elas. */
-async function readSubscriptionHistory(scope:NonNullable<Awaited<ReturnType<typeof getOpenFinanceAccess>>>,today:string):Promise<BankMovement[]>{
- const from=new Date(Date.parse(`${today}T12:00:00Z`)-100*86_400_000).toISOString().slice(0,10);
- try{return (await readBankReport(scope,{from,to:today})).movements;}catch{return [];}
 }
 
 /** Só o que os bancos preveem (empréstimos, parcelas, assinaturas e débitos
@@ -81,12 +76,21 @@ export async function readBankExpenseForecast(user:OpenFinanceIdentity,mode:Fina
  return {forecastCents:Math.round(plan.forecast*100),groups:plan.groups.filter(group=>group.forecast>0).map(group=>[group.name,Math.round(group.forecast*100)] as [string,number]),unquantified:plan.unquantified,incomplete};
 }
 
+/** Assinaturas e cobranças mensais do período, pelo nome: as que o banco
+ * marca como recorrentes e as reconhecidas pelo histórico do cartão. */
+export function monthlyBills(schedules:readonly BankAgendaItem[],subscriptions:readonly DetectedSubscription[],period:Period){
+ const fromBank=schedules.filter(row=>row.kind==="recurring"&&bankScheduleInExpensePeriod(row,period.from,period.to)&&row.amount!==null&&(row.currency??"BRL")==="BRL")
+  .map(row=>({description:row.description,amount:Number(row.amount),date:row.due_date}));
+ const detected=subscriptions.map(row=>({description:row.description,amount:row.amount,date:row.date as string|null}));
+ return [...fromBank,...detected].filter(row=>Number.isFinite(row.amount)&&row.amount>0).sort((a,b)=>(a.date??"9").localeCompare(b.date??"9"));
+}
+
 export async function answerFinancePlanning(user:OpenFinanceIdentity,mode:FinanceMode,from:string,to:string,today:string,details?:{name:string;participants:readonly WppPhoneLink[]}){
  let period:Period;
  try{period=bankPeriod(from,to);}catch{return "Escolha um período válido de até 366 dias para conferir suas despesas.";}
  try{
   const {ledger,recurring,label,incomplete,bankEnabled,subscriptionHistory}=await readPlanning(user,mode,period,false,details,today);
-  const {expensePlan}=financePeriodExpenses(ledger,recurring,{...period,type:"expense",categories:[],search:""},today,subscriptionHistory);
+  const {expensePlan,bankSchedules,subscriptions}=financePeriodExpenses(ledger,recurring,{...period,type:"expense",categories:[],search:""},today,subscriptionHistory);
   const {forecast,recorded,total,groups,unquantified,forecastItems}=expensePlan;
   const partial=incomplete||unquantified>0||!bankEnabled;
   const lines=[
@@ -96,6 +100,12 @@ export async function answerFinancePlanning(user:OpenFinanceIdentity,mode:Financ
    `${partial?"Total com os valores disponíveis":"Total de despesas"}: *${money(total)}*`,
    ...groups.map(group=>`• ${safe(group.name)}: ${money(group.value)}${group.forecast&&group.forecast!==group.value?` (${money(group.forecast)} previstos)`:""}`),
   ];
+  const monthly=monthlyBills(bankSchedules,subscriptions,period);
+  if(monthly.length){
+   lines.push("", "*Contas mensais previstas*");
+   for(const bill of monthly.slice(0,15))lines.push(`• ${safe(bill.description)} · ${money(bill.amount)}${bill.date?` · ${bankDate(bill.date)}`:""}`);
+   if(monthly.length>15)lines.push(`Mais ${monthly.length-15} em Finanças.`);
+  }
   if(details&&forecastItems.length){
    lines.push("", "*O que compõe o valor previsto*");
    for(const item of forecastItems.slice(0,30)){

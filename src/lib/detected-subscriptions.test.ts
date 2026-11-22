@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { detectSubscriptions, subscriptionKey } from "./detected-subscriptions";
 import { financeExpensePlan } from "./finance-expense-plan";
 import { cashProjection, projectionReply } from "./cash-projection";
@@ -125,5 +126,24 @@ describe("projeção com as previsões dos bancos", () => {
     const reply = projectionReply(cashProjection([], [], "personal", december, today), "personal", december, "pt-BR", null);
     expect(reply).not.toContain("Previsto pelos bancos");
     expect(reply).toContain("Base: lançamentos e compromissos cadastrados na Zelo.");
+  });
+});
+
+describe("contas mensais por nome", () => {
+  it("lista as recorrências do banco no período e as assinaturas reconhecidas, por data", async () => {
+    const { monthlyBills } = await import("./finance-planning-whatsapp");
+    const subscriptions = detectSubscriptions({
+      history: [charge("2026-09-17", "OPENAI CHATGPT SUBSCR", "543.38"), charge("2026-10-17", "OPENAI CHATGPT SUBSCR", "543.38")],
+      period: december, today,
+    });
+    const bills = monthlyBills([
+      { id: "a", kind: "recurring", description: "Anthropic", resource_name: "MP", institution_name: "Mercado Pago", due_date: "2026-12-11", amount: "113.85", currency: "BRL", synced_at: "2026-11-22" },
+      { id: "b", kind: "recurring", description: "Antiga", resource_name: "MP", institution_name: "Mercado Pago", due_date: "2026-11-02", amount: "10.00", currency: "BRL", synced_at: "2026-11-22" },
+      { id: "c", kind: "installment", description: "Geladeira", resource_name: "MP", institution_name: "Mercado Pago", due_date: "2026-12-05", amount: "300.00", currency: "BRL", synced_at: "2026-11-22" },
+    ], subscriptions, december);
+    expect(bills).toEqual([
+      { description: "Anthropic", amount: 113.85, date: "2026-12-11" },
+      { description: "OPENAI CHATGPT SUBSCR", amount: 543.38, date: "2026-12-17" },
+    ]);
   });
 });

@@ -267,7 +267,7 @@ export default function DashboardPage() {
 
   const barData = useMemo(() => buildBarData(historyLedger), [historyLedger]);
   const today=new Date(now).toISOString().slice(0,10);
-  const {expensePlan,incomeForecast}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
+  const {expensePlan,incomeForecast}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today,ledger?.subscriptionHistory),[ledger,recs,filters,today]);
   const pieData=expensePlan.groups;
   const areaData = useMemo(() => buildAreaData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
   const flowData = useMemo(() => buildFlowData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);

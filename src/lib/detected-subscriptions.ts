@@ -43,7 +43,7 @@ const median = (values: number[]) => {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 };
 
-function isSubscriptionCandidate(row: BankMovement): boolean {
+export function isSubscriptionCandidate(row: BankMovement): boolean {
   // Compras no cartão podem chegar sem "debit" como direção; o tipo do
   // movimento diz que é saída.
   const outflow = row.kind === "card_purchases" || row.kind === "account_debits" || row.direction === "debit";

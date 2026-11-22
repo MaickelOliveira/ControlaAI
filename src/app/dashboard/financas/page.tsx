@@ -12,6 +12,7 @@ import BankForecastCategoryDialog,{type ForecastCategoryTarget} from "@/componen
 import BankCategoryDialog from "@/components/BankCategoryDialog";
 import BankCreditPixDialog from "@/components/BankCreditPixDialog";
 import FinanceLedgerRows from "@/components/FinanceLedgerRows";
+import FinanceDetectedSubscriptions from "@/components/FinanceDetectedSubscriptions";
 import FinanceInstallmentProjections from "@/components/FinanceInstallmentProjections";
 import PlatformAccountMoveDialog from "@/components/PlatformAccountMoveDialog";
 import {useBankUpdates} from "@/components/useBankUpdates";
@@ -414,7 +415,7 @@ function FinancasContent() {
   // catTotals somava tudo sem filtro de data enquanto o saldo usado como
   // denominador era só do mês atual).
   const today = new Date().toISOString().slice(0, 10);
-  const {incomeForecast,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,expensePlan}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
+  const {incomeForecast,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,subscriptions,expensePlan}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today,ledger?.subscriptionHistory),[ledger,recs,filters,today]);
   // Só os lançamentos que aparecem na tela têm checkbox — "selecionar tudo"
   // não pode marcar o que nem está visível (postedFinances é limitado a 50).
   const selectableFinances = [...pendingFinances, ...postedFinances.slice(0, visibleCount)].filter(f=>f.source!=="bank");
@@ -526,7 +527,7 @@ function FinancasContent() {
             </div>
           )}
           {loading ? <p className="text-subtle text-sm">Carregando...</p> :
-            (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0 && projectedInstallments.length === 0 && loanInstallments.length === 0 && bankSchedules.length === 0) ? (
+            (ledger && postedFinances.length === 0 && sortedRecs.length === 0 && pendingFinances.length === 0 && projectedInstallments.length === 0 && loanInstallments.length === 0 && bankSchedules.length === 0 && subscriptions.length === 0) ? (
               <div className="text-center py-16 text-subtle">
                 <p className="text-4xl mb-3">💬</p>
                 <p className="font-medium text-muted">Nenhum registro ainda</p>
@@ -537,6 +538,7 @@ function FinancasContent() {
                 {!ledger&&<p className="px-3 py-3 text-xs text-amber-ink">{ledgerError?"Extrato indisponível. Ajuste o período ou aguarde uma nova tentativa.":"Carregando o extrato..."}</p>}
                 <FinanceLoanRows key={mode} items={loanInstallments} mode={mode} canEdit={ledger?.bank?.overview.manual_installments_available} onSaved={async()=>{await loadAll(mode);}}/>
                 {ledger?.bank&&<FinanceBankSchedules compact items={bankSchedules} overview={ledger.bank.overview} onCategory={item=>setForecastCategoryTarget({id:item.id,description:item.description,category:bankForecastCategory(item,finances),userCategory:item.user_category})}/>}
+                <FinanceDetectedSubscriptions items={subscriptions}/>
 
                 {/* Pendentes: recorrentes/parcelados */}
                 {sortedRecs.map(r => {
@@ -626,7 +628,7 @@ function FinancasContent() {
                 <FinanceInstallmentProjections items={projectedInstallments} onCategory={item=>setForecastCategoryTarget({id:item.id,description:item.description,category:bankForecastCategory(item,finances),userCategory:item.user_category,...("category_movement_id" in item?{movementId:item.category_movement_id}: {})})}/>
 
                 {/* Separador se tiver pendentes e lançamentos confirmados */}
-                {(sortedRecs.length > 0 || pendingFinances.length > 0 || projectedInstallments.length > 0 || loanInstallments.some(item=>!item.recordedId) || bankSchedules.length > 0) && postedFinances.length > 0 && (
+                {(sortedRecs.length > 0 || pendingFinances.length > 0 || projectedInstallments.length > 0 || loanInstallments.some(item=>!item.recordedId) || bankSchedules.length > 0 || subscriptions.length > 0) && postedFinances.length > 0 && (
                   <div className="flex items-center gap-2 py-1">
                     <div className="flex-1 h-px bg-surface-muted" />
                     <span className="text-xs text-subtle">confirmados</span>

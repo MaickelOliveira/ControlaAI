@@ -3,7 +3,8 @@ import {getSessionWithUser} from "@/lib/auth";
 import {getFinancesInRangeStrict,calculateFinanceBalance} from "@/lib/finances";
 import {getOpenFinanceAccess} from "@/lib/open-finance-access";
 import {bankPeriod} from "@/lib/open-finance-report";
-import {readBankLedger,readBankInstallmentAnchors,readBankHistory} from "@/lib/finance-ledger-storage";
+import {readBankLedger,readBankInstallmentAnchors,readBankHistory,readSubscriptionHistory} from "@/lib/finance-ledger-storage";
+import {todayStrBR} from "@/lib/date-br";
 import {createFinanceLedger,ledgerBalance,ledgerMonthlyTotals} from "@/lib/finance-ledger";
 import {getPhonesForUser} from "@/lib/wpp-phone-links";
 import {getAccountsByUser} from "@/lib/accounts";
@@ -42,18 +43,21 @@ export async function GET(request:Request){
     const bankRead=(async()=>{
       const scope=await getOpenFinanceAccess(auth.user,mode,{throwOnStorageError:true});
       if(scope){try{bankPeriod(period.from,period.to);}catch{return {invalidPeriod:true as const};}}
-      const [bank,installmentAnchors]=await Promise.all([scope?readBankLedger(scope,period):null,scope?readBankInstallmentAnchors(scope):{items:[],incomplete:false}]);
-      return {invalidPeriod:false as const,bank,installmentAnchors};
+      // Períodos que chegam ao futuro também levam as cobranças recentes, para
+      // o extrato prever assinaturas mensais que o banco não marca.
+      const today=todayStrBR();
+      const [bank,installmentAnchors,subscriptionHistory]=await Promise.all([scope?readBankLedger(scope,period):null,scope?readBankInstallmentAnchors(scope):{items:[],incomplete:false},scope&&period.to>=today?Promise.resolve().then(()=>readSubscriptionHistory(scope,today)).catch(()=>[]):[]]);
+      return {invalidPeriod:false as const,bank,installmentAnchors,subscriptionHistory};
     })();
     // The complete authorized history already contains the selected period.
     // Read it once so totals and the visible records share the same snapshot.
     const [allRecords,snapshot,participants,accounts]=await Promise.all([getFinancesInRangeStrict(auth.user.id,mode),bankRead,getPhonesForUser(auth.user.id),getAccountsByUser(auth.user.id,mode)]);
     if(snapshot.invalidPeriod)return NextResponse.json({error:"Para incluir os bancos, escolha um período de até 366 dias."},{status:400,headers});
-    const {bank,installmentAnchors}=snapshot;
+    const {bank,installmentAnchors,subscriptionHistory}=snapshot;
     const records=allRecords.filter(record=>record.date>=period.from&&record.date<=period.to);
     const totalBalance=calculateFinanceBalance(allRecords);
     const finances=createFinanceLedger(identifyFinanceAuthors(records,auth.user,participants).map(({id,type,amount,category,description,date,mode,source,status,autoPost,recurringId,createdAt,registeredByName,accountId})=>({id,type,amount,category,description,date,mode,source,status,autoPost,recurringId,createdAt,registeredByName,accountId})),bank?.report.movements??[],mode);
-    return NextResponse.json({mode,finances,balance:ledgerBalance(finances),totalBalance,bank,installmentAnchors,accounts:accounts.map(({id,name,type})=>({id,name,type}))},{headers});
+    return NextResponse.json({mode,finances,balance:ledgerBalance(finances),totalBalance,bank,installmentAnchors,subscriptionHistory,accounts:accounts.map(({id,name,type})=>({id,name,type}))},{headers});
   }catch{
     return NextResponse.json({error:"Não foi possível atualizar o extrato completo. Tente um período menor ou aguarde uma nova tentativa."},{status:503,headers});
   }

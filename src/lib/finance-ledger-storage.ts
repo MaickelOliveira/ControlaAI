@@ -7,6 +7,7 @@ import type {BankOverview,BankCredit} from "./open-finance-display";
 import {collapseBankInstallmentFragments} from "./open-finance-schedules";
 import type {BankFinancialData,BankMovement,BankReport} from "./open-finance-report";
 import type {BankInstallmentAnchor,ScheduledBankInstallment} from "./bank-installment-projections";
+import {isSubscriptionCandidate} from "./detected-subscriptions";
 const overviewReadsKey=Symbol.for("zelo.pendingBankOverviewReads");
 const registry=globalThis as typeof globalThis & {[overviewReadsKey]?:Map<string,Promise<BankOverview>>};
 const pendingOverviews=registry[overviewReadsKey]??(registry[overviewReadsKey]=new Map<string,Promise<BankOverview>>());
@@ -59,6 +60,13 @@ export async function readBankHistory(scope:OpenFinanceScope,period:{from:string
  const [report,credit]=await Promise.all([readBankReport(scope,period),readCreditData(scope,period)]);
  return credit?{...report,movements:mergeCreditPayments(report.movements,credit.payments)}:report;
 }
+/** Saídas dos últimos ~100 dias, usadas para reconhecer assinaturas mensais
+ * que o banco não marca como recorrentes. Sem histórico, a previsão segue sem elas. */
+export async function readSubscriptionHistory(scope:OpenFinanceScope,today:string):Promise<BankMovement[]> {
+  const from=new Date(Date.parse(`${today}T12:00:00Z`)-100*86_400_000).toISOString().slice(0,10);
+  try{return (await readBankReport(scope,{from,to:today})).movements.filter(isSubscriptionCandidate);}catch{return [];}
+}
+
 export async function readBankLedger(scope:OpenFinanceScope,period:{from:string;to:string}):Promise<BankFinancialData> {
   const [report,overview,credit]=await Promise.all([readBankReport(scope,period),readBankOverview(scope),readCreditData(scope,period)]);
   return credit?{report:{...report,movements:mergeCreditPayments(report.movements,credit.payments)},overview:{...overview,...(credit.progress?.length?{credit:overview.credit.map(row=>({...row,...credit.progress?.find(progress=>progress.resource_id===row.resource_id)}))}:{}),installment_plans:credit.plans,manual_installments_available:true}}:{report,overview};
