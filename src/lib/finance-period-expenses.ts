@@ -1,3 +1,4 @@
+import {scheduledDates, type Schedule} from "./recurring-calendar";
 import type {FinanceFilters} from "@/components/FinanceFilterBar";
 import type {FinanceLedgerData,LedgerEntry} from "./finance-ledger";
 import {matchesFinanceAccount} from "./finance-account-filter";
@@ -8,7 +9,7 @@ import {bankForecastCategory,financeBankSchedules,unrepresentedBankSchedules} fr
 import {linkBankInstallmentAnchors,linkScheduledBankInstallments,projectBankInstallments} from "./bank-installment-projections";
 import {financeExpensePlan} from "./finance-expense-plan";
 import {BILL_PAYMENT_CATEGORY,isBankBillPaymentDescription} from "./bank-bill-payment";
-export type PeriodRecurring={id:string;type:string;amount:number;category:string;description:string;status:string;nextDueDate:string};
+export type PeriodRecurring=Schedule & {id:string;type:string;amount:number;category:string;description:string;status:string;nextDueDate:string};
 export function matchesPeriodFilters(entry:Pick<LedgerEntry,"type"|"category"|"description">,filters:FinanceFilters){
  return (filters.type==="all"||entry.type===filters.type)&&(!filters.categories.length||filters.categories.includes(entry.category))&&(!filters.search.trim()||entry.description.toLowerCase().includes(filters.search.trim().toLowerCase()));
 }
@@ -20,6 +21,11 @@ export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<Fin
  const pendingFinances=filteredFinances.filter(entry=>entry.status==="pending");
  const postedFinances=filteredFinances.filter(entry=>entry.status!=="pending");
  const sortedRecs=recurring.filter(row=>(!filters.account||filters.account==="unlinked")&&row.nextDueDate>=filters.from&&row.nextDueDate<=filters.to&&matchesPeriodFilters(row,filters)).sort((a,b)=>a.nextDueDate.localeCompare(b.nextDueDate));
+ const linkedDates = new Set(filteredFinances.filter(row => row.recurringId && row.autoPost !== false).map(row => row.recurringId + "|" + row.date));
+ const periodOccurrences = recurring.filter(row => row.status === "active" && (!filters.account || filters.account === "unlinked") && matchesPeriodFilters(row,filters))
+   .flatMap(row => scheduledDates(row, filters.from, filters.to).filter(date => !linkedDates.has(row.id + "|" + date)).map(date => ({...row, id:row.id + "|" + date, nextDueDate:date})));
+ const datedPending = pendingFinances.filter(row => row.autoPost !== false);
+ const incomeForecast = [...datedPending, ...periodOccurrences].reduce((sum,row) => sum + (row.type === "income" ? Math.round(row.amount * 100) : 0), 0) / 100;
  const loanInstallments=ledger?.bank?financeLoanInstallments(ledger.bank.overview,finances,filters,today):[];
  const installmentAnchors=linkBankInstallmentAnchors(ledger?.installmentAnchors?.items??[],ledger?.bank?.overview.agenda?.items??[]);
  const scheduledInstallments=linkScheduledBankInstallments(ledger?.installmentAnchors?.scheduled??[],ledger?.bank?.overview.agenda?.items??[],installmentAnchors);
@@ -28,6 +34,6 @@ export function financePeriodExpenses<T extends PeriodRecurring>(ledger:Pick<Fin
   projectBankInstallments(installmentAnchors.map(item=>({...item,currency:item.currency??ledger.bank?.overview.resources.find(resource=>resource.id===item.resource_id)?.currency??null})),ledger.bank.report.movements,{from:filters.from,to:filters.to,today},scheduledInstallments)
    .filter(item=>item.user_category!==BILL_PAYMENT_CATEGORY&&!isBankBillPaymentDescription(item.description)&&(!filters.categories.length||filters.categories.includes(bankForecastCategory(item,finances)))&&matchesBankFilter(item.institution_name,item.resource_id,filters.account)&&(!search||normalizeBankText(`${item.description} ${item.institution_name} ${item.resource_name}`).includes(search)));
  const bankSchedules=unrepresentedBankSchedules(financeBankSchedules(ledger?.bank?.overview.agenda?.items??[],filters,ledger?.bank?.overview.resources,finances),postedFinances,projectedInstallments,[...scheduledInstallments.flatMap(row=>row.schedule_ids),...installmentAnchors.flatMap(row=>row.source_schedule_ids??[])]);
- const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:pendingFinances,recurring:sortedRecs,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,from:filters.from,to:filters.to});
- return {filteredFinances,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,expensePlan};
+ const expensePlan=financeExpensePlan({categoryHistory:finances,posted:postedFinances,pending:datedPending,recurring:periodOccurrences,loans:loanInstallments,installments:projectedInstallments,schedules:bankSchedules,from:filters.from,to:filters.to});
+ return {incomeForecast,filteredFinances,pendingFinances,postedFinances,sortedRecs,loanInstallments,projectedInstallments,bankSchedules,expensePlan};
 }

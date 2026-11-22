@@ -1,4 +1,5 @@
 import { formatCurrency, type Finance, type FinanceMode, type FinanceType } from "./finances";
+import { scheduledDates } from "./recurring-calendar";
 import type { RecurringTransaction } from "./recurring";
 
 export type UpcomingFinanceOrigin = "scheduled" | "undated" | "recurring" | "installment";
@@ -65,16 +66,15 @@ export function collectUpcomingFinanceItems(
   const recurringItems: UpcomingFinanceItem[] = recurringTransactions
     .filter(item => item.status === "active" && (!range.mode || item.mode === range.mode))
     .filter(item => Number.isFinite(item.amount) && item.amount > 0)
-    .filter(item => /^\d{4}-\d{2}-\d{2}$/.test(item.nextDueDate) && knownDateInRange(item.nextDueDate))
-    .map(item => ({
+    .flatMap(item => scheduledDates(item, range.from, range.to).map(dueDate => ({
       id: item.id,
       type: item.type,
       description: item.description,
       amount: item.amount,
-      dueDate: item.nextDueDate,
+      dueDate,
       mode: item.mode,
-      origin: item.recurrenceType === "installment" ? "installment" : "recurring",
-    }));
+      origin: item.recurrenceType === "installment" ? "installment" as const : "recurring" as const,
+    })));
 
   const unique = new Map<string, UpcomingFinanceItem>();
   for (const item of [...pendingItems, ...recurringItems]) {

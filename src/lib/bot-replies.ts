@@ -730,6 +730,10 @@ Pode falar naturalmente. Sempre que possível, inclua: *o que quer fazer + dado 
 • Evite responder apenas _"1"_ depois que uma lista vencer; peça a lista novamente.
 • Para várias ações, use frases separadas: _"Gastei 40 com alimentação. Crie uma tarefa para ligar ao João amanhã"_.
 
+💰 *Receita fixa e previsão*
+• _"Recebo R$ 2.500 de salário todo dia 10, todos os meses."_ Depois da confirmação, você pode conferir em *Recorrentes*.
+• _"Quanto vai sobrar no mês que vem?"_ A Rita consulta o saldo pelos registros da Zelo, as receitas e as despesas do período. Em *Finanças*, selecione o mês para ver quanto já recebeu e quanto está previsto.
+
 Se faltar informação, vou perguntar antes de executar. Para ver este manual novamente, digite *ajuda*.`;
 }
 
@@ -843,6 +847,12 @@ export function replyRecurringCreated(r: RecurringTransaction, locale?: string):
   const fmt = (v: number) => formatCurrency(v);
   const nextStr = new Date(r.nextDueDate + "T12:00:00").toLocaleDateString(dateLocale(locale));
   const typeEmoji = r.type === "income" ? "💰" : "💸";
+  if (r.recurrenceType === "installment" && r.paidInstallments && r.totalInstallments) {
+    const left = r.totalInstallments - r.paidInstallments;
+    return isEs(locale)
+      ? `*${r.description}* · ${fmt(r.amount)} por cuota. Pagadas: ${r.paidInstallments}/${r.totalInstallments}. Quedan ${left}. Próxima: ${r.paidInstallments + 1}/${r.totalInstallments} el ${nextStr}.`
+      : `*${r.description}* · ${fmt(r.amount)} por parcela. Já pagas: ${r.paidInstallments}/${r.totalInstallments}. Restam ${left}. Próxima: ${r.paidInstallments + 1}/${r.totalInstallments} em ${nextStr}.`;
+  }
   if (isEs(locale)) {
     const unitLabel: Record<string, string> = { monthly: "mensual", weekly: "semanal", daily: "diario", yearly: "anual" };
     if (r.recurrenceType === "installment") {
@@ -864,7 +874,7 @@ export function replyRecurringCreated(r: RecurringTransaction, locale?: string):
     return `Cadastrado. Vou acompanhar cada parcela pra você.\n\n${typeEmoji} *${r.description}*\n💳 ${fmt(r.amount)}/parcela × ${r.totalInstallments ?? "?"} vezes\n📅 Primeiro vencimento: ${nextStr}\n\nAviso você às 9h de cada vencimento.`;
   }
   const termLine = r.totalInstallments ? ` · ${r.totalInstallments} vezes` : "";
-  return `Cadastrado. Fico de olho nos próximos vencimentos.\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso você às 9h de cada vencimento.`;
+  return `${r.type === "income" ? "Receita prevista cadastrada. Ela aparece em A receber até o recebimento." : "Despesa programada cadastrada."}\n\n${typeEmoji} *${r.description}* — ${fmt(r.amount)}\n🔁 ${unitLabel[r.repeatUnit] ?? r.repeatUnit}${termLine}\n📅 Próximo vencimento: ${nextStr}\n\nAviso você às 9h de cada vencimento.`;
 }
 
 export function replyGoalCreated(goal: Goal, pct: number, locale?: string): string {

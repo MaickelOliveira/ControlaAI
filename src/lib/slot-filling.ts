@@ -8,7 +8,9 @@ import {
   clearPendingAction,
   parseAmountBR,
 } from "./pending-actions";
-import { createRecurring, type RecurringTransaction } from "./recurring";
+import { occurrenceDate, firstMonthlyDue } from "./recurring-calendar";
+import { formatCurrency } from "./finances";
+import { registerChatRecurring, type RecurringTransaction } from "./recurring";
 import { createGoal, getGoalProgress } from "./goals";
 import type {GoogleWhatsAppProviderEnvelope} from "./google-whatsapp-message";
 import {googleWorkspaceKey} from "./google-workspace-policy";
@@ -273,10 +275,14 @@ function askBatchWithTtl(slot: SlotDef, draft: Draft, ctx: SlotCtx, index: numbe
   const prefix = ctx.user.locale === "es"
     ? `*Elemento ${index + 1} de ${total}${batchItemLabel(draft)}*`
     : `*Item ${index + 1} de ${total}${batchItemLabel(draft)}*`;
-  return `${prefix}\n${askWithTtl(slot, draft, ctx)}`;
+  const shared = index === 0 && draft.recurrenceType && (slot.key === "dayOfMonth" || (slot.label === "duração" && draft.recurrenceType === "recurring")) ? localized(ctx,
+    '\nSe o dia e o prazo forem iguais, pode responder "todos, sempre, dia 10", usando o seu dia.',
+    '\nSi el plazo y el día son iguales, puedes decir "todos, siempre, día 10" con tu día.') : "";
+  return `${prefix}\n${askWithTtl(slot, draft, ctx)}${shared}`;
 }
 
 function joinBatchReplies(replies: string[], ctx: SlotCtx): string {
+  if (replies.some(reply => /^(?:Já existe|Ya existe|Qual é a data|Indica el nombre|Confira o total|Comprueba el total)/.test(reply))) return replies.map((reply,i)=>`${i+1}. ${reply}`).join("\n\n");
   const heading = ctx.user.locale === "es"
     ? `✅ Registré *${replies.length} elementos*.`
     : ctx.user.locale === "pt-PT"
@@ -360,7 +366,12 @@ async function runBatchSlotFillTurn(
   }
 
   let value: unknown;
-  if (isSkipWord(trimmed) && slot.fallback) value = slot.fallback(draft, ctx);
+  const shared = pending.intent === "recurring_create" && /\b(?:todos|todas)\b/i.test(trimmed) && !/\b(?:exceto|menos|salvo|excepto)\b/i.test(trimmed);
+  const sharedDay = shared ? trimmed.match(/\bd[ií]a\s+(0?[1-9]|[12]\d|3[01])\b/i) : null;
+  const forever = shared && /\b(?:sempre|siempre|sem fim|sin fin)\b/i.test(trimmed);
+  if (queue[0] === "term" && forever) value = null;
+  else if (slot.key === "dayOfMonth" && sharedDay) value = Number(sharedDay[1]);
+  else if (isSkipWord(trimmed) && slot.fallback) value = slot.fallback(draft, ctx);
   else {
     const parsed = slot.parse(text, draft, ctx);
     if (!parsed.ok) {
@@ -380,6 +391,18 @@ async function runBatchSlotFillTurn(
   await (slot.apply ?? ((v: unknown, d: Draft) => { d[slot.key] = v; }))(value, draft, queue, ctx);
   drafts[index] = draft;
   missing[index] = queue;
+  if (sharedDay || forever) {
+    for (let i = index; i < drafts.length; i++) {
+      if (forever && drafts[i].recurrenceType === "recurring" && missing[i].includes("term")) {
+        drafts[i].lifetime = true;
+        missing[i] = missing[i].filter(key => key !== "term");
+      }
+      if (sharedDay && missing[i].includes("dayOfMonth")) {
+        drafts[i].dayOfMonth = Number(sharedDay[1]);
+        missing[i] = missing[i].filter(key => key !== "dayOfMonth");
+      }
+    }
+  }
 
   const next = missing.findIndex((candidate, candidateIndex) => candidateIndex >= index && candidate.length > 0);
   if (next < 0) {
@@ -1026,6 +1049,8 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         repeatUnit: r?.repeatUnit ?? "monthly",
         dayOfMonth: r?.dayOfMonth,
         startDate: r?.startDate,
+        nextDueDate: r?.nextDueDate,
+        paidInstallments: r?.paidInstallments,
         totalInstallments: r?.totalInstallments,
         lifetime: r?.lifetime ?? false,
         mode: r?.mode ?? ctx.mode,
@@ -1094,7 +1119,7 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         key: "dayOfMonth",
         label: "dia do vencimento",
         parse: slotDayOfMonth(),
-        ask: (_draft, ctx) => localized(ctx, "📅 Todo dia quantos vence? _(ex: \"10\")_", "📅 ¿Qué día de cada mes vence? _(ej.: \"10\")_"),
+        ask: (draft, ctx) => draft.type === "income" ? localized(ctx, "📅 Em qual dia do mês você recebe?", "📅 ¿Qué día del mes cobras?") : localized(ctx, "📅 Todo dia quantos vence? _(ex: \"10\")_", "📅 ¿Qué día de cada mes vence? _(ej.: \"10\")_"),
         fallback: () => 1, // 1º do mês — evita o vencimento cair "hoje" na maioria dos casos
       },
     },
@@ -1108,7 +1133,22 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         ? (draft.totalAmount as number | undefined) ?? amount * totalInstallments
         : (draft.totalAmount as number | undefined);
 
-      const rec = await createRecurring({
+      const start = (draft.startDate as string) || todayStrBR();
+      const paid = recurrenceType === "installment" ? Number(draft.paidInstallments ?? 0) : 0;
+      if (!Number.isInteger(paid) || paid < 0 || (paid && (!totalInstallments || paid >= totalInstallments))) {
+        return localized(ctx,"Confira o total de parcelas e quantas já foram pagas antes de cadastrar este parcelamento.","Comprueba el total de cuotas y cuántas están pagadas antes de registrarlo.");
+      }
+      const day = draft.dayOfMonth as number | undefined;
+      const repeat = (draft.repeatUnit as RecurringTransaction["repeatUnit"]) || "monthly";
+      let next = draft.nextDueDate as string | undefined;
+      if (paid && !next) {
+        if (!draft.startDate || start >= todayStrBR()) return localized(ctx,
+          "Qual é a data da próxima parcela em aberto? Envie o nome, o total de parcelas, quantas já pagou e a data da próxima. O parcelamento ainda não foi salvo.",
+          "Indica el nombre, el total de cuotas, cuántas pagaste y la fecha de la próxima cuota pendiente. Todavía no se guardó.");
+        const first = repeat === "monthly" && day ? firstMonthlyDue(start, day) : start;
+        next = occurrenceDate({nextDueDate:first, repeatUnit:repeat, dayOfMonth:day},paid);
+      }
+      const registration = await registerChatRecurring({
         userId: ctx.userId,
         type,
         amount,
@@ -1120,12 +1160,17 @@ export const FLOWS: Partial<Record<SlotFillIntent, FlowDef>> = {
         totalInstallments,
         repeatUnit: (draft.repeatUnit as RecurringTransaction["repeatUnit"]) || "monthly",
         dayOfMonth: draft.dayOfMonth as number | undefined,
-        startDate: (draft.startDate as string) || todayStrBR(),
+        startDate: start,
+        nextDueDate: next,
+        paidInstallments: paid,
         source: "whatsapp",
         employeeId: draft.employeeId as string | undefined,
       });
       // Carimba o ID criado no rascunho — finalizeWithDefaults usa isso pra
       // saber o que corrigir se um campo tiver ficado no valor padrão.
+      const {record:rec, existing} = registration;
+      if ("ambiguous" in registration) return localized(ctx,`Já existe um benefício com o mesmo valor e dia: *${rec.description}*. Se for outro benefício, informe um nome distinto, por exemplo com a origem. Nenhum novo cadastro foi feito.`,`Ya existe un beneficio del mismo importe y día: *${rec.description}*. Si es otro, indica un nombre distinto.`);
+      if (existing) return localized(ctx,`Já existe: *${rec.description}* · ${formatCurrency(rec.amount)}. Mantive um único cadastro. Próxima data: ${rec.nextDueDate.split("-").reverse().join("/")}.`,`Ya existe: *${rec.description}* · ${formatCurrency(rec.amount)}. Se mantuvo el registro existente.`);
       draft._createdRecurringId = rec.id;
       return replyRecurringCreated(rec, ctx.user.locale);
     },

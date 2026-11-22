@@ -179,6 +179,7 @@ export default function DashboardPage() {
   const [bootstrapMode, setMode] = useState<string>("");
   const [categories, setCategories] = useState<string[]>([]);
   const [recs,setRecs]=useState<PeriodRecurring[]>([]);
+  const [recurringMode,setRecurringMode]=useState("");
   const [recurringError,setRecurringError]=useState("");
   const [goals, setGoals] = useState<Goal[]>([]);
   const [filters, setFilters] = useState<FinanceFilters>(defaultFilters());
@@ -239,7 +240,7 @@ export default function DashboardPage() {
   useEffect(()=>{
     if(!mode)return;
     const controller=new AbortController();
-    fetch(`/api/recurring?mode=${mode}&status=active`,{signal:controller.signal,cache:"no-store"}).then(async response=>{if(!response.ok)throw Error("RECURRING_UNAVAILABLE");const result=await response.json();if(!Array.isArray(result))throw Error("RECURRING_INVALID");setRecs(result);setRecurringError("");}).catch(()=>{if(!controller.signal.aborted)setRecurringError("Não foi possível atualizar as contas recorrentes. As previsões podem estar incompletas.");});
+    fetch(`/api/recurring?mode=${mode}&status=active`,{signal:controller.signal,cache:"no-store"}).then(async response=>{if(!response.ok)throw Error("RECURRING_UNAVAILABLE");const result=await response.json();if(!Array.isArray(result))throw Error("RECURRING_INVALID");setRecs(result);setRecurringMode(mode);setRecurringError("");}).catch(()=>{if(!controller.signal.aborted)setRecurringError("Não foi possível atualizar as contas recorrentes. As previsões podem estar incompletas.");});
     return()=>controller.abort();
   },[mode]);
 
@@ -266,7 +267,7 @@ export default function DashboardPage() {
 
   const barData = useMemo(() => buildBarData(historyLedger), [historyLedger]);
   const today=new Date(now).toISOString().slice(0,10);
-  const {expensePlan}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
+  const {expensePlan,incomeForecast}=useMemo(()=>financePeriodExpenses(ledger,recs,filters,today),[ledger,recs,filters,today]);
   const pieData=expensePlan.groups;
   const areaData = useMemo(() => buildAreaData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
   const flowData = useMemo(() => buildFlowData(filteredFinances, filters.from, filters.to), [filteredFinances, filters.from, filters.to]);
@@ -302,7 +303,7 @@ export default function DashboardPage() {
             <div className="z-card-heading"><h2>Visão geral financeira</h2><span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] text-white/70">{rangeLabel}</span></div>
             <div className="z-eclipse-stats">
               <div className="z-eclipse-stat"><span>Saldo disponível nas contas</span><strong>{cashValue}</strong><small>{primaryCash?`${primaryCash.accounts.length} conta(s) · ${primaryCash.currency}${primaryCash.missing?" · há saldos não informados":""}`:"Conecte um banco em Contas"}</small></div>
-              <div className="z-eclipse-stat"><span>Entradas do período</span><strong>{fmt(activeBalance.income)}</strong>{!ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.income,prevBalance.income)} goodWhenUp/>}<small>Todas as origens</small></div>
+              <div className="z-eclipse-stat"><span>Entradas recebidas</span><strong>{fmt(activeBalance.income)}</strong>{!ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.income,prevBalance.income)} goodWhenUp/>}<small>{ledger && recurringMode===mode && !recurringError ? `A receber no período: ${fmt(incomeForecast)}` : "Previsão indisponível"}</small></div>
               <div className="z-eclipse-stat"><span>Saídas do período</span><strong>{fmt(activeBalance.expense)}</strong>{!ledger?.bank&&<TrendBadge pct={trendPct(activeBalance.expense,prevBalance.expense)} goodWhenUp={false}/>}<small>Contas, cartões e registros</small></div>
               <div className="z-eclipse-stat"><DashboardBalanceSummary balance={activeBalance} compact/></div>
             </div>
