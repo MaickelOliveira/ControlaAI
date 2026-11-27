@@ -7,7 +7,6 @@ import {
   DEFAULT_META_PIXEL_ID,
   isMetaPublicPath,
   isMetaRegistrationPath,
-  metaCheckoutCurrency,
 } from "@/lib/meta-tracking-config";
 import {
   fbcFromFbclid,
@@ -21,6 +20,7 @@ const CONSENT_KEY = "zelo_meta_consent";
 const CONSENT_CHANGED = "zelo:meta-consent-changed";
 const ATTRIBUTION_KEY = "zelo_attribution";
 const COOKIE_MAX_AGE = 90 * 24 * 60 * 60;
+const VISITOR_COOKIE = "zelo_vid";
 
 // A medição vem LIGADA: a pessoa só deixa de ser medida se escolher desativar
 // (botão na página de Privacidade). Antes ela só ligava depois de um "permitir"
@@ -91,7 +91,7 @@ function setStoredConsent(value: Consent) {
   document.cookie = `${CONSENT_KEY}=${value}; Max-Age=15552000; Path=/; SameSite=Lax; Secure`;
   if (value === "denied") {
     window.fbq?.("consent", "revoke");
-    for (const cookie of ["_fbp", "_fbc"]) expireCookie(cookie);
+    for (const cookie of ["_fbp", "_fbc", VISITOR_COOKIE]) expireCookie(cookie);
     try {
       window.localStorage.removeItem(ATTRIBUTION_KEY);
     } catch {
@@ -204,12 +204,22 @@ export function trackMetaEvent(
   window.fbq(custom ? "trackCustom" : "track", name, parameters, options);
 }
 
-/** PageView no navegador + o mesmo evento (mesmo event_id) pelo servidor, que
+/** Identificador aleatório do visitante (não é dado pessoal); vai à Meta em hash
+ *  como external_id, no Pixel e no servidor, e melhora a correspondência. */
+function visitorId(): string {
+  const current = readCookie(VISITOR_COOKIE);
+  if (current && /^[0-9a-f-]{36}$/i.test(current)) return current;
+  const created = crypto.randomUUID();
+  document.cookie = `${VISITOR_COOKIE}=${created}; Max-Age=${COOKIE_MAX_AGE}; Path=/; SameSite=Lax; Secure`;
+  return created;
+}
+
+/** Evento no navegador + o mesmo evento (mesmo event_id) pelo servidor, que
  *  continua contando quando o Pixel é bloqueado. A espera dá tempo ao Pixel de
- *  criar o cookie _fbp antes de ele ser lido. */
-function trackPageView(fbq: MetaPixel) {
+ *  criar o cookie _fbp antes de ele ser lido. Checkout e compra ficam com a Hotmart. */
+function trackMirrored(fbq: MetaPixel, eventName: "PageView" | "ViewContent", parameters: MetaParameters = {}) {
   const eventId = crypto.randomUUID();
-  fbq("track", "PageView", {}, { eventID: eventId });
+  fbq("track", eventName, parameters, { eventID: eventId });
   window.setTimeout(() => {
     if (!hasMetaConsent()) return;
     void fetch("/api/meta/pageview", {
@@ -217,13 +227,19 @@ function trackPageView(fbq: MetaPixel) {
       headers: { "Content-Type": "application/json" },
       keepalive: true,
       body: JSON.stringify({
+        eventName,
         eventId,
         url: window.location.href,
         fbp: readCookie("_fbp"),
         fbc: readCookie("_fbc"),
+        externalId: readCookie(VISITOR_COOKIE),
       }),
     }).catch(() => {});
   }, 1500);
+}
+
+function trackPageView(fbq: MetaPixel) {
+  trackMirrored(fbq, "PageView");
 }
 
 export default function MetaTracking() {
@@ -248,7 +264,7 @@ export default function MetaTracking() {
     const fbq = installMetaQueue();
     fbq("consent", "grant");
     if (!initialized.current) {
-      fbq("init", pixelId);
+      fbq("init", pixelId, { external_id: visitorId() });
       fbq("set", "autoConfig", false, pixelId);
       trackPageView(fbq);
       initialized.current = true;
@@ -272,16 +288,9 @@ export default function MetaTracking() {
       const isRegistration = url.origin === window.location.origin && isMetaRegistrationPath(url.pathname);
       const isHotmartCheckout = url.hostname === "pay.hotmart.com";
       if (!isRegistration && !isHotmartCheckout) return;
-      if (isHotmartCheckout) {
-        trackMetaEvent("InitiateCheckout", {
-          content_name: "Plano Zelo",
-          content_category: "subscription",
-          plan: target.dataset.metaPlan || "not_selected",
-          currency: metaCheckoutCurrency(pathname),
-          value: Number(target.dataset.metaValue || 0),
-        }, crypto.randomUUID());
-        return;
-      }
+      // InitiateCheckout e Compra são enviados pela Hotmart (pixel + API no checkout);
+      // disparar aqui também contaria o checkout em dobro.
+      if (isHotmartCheckout) return;
       trackMetaEvent("StartRegistration", {
         plan: url.searchParams.get("plan") || "not_selected",
         billing_cycle: url.searchParams.get("cycle") || "not_selected",
@@ -290,6 +299,20 @@ export default function MetaTracking() {
 
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
+  }, [consent, isClient, isPublicPage, pathname, pixelId]);
+
+  // ViewContent: quando a seção de planos aparece na tela (uma vez por página).
+  useEffect(() => {
+    if (!isClient || !pixelId || consent !== "granted" || !isPublicPage) return;
+    const plans = document.getElementById("planos");
+    if (!plans || !("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting) || !window.fbq) return;
+      trackMirrored(window.fbq, "ViewContent", { content_name: "Planos Zelo", content_category: "subscription" });
+      observer.disconnect();
+    }, { threshold: 0.25 });
+    observer.observe(plans);
+    return () => observer.disconnect();
   }, [consent, isClient, isPublicPage, pathname, pixelId]);
 
   if (!pixelId || !isClient || !isPublicPage || consent !== "granted") return null;

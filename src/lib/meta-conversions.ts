@@ -73,7 +73,10 @@ export function buildMetaConversionPayload(input: MetaConversionInput, timestamp
 }
 
 export type MetaPageViewInput = {
+  eventName?: "PageView" | "ViewContent";
   eventId: string;
+  /** Identificador aleatório do visitante (cookie zelo_vid); vai em hash. */
+  externalId?: string;
   eventSourceUrl: string;
   clientIp?: string;
   userAgent?: string;
@@ -90,15 +93,19 @@ export function buildMetaPageViewPayload(input: MetaPageViewInput, timestamp = D
   if (input.userAgent) userData.client_user_agent = input.userAgent;
   if (input.fbp) userData.fbp = input.fbp;
   if (input.fbc) userData.fbc = input.fbc;
+  const externalId = hashed(input.externalId);
+  if (externalId) userData.external_id = externalId;
 
+  const eventName = input.eventName ?? "PageView";
   return {
     data: [{
-      event_name: "PageView",
+      event_name: eventName,
       event_time: Math.floor(timestamp / 1000),
       event_id: input.eventId,
       event_source_url: input.eventSourceUrl,
       action_source: "website",
       user_data: userData,
+      ...(eventName === "ViewContent" ? { custom_data: { content_name: "Planos Zelo", content_category: "subscription" } } : {}),
     }],
   };
 }

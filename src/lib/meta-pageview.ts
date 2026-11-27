@@ -1,6 +1,7 @@
 import { isMetaPublicPath } from "./meta-tracking-config";
 
-export type PageViewBody = { eventId: string; url: string; fbp?: string; fbc?: string };
+export type MirroredEventName = "PageView" | "ViewContent";
+export type PageViewBody = { eventId: string; url: string; fbp?: string; fbc?: string; eventName: MirroredEventName; externalId?: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FBP = /^fb\.\d\.\d{10,13}\.\d{5,20}$/;
@@ -23,8 +24,10 @@ export function pageViewHosts(env: NodeJS.ProcessEnv = process.env): string[] {
 /** Valida o corpo enviado pelo navegador. Retorna null se algo não bate. */
 export function parsePageViewBody(body: unknown, allowedHosts: string[]): PageViewBody | null {
   if (!body || typeof body !== "object") return null;
-  const { eventId, url, fbp, fbc } = body as Record<string, unknown>;
+  const { eventId, url, fbp, fbc, eventName = "PageView", externalId } = body as Record<string, unknown>;
   if (typeof eventId !== "string" || !UUID.test(eventId)) return null;
+  // Só eventos de navegação passam por aqui; compra e checkout vêm da Hotmart.
+  if (eventName !== "PageView" && eventName !== "ViewContent") return null;
   if (typeof url !== "string" || url.length > 600) return null;
 
   let page: URL;
@@ -44,5 +47,7 @@ export function parsePageViewBody(body: unknown, allowedHosts: string[]): PageVi
     // _fbp/_fbc malformados são descartados em vez de derrubar o evento inteiro.
     fbp: typeof fbp === "string" && FBP.test(fbp) ? fbp : undefined,
     fbc: typeof fbc === "string" && FBC.test(fbc) ? fbc : undefined,
+    eventName,
+    externalId: typeof externalId === "string" && UUID.test(externalId) ? externalId : undefined,
   };
 }

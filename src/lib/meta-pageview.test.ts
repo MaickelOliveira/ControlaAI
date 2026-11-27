@@ -12,7 +12,17 @@ describe("PageView enviado pelo navegador ao servidor", () => {
       url: "https://zelogestaointeligente.com.br/?utm_source=facebook&fbclid=abc",
       fbp: undefined,
       fbc: undefined,
+      eventName: "PageView",
+      externalId: undefined,
     });
+  });
+
+  it("aceita ViewContent e o identificador do visitante, e recusa outros eventos", () => {
+    const view = parsePageViewBody({ ...valid, eventName: "ViewContent", externalId: ID }, HOSTS);
+    expect(view?.eventName).toBe("ViewContent");
+    expect(view?.externalId).toBe(ID);
+    expect(parsePageViewBody({ ...valid, eventName: "Purchase" }, HOSTS)).toBeNull();
+    expect(parsePageViewBody({ ...valid, externalId: "qualquer" }, HOSTS)?.externalId).toBeUndefined();
   });
 
   it("repassa _fbp e _fbc bem formados e descarta os malformados", () => {

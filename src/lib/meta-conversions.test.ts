@@ -75,6 +75,13 @@ describe("PageView pelo servidor", () => {
     expect(Object.keys(event.user_data)).not.toContain("em");
   });
 
+  it("ViewContent leva o visitante em hash e o nome do conteúdo", () => {
+    const [event] = buildMetaPageViewPayload({ eventName: "ViewContent", eventId: "x", eventSourceUrl: "https://zelogestaointeligente.com.br/", externalId: "3f2c8e1a-4b5d-4c6e-9f70-1a2b3c4d5e6f" }).data;
+    expect(event.event_name).toBe("ViewContent");
+    expect(event.user_data.external_id).toEqual([hashMetaValue("3f2c8e1a-4b5d-4c6e-9f70-1a2b3c4d5e6f")]);
+    expect(event.custom_data).toEqual({ content_name: "Planos Zelo", content_category: "subscription" });
+  });
+
   it("omite o IP quando ele é desconhecido", () => {
     const [event] = buildMetaPageViewPayload({ eventId: "x", eventSourceUrl: "https://zelogestaointeligente.com.br/", clientIp: "unknown" }).data;
     expect(event.user_data).toEqual({});

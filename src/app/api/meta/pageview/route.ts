@@ -46,13 +46,19 @@ export async function POST(req: NextRequest) {
   const body = parsePageViewBody(json, pageViewHosts());
   if (!body) return new NextResponse(null, { status: 400 });
 
+  // Os cookies primários chegam junto com a requisição: servem de reserva quando o
+  // navegador ainda não tinha lido _fbp/_fbc no momento do envio.
+  const cookie = (name: string) => req.cookies.get(name)?.value;
+  const fallback = parsePageViewBody({ eventId: body.eventId, url: body.url, fbp: cookie("_fbp"), fbc: cookie("_fbc"), externalId: cookie("zelo_vid") }, pageViewHosts());
   await sendMetaPageView({
+    eventName: body.eventName,
     eventId: body.eventId,
     eventSourceUrl: body.url,
     clientIp: ip,
     userAgent: req.headers.get("user-agent") ?? undefined,
-    fbp: body.fbp,
-    fbc: body.fbc,
+    fbp: body.fbp ?? fallback?.fbp,
+    fbc: body.fbc ?? fallback?.fbc,
+    externalId: body.externalId ?? fallback?.externalId,
   });
   return new NextResponse(null, { status: 204 });
 }
